@@ -22,12 +22,12 @@ const $world_configurator_opts = {
     }
 }
 
-window.addEventListener("tools-initialized", load)
+window.addEventListener("tools-initialized", worldConfigurator__load)
 
 if (userSettings.mods.some(s => s.endsWith("whirl-load.js"))) {
     // We can wait for the mod initialization event since it has to be there
     if (window.whirlLoaderLoaded) { // ...unless it's loaded in front of us, then we need to manually load
-        load()
+        worldConfigurator__load()
     }
 } else {
     addMod(WHIRLLOADER);
@@ -64,7 +64,7 @@ function redraw(){
     updateCanvas(); 
 }
 
-function load(){
+function worldConfigurator__load(){
     if ($wt.modsLoaded.includes(MOD_NAME)){
         return;
     }
