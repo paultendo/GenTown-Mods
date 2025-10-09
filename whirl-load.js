@@ -12,12 +12,12 @@ const $wt = {
      * Binds a function after the original function completes.
      * @param {function} toBind The function that is bound.
      * @param {function} runAfter The function to run after the bound function. Has the result of the original function as the first parameter.
-     * @returns The function to set the variable to.
+     * @returns The function to set the variable to. Note that the return value is the result of the modified function!
      */
     bindAfter: (toBind, runAfter) => {
         const newFunc = function(...args) {
-            const result = toBind(...args);
-            runAfter(result, ...args);
+            let result = toBind(...args);
+            result = runAfter(result, ...args);
             return result;
         };
         return newFunc;
