@@ -2,6 +2,11 @@ const toolsInitializedEvent = new CustomEvent("tools-initialized", {bubbles: tru
 
 const $wt = {
     __version__: {major: 1, minor: 0, patch: 0},
+    _mod_notice__update: (mod_name) => {
+        console.log(mod_name)
+        $wt.log(mod_name + " failed to load. Make sure your mods are updated!", false, "warning", "!")
+    },
+
     modsLoaded: [],
     /**
      * Binds a function after the original function completes.
@@ -59,8 +64,40 @@ const $wt = {
             selector.insertBefore(newButton, before);
         }
         return newButton
+    },
+    __queuedMessages: [],
+    /**
+     * Logs a message to the Chronicle.
+     * @param {String} message The message to log. Parser commands will run.
+     * @param {Boolean} withDay If the message should show the day.
+     * @param {String} type The type of the message. One of "normal", "tip", "warning". Defaults to normal.
+     * @param {String} header If withDay is false, replaces the header with this.
+     * @returns The uuid of the message.
+     */
+    log: (message, withDay, type = "normal", header = "?") => {
+        if (!gameLoaded) {
+            $wt.__queuedMessages.push({message, withDay, type, header})
+            return;
+        }
+        message = parseText(escapeHTML(message))
+        header = parseText(escapeHTML(header))
+
+	    let uuid = uuidv4();
+	    let html = `<span class="logMessage log${titleCase(type)}" id="logMessage-${uuid}" new="true">
+	        <span class="logDay" data-day="${!withDay ? "" : planet.day}" title="A mod message." onclick="handleMessageClick(this)">${!withDay ? header : parseText("{{date:"+planet.day+"|s}}")}</span><span class="logtext">${message}</span>
+        </span>`
+	    let logMessages = document.getElementById("logMessages");
+	    logMessages.insertAdjacentHTML("afterbegin",html);
+        if (logMessages.childNodes.length > 100) {
+            logMessages.removeChild(logMessages.lastChild);
+        }
+        return uuid;
     }
 }
 
 window.whirlLoaderLoaded = true
 window.dispatchEvent(toolsInitializedEvent)
+
+window.addEventListener("load", (event) => {
+    $wt.__queuedMessages.forEach(m => $wt.log(m.message, m.withDay, m.type, m.header))
+})
