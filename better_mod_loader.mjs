@@ -12,7 +12,7 @@ class ModContainer {
 
     /**
      * Holds metadata about mods, like dependencies and pretty names.
-     * @type {Record<string, {prettyName?: string, dependencies?: string[]}>}
+     * @type {Record<string, {url: string, prettyName?: string, dependencies?: string[]}>}
      */
     modMetadata = {};
 
