@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.1.4";
+    const MOD_VERSION = "1.1.6";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -874,15 +874,48 @@
                 planetWidth = baseWidth;
                 planetHeight = baseHeight;
             }
-            return baseGeneratePlanet.apply(this, args);
+            const planet = baseGeneratePlanet.apply(this, args);
+            if (typeof resizeCanvases === "function") {
+                try { resizeCanvases(); } catch {}
+            }
+            if (typeof fitToScreen === "function") {
+                try { fitToScreen(); } catch {}
+            }
+            return planet;
         };
 
         generatePlanet._paultendoWorldScale = true;
     }
 
     applyWorldScale();
+    function ensureMapCanvasSync() {
+        if (typeof mapCanvas === "undefined" || !mapCanvas) return false;
+        if (typeof pixelSize === "undefined" || !pixelSize) return false;
+        if (!planetWidth || !planetHeight) return false;
+        const expectedW = planetWidth * pixelSize;
+        const expectedH = planetHeight * pixelSize;
+        const mismatch = mapCanvas.width !== expectedW || mapCanvas.height !== expectedH;
+        if (!mismatch) return false;
+
+        if (typeof resizeCanvases === "function") {
+            try { resizeCanvases(); } catch {}
+        } else {
+            mapCanvas.width = expectedW;
+            mapCanvas.height = expectedH;
+        }
+        if (typeof fitToScreen === "function") {
+            try { fitToScreen(); } catch {}
+        }
+        return true;
+    }
+
     if (!initDiscoveryHooks() && typeof window !== "undefined") {
         window.addEventListener("load", () => { initDiscoveryHooks(); });
+    }
+    if (typeof window !== "undefined") {
+        window.addEventListener("load", () => {
+            try { ensureMapCanvasSync(); } catch {}
+        });
     }
 
     function initDiscoveryRenderHooks() {
