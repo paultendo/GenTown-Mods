@@ -5,25 +5,77 @@
 // Or use full URL during development
 //
 // Mod API:
-//   Mod.event(id, data)         - Register a custom event
+//   Mod.event(id, data)          - Register a custom event
 //   Mod.action(className, func) - Add action to existing event class
+// Mod helper:
+//   modEvent(id, data)          - Wraps Mod.event for safe per-town daily checks
 //
 // Available globals: Registry, towns, events, biomes, userSettings, etc.
 
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.0.1";
+    const MOD_VERSION = "1.0.2";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
     console.log(`[paultendo-mod] Loaded v${MOD_VERSION}`);
 
     // =========================================================================
+    // EVENT WRAPPER (daily + subject/target all safe per-entity value/check)
+    // =========================================================================
+
+    const _paultendoEvent = Mod.event;
+    function modEvent(id, data) {
+        if (!data || typeof data !== "object") return _paultendoEvent(id, data);
+
+        const hasAllSubject = !!(data.subject && data.subject.all);
+        const hasAllTarget = !!(data.target && data.target.all);
+        const isDaily = data.daily === true;
+
+        const valueFn = typeof data.value === "function" ? data.value : null;
+        const checkFn = typeof data.check === "function" ? data.check : null;
+        const funcFn = typeof data.func === "function" ? data.func : null;
+
+        // Base game runs value/check once with array when subject/target all.
+        // For daily events, move value/check into per-entity func so logic runs per town.
+        if (isDaily && (hasAllSubject || hasAllTarget) && (valueFn || checkFn)) {
+            if (valueFn) data.value = undefined;
+            if (checkFn) data.check = undefined;
+
+            data.func = (subject, target, args) => {
+                const subjects = Array.isArray(subject) ? subject : [subject];
+                const targets = Array.isArray(target) ? target : [target];
+                const baseArgs = (args && typeof args === "object") ? args : {};
+
+                for (let i = 0; i < subjects.length; i++) {
+                    const s = subjects[i];
+                    for (let j = 0; j < targets.length; j++) {
+                        const t = targets[j];
+                        const localArgs = Object.assign({}, baseArgs);
+
+                        if (valueFn) {
+                            const valueResult = valueFn(s, t, localArgs);
+                            if (valueResult === false) continue;
+                            if (localArgs.value === undefined && valueResult !== undefined) {
+                                localArgs.value = valueResult;
+                            }
+                        }
+                        if (checkFn && !checkFn(s, t, localArgs)) continue;
+                        if (funcFn) funcFn(s, t, localArgs);
+                    }
+                }
+            };
+        }
+
+        return _paultendoEvent(id, data);
+    }
+
+    // =========================================================================
     // MOD STATUS (one-time Chronicle message after the first town exists)
     // =========================================================================
 
-    Mod.event("paultendoModStatus", {
+    modEvent("paultendoModStatus", {
         daily: true,
         subject: { reg: "town", all: true },
         check: () => {
@@ -87,11 +139,19 @@
             towns: [town1.id, town2.id]
         }, "process");
         if (!process) return false;
-        town1.issues = town1.issues || {};
-        town2.issues = town2.issues || {};
+        ensureIssues(town1);
+        ensureIssues(town2);
         town1.issues.war = process.id;
         town2.issues.war = process.id;
         return process;
+    }
+
+    function ensureIssues(town) {
+        if (town && !town.issues) town.issues = {};
+    }
+
+    function hasIssue(town, issueKey) {
+        return !!(town && town.issues && town.issues[issueKey]);
     }
 
     // =========================================================================
@@ -143,7 +203,7 @@
     // NEGATIVE SWAY: Spread rumors / sow discord
     // -------------------------------------------------------------------------
 
-    Mod.event("swayDiscord", {
+    modEvent("swayDiscord", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -197,7 +257,7 @@
     // POSITIVE SWAY: Encourage friendship / mend relations
     // -------------------------------------------------------------------------
 
-    Mod.event("swayFriendship", {
+    modEvent("swayFriendship", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -261,7 +321,7 @@
     // Requires a temple - speak through religious authority
     // -------------------------------------------------------------------------
 
-    Mod.event("swayTemple", {
+    modEvent("swayTemple", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -325,7 +385,7 @@
     // TRADE SWAY: Economic manipulation (works through trade routes)
     // -------------------------------------------------------------------------
 
-    Mod.event("swayTrade", {
+    modEvent("swayTrade", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -387,7 +447,7 @@
     // ENCOURAGE TRADE: Positive economic sway
     // -------------------------------------------------------------------------
 
-    Mod.event("swayTradePositive", {
+    modEvent("swayTradePositive", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -447,7 +507,7 @@
     // MILITARY SWAY: Warn of threats (incite military buildup / fear)
     // -------------------------------------------------------------------------
 
-    Mod.event("swayMilitary", {
+    modEvent("swayMilitary", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -505,7 +565,7 @@
     // MILITARY ALLIANCE: Encourage mutual defense
     // -------------------------------------------------------------------------
 
-    Mod.event("swayAlliance", {
+    modEvent("swayAlliance", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -568,7 +628,7 @@
     // EDUCATION SWAY: Spread intellectual rivalry / academic competition
     // -------------------------------------------------------------------------
 
-    Mod.event("swayScholars", {
+    modEvent("swayScholars", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -628,7 +688,7 @@
     // EDUCATION EXCHANGE: Encourage knowledge sharing
     // -------------------------------------------------------------------------
 
-    Mod.event("swayKnowledge", {
+    modEvent("swayKnowledge", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -687,7 +747,7 @@
     // CULTURAL SWAY: Spread cultural superiority / rivalry
     // -------------------------------------------------------------------------
 
-    Mod.event("swayCulture", {
+    modEvent("swayCulture", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -744,7 +804,7 @@
     // CULTURAL EXCHANGE: Encourage festivals and shared celebrations
     // -------------------------------------------------------------------------
 
-    Mod.event("swayFestival", {
+    modEvent("swayFestival", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -802,7 +862,7 @@
     // MEDIATE CONFLICT: Try to heal existing bad relations
     // -------------------------------------------------------------------------
 
-    Mod.event("swayMediate", {
+    modEvent("swayMediate", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -870,7 +930,7 @@
     // BLAME SHIFTING: Redirect anger from one town to another
     // -------------------------------------------------------------------------
 
-    Mod.event("swayBlame", {
+    modEvent("swayBlame", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -1021,7 +1081,7 @@
     // ALLIANCE FORMATION: Towns with good relations may form alliances
     // -------------------------------------------------------------------------
 
-    Mod.event("allianceForm", {
+    modEvent("allianceForm", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -1045,7 +1105,7 @@
             // Need military unlocked
             if (!planet.unlocks.military) return false;
             // Not during war
-            if (subject.issues.war || target.issues.war) return false;
+            if (hasIssue(subject, "war") || hasIssue(target, "war")) return false;
             return true;
         },
         func: (subject, target, args) => {
@@ -1067,7 +1127,7 @@
     // ALLIANCE INVITATION: Existing alliance invites a third town
     // -------------------------------------------------------------------------
 
-    Mod.event("allianceInvite", {
+    modEvent("allianceInvite", {
         random: true,
         weight: $c.VERY_RARE,
         subject: {
@@ -1129,7 +1189,7 @@
     // ALLIANCE DISSOLUTION: Town leaves or alliance breaks apart
     // -------------------------------------------------------------------------
 
-    Mod.event("allianceLeave", {
+    modEvent("allianceLeave", {
         random: true,
         weight: $c.VERY_RARE,
         subject: {
@@ -1180,14 +1240,14 @@
     // ALLIANCE DEFENSE: Allied towns join wars to defend each other
     // -------------------------------------------------------------------------
 
-    Mod.event("allianceDefend", {
+    modEvent("allianceDefend", {
         daily: true,
         subject: {
             reg: "town", all: true
         },
         check: (subject, target, args) => {
             // Subject must be in a war
-            if (!subject.issues.war) return false;
+            if (!hasIssue(subject, "war")) return false;
             // Must have an alliance
             const alliance = getTownAlliance(subject);
             if (!alliance) return false;
@@ -1211,7 +1271,7 @@
             for (const memberId of alliance.members) {
                 if (memberId === subject.id) continue;
                 const ally = regGet("town", memberId);
-                if (!ally || ally.end || ally.issues.war) continue;
+                if (!ally || ally.end || hasIssue(ally, "war")) continue;
 
                 // Chance to join the war
                 const relation = ally.relations[subject.id] || 0;
@@ -1226,6 +1286,7 @@
 
                 if (Math.random() < joinChance) {
                     // Join the war on subject's side
+                    ensureIssues(ally);
                     ally.issues.war = warProcess.id;
                     if (!warProcess.towns.includes(ally.id)) {
                         warProcess.towns.push(ally.id);
@@ -1243,7 +1304,7 @@
     // ALLIANCE RELATIONS BOOST: Being in an alliance gradually improves relations
     // -------------------------------------------------------------------------
 
-    Mod.event("allianceRelationsBoost", {
+    modEvent("allianceRelationsBoost", {
         daily: true,
         subject: {
             reg: "town", all: true
@@ -1276,7 +1337,7 @@
     // PLAYER SWAY: Suggest alliance formation
     // -------------------------------------------------------------------------
 
-    Mod.event("swayFormAlliance", {
+    modEvent("swayFormAlliance", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -1343,7 +1404,7 @@
     // PLAYER SWAY: Break an alliance apart
     // -------------------------------------------------------------------------
 
-    Mod.event("swayBreakAlliance", {
+    modEvent("swayBreakAlliance", {
         random: true,
         weight: $c.VERY_RARE,
         subject: {
@@ -1531,7 +1592,7 @@
     // -------------------------------------------------------------------------
 
     // Towns request loans from wealthier towns
-    Mod.event("townRequestLoan", {
+    modEvent("townRequestLoan", {
         random: true,
         weight: $c.UNCOMMON,
         target: {
@@ -1581,7 +1642,7 @@
     });
 
     // Process loan repayments daily
-    Mod.event("townLoanRepayment", {
+    modEvent("townLoanRepayment", {
         daily: true,
         weight: $c.ALWAYS,
         target: {
@@ -1614,7 +1675,7 @@
     });
 
     // Towns declare embargoes on enemies
-    Mod.event("townDeclareEmbargo", {
+    modEvent("townDeclareEmbargo", {
         random: true,
         weight: $c.RARE,
         target: {
@@ -1647,7 +1708,7 @@
     });
 
     // Embargoes can be lifted when relations improve
-    Mod.event("townLiftEmbargo", {
+    modEvent("townLiftEmbargo", {
         random: true,
         weight: $c.UNCOMMON,
         target: {
@@ -1683,7 +1744,7 @@
     });
 
     // Towns send economic aid to struggling allies
-    Mod.event("townEconomicAid", {
+    modEvent("townEconomicAid", {
         random: true,
         weight: $c.UNCOMMON,
         target: {
@@ -1719,7 +1780,7 @@
     });
 
     // Currency adoption through strong trade ties
-    Mod.event("townAdoptCurrency", {
+    modEvent("townAdoptCurrency", {
         random: true,
         weight: $c.VERY_RARE,
         target: {
@@ -1761,7 +1822,7 @@
     // -------------------------------------------------------------------------
 
     // Suggest a town request a loan
-    Mod.event("swayRequestLoan", {
+    modEvent("swayRequestLoan", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -1819,7 +1880,7 @@
     });
 
     // Encourage embargo
-    Mod.event("swayEmbargo", {
+    modEvent("swayEmbargo", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -1869,7 +1930,7 @@
     });
 
     // Encourage lifting an embargo
-    Mod.event("swayLiftEmbargo", {
+    modEvent("swayLiftEmbargo", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -1918,7 +1979,7 @@
     });
 
     // Suggest sending economic aid
-    Mod.event("swayEconomicAid", {
+    modEvent("swayEconomicAid", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -1971,7 +2032,7 @@
     });
 
     // Suggest currency adoption
-    Mod.event("swayCurrencyAdoption", {
+    modEvent("swayCurrencyAdoption", {
         random: true,
         weight: $c.VERY_RARE,
         subject: {
@@ -2303,7 +2364,7 @@
     // Specialization Emergence - Towns develop specializations naturally
     // -------------------------------------------------------------------------
 
-    Mod.event("specializationEmerge", {
+    modEvent("specializationEmerge", {
         daily: true,
         subject: {
             reg: "town", all: true
@@ -2325,7 +2386,7 @@
     });
 
     // Specializations can fade if influence drops too low
-    Mod.event("specializationFade", {
+    modEvent("specializationFade", {
         daily: true,
         subject: {
             reg: "town", all: true
@@ -2359,7 +2420,7 @@
     // -------------------------------------------------------------------------
 
     // Trade partners can learn specializations from each other
-    Mod.event("specializationTradeSpread", {
+    modEvent("specializationTradeSpread", {
         random: true,
         weight: $c.VERY_RARE,
         subject: {
@@ -2408,7 +2469,7 @@
     });
 
     // Allied towns share knowledge more readily
-    Mod.event("specializationAllianceSpread", {
+    modEvent("specializationAllianceSpread", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -2457,7 +2518,7 @@
     });
 
     // Conquest can transfer specializations (knowledge plundered)
-    Mod.event("specializationConquest", {
+    modEvent("specializationConquest", {
         daily: true,
         subject: {
             reg: "process",
@@ -2493,7 +2554,7 @@
     // -------------------------------------------------------------------------
 
     // Towns with valuable specializations become trade targets
-    Mod.event("specializationTradeAttract", {
+    modEvent("specializationTradeAttract", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -2533,7 +2594,7 @@
     });
 
     // Towns with valuable specializations become raid targets
-    Mod.event("specializationRaidTarget", {
+    modEvent("specializationRaidTarget", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -2555,7 +2616,7 @@
             if (raidValue < 2) return false;
 
             // Already at war?
-            if (subject.issues.war || target.issues.war) return false;
+            if (hasIssue(subject, "war") || hasIssue(target, "war")) return false;
 
             // Check relations (need to be neutral or bad)
             const relation = subject.relations[target.id] || 0;
@@ -2576,7 +2637,7 @@
     });
 
     // People migrate toward towns with cultural specializations
-    Mod.event("specializationMigration", {
+    modEvent("specializationMigration", {
         random: true,
         weight: $c.UNCOMMON,
         subject: {
@@ -2620,7 +2681,7 @@
     // -------------------------------------------------------------------------
 
     // Encourage a town to develop a specialization
-    Mod.event("swayDevelopSpecialization", {
+    modEvent("swayDevelopSpecialization", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -2666,7 +2727,7 @@
     });
 
     // Encourage knowledge theft between towns
-    Mod.event("swayStealKnowledge", {
+    modEvent("swayStealKnowledge", {
         random: true,
         weight: $c.VERY_RARE,
         subject: {
@@ -2728,7 +2789,7 @@
     });
 
     // Encourage knowledge sharing (the nice version)
-    Mod.event("swayShareKnowledge", {
+    modEvent("swayShareKnowledge", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -2801,7 +2862,7 @@
     });
 
     // Suggest abandoning a specialization
-    Mod.event("swayAbandonSpecialization", {
+    modEvent("swayAbandonSpecialization", {
         random: true,
         weight: $c.VERY_RARE,
         subject: {
@@ -2852,7 +2913,7 @@
     // Complementary Alliances - Towns seek allies with different specializations
     // -------------------------------------------------------------------------
 
-    Mod.event("specializationComplementaryAlliance", {
+    modEvent("specializationComplementaryAlliance", {
         random: true,
         weight: $c.RARE,
         subject: {
@@ -2913,7 +2974,7 @@
     // =========================================================================
 
     // Farm branch extensions (currently ends at 40: Crop Rotation)
-    Mod.event("unlockFertilization", {
+    modEvent("unlockFertilization", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -2930,7 +2991,7 @@
         messageNo: () => "Waste is kept far from food sources."
     });
 
-    Mod.event("unlockSelectiveBreeding", {
+    modEvent("unlockSelectiveBreeding", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -2947,7 +3008,7 @@
         messageNo: () => "Nature is left to decide which survive."
     });
 
-    Mod.event("unlockMechanizedFarming", {
+    modEvent("unlockMechanizedFarming", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -2967,7 +3028,7 @@
         }
     });
 
-    Mod.event("unlockAgriculturalScience", {
+    modEvent("unlockAgriculturalScience", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -2985,7 +3046,7 @@
     });
 
     // Travel branch extensions (currently ends at 40: Wheels)
-    Mod.event("unlockRoads", {
+    modEvent("unlockRoads", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3002,7 +3063,7 @@
         messageNo: () => "Dirt paths serve well enough."
     });
 
-    Mod.event("unlockSailingShips", {
+    modEvent("unlockSailingShips", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3019,7 +3080,7 @@
         messageNo: () => "The coast is far enough to venture."
     });
 
-    Mod.event("unlockNavigation", {
+    modEvent("unlockNavigation", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3036,7 +3097,7 @@
         messageNo: () => "Sailors stay within sight of land."
     });
 
-    Mod.event("unlockSteamPower", {
+    modEvent("unlockSteamPower", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3057,7 +3118,7 @@
         }
     });
 
-    Mod.event("unlockRailways", {
+    modEvent("unlockRailways", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3075,7 +3136,7 @@
     });
 
     // Fire branch extensions (currently ends at 30: Firebombing)
-    Mod.event("unlockKilns", {
+    modEvent("unlockKilns", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3092,7 +3153,7 @@
         messageNo: () => "Open fires serve all heating needs."
     });
 
-    Mod.event("unlockForges", {
+    modEvent("unlockForges", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3109,7 +3170,7 @@
         messageNo: () => "Simple metalwork is sufficient."
     });
 
-    Mod.event("unlockGunpowder", {
+    modEvent("unlockGunpowder", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3130,7 +3191,7 @@
         }
     });
 
-    Mod.event("unlockEngines", {
+    modEvent("unlockEngines", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3148,7 +3209,7 @@
     });
 
     // Smith branch extensions (currently ends at 40: Metal Tools)
-    Mod.event("unlockSteel", {
+    modEvent("unlockSteel", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3165,7 +3226,7 @@
         messageNo: () => "Iron serves all needs."
     });
 
-    Mod.event("unlockArchitecture", {
+    modEvent("unlockArchitecture", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3182,7 +3243,7 @@
         messageNo: () => "Humble structures shelter the people."
     });
 
-    Mod.event("unlockMachinery", {
+    modEvent("unlockMachinery", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3199,7 +3260,7 @@
         messageNo: () => "Hands are the proper tools of work."
     });
 
-    Mod.event("unlockPrecisionEngineering", {
+    modEvent("unlockPrecisionEngineering", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3217,7 +3278,7 @@
     });
 
     // Trade branch extensions (currently ends at 30: Currency)
-    Mod.event("unlockBanking", {
+    modEvent("unlockBanking", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3234,7 +3295,7 @@
         messageNo: () => "Each keeps their own wealth close."
     });
 
-    Mod.event("unlockContracts", {
+    modEvent("unlockContracts", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3251,7 +3312,7 @@
         messageNo: () => "A handshake and one's word are bond enough."
     });
 
-    Mod.event("unlockMarkets", {
+    modEvent("unlockMarkets", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3268,7 +3329,7 @@
         messageNo: () => "Trade happens wherever people meet."
     });
 
-    Mod.event("unlockGuilds", {
+    modEvent("unlockGuilds", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3285,7 +3346,7 @@
         messageNo: () => "Any may practice any trade freely."
     });
 
-    Mod.event("unlockCorporations", {
+    modEvent("unlockCorporations", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3303,7 +3364,7 @@
     });
 
     // Government branch extensions (currently ends at 10: Laws)
-    Mod.event("unlockTaxation", {
+    modEvent("unlockTaxation", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3320,7 +3381,7 @@
         messageNo: () => "The people keep what they earn."
     });
 
-    Mod.event("unlockBureaucracy", {
+    modEvent("unlockBureaucracy", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3337,7 +3398,7 @@
         messageNo: () => "Simple councils decide local matters."
     });
 
-    Mod.event("unlockCourts", {
+    modEvent("unlockCourts", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3354,7 +3415,7 @@
         messageNo: () => "Communities settle their own disputes."
     });
 
-    Mod.event("unlockConstitution", {
+    modEvent("unlockConstitution", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3372,7 +3433,7 @@
     });
 
     // Education branch extensions (currently ends at 20: Higher Education)
-    Mod.event("unlockWriting", {
+    modEvent("unlockWriting", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3389,7 +3450,7 @@
         messageNo: () => "Memory and oral tradition carry wisdom forward."
     });
 
-    Mod.event("unlockLibraries", {
+    modEvent("unlockLibraries", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3406,7 +3467,7 @@
         messageNo: () => "Knowledge stays with those who earned it."
     });
 
-    Mod.event("unlockPrinting", {
+    modEvent("unlockPrinting", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3423,7 +3484,7 @@
         messageNo: () => "Hand-copied texts are precious and controlled."
     });
 
-    Mod.event("unlockUniversities", {
+    modEvent("unlockUniversities", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3440,7 +3501,7 @@
         messageNo: () => "Apprenticeship teaches all that's needed."
     });
 
-    Mod.event("unlockScientificMethod", {
+    modEvent("unlockScientificMethod", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3457,7 +3518,7 @@
         messageNo: () => "Ancient wisdom guides inquiry."
     });
 
-    Mod.event("unlockMedicine", {
+    modEvent("unlockMedicine", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3475,7 +3536,7 @@
     });
 
     // Military branch extensions (currently ends at 50: Combat Vehicles)
-    Mod.event("unlockFortifications", {
+    modEvent("unlockFortifications", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3492,7 +3553,7 @@
         messageNo: () => "Open communities trust in peace."
     });
 
-    Mod.event("unlockStandingArmies", {
+    modEvent("unlockStandingArmies", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3509,7 +3570,7 @@
         messageNo: () => "Citizens take up arms only when needed."
     });
 
-    Mod.event("unlockFirearms", {
+    modEvent("unlockFirearms", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3526,7 +3587,7 @@
         messageNo: () => "Traditional weapons maintain honor in combat."
     });
 
-    Mod.event("unlockArtillery", {
+    modEvent("unlockArtillery", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3554,7 +3615,7 @@
         }
     }
 
-    Mod.event("unlockRituals", {
+    modEvent("unlockRituals", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3573,7 +3634,7 @@
         messageNo: () => "Each observes in their own way."
     });
 
-    Mod.event("unlockTemples", {
+    modEvent("unlockTemples", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3591,7 +3652,7 @@
         messageNo: () => "The world itself is sacred enough."
     });
 
-    Mod.event("unlockPriesthood", {
+    modEvent("unlockPriesthood", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3609,7 +3670,7 @@
         messageNo: () => "All commune with the divine equally."
     });
 
-    Mod.event("unlockScripture", {
+    modEvent("unlockScripture", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -3627,7 +3688,7 @@
         messageNo: () => "Sacred knowledge passes through living tradition."
     });
 
-    Mod.event("unlockMonasteries", {
+    modEvent("unlockMonasteries", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -3835,7 +3896,7 @@
     // -------------------------------------------------------------------------
 
     // Towns can evolve their government type
-    Mod.event("governmentEvolution", {
+    modEvent("governmentEvolution", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -3883,7 +3944,7 @@
     });
 
     // Government tensions affect relations
-    Mod.event("governmentTensions", {
+    modEvent("governmentTensions", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -3921,7 +3982,7 @@
     });
 
     // Similar governments get along better
-    Mod.event("governmentHarmony", {
+    modEvent("governmentHarmony", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -3957,7 +4018,7 @@
     // Player Sway - Government Manipulation
     // -------------------------------------------------------------------------
 
-    Mod.event("swayGovernmentChange", {
+    modEvent("swayGovernmentChange", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "player", id: 1 },
@@ -3999,7 +4060,7 @@
     });
 
     // Incite revolution against a government type
-    Mod.event("swayRevolution", {
+    modEvent("swayRevolution", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "player", id: 1 },
@@ -4058,7 +4119,7 @@
     // -------------------------------------------------------------------------
 
     // When a town gains a relevant specialization, it can boost global research
-    Mod.event("specializationResearchBoost", {
+    modEvent("specializationResearchBoost", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -4147,7 +4208,7 @@
     // Doctor Job Special Effect - Reduces disease in town
     // -------------------------------------------------------------------------
 
-    Mod.event("doctorEffect", {
+    modEvent("doctorEffect", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -4171,7 +4232,7 @@
     // Builder Job Special Effect - Speeds construction/repairs
     // -------------------------------------------------------------------------
 
-    Mod.event("builderEffect", {
+    modEvent("builderEffect", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -4179,7 +4240,7 @@
             if (builders <= 0) return false;
 
             // Builders help recover from disasters
-            if (!subject.issues.disaster) return false;
+            if (!hasIssue(subject, "disaster")) return false;
 
             args.builders = builders;
             return true;
@@ -4355,7 +4416,7 @@
     // -------------------------------------------------------------------------
 
     // Epidemics can spontaneously start
-    Mod.event("epidemicStart", {
+    modEvent("epidemicStart", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "player", id: 1 },
@@ -4411,7 +4472,7 @@
     });
 
     // Epidemics spread between towns
-    Mod.event("epidemicSpread", {
+    modEvent("epidemicSpread", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -4471,7 +4532,7 @@
     });
 
     // Epidemics end naturally over time
-    Mod.event("epidemicEnd", {
+    modEvent("epidemicEnd", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -4496,7 +4557,7 @@
     });
 
     // Epidemics cause extra deaths
-    Mod.event("epidemicDeaths", {
+    modEvent("epidemicDeaths", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -4529,7 +4590,7 @@
     // -------------------------------------------------------------------------
 
     // Player can suggest quarantine
-    Mod.event("swayQuarantine", {
+    modEvent("swayQuarantine", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -4589,7 +4650,7 @@
     });
 
     // Quarantine ends naturally after epidemic passes or by choice
-    Mod.event("quarantineEnd", {
+    modEvent("quarantineEnd", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -4621,7 +4682,7 @@
     // -------------------------------------------------------------------------
 
     // Hospitals heal injuries over time
-    Mod.event("hospitalHealing", {
+    modEvent("hospitalHealing", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -4659,11 +4720,11 @@
     });
 
     // Doctors reduce death rate during disasters
-    Mod.event("doctorDisasterHelp", {
+    modEvent("doctorDisasterHelp", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
-            if (!subject.issues.disaster) return false;
+            if (!hasIssue(subject, "disaster")) return false;
 
             const doctors = subject.jobs?.doctor || 0;
             if (doctors === 0) return false;
@@ -4684,7 +4745,7 @@
     // -------------------------------------------------------------------------
 
     // Towns can establish public healthcare
-    Mod.event("establishHealthcare", {
+    modEvent("establishHealthcare", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -4731,7 +4792,7 @@
     });
 
     // Public healthcare provides ongoing benefits
-    Mod.event("publicHealthcareEffect", {
+    modEvent("publicHealthcareEffect", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -4759,7 +4820,7 @@
     // -------------------------------------------------------------------------
 
     // Sway a town to build a hospital
-    Mod.event("swayBuildHospital", {
+    modEvent("swayBuildHospital", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -4807,7 +4868,7 @@
     });
 
     // Sway to train doctors
-    Mod.event("swayTrainDoctors", {
+    modEvent("swayTrainDoctors", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -5084,7 +5145,7 @@
     // -------------------------------------------------------------------------
 
     // Traditions emerge based on town character
-    Mod.event("traditionEmerge", {
+    modEvent("traditionEmerge", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5161,7 +5222,7 @@
     });
 
     // Traditions can fade if conditions change
-    Mod.event("traditionFade", {
+    modEvent("traditionFade", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5191,7 +5252,7 @@
     // -------------------------------------------------------------------------
 
     // Artists can create cultural works
-    Mod.event("artistCreateWork", {
+    modEvent("artistCreateWork", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5219,7 +5280,7 @@
     });
 
     // Musicians boost happiness and may create music tradition
-    Mod.event("musicianEffect", {
+    modEvent("musicianEffect", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5243,7 +5304,7 @@
     });
 
     // Performers boost happiness significantly and attract visitors
-    Mod.event("performerEffect", {
+    modEvent("performerEffect", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5274,7 +5335,7 @@
     // -------------------------------------------------------------------------
 
     // Towns with festive tradition hold festivals
-    Mod.event("festival", {
+    modEvent("festival", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -5287,7 +5348,7 @@
             if (!hasFestive && !isHappy) return false;
 
             // Not during disasters or war
-            if (target.issues.disaster || target.issues.war) return false;
+            if (hasIssue(target, "disaster") || hasIssue(target, "war")) return false;
 
             return true;
         },
@@ -5322,7 +5383,7 @@
     });
 
     // Cultural competitions between towns
-    Mod.event("culturalCompetition", {
+    modEvent("culturalCompetition", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -5392,7 +5453,7 @@
     // -------------------------------------------------------------------------
 
     // Trade spreads culture
-    Mod.event("culturalTradeSpread", {
+    modEvent("culturalTradeSpread", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5430,7 +5491,7 @@
     });
 
     // Alliance spreads culture faster
-    Mod.event("culturalAllianceSpread", {
+    modEvent("culturalAllianceSpread", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5470,7 +5531,7 @@
     // -------------------------------------------------------------------------
 
     // Similar cultures get along better
-    Mod.event("culturalAffinity", {
+    modEvent("culturalAffinity", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5502,7 +5563,7 @@
     });
 
     // Cultural migration - people move to culturally rich towns
-    Mod.event("culturalMigration", {
+    modEvent("culturalMigration", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5543,7 +5604,7 @@
     // -------------------------------------------------------------------------
 
     // Encourage a tradition
-    Mod.event("swayDevelopTradition", {
+    modEvent("swayDevelopTradition", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -5605,14 +5666,14 @@
     });
 
     // Encourage a festival
-    Mod.event("swayHoldFestival", {
+    modEvent("swayHoldFestival", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
         target: { reg: "town", random: true },
         value: (subject, target, args) => {
             if ((target.influences.faith || 0) < -1) return false;
-            if (target.issues.disaster || target.issues.war) return false;
+            if (hasIssue(target, "disaster") || hasIssue(target, "war")) return false;
 
             args.successChance = 0.50;
             args.successChance += (target.influences.faith || 0) * 0.05;
@@ -5654,7 +5715,7 @@
     });
 
     // Encourage cultural exchange between towns
-    Mod.event("swayCulturalExchange", {
+    modEvent("swayCulturalExchange", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -5738,7 +5799,7 @@
     });
 
     // Suppress a tradition (controversial)
-    Mod.event("swaySuppressTradition", {
+    modEvent("swaySuppressTradition", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "player", id: 1 },
@@ -5824,7 +5885,7 @@
     }
 
     // Player can encourage building cultural landmarks
-    Mod.event("swayBuildTheater", {
+    modEvent("swayBuildTheater", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -5865,7 +5926,7 @@
         messageNo: () => `You let them build what they will.`
     });
 
-    Mod.event("swayBuildMuseum", {
+    modEvent("swayBuildMuseum", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -5905,7 +5966,7 @@
         messageNo: () => `You let them decide what to build.`
     });
 
-    Mod.event("swayBuildGallery", {
+    modEvent("swayBuildGallery", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -5947,7 +6008,7 @@
     });
 
     // Cultural landmarks provide ongoing effects
-    Mod.event("culturalLandmarkEffects", {
+    modEvent("culturalLandmarkEffects", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -5986,7 +6047,7 @@
     // =========================================================================
 
     // Victory celebration - winning a war triggers cultural boost
-    Mod.event("victoryCelebration", {
+    modEvent("victoryCelebration", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -6030,7 +6091,7 @@
     });
 
     // War memorial - towns that fought in wars may build memorials
-    Mod.event("warMemorial", {
+    modEvent("warMemorial", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -6086,7 +6147,7 @@
     });
 
     // Conquest culture effects - conquering towns can spread or suppress culture
-    Mod.event("conquestCultureSpread", {
+    modEvent("conquestCultureSpread", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -6130,7 +6191,7 @@
     });
 
     // War poets and artists - war inspires cultural works
-    Mod.event("warArt", {
+    modEvent("warArt", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -6187,7 +6248,7 @@
     });
 
     // Propaganda during war - governments can boost martial spirit
-    Mod.event("warPropaganda", {
+    modEvent("warPropaganda", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -6229,12 +6290,13 @@
     });
 
     // War weariness affects culture - long wars damage cultural traditions
-    Mod.event("warWeariness", {
+    modEvent("warWeariness", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
             if (!subject.issues?.war) return false;
 
+            if (!hasIssue(subject, "war")) return false;
             const war = regGet("process", subject.issues.war);
             if (!war) return false;
 
@@ -6267,7 +6329,7 @@
     });
 
     // Cultural resistance - conquered peoples resist cultural suppression
-    Mod.event("culturalResistance", {
+    modEvent("culturalResistance", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -6312,7 +6374,7 @@
     });
 
     // Peace brings cultural flourishing
-    Mod.event("peaceCulture", {
+    modEvent("peaceCulture", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -6356,7 +6418,7 @@
     });
 
     // Allies share war glory - allied victories boost culture
-    Mod.event("alliedVictoryGlory", {
+    modEvent("alliedVictoryGlory", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -6453,7 +6515,7 @@
     // ----------------------------------------
 
     // Track when a disaster ends and mark town as recovering
-    Mod.event("disasterEndsRecovery", {
+    modEvent("disasterEndsRecovery", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -6494,7 +6556,7 @@
     });
 
     // Recovery period ticks down and affects town
-    Mod.event("disasterRecoveryTick", {
+    modEvent("disasterRecoveryTick", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -6519,7 +6581,7 @@
     });
 
     // Disaster triggers emergency aid requests to allies
-    Mod.event("disasterAidRequest", {
+    modEvent("disasterAidRequest", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -6572,7 +6634,7 @@
     });
 
     // Disaster-struck towns may seek emergency loans
-    Mod.event("disasterEmergencyLoan", {
+    modEvent("disasterEmergencyLoan", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -6617,7 +6679,7 @@
     });
 
     // Trade routes disrupted during active disasters
-    Mod.event("disasterTradeDisruption", {
+    modEvent("disasterTradeDisruption", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -6634,7 +6696,7 @@
     // ----------------------------------------
 
     // Refugees flee disaster-struck towns
-    Mod.event("disasterRefugees", {
+    modEvent("disasterRefugees", {
         random: true,
         weight: $c.COMMON,
         subject: { reg: "town", random: true },
@@ -6702,7 +6764,7 @@
     });
 
     // Skilled workers emigrate after major disasters
-    Mod.event("disasterBrainDrain", {
+    modEvent("disasterBrainDrain", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -6755,7 +6817,7 @@
     // ----------------------------------------
 
     // Player sway: Offer disaster relief to improve relations
-    Mod.event("swayDisasterRelief", {
+    modEvent("swayDisasterRelief", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -6789,7 +6851,7 @@
     });
 
     // Rivals may exploit disaster-weakened towns
-    Mod.event("disasterExploitation", {
+    modEvent("disasterExploitation", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -6834,7 +6896,7 @@
     });
 
     // Helping disaster victims improves global reputation
-    Mod.event("disasterReliefReputation", {
+    modEvent("disasterReliefReputation", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
@@ -6873,7 +6935,7 @@
     // ----------------------------------------
 
     // Major disasters inspire memorial construction
-    Mod.event("disasterMemorial", {
+    modEvent("disasterMemorial", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -6923,7 +6985,7 @@
     });
 
     // Disaster survivors inspire stories and art
-    Mod.event("disasterSurvivorStories", {
+    modEvent("disasterSurvivorStories", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -6950,7 +7012,7 @@
     });
 
     // Surviving disaster together strengthens community
-    Mod.event("disasterCommunityBonds", {
+    modEvent("disasterCommunityBonds", {
         random: true,
         weight: $c.COMMON,
         subject: { reg: "town", random: true },
@@ -6976,7 +7038,7 @@
     // ----------------------------------------
 
     // Earthquakes and floods can trigger disease outbreaks
-    Mod.event("disasterDiseaseOutbreak", {
+    modEvent("disasterDiseaseOutbreak", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7014,7 +7076,7 @@
     });
 
     // Hospitals help disaster recovery
-    Mod.event("disasterHospitalRelief", {
+    modEvent("disasterHospitalRelief", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -7030,7 +7092,7 @@
     });
 
     // Disaster overwhelms medical capacity
-    Mod.event("disasterMedicalCrisis", {
+    modEvent("disasterMedicalCrisis", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -7055,7 +7117,7 @@
     // ----------------------------------------
 
     // Government response affects satisfaction
-    Mod.event("disasterGovernmentResponse", {
+    modEvent("disasterGovernmentResponse", {
         random: true,
         weight: $c.COMMON,
         subject: { reg: "town", random: true },
@@ -7132,7 +7194,7 @@
     });
 
     // Failed disaster response can trigger revolution
-    Mod.event("disasterRevolutionTrigger", {
+    modEvent("disasterRevolutionTrigger", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
@@ -7175,7 +7237,7 @@
     // ----------------------------------------
 
     // Drought event - slow-burn agricultural disaster
-    Mod.event("droughtBegins", {
+    modEvent("droughtBegins", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -7206,7 +7268,7 @@
     });
 
     // Drought worsens over time
-    Mod.event("droughtWorsens", {
+    modEvent("droughtWorsens", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -7245,7 +7307,7 @@
     });
 
     // Famine follows severe drought
-    Mod.event("famine", {
+    modEvent("famine", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7270,7 +7332,7 @@
     });
 
     // Famine effects
-    Mod.event("famineEffects", {
+    modEvent("famineEffects", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -7298,7 +7360,7 @@
     });
 
     // Food aid during famine
-    Mod.event("famineAid", {
+    modEvent("famineAid", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7375,7 +7437,7 @@
     }
 
     // Economic migration - people move toward prosperity
-    Mod.event("economicMigration", {
+    modEvent("economicMigration", {
         random: true,
         weight: $c.COMMON,
         subject: { reg: "town", random: true },
@@ -7415,7 +7477,7 @@
     });
 
     // Skilled worker migration - scholars seek academies
-    Mod.event("scholarMigration", {
+    modEvent("scholarMigration", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7446,7 +7508,7 @@
     });
 
     // Doctor migration - doctors seek hospitals/healer towns
-    Mod.event("doctorMigration", {
+    modEvent("doctorMigration", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7473,7 +7535,7 @@
     });
 
     // Artist migration - artists seek cultural centers
-    Mod.event("artistMigration", {
+    modEvent("artistMigration", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7512,7 +7574,7 @@
     });
 
     // Religious migration - faithful move toward holy sites
-    Mod.event("religiousMigration", {
+    modEvent("religiousMigration", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -7554,7 +7616,7 @@
     });
 
     // Religious refugees - flee persecution
-    Mod.event("religiousRefugees", {
+    modEvent("religiousRefugees", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -7590,7 +7652,7 @@
     });
 
     // War refugees - flee conflict zones
-    Mod.event("warRefugees", {
+    modEvent("warRefugees", {
         random: true,
         weight: $c.COMMON,
         subject: { reg: "town", random: true },
@@ -7634,7 +7696,7 @@
     });
 
     // Return migration - refugees return home after crisis ends
-    Mod.event("returnMigration", {
+    modEvent("returnMigration", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7732,7 +7794,7 @@
     }
 
     // Unrest builds up from various factors
-    Mod.event("unrestBuildup", {
+    modEvent("unrestBuildup", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -7798,7 +7860,7 @@
     });
 
     // Protests - warning sign before revolution
-    Mod.event("protests", {
+    modEvent("protests", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7823,7 +7885,7 @@
     });
 
     // Strikes - workers refuse to work
-    Mod.event("strikes", {
+    modEvent("strikes", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7853,7 +7915,7 @@
     });
 
     // Riots - violent unrest
-    Mod.event("riots", {
+    modEvent("riots", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -7878,7 +7940,7 @@
     });
 
     // Player can try to address unrest
-    Mod.event("swayAddressGrievances", {
+    modEvent("swayAddressGrievances", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "player", id: 1 },
@@ -7901,7 +7963,7 @@
     });
 
     // Unrest-triggered revolution (supplements base game)
-    Mod.event("unrestRevolution", {
+    modEvent("unrestRevolution", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -7936,7 +7998,7 @@
     });
 
     // Revolution outcomes use our government types
-    Mod.event("revolutionGovernmentChange", {
+    modEvent("revolutionGovernmentChange", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -7995,7 +8057,7 @@
     });
 
     // Track when revolutions end
-    Mod.event("trackRevolutionEnd", {
+    modEvent("trackRevolutionEnd", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -8016,7 +8078,7 @@
     });
 
     // Coup - military takeover without full revolution
-    Mod.event("militaryCoup", {
+    modEvent("militaryCoup", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
@@ -8072,7 +8134,7 @@
     });
 
     // Counter-revolution - attempt to restore old order
-    Mod.event("counterRevolution", {
+    modEvent("counterRevolution", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
@@ -8375,7 +8437,7 @@
     // ----------------------------------------
 
     // New religion emerges in a town without one
-    Mod.event("religionEmerges", {
+    modEvent("religionEmerges", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -8413,7 +8475,7 @@
     // ----------------------------------------
 
     // Religion spreads to neighboring towns
-    Mod.event("religionSpreads", {
+    modEvent("religionSpreads", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -8496,7 +8558,7 @@
     });
 
     // Missionaries actively spread religion
-    Mod.event("missionaries", {
+    modEvent("missionaries", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -8557,7 +8619,7 @@
     // ----------------------------------------
 
     // Religious reform - religion updates its tenets
-    Mod.event("religiousReform", {
+    modEvent("religiousReform", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
@@ -8621,7 +8683,7 @@
     });
 
     // Religious schism - religion splits into two
-    Mod.event("religiousSchism", {
+    modEvent("religiousSchism", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
@@ -8700,7 +8762,7 @@
     // ----------------------------------------
 
     // Religious festivals boost culture
-    Mod.event("religiousFestival", {
+    modEvent("religiousFestival", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -8731,7 +8793,7 @@
     });
 
     // Religion inspires art and architecture
-    Mod.event("religiousArt", {
+    modEvent("religiousArt", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -8757,7 +8819,7 @@
     });
 
     // Religion influences scholarly tradition
-    Mod.event("religiousScholarship", {
+    modEvent("religiousScholarship", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -8793,7 +8855,7 @@
     // ----------------------------------------
 
     // Theocracy strengthens state religion
-    Mod.event("theocracyReligion", {
+    modEvent("theocracyReligion", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -8822,7 +8884,7 @@
     // ----------------------------------------
 
     // Apply religion influences daily
-    Mod.event("religionDailyEffects", {
+    modEvent("religionDailyEffects", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -8834,7 +8896,7 @@
     });
 
     // Religion provides stability
-    Mod.event("religiousStability", {
+    modEvent("religiousStability", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -8865,7 +8927,7 @@
     // ----------------------------------------
 
     // Religious tensions between towns
-    Mod.event("religiousTension", {
+    modEvent("religiousTension", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -8900,7 +8962,7 @@
     });
 
     // Holy war - war triggered by religious differences
-    Mod.event("holyWar", {
+    modEvent("holyWar", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
@@ -8961,7 +9023,7 @@
     // ----------------------------------------
 
     // Player can encourage religious conversion
-    Mod.event("swayReligiousConversion", {
+    modEvent("swayReligiousConversion", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -9002,7 +9064,7 @@
     });
 
     // Player can encourage religious tolerance
-    Mod.event("swayReligiousTolerance", {
+    modEvent("swayReligiousTolerance", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "player", id: 1 },
@@ -9286,7 +9348,7 @@
     }
 
     // Grudges and bonds decay over time
-    Mod.event("memoryDecay", {
+    modEvent("memoryDecay", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -9320,7 +9382,7 @@
     });
 
     // Grudges influence relations
-    Mod.event("grudgeInfluence", {
+    modEvent("grudgeInfluence", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -9344,7 +9406,7 @@
     });
 
     // Bonds influence relations
-    Mod.event("bondInfluence", {
+    modEvent("bondInfluence", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -9432,7 +9494,7 @@
     };
 
     // Check for era changes
-    Mod.event("eraCheck", {
+    modEvent("eraCheck", {
         daily: true,
         subject: { reg: "nature", id: 1 },
         value: () => {
@@ -9489,7 +9551,7 @@
     // ----------------------------------------
 
     // Record wars when they end
-    Mod.event("recordWarHistory", {
+    modEvent("recordWarHistory", {
         daily: true,
         subject: { reg: "process", all: true },
         value: (subject) => {
@@ -9546,7 +9608,7 @@
     });
 
     // Record town foundings
-    Mod.event("recordTownFounding", {
+    modEvent("recordTownFounding", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -9575,7 +9637,7 @@
     });
 
     // Record disasters
-    Mod.event("recordDisasterHistory", {
+    modEvent("recordDisasterHistory", {
         daily: true,
         subject: { reg: "process", all: true },
         value: (subject) => {
@@ -9610,7 +9672,7 @@
     });
 
     // Record revolutions
-    Mod.event("recordRevolutionHistory", {
+    modEvent("recordRevolutionHistory", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
@@ -9705,7 +9767,7 @@
     // ----------------------------------------
 
     // Commemorate significant historical events
-    Mod.event("warAnniversary", {
+    modEvent("warAnniversary", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -9757,7 +9819,7 @@
     });
 
     // Remember fallen figures
-    Mod.event("figureRemembrance", {
+    modEvent("figureRemembrance", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -9790,7 +9852,7 @@
     });
 
     // Historical references in events
-    Mod.event("historicalParallel", {
+    modEvent("historicalParallel", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -9846,7 +9908,7 @@
     // ----------------------------------------
 
     // Build monuments to historical figures
-    Mod.event("buildFigureMonument", {
+    modEvent("buildFigureMonument", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -9890,7 +9952,7 @@
     });
 
     // Build monuments to historical events
-    Mod.event("buildEventMonument", {
+    modEvent("buildEventMonument", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -9949,7 +10011,7 @@
     // ----------------------------------------
 
     // Living heroes boost morale during war
-    Mod.event("heroRallies", {
+    modEvent("heroRallies", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -9982,7 +10044,7 @@
     });
 
     // Scholars advance learning
-    Mod.event("scholarAdvances", {
+    modEvent("scholarAdvances", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -10018,7 +10080,7 @@
     });
 
     // Figures can die of old age
-    Mod.event("figureAges", {
+    modEvent("figureAges", {
         daily: true,
         subject: { reg: "nature", id: 1 },
         value: () => {
@@ -10052,7 +10114,7 @@
     });
 
     // Create scholars in academic towns
-    Mod.event("scholarEmerges", {
+    modEvent("scholarEmerges", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -10077,7 +10139,7 @@
     });
 
     // Create artists in cultural towns
-    Mod.event("artistEmerges", {
+    modEvent("artistEmerges", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -10295,7 +10357,7 @@
     // ----------------------------------------
 
     // Establish new trade routes between nearby prosperous towns
-    Mod.event("establishTradeRoute", {
+    modEvent("establishTradeRoute", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -10349,7 +10411,7 @@
     });
 
     // Caravans travel along trade routes
-    Mod.event("caravanDeparts", {
+    modEvent("caravanDeparts", {
         random: true,
         weight: $c.COMMON,
         subject: { reg: "town", random: true },
@@ -10417,7 +10479,7 @@
     });
 
     // Trade routes can be disrupted by war
-    Mod.event("tradeRouteDisrupted", {
+    modEvent("tradeRouteDisrupted", {
         daily: true,
         subject: { reg: "town", all: true },
         func: (subject) => {
@@ -10445,7 +10507,7 @@
     });
 
     // Major trade hub emerges
-    Mod.event("tradeHubEmerges", {
+    modEvent("tradeHubEmerges", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -10491,7 +10553,7 @@
     // ----------------------------------------
 
     // Climate affects disease spread
-    Mod.event("climateDisease", {
+    modEvent("climateDisease", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -10525,7 +10587,7 @@
     });
 
     // Cold climates affect happiness in winter (simulated by random checks)
-    Mod.event("coldHardship", {
+    modEvent("coldHardship", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -10550,7 +10612,7 @@
     });
 
     // Hot climates can cause heat-related issues
-    Mod.event("heatWave", {
+    modEvent("heatWave", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -10619,7 +10681,7 @@
     }
 
     // Daily environmental pressure accumulation
-    Mod.event("environmentalPressure", {
+    modEvent("environmentalPressure", {
         daily: true,
         subject: { reg: "town", all: true },
         func: (subject) => {
@@ -10675,7 +10737,7 @@
     });
 
     // Environmental degradation events (rare, subtle changes)
-    Mod.event("localDeforestation", {
+    modEvent("localDeforestation", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
@@ -10704,7 +10766,7 @@
     });
 
     // Soil exhaustion from overfarming
-    Mod.event("soilExhaustion", {
+    modEvent("soilExhaustion", {
         random: true,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
@@ -10733,7 +10795,7 @@
     });
 
     // Desertification (extreme case, very rare)
-    Mod.event("desertificationRisk", {
+    modEvent("desertificationRisk", {
         random: true,
         weight: $c.VERY_RARE * 0.5, // Even rarer
         subject: { reg: "town", random: true },
@@ -10782,7 +10844,7 @@
     });
 
     // Irrigation improves local conditions
-    Mod.event("irrigationSuccess", {
+    modEvent("irrigationSuccess", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -10821,7 +10883,7 @@
     });
 
     // Pollution affects nearby areas (industrial era)
-    Mod.event("industrialPollution", {
+    modEvent("industrialPollution", {
         random: true,
         weight: $c.RARE,
         subject: { reg: "town", random: true },
@@ -10859,7 +10921,7 @@
     // ----------------------------------------
 
     // Coastal towns can establish sea trade routes
-    Mod.event("establishSeaRoute", {
+    modEvent("establishSeaRoute", {
         random: true,
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
@@ -10926,7 +10988,7 @@
     });
 
     // Coastal towns benefit from fishing
-    Mod.event("coastalFishing", {
+    modEvent("coastalFishing", {
         random: true,
         weight: $c.COMMON,
         subject: { reg: "town", random: true },
@@ -10947,7 +11009,7 @@
 
     // Certain goods are only available in certain climates
     // This affects trade value
-    Mod.event("climateTradeGoods", {
+    modEvent("climateTradeGoods", {
         random: true,
         weight: $c.COMMON,
         subject: { reg: "town", random: true },
