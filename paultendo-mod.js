@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.1.1";
+    const MOD_VERSION = "1.1.2";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -200,6 +200,139 @@
         if (!center) return null;
         const chunk = chunkAt(center[0], center[1]);
         return (chunk && chunk.v) ? chunk.v.g : null;
+    }
+
+    // =========================================================================
+    // SEASONS SYSTEM (global calendar + seasonal influences)
+    // =========================================================================
+
+    const SEASON_LENGTH_DAYS = 30;
+    const YEAR_LENGTH_DAYS = SEASON_LENGTH_DAYS * 4;
+    const SEASONS = [
+        { id: "spring", name: "Spring", icon: "🌱" },
+        { id: "summer", name: "Summer", icon: "☀" },
+        { id: "autumn", name: "Autumn", icon: "🍂" },
+        { id: "winter", name: "Winter", icon: "❄" }
+    ];
+
+    function getSeasonInfo(day = null) {
+        if (!planet) return null;
+        const currentDay = day || planet.day || 1;
+        const dayIndex = Math.max(0, currentDay - 1);
+        const year = Math.floor(dayIndex / YEAR_LENGTH_DAYS) + 1;
+        const dayOfYear = (dayIndex % YEAR_LENGTH_DAYS) + 1;
+        const seasonIndex = Math.floor((dayOfYear - 1) / SEASON_LENGTH_DAYS);
+        const seasonDay = ((dayOfYear - 1) % SEASON_LENGTH_DAYS) + 1;
+        const season = SEASONS[seasonIndex] || SEASONS[0];
+        return {
+            year,
+            dayOfYear,
+            seasonIndex,
+            seasonDay,
+            id: season.id,
+            name: season.name,
+            icon: season.icon
+        };
+    }
+
+    function ensureSeasonIndicator() {
+        if (typeof document === "undefined") return null;
+        const statsMain = document.getElementById("statsMain");
+        if (!statsMain) return null;
+        let indicator = document.getElementById("paultendoSeasonIndicator");
+        if (!indicator) {
+            indicator = document.createElement("span");
+            indicator.id = "paultendoSeasonIndicator";
+            indicator.className = "panelSubtitle";
+            const statsDiv = document.getElementById("statsDiv");
+            if (statsDiv) statsMain.insertBefore(indicator, statsDiv);
+            else statsMain.appendChild(indicator);
+        }
+        return indicator;
+    }
+
+    function updateSeasonIndicator() {
+        const info = getSeasonInfo();
+        if (!info) return;
+        const indicator = ensureSeasonIndicator();
+        if (!indicator) return;
+        indicator.textContent = `${info.icon} ${info.name} ${info.seasonDay}/${SEASON_LENGTH_DAYS} · Year ${info.year}`;
+    }
+
+    function updateSeasonState() {
+        const info = getSeasonInfo();
+        if (!info) return;
+        const prev = planet._paultendoSeason;
+        planet._paultendoSeason = info;
+        updateSeasonIndicator();
+
+        if (!prev || prev.year !== info.year) {
+            try {
+                const stage = getAnnalsStage();
+                const title = `Year ${info.year} Begins`;
+                let body = stage === "oral"
+                    ? `The year turns anew, and {{people}} mark the return of ${info.name}.`
+                    : stage === "scribe"
+                        ? `Records begin Year ${info.year} in ${info.name}.`
+                        : `Archivists mark Year ${info.year} with the return of ${info.name}.`;
+                recordAnnalsEntry({
+                    theme: "nature",
+                    title,
+                    body,
+                    sourceType: "year_start",
+                    sourceId: info.year,
+                    day: planet.day
+                });
+            } catch {}
+        }
+    }
+
+    function getSeasonalInfluences(town) {
+        const season = getSeasonInfo();
+        if (!season || !town) return null;
+        const climate = getTownClimate(town);
+        const cold = clampValue((0.5 - climate.temp) / 0.25, 0, 1);
+        const heat = clampValue((climate.temp - 0.55) / 0.25, 0, 1);
+        const dry = clampValue((0.45 - climate.moisture) / 0.25, 0, 1);
+        const wet = clampValue((climate.moisture - 0.6) / 0.25, 0, 1);
+
+        const influences = {};
+
+        if (season.id === "spring") {
+            const growth = 0.08 * (1 - dry * 0.6);
+            influences.farm = growth;
+            influences.travel = 0.05;
+            influences.happy = 0.04;
+            if (wet > 0) influences.disease = 0.04 * wet;
+            influences.hunger = -0.03;
+        } else if (season.id === "summer") {
+            const heatStress = clampValue(heat + dry * 0.8, 0, 1.5);
+            influences.farm = 0.05 - 0.12 * heatStress;
+            influences.travel = 0.04 - 0.06 * heatStress;
+            influences.trade = 0.04 - 0.04 * heatStress;
+            if (heatStress > 0) {
+                influences.hunger = 0.05 * heatStress;
+                influences.disease = 0.03 * heatStress;
+                influences.happy = -0.03 * heatStress;
+            }
+        } else if (season.id === "autumn") {
+            const harvest = 0.12 * (1 - dry * 0.5);
+            influences.farm = harvest;
+            influences.trade = 0.05;
+            influences.happy = 0.05;
+            influences.hunger = -0.04;
+            if (wet > 0) influences.disease = 0.03 * wet;
+        } else if (season.id === "winter") {
+            const chill = clampValue(cold + wet * 0.2, 0, 1.2);
+            influences.travel = -0.08 * (1 + chill);
+            influences.trade = -0.05 * (1 + chill * 0.7);
+            influences.farm = -0.12 * (1 + chill);
+            influences.disease = 0.08 * (1 + chill);
+            influences.hunger = 0.07 * (1 + chill);
+            influences.happy = -0.04 * (1 + chill * 0.6);
+        }
+
+        return influences;
     }
 
     // =========================================================================
@@ -876,6 +1009,32 @@
             planet._paultendoDiscovery.boostUntil = planet.day + 30;
             happen("Influence", null, target, { travel: 0.5, education: 0.2, temp: true });
             logMessage(`Explorers from {{regname:town|${target.id}}} outfit ships and charts for distant horizons.`);
+        }
+    });
+
+    // -------------------------------------------------------------------------
+    // Seasons: state + indicator + daily influences
+    // -------------------------------------------------------------------------
+
+    modEvent("seasonUpdate", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        func: () => {
+            updateSeasonState();
+        }
+    });
+
+    modEvent("seasonalInfluences", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!subject || subject.end || subject.pop <= 0) return false;
+            return true;
+        },
+        func: (subject) => {
+            const influences = getSeasonalInfluences(subject);
+            if (!influences) return;
+            happen("Influence", null, subject, { ...influences, temp: true });
         }
     });
 
@@ -10709,7 +10868,8 @@
         revolution: "Revolution",
         expansion: "Expansion",
         learning: "Learning",
-        hardship: "Hardship"
+        hardship: "Hardship",
+        nature: "Nature"
     };
 
     const ANNALS_MAX_ENTRIES = 200;
@@ -11260,7 +11420,14 @@
     if (typeof window !== "undefined") {
         window.addEventListener("load", () => {
             try { addAnnalsButton(); } catch {}
+            try { updateSeasonState(); } catch {}
         });
+    }
+
+    if (typeof document !== "undefined") {
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            try { updateSeasonState(); } catch {}
+        }
     }
 
     // Create a notable figure
@@ -11519,6 +11686,332 @@
                     }
                 }
             }
+        }
+    });
+
+    // ----------------------------------------
+    // ESPIONAGE & SECRETS SYSTEM
+    // ----------------------------------------
+
+    const SECRET_TYPE_DEFS = {
+        military: {
+            id: "military",
+            name: "military plans",
+            theme: "war",
+            weight: (town) => 1 + (town.influences?.military || 0) * 0.3 + (hasTradition(town, "martial") ? 1 : 0)
+        },
+        trade: {
+            id: "trade",
+            name: "trade arrangements",
+            theme: "diplomacy",
+            weight: (town) => 1 + (town.influences?.trade || 0) * 0.3 + (getTownGovernment(town).id === "oligarchy" ? 1 : 0)
+        },
+        faith: {
+            id: "faith",
+            name: "religious dispute",
+            theme: "faith",
+            weight: (town) => 1 + (town.influences?.faith || 0) * 0.3 + (getTownGovernment(town).id === "theocracy" ? 1 : 0)
+        },
+        succession: {
+            id: "succession",
+            name: "succession intrigue",
+            theme: "revolution",
+            weight: (town) => 1 + (["monarchy", "dictatorship", "chiefdom"].includes(getTownGovernment(town).id) ? 2 : 0)
+        },
+        scandal: {
+            id: "scandal",
+            name: "public scandal",
+            theme: "diplomacy",
+            weight: (town) => 1 + (town.influences?.crime || 0) * 0.3
+        },
+        knowledge: {
+            id: "knowledge",
+            name: "technical knowledge",
+            theme: "learning",
+            weight: (town) => 1 + (town.influences?.education || 0) * 0.3 + (hasTownSpecialization(town, "academy") ? 1 : 0)
+        }
+    };
+
+    const MAX_SECRETS_PER_TOWN = 3;
+
+    function initSecrets() {
+        if (!planet._paultendoSecrets) {
+            planet._paultendoSecrets = [];
+        }
+        if (!planet._paultendoSecretId) {
+            planet._paultendoSecretId = 1;
+        }
+    }
+
+    function getTownSecrets(town, includeExposed = false) {
+        initSecrets();
+        return planet._paultendoSecrets.filter(s =>
+            s.owner === town.id && (includeExposed || !s.exposed)
+        );
+    }
+
+    function chooseSecretType(town) {
+        const defs = Object.values(SECRET_TYPE_DEFS);
+        const chosen = weightedChoice(defs, def => def.weight(town));
+        return chosen || SECRET_TYPE_DEFS.scandal;
+    }
+
+    function createSecret(owner, typeDef) {
+        initSecrets();
+        const def = typeDef || chooseSecretType(owner);
+        const secret = {
+            id: planet._paultendoSecretId++,
+            type: def.id,
+            title: def.name,
+            theme: def.theme,
+            owner: owner.id,
+            created: planet.day,
+            knownBy: [owner.id],
+            exposed: false
+        };
+        planet._paultendoSecrets.push(secret);
+        return secret;
+    }
+
+    function addSecretKnowledge(secret, town) {
+        if (!secret.knownBy) secret.knownBy = [];
+        if (!secret.knownBy.includes(town.id)) {
+            secret.knownBy.push(town.id);
+        }
+    }
+
+    function getSpyCapability(town) {
+        const education = town.influences?.education || 0;
+        const crime = town.influences?.crime || 0;
+        const trade = town.influences?.trade || 0;
+        return Math.max(0, education * 0.4 + crime * 0.6 + trade * 0.2);
+    }
+
+    function getEspionageStageProfile() {
+        const stage = getAnnalsStage();
+        if (stage === "oral") return { scale: 0.5, minCapability: 0.2 };
+        if (stage === "scribe") return { scale: 0.8, minCapability: 0.35 };
+        return { scale: 1, minCapability: 0.5 };
+    }
+
+    function getEspionageMotive(subject, target) {
+        let motive = 0;
+        const relation = getRelations(subject, target);
+        if (relation < 0) motive += Math.min(5, -relation) * 0.2 + 0.5;
+        if (relation > 3) motive -= 0.5;
+
+        if (hasGrudge(subject, target.id) || hasGrudge(target, subject.id)) motive += 1;
+        if (hasEmbargoBetween(subject, target)) motive += 0.5;
+
+        const pressure = getWarPressureValue(subject, target);
+        if (pressure > 10) motive += 0.5;
+        if (pressure > 25) motive += 0.5;
+
+        const govTension = getGovernmentTension(getTownGovernment(subject).id, getTownGovernment(target).id);
+        motive += govTension * 0.2;
+
+        return Math.max(0, motive);
+    }
+
+    function computeSpySuccessChance(subject, target) {
+        const capability = getSpyCapability(subject);
+        const counter = (target.influences?.education || 0) * 0.3 + (target.influences?.law || 0) * 0.4;
+        let chance = 0.25 + capability * 0.03 - counter * 0.03;
+        if (areAllied(subject, target)) chance -= 0.1;
+        const stageScale = getEspionageStageProfile().scale;
+        chance *= stageScale;
+        return clampValue(chance, 0.05, 0.75);
+    }
+
+    function bumpWarPressure(town1, town2, amount) {
+        const record = getWarPressureRecord(town1, town2);
+        record.value = clampValue((record.value || 0) + amount, 0, 100);
+        record.lastDay = planet.day;
+    }
+
+    function applySecretLeverage(secret, subject, target, scale = 1) {
+        const effect = clampValue(scale, 0.25, 1);
+        switch (secret.type) {
+            case "military":
+                bumpWarPressure(subject, target, 3 * effect);
+                happen("Influence", null, subject, { military: 0.5 * effect, temp: true });
+                happen("Influence", null, target, { military: -0.2 * effect, temp: true });
+                break;
+            case "trade":
+                happen("Influence", null, subject, { trade: 0.5 * effect, temp: true });
+                happen("Influence", null, target, { trade: -0.3 * effect, temp: true });
+                worsenRelations(target, subject, Math.max(1, Math.round(1 * effect)));
+                break;
+            case "faith":
+                happen("Influence", null, target, { faith: -0.6 * effect, happy: -0.2 * effect, temp: true });
+                initUnrest(target);
+                target.unrest = Math.min(100, target.unrest + Math.round(2 * effect));
+                break;
+            case "succession":
+                initUnrest(target);
+                target.unrest = Math.min(100, target.unrest + Math.round(5 * effect));
+                happen("Influence", null, target, { happy: -0.4 * effect, temp: true });
+                bumpWarPressure(subject, target, 1.5 * effect);
+                break;
+            case "scandal":
+                happen("Influence", null, target, { happy: -0.5 * effect, faith: -0.3 * effect, crime: 0.3 * effect, temp: true });
+                worsenRelations(target, subject, Math.max(1, Math.round(1 * effect)));
+                break;
+            case "knowledge": {
+                const targetSpecs = getTownSpecializations(target);
+                const stealable = targetSpecs.filter(s => !hasSpecialization(subject, s.id));
+                if (stealable.length > 0 && Math.random() < 0.4 * effect) {
+                    const spec = choose(stealable);
+                    addSpecialization(subject, spec.id);
+                    happen("Influence", null, subject, { education: 0.5 * effect, temp: true });
+                } else {
+                    happen("Influence", null, subject, { education: 0.5 * effect, temp: true });
+                }
+                worsenRelations(target, subject, Math.max(1, Math.round(1 * effect)));
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    function exposeSecret(secret, exposedBy = null) {
+        if (!secret || secret.exposed) return false;
+        secret.exposed = true;
+        secret.exposedDay = planet.day;
+
+        const owner = regGet("town", secret.owner);
+        if (owner && !owner.end) {
+            if (secret.type === "military") {
+                happen("Influence", null, owner, { military: -0.5, temp: true });
+            } else if (secret.type === "trade") {
+                happen("Influence", null, owner, { trade: -0.5, temp: true });
+            } else if (secret.type === "faith") {
+                happen("Influence", null, owner, { faith: -0.8, temp: true });
+            } else if (secret.type === "succession") {
+                initUnrest(owner);
+                owner.unrest = Math.min(100, owner.unrest + 6);
+            } else if (secret.type === "scandal") {
+                happen("Influence", null, owner, { happy: -0.7, crime: 0.5, temp: true });
+            }
+        }
+
+        const ownerName = owner ? `{{regname:town|${owner.id}}}` : "A town";
+        logMessage(`${ownerName}'s ${secret.title} are exposed to the world.`, "warning");
+
+        try {
+            const stage = getAnnalsStage();
+            const title = `Secrets of ${ownerName} Revealed`;
+            let body = stage === "oral"
+                ? `Rumors about ${ownerName} spread along the roads.`
+                : stage === "scribe"
+                    ? `Records note the exposure of ${ownerName}'s ${secret.title}.`
+                    : `Later historians cite the revelation of ${ownerName}'s ${secret.title} as a turning point.`;
+            recordAnnalsEntry({
+                theme: secret.theme || "diplomacy",
+                title,
+                body,
+                sourceType: "secret_exposed",
+                sourceId: secret.id
+            });
+        } catch {}
+
+        return true;
+    }
+
+    modEvent("secretGeneration", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!subject || subject.end || subject.pop < 10) return false;
+            const secrets = getTownSecrets(subject, true);
+            if (secrets.length >= MAX_SECRETS_PER_TOWN) return false;
+            if (Math.random() > 0.002) return false;
+            return true;
+        },
+        func: (subject) => {
+            createSecret(subject, chooseSecretType(subject));
+        }
+    });
+
+    modEvent("espionageAttempt", {
+        random: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        target: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || !target) return false;
+            if (subject.id === target.id) return false;
+            if (subject.end || target.end) return false;
+            if (subject.pop < 20 || target.pop < 20) return false;
+
+            const profile = getEspionageStageProfile();
+            const capability = getSpyCapability(subject);
+            if (capability < profile.minCapability) return false;
+
+            const motive = getEspionageMotive(subject, target);
+            if (motive <= 0) return false;
+
+            if (Math.random() > Math.min(0.3, 0.1 + motive * 0.1)) return false;
+
+            args.motive = motive;
+            args.stageScale = profile.scale;
+            args.successChance = computeSpySuccessChance(subject, target);
+            return true;
+        },
+        func: (subject, target, args) => {
+            const effectScale = args.stageScale || 1;
+            const success = Math.random() < args.successChance;
+            args.success = success;
+
+            if (success) {
+                const secrets = getTownSecrets(target, false);
+                const secret = secrets.length > 0 ? choose(secrets) : createSecret(target, chooseSecretType(target));
+                addSecretKnowledge(secret, subject);
+                applySecretLeverage(secret, subject, target, effectScale);
+                bumpWarPressure(subject, target, 1 * effectScale);
+
+                if (Math.random() < 0.15 * effectScale) {
+                    logMessage(`Whispers say agents from {{regname:town|${subject.id}}} returned from {{regname:town|${target.id}}} with ${secret.title}.`);
+                }
+            } else {
+                const fallout = effectScale;
+                const relationHit = Math.max(1, Math.round(3 * fallout));
+                const grudgeHit = Math.max(1, Math.round(3 * fallout));
+                worsenRelations(target, subject, relationHit);
+                recordGrudge(target, subject.id, "Espionage exposed", grudgeHit);
+                bumpWarPressure(target, subject, 2 * fallout);
+                logMessage(`Spies from {{regname:town|${subject.id}}} are caught in {{regname:town|${target.id}}}!`, "warning");
+            }
+        }
+    });
+
+    modEvent("secretLeak", {
+        random: true,
+        weight: $c.VERY_RARE,
+        subject: { reg: "player", id: 1 },
+        value: (subject, target, args) => {
+            initSecrets();
+            const candidates = planet._paultendoSecrets.filter(s =>
+                !s.exposed && s.knownBy && s.knownBy.length > 1
+            );
+            if (candidates.length === 0) return false;
+            args.secret = choose(candidates);
+            return true;
+        },
+        func: (subject, target, args) => {
+            exposeSecret(args.secret);
+        }
+    });
+
+    modEvent("secretDecay", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        func: () => {
+            initSecrets();
+            planet._paultendoSecrets = planet._paultendoSecrets.filter(s =>
+                !s.exposed || planet.day - (s.exposedDay || s.created) < 200
+            );
         }
     });
 
