@@ -15,6 +15,29 @@
 
     console.log("[paultendo-mod] Loaded!");
 
+    const MOD_VERSION = "1.0";
+
+    // =========================================================================
+    // MOD STATUS (one-time Chronicle message after the first town exists)
+    // =========================================================================
+
+    Mod.event("paultendoModStatus", {
+        daily: true,
+        subject: { reg: "nature", id: 1 },
+        check: () => {
+            if (planet._paultendoModStatusShown) return false;
+            const towns = regFilter("town", (t) => !t.end && t.pop > 0);
+            if (!towns.length) return false;
+            // First day after the first town appears
+            if (planet.day < 1) return false;
+            return true;
+        },
+        func: () => {
+            planet._paultendoModStatusShown = true;
+            logMessage(`{{b:paultendo-mod}} active (v${MOD_VERSION}).`, "milestone");
+        }
+    });
+
     // =========================================================================
     // SWAY MECHANIC
     // Allows player to spread rumors and sow discord between towns
