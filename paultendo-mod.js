@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.0.8";
+    const MOD_VERSION = "1.1.1";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -389,6 +389,25 @@
         } else {
             logMessage(`The ${name} are ${reason}.`, "milestone");
         }
+
+        try {
+            const stage = getAnnalsStage();
+            const title = `Discovery of ${landmassRef(landmassId)}`;
+            let body = stage === "oral"
+                ? `Sailors returned with tales of ${landmassRef(landmassId)}.`
+                : stage === "scribe"
+                    ? `Charts now include ${landmassRef(landmassId)}, newly reached.`
+                    : `Cartographers recorded the first firm knowledge of ${landmassRef(landmassId)}.`;
+            const line = themeLine("discovery", stage);
+            if (line) body += ` ${line}`;
+            recordAnnalsEntry({
+                theme: "discovery",
+                title,
+                body,
+                sourceType: "discovery_landmass",
+                sourceId: landmassId
+            });
+        } catch {}
         return true;
     }
 
@@ -474,6 +493,25 @@
         if (Math.random() < chance) {
             setDiscoveryTier(nextTier);
             logMessage(`New horizons open: {{b:${getDiscoveryTierName(nextTier)}}} now lie within reach.`, "milestone");
+            try {
+                const stage = getAnnalsStage();
+                const tierName = getDiscoveryTierName(nextTier);
+                const title = `${tierName} Opened`;
+                let body = stage === "oral"
+                    ? `The people whisper of the ${tierName}, and ships dare farther waters.`
+                    : stage === "scribe"
+                        ? `Navigators mark the ${tierName} as newly reachable.`
+                        : `Expanded routes and charts brought the ${tierName} into the known world.`;
+                const line = themeLine("discovery", stage);
+                if (line) body += ` ${line}`;
+                recordAnnalsEntry({
+                    theme: "discovery",
+                    title,
+                    body,
+                    sourceType: "discovery_tier",
+                    sourceId: nextTier
+                });
+            } catch {}
             return true;
         }
         return false;
@@ -6249,6 +6287,46 @@
     // Culture affects happiness, migration, relations, and soft power
     // =========================================================================
 
+    const ART_LOG_TOWN_COOLDOWN_DAYS = 20;
+    const ART_LOG_GLOBAL_MAX_PER_DAY = 2;
+
+    function initArtLogState() {
+        if (!planet._paultendoArtLog) {
+            planet._paultendoArtLog = { day: planet.day, count: 0 };
+        }
+        if (planet._paultendoArtLog.day !== planet.day) {
+            planet._paultendoArtLog.day = planet.day;
+            planet._paultendoArtLog.count = 0;
+        }
+    }
+
+    function canLogArtMessage(town) {
+        initArtLogState();
+        if (planet._paultendoArtLog.count >= ART_LOG_GLOBAL_MAX_PER_DAY) return false;
+        if (!town) return true;
+        if (!town._paultendoArtLog) {
+            town._paultendoArtLog = { lastDay: -999 };
+        }
+        return (planet.day - town._paultendoArtLog.lastDay) >= ART_LOG_TOWN_COOLDOWN_DAYS;
+    }
+
+    function noteArtMessage(town) {
+        initArtLogState();
+        planet._paultendoArtLog.count += 1;
+        if (town) {
+            if (!town._paultendoArtLog) town._paultendoArtLog = { lastDay: planet.day };
+            town._paultendoArtLog.lastDay = planet.day;
+        }
+    }
+
+    function logArtMessage(town, message, type) {
+        if (!message) return false;
+        if (!canLogArtMessage(town)) return false;
+        const result = logMessage(message, type);
+        noteArtMessage(town);
+        return result;
+    }
+
     // Cultural tradition types - each town can develop these
     const CULTURAL_TRADITIONS = {
         music: {
@@ -6603,7 +6681,7 @@
             }
 
             if (Math.random() < 0.2) {
-                logMessage(`An artist in {{regname:town|${subject.id}}} creates a {{c:masterpiece|renowned work|celebrated piece}}.`);
+                logArtMessage(subject, `An artist in {{regname:town|${subject.id}}} creates a {{c:masterpiece|renowned work|celebrated piece}}.`);
             }
         }
     });
@@ -6626,7 +6704,7 @@
             // May develop music tradition
             if (Math.random() < 0.01 * args.musicians) {
                 if (addTradition(subject, "music") && !hasTradition(subject, "music")) {
-                    logMessage(`Musicians in {{regname:town|${subject.id}}} establish a {{b:Musical}} tradition.`);
+                    logArtMessage(subject, `Musicians in {{regname:town|${subject.id}}} establish a {{b:Musical}} tradition.`);
                 }
             }
         }
@@ -7660,17 +7738,17 @@
             if (args.musicians > 0 && Math.random() < 0.4) {
                 addTradition(subject, "music");
                 if (Math.random() < 0.3) {
-                    logMessage(`A {{regadj:town|${subject.id}}} composer writes a {{c:stirring|haunting|powerful}} war {{c:anthem|symphony|ballad}}.`);
+                    logArtMessage(subject, `A {{regadj:town|${subject.id}}} composer writes a {{c:stirring|haunting|powerful}} war {{c:anthem|symphony|ballad}}.`);
                 }
             } else if (args.artists > 0 && Math.random() < 0.4) {
                 addTradition(subject, "art");
                 if (Math.random() < 0.3) {
-                    logMessage(`An artist in {{regname:town|${subject.id}}} creates a {{c:powerful|moving|striking}} war {{c:painting|sculpture|mural}}.`);
+                    logArtMessage(subject, `An artist in {{regname:town|${subject.id}}} creates a {{c:powerful|moving|striking}} war {{c:painting|sculpture|mural}}.`);
                 }
             } else if (args.scholars > 0 && Math.random() < 0.4) {
                 addTradition(subject, "literary");
                 if (Math.random() < 0.3) {
-                    logMessage(`A poet in {{regname:town|${subject.id}}} writes {{c:verses|an epic|poetry}} about the {{c:conflict|war|struggle}}.`);
+                    logArtMessage(subject, `A poet in {{regname:town|${subject.id}}} writes {{c:verses|an epic|poetry}} about the {{c:conflict|war|struggle}}.`);
                 }
             }
         }
@@ -8437,9 +8515,9 @@
             subject.culture.prestige += 2;
 
             if (tradition === "literary") {
-                logMessage(`Writers in {{regname:town|${subject.id}}} chronicle the ${disaster.subtype} in powerful accounts.`);
+                logArtMessage(subject, `Writers in {{regname:town|${subject.id}}} chronicle the ${disaster.subtype} in powerful accounts.`);
             } else {
-                logMessage(`Artists in {{regname:town|${subject.id}}} create moving works depicting the ${disaster.subtype}.`);
+                logArtMessage(subject, `Artists in {{regname:town|${subject.id}}} create moving works depicting the ${disaster.subtype}.`);
             }
         }
     });
@@ -10256,7 +10334,7 @@
 
             const artType = hasTradition(subject, "art") ? "artwork" : "hymns";
             if (Math.random() < 0.2) {
-                logMessage(`Artists in {{regname:town|${subject.id}}} create ${artType} honoring {{b:${religion.name}}}.`);
+                logArtMessage(subject, `Artists in {{regname:town|${subject.id}}} create ${artType} honoring {{b:${religion.name}}}.`);
             }
         }
     });
@@ -10617,6 +10695,574 @@
         return entry;
     }
 
+    // ----------------------------------------
+    // ANNALS SYSTEM (long-form storytelling)
+    // ----------------------------------------
+
+    const ANNALS_THEME_NAMES = {
+        era: "Era",
+        war: "War",
+        discovery: "Discovery",
+        faith: "Faith",
+        diplomacy: "Diplomacy",
+        culture: "Culture",
+        revolution: "Revolution",
+        expansion: "Expansion",
+        learning: "Learning",
+        hardship: "Hardship"
+    };
+
+    const ANNALS_MAX_ENTRIES = 200;
+
+    function initAnnals() {
+        if (!planet.annals) {
+            planet.annals = [];
+        }
+        if (!planet._paultendoAnnalsMeta) {
+            const maxId = planet.annals.reduce((max, entry) => Math.max(max, entry.id || 0), 0);
+            planet._paultendoAnnalsMeta = { lastId: maxId };
+        }
+    }
+
+    function getAnnalsEraContext() {
+        initHistory();
+        if (planet.currentEra) {
+            return { type: planet.currentEra.type, name: planet.currentEra.name };
+        }
+        if (planet.eras && planet.eras.length) {
+            const lastEra = planet.eras[planet.eras.length - 1];
+            return { type: lastEra.type, name: lastEra.name };
+        }
+        return { type: "early", name: "The Early Days" };
+    }
+
+    function getAnnalsStage() {
+        const edu = planet.unlocks?.education || 0;
+        if (planet.day < 200 || edu < 10) return "oral";
+        if (planet.day < 600 || edu < 30) return "scribe";
+        return "scholar";
+    }
+
+    const ANNALS_VOICES = {
+        oral: { id: "oral", name: "The Hearth-Teller" },
+        scribe: { id: "scribe", name: "The Chronicler" },
+        scholar: { id: "scholar", name: "The Archivist" }
+    };
+
+    function getAnnalsVoice(theme) {
+        const stage = getAnnalsStage();
+        return ANNALS_VOICES[stage] || ANNALS_VOICES.scribe;
+    }
+
+    function townRef(townId) {
+        if (!townId) return "a distant town";
+        return `{{regname:town|${townId}}}`;
+    }
+
+    function landmassRef(landmassId) {
+        if (!landmassId) return "unknown lands";
+        return `{{regname:landmass|${landmassId}}}`;
+    }
+
+    function recordAnnalsEntry(data) {
+        if (!data || !data.title || !data.body) return null;
+        initAnnals();
+
+        if (data.sourceType && data.sourceId) {
+            const existing = planet.annals.find(a =>
+                a.sourceType === data.sourceType && a.sourceId === data.sourceId
+            );
+            if (existing) return existing;
+        }
+
+        const era = getAnnalsEraContext();
+        const voice = getAnnalsVoice(data.theme);
+
+        const entryDay = data.day !== undefined ? data.day : planet.day;
+        const entry = {
+            id: planet._paultendoAnnalsMeta.lastId + 1,
+            day: entryDay,
+            theme: data.theme || "era",
+            eraType: data.eraType || era.type,
+            eraName: data.eraName || era.name,
+            title: data.title,
+            body: data.body,
+            voiceId: voice.id,
+            voiceName: voice.name,
+            sourceType: data.sourceType,
+            sourceId: data.sourceId
+        };
+
+        planet._paultendoAnnalsMeta.lastId = entry.id;
+        planet.annals.push(entry);
+
+        if (planet.annals.length > ANNALS_MAX_ENTRIES) {
+            planet.annals.splice(0, planet.annals.length - ANNALS_MAX_ENTRIES);
+        }
+        return entry;
+    }
+
+    function themeLine(theme, stage) {
+        if (Math.random() > 0.3) return null;
+        switch (theme) {
+            case "war":
+                return stage === "oral"
+                    ? "The warriors still sing of those days."
+                    : stage === "scribe"
+                        ? "The war-scribes note the hardening of borders."
+                        : "Analysts later called it a turning point in power.";
+            case "faith":
+                return stage === "oral"
+                    ? "The faithful say the signs were clear."
+                    : stage === "scribe"
+                        ? "Clerics recorded omens in the margins of their texts."
+                        : "Doctrine shifted alongside the politics of the day.";
+            case "discovery":
+                return stage === "oral"
+                    ? "Sailors returned with tales of strange horizons."
+                    : stage === "scribe"
+                        ? "Maps gained new edges and names."
+                        : "Cartographers revised the known world accordingly.";
+            case "culture":
+                return stage === "oral"
+                    ? "Songs carried the story to distant fires."
+                    : stage === "scribe"
+                        ? "Patrons commissioned works to remember it."
+                        : "Later critics traced a flourishing of the arts to this time.";
+            case "revolution":
+                return stage === "oral"
+                    ? "The old oaths were broken in the streets."
+                    : stage === "scribe"
+                        ? "The archives describe a sudden change of rule."
+                        : "Political scholars cite this as a decisive rupture.";
+            case "diplomacy":
+                return stage === "oral"
+                    ? "Messengers walked dusty roads bearing promises."
+                    : stage === "scribe"
+                        ? "Seals were pressed into wax and kept in record."
+                        : "The treaty shaped the balance of the region.";
+            case "expansion":
+                return stage === "oral"
+                    ? "Families set out toward empty lands."
+                    : stage === "scribe"
+                        ? "Settlers crossed rivers and staked new ground."
+                        : "Demographers marked a clear frontier shift.";
+            default:
+                return null;
+        }
+    }
+
+    function buildAnnalsFromHistory(entry) {
+        if (!entry || (!entry.type && !entry.historyType)) return null;
+        const historyType = entry.historyType || entry.type;
+        const stage = getAnnalsStage();
+
+        switch (historyType) {
+            case HISTORY_TYPES.ERA_BEGAN: {
+                const title = `${entry.eraName} Begins`;
+                const body = stage === "oral"
+                    ? `A new age begins, and {{people}} speak its name with wonder.`
+                    : stage === "scribe"
+                        ? `Records mark the beginning of {{b:${entry.eraName}}}.`
+                        : `Historians date the start of {{b:${entry.eraName}}} to this day.`;
+                return recordAnnalsEntry({
+                    theme: "era",
+                    title,
+                    body,
+                    eraType: entry.eraType,
+                    eraName: entry.eraName,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            case HISTORY_TYPES.WAR: {
+                const victor = entry.victor ? townRef(entry.victor) : "one town";
+                const loser = entry.loser ? townRef(entry.loser) : "another";
+                const duration = entry.duration ? `${entry.duration} days` : "many days";
+                const deaths = entry.deaths ? `${entry.deaths}` : null;
+
+                let body = stage === "oral"
+                    ? `${victor} and ${loser} clashed in bitter days. Smoke and sorrow lingered.`
+                    : stage === "scribe"
+                        ? `Scribes record a war between ${victor} and ${loser}, lasting ${duration}.`
+                        : `The conflict between ${victor} and ${loser} concluded after ${duration}${deaths ? `, with ${deaths} deaths recorded` : ""}.`;
+
+                const line = themeLine("war", stage);
+                if (line) body += ` ${line}`;
+
+                return recordAnnalsEntry({
+                    theme: "war",
+                    title: entry.name || "A War is Recorded",
+                    body,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            case HISTORY_TYPES.ALLIANCE_FORMED: {
+                const founders = entry.founders || [];
+                const founderText = founders.length >= 2
+                    ? `${townRef(founders[0])} and ${townRef(founders[1])}`
+                    : "two towns";
+                let body = stage === "oral"
+                    ? `${founderText} swore bonds of mutual aid. The pact was spoken aloud.`
+                    : stage === "scribe"
+                        ? `A formal alliance, {{b:${entry.allianceName}}}, is recorded between ${founderText}.`
+                        : `The alliance {{b:${entry.allianceName}}} bound ${founderText} to shared defense and trade.`;
+                const line = themeLine("diplomacy", stage);
+                if (line) body += ` ${line}`;
+                return recordAnnalsEntry({
+                    theme: "diplomacy",
+                    title: `{{b:${entry.allianceName}}} Formed`,
+                    body,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            case HISTORY_TYPES.ALLIANCE_DISSOLVED: {
+                const title = `{{b:${entry.allianceName || "An Alliance"}}} Dissolves`;
+                let body = stage === "oral"
+                    ? "The old pact frayed and fell apart."
+                    : stage === "scribe"
+                        ? "Records mark the dissolution of an alliance."
+                        : "Diplomatic ties unravelled, leaving the region less stable.";
+                const line = themeLine("diplomacy", stage);
+                if (line) body += ` ${line}`;
+                return recordAnnalsEntry({
+                    theme: "diplomacy",
+                    title,
+                    body,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            case HISTORY_TYPES.RELIGION_FOUNDED: {
+                const town = entry.town ? townRef(entry.town) : "a town";
+                let body = stage === "oral"
+                    ? `A new faith, {{b:${entry.religionName}}}, rose among ${town}.`
+                    : stage === "scribe"
+                        ? `Clerics record the founding of {{b:${entry.religionName}}} in ${town}.`
+                        : `The faith of {{b:${entry.religionName}}} was established in ${town}, reshaping belief.`;
+                const line = themeLine("faith", stage);
+                if (line) body += ` ${line}`;
+                return recordAnnalsEntry({
+                    theme: "faith",
+                    title: `{{b:${entry.religionName}}} Established`,
+                    body,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            case HISTORY_TYPES.RELIGION_SCHISM: {
+                const town = entry.town ? townRef(entry.town) : "a town";
+                let body = stage === "oral"
+                    ? `In ${town}, {{b:${entry.religionName}}} split from {{b:${entry.parentName}}}.`
+                    : stage === "scribe"
+                        ? `A schism divides {{b:${entry.parentName}}}; {{b:${entry.religionName}}} emerges in ${town}.`
+                        : `The schism between {{b:${entry.parentName}}} and {{b:${entry.religionName}}} began in ${town}.`;
+                const line = themeLine("faith", stage);
+                if (line) body += ` ${line}`;
+                return recordAnnalsEntry({
+                    theme: "faith",
+                    title: `Schism of {{b:${entry.parentName}}}`,
+                    body,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            case HISTORY_TYPES.REVOLUTION: {
+                const town = entry.town ? townRef(entry.town) : "a town";
+                let body = stage === "oral"
+                    ? `${town} cast off its old rulers. A new order rose.`
+                    : stage === "scribe"
+                        ? `The {{b:${entry.name}}} reshaped governance in ${town}.`
+                        : `${town} underwent revolution, adopting ${entry.newGovernment ? `a ${entry.newGovernment} government` : "a new order"}.`;
+                const line = themeLine("revolution", stage);
+                if (line) body += ` ${line}`;
+                return recordAnnalsEntry({
+                    theme: "revolution",
+                    title: entry.name || "A Revolution",
+                    body,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            case HISTORY_TYPES.TOWN_FOUNDED: {
+                const town = entry.town ? townRef(entry.town) : "a new town";
+                const parent = entry.parentTown ? townRef(entry.parentTown) : null;
+                let body = stage === "oral"
+                    ? `${town} was founded${parent ? ` by settlers from ${parent}` : ""}.`
+                    : stage === "scribe"
+                        ? `Records mark the founding of ${town}${parent ? `, settled from ${parent}` : ""}.`
+                        : `A new settlement, ${town}, was established${parent ? ` by migrants from ${parent}` : ""}.`;
+                const line = themeLine("expansion", stage);
+                if (line) body += ` ${line}`;
+                return recordAnnalsEntry({
+                    theme: "expansion",
+                    title: `Founding of ${town}`,
+                    body,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            case HISTORY_TYPES.DISASTER: {
+                if ((entry.deaths || 0) < 20) return null;
+                const title = entry.name || "A Great Disaster";
+                let body = stage === "oral"
+                    ? `A ${entry.subtype} swept the land, and many were lost.`
+                    : stage === "scribe"
+                        ? `The ${entry.subtype} is recorded as a grievous disaster.`
+                        : `The ${entry.subtype} claimed ${entry.deaths || "many"} lives and left long scars.`;
+                return recordAnnalsEntry({
+                    theme: "hardship",
+                    title,
+                    body,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            case HISTORY_TYPES.CULTURAL_ACHIEVEMENT: {
+                const town = entry.town ? townRef(entry.town) : "a town";
+                const achievementType = entry.achievementType || entry.type;
+                const title = achievementType === "scholarship"
+                    ? `Scholarship in ${town}`
+                    : `A Masterwork in ${town}`;
+                let body = stage === "oral"
+                    ? `Stories from ${town} speak of a great ${achievementType === "scholarship" ? "discovery" : "work"}.`
+                    : stage === "scribe"
+                        ? `${town} is noted for a cultural achievement of lasting memory.`
+                        : `Cultural records from ${town} highlight a period of notable ${achievementType === "scholarship" ? "learning" : "artistry"}.`;
+                const line = themeLine("culture", stage);
+                if (line) body += ` ${line}`;
+                return recordAnnalsEntry({
+                    theme: "culture",
+                    title,
+                    body,
+                    sourceType: historyType,
+                    sourceId: entry.id,
+                    day: entry.day
+                });
+            }
+            default:
+                return null;
+        }
+    }
+
+    if (typeof recordHistory === "function" && !recordHistory._paultendoAnnals) {
+        const baseRecordHistory = recordHistory;
+        recordHistory = function(type, data) {
+            const entry = baseRecordHistory(type, data);
+            if (entry && !entry.historyType) entry.historyType = type;
+            if (entry && type === HISTORY_TYPES.CULTURAL_ACHIEVEMENT && data && data.type) {
+                entry.achievementType = data.type;
+            }
+            try { buildAnnalsFromHistory(entry); } catch {}
+            return entry;
+        };
+        recordHistory._paultendoAnnals = true;
+    }
+
+    // ----------------------------------------
+    // Lore UI (Executive panel)
+    // ----------------------------------------
+
+    function getAnnalsViewState() {
+        if (typeof userSettings === "undefined") return { era: "all", theme: "all" };
+        if (!userSettings.paultendoAnnalsEra) userSettings.paultendoAnnalsEra = "all";
+        if (!userSettings.paultendoAnnalsTheme) userSettings.paultendoAnnalsTheme = "all";
+        return { era: userSettings.paultendoAnnalsEra, theme: userSettings.paultendoAnnalsTheme };
+    }
+
+    function setAnnalsViewState(state) {
+        if (typeof userSettings === "undefined") return;
+        if (state.era) userSettings.paultendoAnnalsEra = state.era;
+        if (state.theme) userSettings.paultendoAnnalsTheme = state.theme;
+        if (typeof saveSettings === "function") saveSettings();
+    }
+
+    function getAnnalsEraOptions() {
+        const options = [{ id: "all", label: "All Eras" }];
+        if (planet.currentEra) {
+            options.push({ id: "current", label: `Current: ${planet.currentEra.name}` });
+        }
+        const eraNames = new Set();
+        if (planet.eras && planet.eras.length) {
+            planet.eras.forEach(era => {
+                if (era && era.name && !eraNames.has(era.name)) {
+                    options.push({ id: `name:${era.name}`, label: era.name });
+                    eraNames.add(era.name);
+                }
+            });
+        }
+        return options;
+    }
+
+    function getAnnalsThemeOptions() {
+        const options = [{ id: "all", label: "All Themes" }];
+        for (const [key, label] of Object.entries(ANNALS_THEME_NAMES)) {
+            options.push({ id: key, label });
+        }
+        return options;
+    }
+
+    function formatAnnalsListItem(entry) {
+        const themeLabel = ANNALS_THEME_NAMES[entry.theme] || "Theme";
+        const datePart = `{{color:[{{date:${entry.day}|s}}]|rgba(255,255,0,0.75)}}`;
+        return `${datePart} ${entry.title} {{color:[${themeLabel}]|rgba(160,160,160,0.7)}}`;
+    }
+
+    function formatAnnalsBody(entry) {
+        return entry.body.replace(/\n/g, "<br>");
+    }
+
+    function getFilteredAnnalsEntries() {
+        initAnnals();
+        const state = getAnnalsViewState();
+        const eraFilter = state.era;
+        const themeFilter = state.theme;
+        const currentEraName = planet.currentEra?.name;
+
+        return planet.annals.filter(entry => {
+            if (themeFilter !== "all" && entry.theme !== themeFilter) return false;
+            if (eraFilter === "all") return true;
+            if (eraFilter === "current") return entry.eraName === currentEraName;
+            if (eraFilter.startsWith("name:")) {
+                const name = eraFilter.slice(5);
+                return entry.eraName === name;
+            }
+            return true;
+        }).sort((a, b) => b.day - a.day);
+    }
+
+    function openAnnalsEntry(entry) {
+        if (!entry) return;
+        const items = [];
+        items.push({ text: `{{color:[{{date:${entry.day}|s}}]|rgba(255,255,0,0.75)}} ${entry.title}` });
+        items.push({ text: `{{i:Theme:}} ${ANNALS_THEME_NAMES[entry.theme] || "Theme"}` });
+        items.push({ text: `{{i:Era:}} ${entry.eraName || "The Early Days"}` });
+        items.push({ text: `{{i:Voice:}} ${entry.voiceName || "Chronicler"}` });
+        items.push({ spacer: true, text: formatAnnalsBody(entry) });
+        items.push({ spacer: true });
+        items.push({
+            text: "◁ Back to Lore",
+            func: () => openAnnalsPanel()
+        });
+        populateExecutive(items, "Lore Entry");
+    }
+
+    function chooseAnnalsFilter(type, options) {
+        const state = getAnnalsViewState();
+        const current = type === "era" ? state.era : state.theme;
+        doPrompt({
+            type: "choose",
+            message: `Select ${type} filter:`,
+            choices: options.map(o => o.label),
+            choiceValues: options.map(o => o.id),
+            selected: options.findIndex(o => o.id === current),
+            func: (value) => {
+                if (type === "era") state.era = value;
+                else state.theme = value;
+                setAnnalsViewState(state);
+                openAnnalsPanel();
+            }
+        });
+    }
+
+    function openAnnalsPanel() {
+        initAnnals();
+        if (!planet._paultendoAnnalsBackfill && planet.history && planet.history.length) {
+            planet._paultendoAnnalsBackfill = true;
+            const historySorted = [...planet.history].sort((a, b) => (a.day || 0) - (b.day || 0));
+            historySorted.forEach(h => {
+                try { buildAnnalsFromHistory(h); } catch {}
+            });
+            if (planet.eras && planet.eras.length) {
+                planet.eras.forEach(era => {
+                    if (!era || !era.ended) return;
+                    recordAnnalsEntry({
+                        theme: "era",
+                        title: `${era.name} Ends`,
+                        body: `The age called {{b:${era.name}}} passed into memory.`,
+                        eraType: era.type,
+                        eraName: era.name,
+                        sourceType: "era_end",
+                        sourceId: era.started,
+                        day: era.ended
+                    });
+                });
+            }
+        }
+        const entries = getFilteredAnnalsEntries();
+        const state = getAnnalsViewState();
+
+        const eraOptions = getAnnalsEraOptions();
+        const themeOptions = getAnnalsThemeOptions();
+        const eraLabel = (eraOptions.find(o => o.id === state.era) || eraOptions[0]).label;
+        const themeLabel = (themeOptions.find(o => o.id === state.theme) || themeOptions[0]).label;
+
+        const items = [];
+        items.push({
+            text: `Era: ${eraLabel}`,
+            func: () => chooseAnnalsFilter("era", eraOptions)
+        });
+        items.push({
+            text: `Theme: ${themeLabel}`,
+            func: () => chooseAnnalsFilter("theme", themeOptions)
+        });
+        items.push({ spacer: true, text: `Entries (${entries.length})` });
+
+        if (entries.length === 0) {
+            items.push({ text: "{{none}}" });
+        } else {
+            entries.forEach((entry) => {
+                items.push({
+                    text: formatAnnalsListItem(entry),
+                    func: () => openAnnalsEntry(entry)
+                });
+            });
+        }
+
+        populateExecutive(items, `Lore (${entries.length})`);
+    }
+
+    function addAnnalsButton() {
+        const list = document.getElementById("actionMainList");
+        if (!list || document.getElementById("actionItem-annals")) return;
+
+        const button = document.createElement("span");
+        button.className = "actionItem clickable";
+        button.id = "actionItem-annals";
+        button.innerHTML = "Lore";
+        button.addEventListener("click", () => {
+            openAnnalsPanel();
+        });
+        list.appendChild(button);
+    }
+
+    if (typeof initExecutive === "function" && !initExecutive._paultendoAnnals) {
+        const baseInitExecutive = initExecutive;
+        initExecutive = function(...args) {
+            const result = baseInitExecutive.apply(this, args);
+            try { addAnnalsButton(); } catch {}
+            return result;
+        };
+        initExecutive._paultendoAnnals = true;
+    }
+
+    if (typeof window !== "undefined") {
+        window.addEventListener("load", () => {
+            try { addAnnalsButton(); } catch {}
+        });
+    }
+
     // Create a notable figure
     function createFigure(type, data) {
         initHistory();
@@ -10963,6 +11609,24 @@
                     planet.currentEra.duration = planet.day - planet.currentEra.started;
 
                     logMessage(`{{b:${planet.currentEra.name}}} comes to an end after ${planet.currentEra.duration} days.`, "milestone");
+                    try {
+                        const stage = getAnnalsStage();
+                        const title = `${planet.currentEra.name} Ends`;
+                        let body = stage === "oral"
+                            ? `The age called {{b:${planet.currentEra.name}}} fades into memory.`
+                            : stage === "scribe"
+                                ? `Records mark the end of {{b:${planet.currentEra.name}}} after ${planet.currentEra.duration} days.`
+                                : `Historians close the chapter on {{b:${planet.currentEra.name}}}, lasting ${planet.currentEra.duration} days.`;
+                        recordAnnalsEntry({
+                            theme: "era",
+                            title,
+                            body,
+                            eraType: planet.currentEra.type,
+                            eraName: planet.currentEra.name,
+                            sourceType: "era_end",
+                            sourceId: planet.currentEra.started
+                        });
+                    } catch {}
 
                     planet.eras.push(planet.currentEra);
                     planet.currentEra = null;
@@ -11615,7 +12279,7 @@
                 type: "art"
             });
 
-            logMessage(`{{b:${artist.fullTitle}}} becomes renowned in {{regname:town|${subject.id}}}.`);
+            logArtMessage(subject, `{{b:${artist.fullTitle}}} becomes renowned in {{regname:town|${subject.id}}}.`);
 
             subject.culture.prestige += 2;
         }
