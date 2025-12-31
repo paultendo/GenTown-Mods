@@ -13,9 +13,11 @@
 (function() {
     "use strict";
 
-    console.log("[paultendo-mod] Loaded!");
-
-    const MOD_VERSION = "1.0";
+    const MOD_VERSION = "1.0.1";
+    if (typeof window !== "undefined") {
+        window.PAULTENDO_MOD_VERSION = MOD_VERSION;
+    }
+    console.log(`[paultendo-mod] Loaded v${MOD_VERSION}`);
 
     // =========================================================================
     // MOD STATUS (one-time Chronicle message after the first town exists)
@@ -23,20 +25,74 @@
 
     Mod.event("paultendoModStatus", {
         daily: true,
-        subject: { reg: "nature", id: 1 },
+        subject: { reg: "town", all: true },
         check: () => {
             if (planet._paultendoModStatusShown) return false;
             const towns = regFilter("town", (t) => !t.end && t.pop > 0);
             if (!towns.length) return false;
+            const settledDay = planet.settled || planet.day;
             // First day after the first town appears
-            if (planet.day < 1) return false;
+            if (planet.day < settledDay) return false;
             return true;
         },
         func: () => {
+            if (planet._paultendoModStatusShown) return;
             planet._paultendoModStatusShown = true;
             logMessage(`{{b:paultendo-mod}} active (v${MOD_VERSION}).`, "milestone");
         }
     });
+
+    // =========================================================================
+    // BASE-COMPAT HELPERS (relations + war)
+    // =========================================================================
+
+    function getRelations(town1, town2) {
+        if (!town1 || !town2) return 0;
+        return (town1.relations && town1.relations[town2.id]) || 0;
+    }
+
+    function improveRelations(town1, town2, amount = 1) {
+        if (!town1 || !town2) return false;
+        return happen("AddRelation", town1, town2, { amount: Math.abs(amount) });
+    }
+
+    function worsenRelations(town1, town2, amount = 1) {
+        if (!town1 || !town2) return false;
+        return happen("AddRelation", town1, town2, { amount: -Math.abs(amount) });
+    }
+
+    function areAtWar(town1, town2) {
+        if (!town1 || !town2) return false;
+        const warId1 = town1.issues?.war;
+        const warId2 = town2.issues?.war;
+        if (warId1 && warId1 === warId2) {
+            const process = regGet("process", warId1);
+            if (process && !process.done && process.type === "war") return true;
+        }
+        const wars = regFilter("process", p =>
+            p.type === "war" &&
+            !p.done &&
+            p.towns &&
+            p.towns.includes(town1.id) &&
+            p.towns.includes(town2.id)
+        );
+        return wars.length > 0;
+    }
+
+    function startWar(town1, town2) {
+        if (!town1 || !town2 || town1.id === town2.id) return false;
+        if (areAtWar(town1, town2)) return false;
+        const process = happen("Create", town1, null, {
+            type: "war",
+            towns: [town1.id, town2.id]
+        }, "process");
+        if (!process) return false;
+        town1.issues = town1.issues || {};
+        town2.issues = town2.issues || {};
+        town1.issues.war = process.id;
+        town2.issues.war = process.id;
+        return process;
+    }
 
     // =========================================================================
     // SWAY MECHANIC
@@ -6771,7 +6827,7 @@
                 worsenRelations(subject, target, 15);
             } else {
                 // Declaration of war while weak
-                happen("Create", subject, target, { type: "war" });
+                startWar(target, subject);
                 logMessage(`{{regname:town|${target.id}}} attacks disaster-weakened {{regname:town|${subject.id}}}!`, "warning");
             }
         }
@@ -8890,7 +8946,7 @@
             return true;
         },
         func: (subject, target, args) => {
-            happen("Create", subject, target, { type: "war" });
+            startWar(subject, target);
 
             logMessage(`{{regname:town|${subject.id}}} declares holy war on {{regname:town|${target.id}}} in the name of {{b:${args.subjectReligion.name}}}!`, "warning");
 
