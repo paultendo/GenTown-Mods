@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.1.15";
+    const MOD_VERSION = "1.2.4";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -122,7 +122,16 @@
         const warId2 = town2.issues?.war;
         if (warId1 && warId1 === warId2) {
             const process = regGet("process", warId1);
-            if (process && !process.done && process.type === "war") return true;
+            if (process && !process.done && process.type === "war") {
+                if (process.sides) {
+                    const side1 = getWarSideIndex(process, town1.id);
+                    const side2 = getWarSideIndex(process, town2.id);
+                    if (side1 !== null && side2 !== null) {
+                        return side1 !== side2;
+                    }
+                }
+                return true;
+            }
         }
         const wars = regFilter("process", p =>
             p.type === "war" &&
@@ -131,7 +140,21 @@
             p.towns.includes(town1.id) &&
             p.towns.includes(town2.id)
         );
-        return wars.length > 0;
+        if (wars.length === 0) return false;
+        for (let i = 0; i < wars.length; i++) {
+            const process = wars[i];
+            if (!process || process.done) continue;
+            if (process.sides) {
+                const side1 = getWarSideIndex(process, town1.id);
+                const side2 = getWarSideIndex(process, town2.id);
+                if (side1 !== null && side2 !== null) {
+                    if (side1 !== side2) return true;
+                    continue;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     function startWar(town1, town2) {
@@ -142,6 +165,9 @@
             towns: [town1.id, town2.id]
         }, "process");
         if (!process) return false;
+        process.initiator = town1.id;
+        process.defender = town2.id;
+        process.sides = [[town1.id], [town2.id]];
         const early = isEarlyWarEra();
         if (early) {
             process._paultendoEarly = true;
@@ -190,6 +216,75 @@
             if (roll <= 0) return items[i];
         }
         return items[items.length - 1];
+    }
+
+    const MOD_LOG_BUDGETS = {
+        migration: { perDay: 2, perTownCooldown: 12 },
+        espionage: { perDay: 2, perTownCooldown: 10 },
+        trade: { perDay: 2, perTownCooldown: 10 },
+        lore: { perDay: 1 },
+        governance: { perDay: 2, perTownCooldown: 15 },
+        religion: { perDay: 2, perTownCooldown: 15 },
+        season: { perDay: 2, perTownCooldown: 10 },
+        resource: { perDay: 2, perTownCooldown: 20 }
+    };
+
+    function initLogBudgets() {
+        if (typeof planet === "undefined") return null;
+        const day = planet.day || 0;
+        if (!planet._paultendoLogBudgets || planet._paultendoLogBudgets.day !== day) {
+            planet._paultendoLogBudgets = { day, systems: {} };
+        }
+        return planet._paultendoLogBudgets;
+    }
+
+    function shouldLogSystem(system, options = {}) {
+        if (!system) return true;
+        if (options.force) return true;
+        const type = options.type;
+        if (type === "warning" || type === "milestone") return true;
+        const cfg = MOD_LOG_BUDGETS[system];
+        if (!cfg) return true;
+        const state = initLogBudgets();
+        if (!state) return true;
+        if (!state.systems[system]) state.systems[system] = { count: 0, townLast: {} };
+        const sys = state.systems[system];
+        if (cfg.perDay && sys.count >= cfg.perDay) return false;
+        if (cfg.perTownCooldown && options.town) {
+            const townId = typeof options.town === "object" ? options.town.id : options.town;
+            if (townId !== undefined && townId !== null) {
+                const lastDay = sys.townLast[townId];
+                if (lastDay !== undefined && (state.day - lastDay) < cfg.perTownCooldown) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    function noteLogSystem(system, town) {
+        if (!system) return;
+        const cfg = MOD_LOG_BUDGETS[system];
+        if (!cfg) return;
+        const state = initLogBudgets();
+        if (!state) return;
+        if (!state.systems[system]) state.systems[system] = { count: 0, townLast: {} };
+        const sys = state.systems[system];
+        sys.count += 1;
+        if (cfg.perTownCooldown && town) {
+            const townId = typeof town === "object" ? town.id : town;
+            if (townId !== undefined && townId !== null) {
+                sys.townLast[townId] = state.day;
+            }
+        }
+    }
+
+    function modLog(system, message, type, options = {}) {
+        if (!message) return false;
+        if (!shouldLogSystem(system, { ...options, type })) return false;
+        const result = logMessage(message, type);
+        noteLogSystem(system, options.town);
+        return result;
     }
 
     function getTownCenter(town) {
@@ -273,6 +368,9 @@
         const prev = planet._paultendoSeason;
         planet._paultendoSeason = info;
         updateSeasonIndicator();
+        try { updateDiscoveryIndicator(); } catch {}
+        try { updateSystemIndicator(); } catch {}
+        try { updateGreatWorkIndicator(); } catch {}
 
         if (!prev || prev.year !== info.year) {
             try {
@@ -293,6 +391,139 @@
                 });
             } catch {}
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // UI INDICATORS (Discovery + Active Systems)
+    // -------------------------------------------------------------------------
+
+    function ensureStatsIndicator(id) {
+        if (typeof document === "undefined") return null;
+        const statsMain = document.getElementById("statsMain");
+        if (!statsMain) return null;
+        let indicator = document.getElementById(id);
+        if (!indicator) {
+            indicator = document.createElement("span");
+            indicator.id = id;
+            indicator.className = "panelSubtitle";
+        }
+        const statsDiv = document.getElementById("statsDiv");
+        if (statsDiv && indicator.parentNode !== statsMain) {
+            statsMain.insertBefore(indicator, statsDiv);
+        } else if (!indicator.parentNode) {
+            statsMain.appendChild(indicator);
+        }
+        return indicator;
+    }
+
+    function formatDiscoveryRequirement(req) {
+        if (!req) return "";
+        const parts = [];
+        if (req.travel) parts.push(`Travel ${req.travel}`);
+        if (req.trade) parts.push(`Trade ${req.trade}`);
+        if (req.education) parts.push(`Education ${req.education}`);
+        if (req.towns) parts.push(`${req.towns} towns`);
+        return parts.join(", ");
+    }
+
+    function updateDiscoveryIndicator() {
+        if (!initDiscoveryState()) return;
+        const indicator = ensureStatsIndicator("paultendoDiscoveryIndicator");
+        if (!indicator) return;
+        const tier = getDiscoveryTier();
+        const maxTier = getDiscoveryMaxTier();
+        let nextText = "Maxed";
+        if (tier < maxTier) {
+            const req = DISCOVERY_TIER_REQUIREMENTS[tier + 1];
+            nextText = req ? formatDiscoveryRequirement(req) : "Unknown";
+        }
+        indicator.textContent = `Discovery: ${getDiscoveryTierName(tier)}${tier < maxTier ? ` → ${nextText}` : ""}`;
+    }
+
+    function ensureSystemStyles() {
+        if (typeof document === "undefined") return;
+        if (document.getElementById("paultendoSystemStyles")) return;
+        const style = document.createElement("style");
+        style.id = "paultendoSystemStyles";
+        style.textContent = `
+            #paultendoSystemsIndicator { font-size: 0.95em; opacity: 0.9; }
+            .paultendoSystemTag {
+                display: inline-block;
+                margin-right: 6px;
+                padding: 0 4px;
+                border-radius: 4px;
+                font-size: 0.9em;
+                border: 1px solid rgba(255,255,255,0.15);
+                background: rgba(0,0,0,0.15);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function getActiveSystemTags() {
+        const tags = [];
+        const wars = regFilter("process", p => p.type === "war" && !p.done);
+        if (wars.length) tags.push({ key: "WAR", count: wars.length, color: "rgba(255,120,120,0.9)" });
+        const epidemics = planet.epidemics && planet.epidemics.length ? planet.epidemics.length : 0;
+        if (epidemics) tags.push({ key: "PLAGUE", count: epidemics, color: "rgba(255,210,120,0.9)" });
+        const alliances = planet.alliances && planet.alliances.length ? planet.alliances.length : 0;
+        if (alliances) tags.push({ key: "ALLIANCE", count: alliances, color: "rgba(120,200,255,0.9)" });
+        const routes = planet.tradeRoutes && planet.tradeRoutes.length ? planet.tradeRoutes.length : 0;
+        if (routes) tags.push({ key: "TRADE", count: routes, color: "rgba(120,255,170,0.9)" });
+        const secrets = planet._paultendoSecrets ? planet._paultendoSecrets.filter(s => !s.exposed).length : 0;
+        if (secrets) tags.push({ key: "SECRETS", count: secrets, color: "rgba(200,200,200,0.9)" });
+
+        const universe = getUniverse(false);
+        if (universe) {
+            const spaceRoutes = universe.spaceRoutes ? universe.spaceRoutes.filter(r => r.active).length : 0;
+            const spaceWars = universe.spaceWars ? universe.spaceWars.filter(w => !w.endedDay).length : 0;
+            if (spaceRoutes) tags.push({ key: "SPACE ROUTE", count: spaceRoutes, color: "rgba(170,170,255,0.9)" });
+            if (spaceWars) tags.push({ key: "SPACE WAR", count: spaceWars, color: "rgba(255,170,170,0.9)" });
+        }
+
+        return tags;
+    }
+
+    function updateSystemIndicator() {
+        ensureSystemStyles();
+        const indicator = ensureStatsIndicator("paultendoSystemsIndicator");
+        if (!indicator) return;
+        const tags = getActiveSystemTags();
+        if (!tags.length) {
+            indicator.textContent = "Systems: calm";
+            return;
+        }
+        indicator.innerHTML = "Systems: " + tags.map(tag => {
+            const label = `${tag.key}${tag.count ? ` ${tag.count}` : ""}`;
+            return `<span class="paultendoSystemTag" style="color:${tag.color}" title="${tag.key}">${label}</span>`;
+        }).join("");
+    }
+
+    function getCurrentGreatWork() {
+        if (!planet || !planet.currentEra) return null;
+        return ensureGreatWorkForEra(planet.currentEra);
+    }
+
+    function formatGreatWorkStatus(work) {
+        if (!work) return "Great Work: unavailable";
+        if (work.status === "completed") return `Great Work: ${work.title} (completed)`;
+        if (work.status === "started") {
+            const town = work.townId ? regGet("town", work.townId) : null;
+            const townName = town ? ` in ${town.name}` : "";
+            return `Great Work: ${work.title} (building${townName})`;
+        }
+        return `Great Work: ${work.title} (pending)`;
+    }
+
+    function updateGreatWorkIndicator() {
+        const indicator = ensureStatsIndicator("paultendoGreatWorkIndicator");
+        if (!indicator) return;
+        const work = getCurrentGreatWork();
+        if (!work) {
+            indicator.textContent = "Great Work: none";
+            return;
+        }
+        indicator.textContent = formatGreatWorkStatus(work);
     }
 
     function getSeasonalInfluences(town) {
@@ -466,7 +697,7 @@
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
             if (!chunk || typeof chunk.x !== "number" || typeof chunk.y !== "number") continue;
-            if (!opts.force && chunk.v && chunk.v.g && !isLandmassDiscovered(chunk.v.g)) continue;
+            if (!opts.force && chunk.v && chunk.v.g && !isLandmassDiscovered(chunk.v.g) && !isMountainChunk(chunk)) continue;
             const key = getChunkKey(chunk.x, chunk.y);
             if (fog.explored[key]) continue;
             fog.explored[key] = 1;
@@ -533,6 +764,16 @@
     function getChunkElevation(chunk) {
         if (!chunk) return 0;
         return typeof chunk.e === "number" ? chunk.e : 0;
+    }
+
+    function isMountainChunk(chunk) {
+        if (!chunk) return false;
+        if (chunk.b === "mountain") return true;
+        if (chunk.v && chunk.v.g) {
+            const landmass = regGet("landmass", chunk.v.g);
+            return landmass && landmass.type === "mountain";
+        }
+        return false;
     }
 
     function computeTownSightRadius(town) {
@@ -643,7 +884,7 @@
 
                 const chunk = chunkAt(x, y);
                 if (!chunk) continue;
-                if (chunk.v && chunk.v.g && !isLandmassDiscovered(chunk.v.g)) continue;
+                if (chunk.v && chunk.v.g && !isLandmassDiscovered(chunk.v.g) && !isMountainChunk(chunk)) continue;
 
                 const targetElev = getChunkElevation(chunk);
                 const visibility = computeVisibilityStrength(offset.dist, radius, observerElev, targetElev);
@@ -773,7 +1014,7 @@
         for (const chunkKey in planet.chunks) {
             const chunk = planet.chunks[chunkKey];
             if (!chunk || !chunk.v) continue;
-            if (chunk.v.g && !isLandmassDiscovered(chunk.v.g) && !chunk.v.s) {
+            if (chunk.v.g && !isLandmassDiscovered(chunk.v.g) && !chunk.v.s && !isMountainChunk(chunk)) {
                 ctx.fillStyle = `rgba(8, 10, 14, ${opaqueAlpha})`;
                 ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
                 continue;
@@ -1273,6 +1514,9 @@
     }
 
     function getWorldScaleSetting() {
+        if (typeof window !== "undefined" && window._paultendoWorldScaleOverride !== undefined && window._paultendoWorldScaleOverride !== null) {
+            return window._paultendoWorldScaleOverride || 1;
+        }
         if (typeof userSettings === "undefined" || !userSettings) return 1;
         if (userSettings.worldConfigurator__resolution ||
             userSettings.worldConfigurator__continentSize ||
@@ -1719,6 +1963,1702 @@
         }
     });
 
+    // Seasonal strain on ongoing wars (strategic pressure)
+    modEvent("seasonalWarStrain", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!subject || subject.end) return false;
+            const atWar = regFilter("process", p =>
+                p.type === "war" && !p.done && p.towns?.includes(subject.id)
+            );
+            if (atWar.length === 0) return false;
+            return true;
+        },
+        func: (subject) => {
+            const season = getSeasonInfo();
+            if (!season) return;
+            const climate = getTownClimate(subject);
+            if (!climate) return;
+
+            let military = 0;
+            let happy = 0;
+            let disease = 0;
+            let unrestDelta = 0;
+
+            if (season.id === "winter") {
+                const cold = clampValue((0.5 - climate.temp) / 0.25, 0, 1);
+                if (cold > 0.1) {
+                    military -= 0.3 * (0.6 + cold);
+                    happy -= 0.2 * (0.5 + cold);
+                    unrestDelta += 0.15 * (0.5 + cold);
+                }
+            } else if (season.id === "summer") {
+                const heat = clampValue((climate.temp - 0.55) / 0.25, 0, 1);
+                if (heat > 0.1) {
+                    military -= 0.2 * (0.6 + heat);
+                    disease += 0.2 * (0.6 + heat);
+                    unrestDelta += 0.1 * heat;
+                }
+            } else if (season.id === "spring") {
+                military += 0.1;
+            } else if (season.id === "autumn") {
+                happy += 0.1;
+            }
+
+            if (military || happy || disease) {
+                happen("Influence", null, subject, { military, happy, disease, temp: true });
+            }
+            if (unrestDelta > 0) {
+                initUnrest(subject);
+                subject.unrest = Math.min(100, subject.unrest + unrestDelta);
+            }
+        }
+    });
+
+    // Autumn trade surge and diplomacy
+    modEvent("seasonalHarvestSurge", {
+        random: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject) => {
+            const season = getSeasonInfo();
+            if (!season || season.id !== "autumn") return false;
+            if ((subject.influences?.farm || 0) < 6) return false;
+            if ((subject.influences?.trade || 0) < 3) return false;
+            return true;
+        },
+        func: (subject) => {
+            happen("Influence", null, subject, { trade: 0.4, happy: 0.3, temp: true });
+            if (Math.random() < 0.2) {
+                modLog(
+                    "season",
+                    `Harvest markets in {{regname:town|${subject.id}}} draw merchants from afar.`,
+                    null,
+                    { town: subject }
+                );
+            }
+        }
+    });
+
+    // =========================================================================
+    // SOLAR SYSTEM + MULTI-WORLD SUPPORT
+    // =========================================================================
+
+    const UNIVERSE_VERSION = 1;
+    const SOLAR_SYSTEM_CONFIG = {
+        mapSize: 220,
+        orbitStart: 24,
+        orbitGap: 26
+    };
+    const SPACE_TECH_THRESHOLDS = {
+        orbit: 20,
+        moon: 35,
+        mars: 50,
+        belt: 65,
+        outer: 80
+    };
+    const SPACE_ROUTE_CONFIG = {
+        minTech: 45,
+        routeChance: 0.012,
+        maxRoutes: 18,
+        baseTravel: 8,
+        orbitTravel: 4
+    };
+    const SPACE_WAR_CONFIG = {
+        minTech: 55,
+        baseChance: 0.003,
+        raidChance: 0.12,
+        peaceMinDays: 90,
+        peaceChance: 0.02,
+        maxActive: 3
+    };
+
+    const SOLAR_WORLD_TEMPLATES = [
+        { id: 1, key: "home", type: "home", orbitIndex: 0, sizeScale: 1, waterLevel: null, habitable: true, harsh: false, label: "Homeworld", color: "#6eff6e" },
+        { id: 2, key: "moon", type: "moon", orbitIndex: 1, sizeScale: 0.45, waterLevel: 0.12, habitable: true, harsh: true, label: "Moon", color: "#cfcfcf", discovery: "moon" },
+        { id: 3, key: "mars", type: "mars", orbitIndex: 2, sizeScale: 0.7, waterLevel: 0.18, habitable: true, harsh: true, label: "Red Planet", color: "#ff8a65", discovery: "mars" },
+        { id: 4, key: "belt", type: "belt", orbitIndex: 3, sizeScale: 0.6, waterLevel: 0.08, habitable: false, harsh: true, label: "Asteroid Belt", color: "#b6b6b6", discovery: "belt" },
+        { id: 5, key: "outer", type: "outer", orbitIndex: 4, sizeScale: 1.2, waterLevel: 0.35, habitable: false, harsh: true, label: "Outer Planet", color: "#7aa7ff", discovery: "outer", rareHabitable: 0.15 }
+    ];
+
+    function getUniverseDay() {
+        return planet && planet.day ? planet.day : 1;
+    }
+
+    function getWorldTemplate(id) {
+        return SOLAR_WORLD_TEMPLATES.find(t => t.id === id) || null;
+    }
+
+    function generateWorldName(template) {
+        if (!template) return generateWord(randRange(2, 3), true);
+        if (template.key === "moon") {
+            const universe = getUniverse(false);
+            const homeName = universe?.worlds?.[universe.homeWorldId]?.name;
+            if (homeName) return `${homeName}'s Moon`;
+            if (planet && planet.name) return `${planet.name}'s Moon`;
+        }
+        if (template.key === "belt") {
+            return generateWord(randRange(1, 2), true);
+        }
+        return generateWord(randRange(2, 3), true);
+    }
+
+    function createWorldEntry(template, overrides = {}) {
+        const world = {
+            id: template.id,
+            key: template.key,
+            type: template.type,
+            orbitIndex: template.orbitIndex,
+            sizeScale: template.sizeScale || 1,
+            waterLevel: template.waterLevel,
+            habitable: template.habitable !== undefined ? template.habitable : true,
+            harsh: !!template.harsh,
+            label: template.label || "World",
+            color: template.color || "#cfcfcf",
+            discovery: template.discovery,
+            rareHabitable: template.rareHabitable,
+            name: overrides.name || template.name || null,
+            discovered: !!template.discovered,
+            orbitAngle: overrides.orbitAngle !== undefined ? overrides.orbitAngle : Math.floor(Math.random() * 360),
+            createdDay: getUniverseDay(),
+            state: null
+        };
+
+        if (world.rareHabitable && Math.random() < world.rareHabitable) {
+            world.habitable = true;
+            world.harsh = false;
+        }
+
+        return world;
+    }
+
+    function captureWorldState() {
+        return {
+            planet: planet,
+            planetWidth: planetWidth,
+            planetHeight: planetHeight,
+            chunkSize: chunkSize,
+            waterLevel: waterLevel
+        };
+    }
+
+    function applyWorldMetaToPlanet(world, state = null) {
+        const planetObj = state ? state.planet : planet;
+        if (!world || !planetObj) return;
+        planetObj._paultendoWorldId = world.id;
+        planetObj._paultendoWorldKey = world.key;
+        planetObj._paultendoWorldType = world.type;
+        planetObj._paultendoWorldHarsh = !!world.harsh;
+        planetObj._paultendoWorldHabitable = !!world.habitable;
+        planetObj._paultendoWorldName = world.name;
+    }
+
+    function applyWorldState(state, world = null) {
+        if (!state || !state.planet) return false;
+        planet = state.planet;
+        reg = planet.reg;
+        planetWidth = state.planetWidth;
+        planetHeight = state.planetHeight;
+        chunkSize = state.chunkSize;
+        waterLevel = state.waterLevel;
+        if (world) applyWorldMetaToPlanet(world, state);
+        if (typeof regGet === "function") {
+            try { currentPlayer = regGet("player", 1) || currentPlayer; } catch {}
+        }
+        return true;
+    }
+
+    function withWorldState(worldOrState, func, opts = {}) {
+        if (!func) return;
+        const state = worldOrState && worldOrState.state ? worldOrState.state : worldOrState;
+        if (!state) return;
+
+        const snapshot = {
+            planet: planet,
+            reg: reg,
+            planetWidth: planetWidth,
+            planetHeight: planetHeight,
+            chunkSize: chunkSize,
+            waterLevel: waterLevel,
+            currentPlayer: currentPlayer
+        };
+        const baseLog = typeof logMessage === "function" ? logMessage : null;
+
+        applyWorldState(state, worldOrState.state ? worldOrState : null);
+        if (opts.silent && baseLog) {
+            logMessage = function() {};
+        }
+
+        try {
+            return func();
+        } finally {
+            if (opts.silent && baseLog) {
+                logMessage = baseLog;
+            }
+            planet = snapshot.planet;
+            reg = snapshot.reg;
+            planetWidth = snapshot.planetWidth;
+            planetHeight = snapshot.planetHeight;
+            chunkSize = snapshot.chunkSize;
+            waterLevel = snapshot.waterLevel;
+            currentPlayer = snapshot.currentPlayer;
+        }
+    }
+
+    function ensureUniverseBase(universe) {
+        if (!universe.baseDims) {
+            universe.baseDims = {
+                width: planetWidth,
+                height: planetHeight,
+                chunkSize: chunkSize,
+                waterLevel: waterLevel
+            };
+        }
+    }
+
+    function createDefaultUniverse() {
+        if (!planet) return null;
+        const base = {
+            version: UNIVERSE_VERSION,
+            currentWorldId: 1,
+            homeWorldId: 1,
+            worldOrder: [],
+            worlds: {},
+            baseDims: null,
+            spaceTech: 0,
+            spaceRoutes: [],
+            spaceWars: [],
+            nextSpaceRouteId: 1,
+            nextSpaceWarId: 1,
+            relations: {}
+        };
+
+        const homeTemplate = getWorldTemplate(1) || SOLAR_WORLD_TEMPLATES[0];
+        const homeWorld = createWorldEntry(homeTemplate, { name: planet.name });
+        homeWorld.discovered = true;
+        homeWorld.state = captureWorldState();
+        base.worlds[homeWorld.id] = homeWorld;
+        base.worldOrder.push(homeWorld.id);
+        base.currentWorldId = homeWorld.id;
+        base.homeWorldId = homeWorld.id;
+
+        for (let i = 0; i < SOLAR_WORLD_TEMPLATES.length; i++) {
+            const template = SOLAR_WORLD_TEMPLATES[i];
+            if (template.id === homeWorld.id) continue;
+            const world = createWorldEntry(template);
+            base.worlds[world.id] = world;
+            base.worldOrder.push(world.id);
+        }
+
+        ensureUniverseBase(base);
+        applyWorldMetaToPlanet(homeWorld);
+        return base;
+    }
+
+    function getUniverse(createIfMissing = true) {
+        if (typeof window === "undefined") return null;
+        if (!window._paultendoUniverse && createIfMissing) {
+            if (!planet) return null;
+            window._paultendoUniverse = createDefaultUniverse();
+        }
+        return window._paultendoUniverse || null;
+    }
+
+    function syncCurrentWorldState(universe = null) {
+        const uni = universe || getUniverse(false);
+        if (!uni) return;
+        const current = uni.worlds[uni.currentWorldId];
+        if (!current) return;
+        current.state = captureWorldState();
+        applyWorldMetaToPlanet(current);
+        ensureUniverseBase(uni);
+    }
+
+    function resolveWorldDimensions(universe, world) {
+        const base = universe?.baseDims || { width: planetWidth, height: planetHeight, chunkSize: chunkSize, waterLevel: waterLevel };
+        const scale = world?.sizeScale || 1;
+        const chunk = base.chunkSize || chunkSize || 4;
+        let width = Math.max(chunk * 4, Math.round((base.width || 200) * scale));
+        let height = Math.max(chunk * 3, Math.round((base.height || 120) * scale));
+        width -= (width % chunk);
+        height -= (height % chunk);
+        return { width, height, chunk, waterLevel: world?.waterLevel ?? base.waterLevel };
+    }
+
+    function suppressGenerationUI() {
+        const snapshot = {
+            resizeCanvases: typeof resizeCanvases === "function" ? resizeCanvases : null,
+            fitToScreen: typeof fitToScreen === "function" ? fitToScreen : null,
+            applyScaleAwareZoom: typeof applyScaleAwareZoom === "function" ? applyScaleAwareZoom : null,
+            ensureMapControls: typeof ensureMapControls === "function" ? ensureMapControls : null,
+            ensureFogLayer: typeof ensureFogLayer === "function" ? ensureFogLayer : null
+        };
+        if (snapshot.resizeCanvases) resizeCanvases = function() {};
+        if (snapshot.fitToScreen) fitToScreen = function() {};
+        if (snapshot.applyScaleAwareZoom) applyScaleAwareZoom = function() {};
+        if (snapshot.ensureMapControls) ensureMapControls = function() {};
+        if (snapshot.ensureFogLayer) ensureFogLayer = function() {};
+        return snapshot;
+    }
+
+    function restoreGenerationUI(snapshot) {
+        if (!snapshot) return;
+        if (snapshot.resizeCanvases) resizeCanvases = snapshot.resizeCanvases;
+        if (snapshot.fitToScreen) fitToScreen = snapshot.fitToScreen;
+        if (snapshot.applyScaleAwareZoom) applyScaleAwareZoom = snapshot.applyScaleAwareZoom;
+        if (snapshot.ensureMapControls) ensureMapControls = snapshot.ensureMapControls;
+        if (snapshot.ensureFogLayer) ensureFogLayer = snapshot.ensureFogLayer;
+    }
+
+    function generateWorldState(world) {
+        const universe = getUniverse(false);
+        if (!universe || !world) return null;
+        ensureUniverseBase(universe);
+        const dims = resolveWorldDimensions(universe, world);
+
+        const snapshot = captureWorldState();
+        const uiSnapshot = suppressGenerationUI();
+        const prevOverride = window._paultendoWorldScaleOverride;
+        window._paultendoWorldScaleOverride = 1;
+
+        try {
+            planetWidth = dims.width;
+            planetHeight = dims.height;
+            chunkSize = dims.chunk;
+            waterLevel = dims.waterLevel;
+
+            const newPlanet = generatePlanet();
+            planet = newPlanet;
+            reg = planet.reg;
+
+            updateBiomes();
+            calculateLandmasses();
+
+            if (!newPlanet.name) {
+                newPlanet.name = world.name || generateWorldName(world);
+            }
+            world.name = newPlanet.name;
+
+            const state = captureWorldState();
+            applyWorldMetaToPlanet(world, state);
+            return state;
+        } finally {
+            window._paultendoWorldScaleOverride = prevOverride;
+            restoreGenerationUI(uiSnapshot);
+            applyWorldState(snapshot);
+        }
+    }
+
+    function ensureWorldState(world) {
+        if (!world) return null;
+        if (!world.state) {
+            world.state = generateWorldState(world);
+        }
+        return world.state;
+    }
+
+    function getCurrentWorldId() {
+        const universe = getUniverse(false);
+        if (universe && universe.currentWorldId) return universe.currentWorldId;
+        return planet?._paultendoWorldId || 1;
+    }
+
+    function getWorldById(id) {
+        const universe = getUniverse(false);
+        if (!universe) return null;
+        return universe.worlds[id] || null;
+    }
+
+    function getWorldOrder() {
+        const universe = getUniverse(false);
+        if (!universe) return [];
+        return (universe.worldOrder || []).map(id => universe.worlds[id]).filter(Boolean);
+    }
+
+    function syncLogToPlanet() {
+        if (!planet || typeof document === "undefined") return;
+        const logDiv = document.getElementById("logMessages");
+        if (logDiv) planet._paultendoLogHTML = logDiv.innerHTML;
+    }
+
+    function restoreLogFromPlanet(options = {}) {
+        if (!planet || typeof document === "undefined") return;
+        const logDiv = document.getElementById("logMessages");
+        if (!logDiv) return;
+        if (planet._paultendoLogHTML !== undefined) {
+            if (options.merge) {
+                logDiv.innerHTML = (planet._paultendoLogHTML || "") + (logDiv.innerHTML || "");
+            } else {
+                logDiv.innerHTML = planet._paultendoLogHTML;
+            }
+        }
+    }
+
+    function switchWorld(worldId) {
+        const universe = getUniverse();
+        if (!universe) return false;
+        const target = universe.worlds[worldId];
+        if (!target) return false;
+
+        if (!target.discovered) {
+            logMessage("That world remains beyond reach.");
+            return false;
+        }
+
+        if (universe.currentWorldId === worldId) return true;
+
+        try { syncLogToPlanet(); } catch {}
+        syncCurrentWorldState(universe);
+        ensureWorldState(target);
+
+        universe.currentWorldId = worldId;
+        applyWorldState(target.state, target);
+        if (planet && planet.unlocks) {
+            planet.unlocks.space = Math.max(planet.unlocks.space || 0, universe.spaceTech || 0);
+        }
+
+        if (typeof initGame === "function") {
+            let prevSuppress = undefined;
+            if (typeof window !== "undefined") {
+                prevSuppress = window._paultendoSuppressLogSync;
+                window._paultendoSuppressLogSync = true;
+            }
+            initGame();
+            if (typeof window !== "undefined") {
+                window._paultendoSuppressLogSync = prevSuppress;
+            }
+            restoreLogFromPlanet({ merge: true });
+            try { syncLogToPlanet(); } catch {}
+        } else {
+            if (typeof renderMap === "function") renderMap();
+            if (typeof renderHighlight === "function") renderHighlight();
+            if (typeof updateCanvas === "function") updateCanvas();
+        }
+
+        try { ensureMapCanvasSync(); } catch {}
+        try { ensureFogLayer(); } catch {}
+        try { applyScaleAwareZoom(true); } catch {}
+        try { updateSeasonState(); } catch {}
+        return true;
+    }
+
+    function getWorldTownStats(world) {
+        if (!world || !world.state || !world.state.planet || !world.state.planet.reg) {
+            return { towns: 0, pop: 0 };
+        }
+        const regTown = world.state.planet.reg.town || {};
+        let towns = 0;
+        let pop = 0;
+        for (const key in regTown) {
+            const town = regTown[key];
+            if (!town || !isNaN(town)) continue;
+            if (town.end) continue;
+            towns += 1;
+            pop += town.pop || 0;
+        }
+        return { towns, pop };
+    }
+
+    function isWorldHarsh(world) {
+        if (!world) return false;
+        if (world.harsh) return true;
+        if (world.habitable === false) return true;
+        return false;
+    }
+
+    function canDiscoverWorld(world, tech = null) {
+        if (!world || world.discovered) return false;
+        const universe = getUniverse(false);
+        const score = tech !== null ? tech : universe?.spaceTech || 0;
+        if (!world.discovery) return false;
+        const threshold = SPACE_TECH_THRESHOLDS[world.discovery] || 0;
+        return score >= threshold;
+    }
+
+    function discoverWorld(worldId, reason = "observe") {
+        const universe = getUniverse();
+        const world = universe?.worlds?.[worldId];
+        if (!world || world.discovered) return false;
+        const techScore = universe.spaceTech || 0;
+        if (!canDiscoverWorld(world, techScore)) return false;
+
+        world.discovered = true;
+        if (!world.name) world.name = generateWorldName(world);
+        ensureWorldState(world);
+
+        let note = "New celestial charts are compiled.";
+        if (reason === "mission") note = "A daring mission reaches new horizons.";
+        const msg = `Astronomers reveal {{b:${world.name}}}. ${note}`;
+        logMessage(msg, "milestone");
+        noteSpaceEvent(msg);
+        return true;
+    }
+
+    function computeSpaceTechScore(planetObj) {
+        if (!planetObj || !planetObj.unlocks) return 0;
+        const edu = planetObj.unlocks.education || 0;
+        const smith = planetObj.unlocks.smith || 0;
+        const fire = planetObj.unlocks.fire || 0;
+        const travel = planetObj.unlocks.travel || 0;
+        const trade = planetObj.unlocks.trade || 0;
+        const military = planetObj.unlocks.military || 0;
+        const avg = (edu + smith + fire + travel + trade + military) / 6;
+        return Math.round(avg);
+    }
+
+    function noteSpaceEvent(text) {
+        const universe = getUniverse(false);
+        if (!universe || !text) return;
+        universe.lastSpaceEvent = {
+            day: getUniverseDay(),
+            text: text
+        };
+    }
+
+    function updateSpaceTech() {
+        const universe = getUniverse(false);
+        if (!universe) return 0;
+        let maxScore = 0;
+        for (const world of Object.values(universe.worlds)) {
+            if (!world || !world.state || !world.state.planet) continue;
+            const score = computeSpaceTechScore(world.state.planet);
+            if (score > maxScore) maxScore = score;
+        }
+        if (maxScore > universe.spaceTech) {
+            universe.spaceTech = maxScore;
+            if (maxScore >= SPACE_TECH_THRESHOLDS.orbit && !universe._spaceOrbitNoted) {
+                universe._spaceOrbitNoted = true;
+                const msg = "Signals reach for the skies. The first satellites rise.";
+                logMessage(msg, "milestone");
+                noteSpaceEvent(msg);
+            }
+            if (maxScore >= SPACE_TECH_THRESHOLDS.moon && !universe._spaceMoonNoted) {
+                universe._spaceMoonNoted = true;
+                const msg = "A lunar mission becomes possible.";
+                logMessage(msg, "milestone");
+                noteSpaceEvent(msg);
+            }
+        }
+        if (planet && planet.unlocks) {
+            planet.unlocks.space = Math.max(planet.unlocks.space || 0, universe.spaceTech);
+        }
+        return universe.spaceTech;
+    }
+
+    function updateSpaceDiscovery() {
+        const universe = getUniverse(false);
+        if (!universe) return;
+        const tech = universe.spaceTech || 0;
+        getWorldOrder().forEach(world => {
+            if (!world || world.id === universe.homeWorldId) return;
+            if (!world.discovered && canDiscoverWorld(world, tech)) {
+                discoverWorld(world.id, "observe");
+            }
+        });
+    }
+
+    function ensureSolarStyles() {
+        if (typeof document === "undefined") return;
+        if (document.getElementById("paultendoSolarStyles")) return;
+        const style = document.createElement("style");
+        style.id = "paultendoSolarStyles";
+        style.textContent = `
+            .paultendo-solar-map {
+                position: relative;
+                margin: 0.5em auto 0.9em;
+                border: 1px solid rgba(255,255,255,0.15);
+                background: radial-gradient(circle at center, rgba(255,255,255,0.08), rgba(0,0,0,0.65));
+                border-radius: 12px;
+                box-shadow: 0 0 14px rgba(0,0,0,0.35) inset;
+            }
+            .paultendo-solar-star {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #ffd166;
+                transform: translate(-50%, -50%);
+                box-shadow: 0 0 10px rgba(255,209,102,0.8);
+            }
+            .paultendo-solar-orbit {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: calc(var(--orbit) * 2);
+                height: calc(var(--orbit) * 2);
+                border: 1px dashed rgba(255,255,255,0.15);
+                border-radius: 50%;
+                transform: translate(-50%, -50%);
+            }
+            .paultendo-solar-world {
+                position: absolute;
+                border-radius: 50%;
+                cursor: pointer;
+                box-shadow: 0 0 6px rgba(0,0,0,0.5);
+                border: 1px solid rgba(255,255,255,0.35);
+            }
+            .paultendo-solar-world.locked {
+                opacity: 0.35;
+                cursor: default;
+                filter: grayscale(1);
+            }
+            .paultendo-solar-world.active {
+                outline: 2px solid rgba(255,255,255,0.8);
+            }
+            .paultendo-solar-label {
+                font-size: 0.95em;
+                opacity: 0.9;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function buildSolarMapHTML() {
+        const universe = getUniverse(false);
+        if (!universe) return "";
+        const size = SOLAR_SYSTEM_CONFIG.mapSize;
+        const center = size / 2;
+        let html = `<div class="paultendo-solar-map" style="width:${size}px;height:${size}px">`;
+        html += `<div class="paultendo-solar-star"></div>`;
+
+        const worlds = getWorldOrder();
+        worlds.forEach(world => {
+            const radius = SOLAR_SYSTEM_CONFIG.orbitStart + world.orbitIndex * SOLAR_SYSTEM_CONFIG.orbitGap;
+            html += `<div class="paultendo-solar-orbit" style="--orbit:${radius}px"></div>`;
+        });
+
+        worlds.forEach(world => {
+            const radius = SOLAR_SYSTEM_CONFIG.orbitStart + world.orbitIndex * SOLAR_SYSTEM_CONFIG.orbitGap;
+            const angle = ((world.orbitAngle || 0) * Math.PI) / 180;
+            const sizePx = Math.max(6, Math.round(6 + world.orbitIndex * 1.2));
+            const x = center + radius * Math.cos(angle) - sizePx / 2;
+            const y = center + radius * Math.sin(angle) - sizePx / 2;
+            const classes = ["paultendo-solar-world"];
+            if (!world.discovered) classes.push("locked");
+            if (world.id === universe.currentWorldId) classes.push("active");
+            html += `<div class="${classes.join(" ")}" data-world-id="${world.id}" style="left:${x}px;top:${y}px;width:${sizePx}px;height:${sizePx}px;background:${world.color};"></div>`;
+        });
+
+        html += `</div>`;
+        return html;
+    }
+
+    function formatWorldListItem(world) {
+        if (!world) return "{{none}}";
+        const stats = getWorldTownStats(world);
+        const name = world.discovered ? (world.name || "Unknown") : "???";
+        const status = world.discovered ? `${stats.towns} town${stats.towns === 1 ? "" : "s"}` : "Undiscovered";
+        const day = world.state?.planet?.day || (planet?.day || 1);
+        return `<span class="paultendo-solar-label">${name}</span> <span style="opacity:0.7">(${status}, Day ${day})</span>`;
+    }
+
+    const SPACE_UNLOCK_LABELS = {
+        orbit: "Orbital Satellites",
+        moon: "Lunar Missions",
+        mars: "Red Planet",
+        belt: "Asteroid Belt",
+        outer: "Outer Planet"
+    };
+
+    function getNextSpaceThreshold(tech) {
+        const entries = Object.entries(SPACE_TECH_THRESHOLDS)
+            .sort((a, b) => a[1] - b[1]);
+        for (const [key, value] of entries) {
+            if (tech < value) return { key, value, label: SPACE_UNLOCK_LABELS[key] || key };
+        }
+        return null;
+    }
+
+    function openSolarWorldDetail(worldId) {
+        const universe = getUniverse(false);
+        const world = universe?.worlds?.[worldId];
+        if (!world) return;
+
+        const items = [];
+        const stats = getWorldTownStats(world);
+        const name = world.discovered ? (world.name || "Unknown World") : "Unknown World";
+        const typeLabel = world.label || "World";
+        const habitability = world.habitable ? "Habitable" : "Harsh";
+        const status = world.discovered ? `${stats.towns} town${stats.towns === 1 ? "" : "s"}, ${stats.pop} people` : "Undiscovered";
+
+        items.push({ text: `{{b:${name}}}` });
+        items.push({ text: `Type: ${typeLabel}` });
+        items.push({ text: `Environment: ${habitability}` });
+        items.push({ text: `Status: ${status}` });
+        items.push({ spacer: true });
+
+        if (!world.discovered && canDiscoverWorld(world)) {
+            items.push({
+                text: "Launch mission",
+                func: () => {
+                    discoverWorld(world.id, "mission");
+                    openSolarWorldDetail(world.id);
+                }
+            });
+        }
+
+        if (world.discovered && world.state) {
+            if (world.id === universe.currentWorldId) {
+                items.push({ text: "Currently active" });
+            } else {
+                items.push({
+                    text: "Switch to world",
+                    func: () => {
+                        switchWorld(world.id);
+                    }
+                });
+            }
+        }
+
+        items.push({ spacer: true });
+        items.push({
+            text: "◁ Back to Solar System",
+            func: () => openSolarPanel()
+        });
+
+        populateExecutive(items, "World Details");
+    }
+
+    function attachSolarMapHandlers() {
+        if (typeof document === "undefined") return;
+        const nodes = document.querySelectorAll(".paultendo-solar-world");
+        nodes.forEach(node => {
+            node.addEventListener("click", () => {
+                const id = parseInt(node.getAttribute("data-world-id"));
+                if (!id) return;
+                openSolarWorldDetail(id);
+            });
+        });
+    }
+
+    function openSolarPanel() {
+        ensureSolarStyles();
+        const universe = getUniverse(false);
+        if (!universe) return;
+
+        const items = [];
+        items.push({ spacer: true, text: buildSolarMapHTML() });
+        const tech = universe.spaceTech || 0;
+        const nextUnlock = getNextSpaceThreshold(tech);
+        items.push({ spacer: true, text: `Space Tech: ${tech}` });
+        if (nextUnlock) {
+            items.push({ text: `Next: ${nextUnlock.label} (${tech}/${nextUnlock.value})` });
+        } else {
+            items.push({ text: "All known thresholds reached." });
+        }
+        if (universe.lastSpaceEvent && universe.lastSpaceEvent.text) {
+            items.push({ spacer: true, text: `Recent: ${universe.lastSpaceEvent.text} (Day ${universe.lastSpaceEvent.day || getUniverseDay()})` });
+        }
+        items.push({ spacer: true, text: `Worlds (${getWorldOrder().length})` });
+
+        getWorldOrder().forEach(world => {
+            items.push({
+                text: formatWorldListItem(world),
+                func: () => openSolarWorldDetail(world.id)
+            });
+        });
+
+        populateExecutive(items, "Solar System");
+        attachSolarMapHandlers();
+    }
+
+    function addSolarButton() {
+        const list = document.getElementById("actionMainList");
+        if (!list || document.getElementById("actionItem-solar")) return;
+        const button = document.createElement("span");
+        button.className = "actionItem clickable";
+        button.id = "actionItem-solar";
+        button.innerHTML = "Solar";
+        button.addEventListener("click", () => {
+            openSolarPanel();
+        });
+        list.appendChild(button);
+    }
+
+    function initSpaceRoutes() {
+        const universe = getUniverse(false);
+        if (!universe) return;
+        if (!Array.isArray(universe.spaceRoutes)) universe.spaceRoutes = [];
+        if (!universe.nextSpaceRouteId) universe.nextSpaceRouteId = 1;
+    }
+
+    function getTownRefKey(ref) {
+        return ref ? `${ref.worldId}:${ref.townId}` : "";
+    }
+
+    function getTownByRef(ref) {
+        if (!ref) return null;
+        const world = getWorldById(ref.worldId);
+        if (!world || !world.state || !world.state.planet || !world.state.planet.reg) return null;
+        return world.state.planet.reg.town?.[ref.townId] || null;
+    }
+
+    function formatTownRef(ref) {
+        const town = getTownByRef(ref);
+        if (!town) return "Unknown settlement";
+        if (ref.worldId === getCurrentWorldId()) {
+            return `{{regname:town|${town.id}}}`;
+        }
+        const world = getWorldById(ref.worldId);
+        const worldName = world?.name || world?.label || "Unknown World";
+        return `${town.name} of ${worldName}`;
+    }
+
+    function getWorldTownRefs(filterFn = null) {
+        const universe = getUniverse(false);
+        if (!universe) return [];
+        const refs = [];
+        for (const world of Object.values(universe.worlds)) {
+            if (!world || !world.state || !world.state.planet || !world.state.planet.reg) continue;
+            const regTown = world.state.planet.reg.town || {};
+            for (const key in regTown) {
+                const town = regTown[key];
+                if (!town || !isNaN(town)) continue;
+                if (town.end || town.pop <= 0) continue;
+                if (filterFn && !filterFn(town, world)) continue;
+                refs.push({ worldId: world.id, townId: town.id });
+            }
+        }
+        return refs;
+    }
+
+    function isSpaceRouteBetween(refA, refB) {
+        const universe = getUniverse(false);
+        if (!universe || !Array.isArray(universe.spaceRoutes)) return false;
+        const keyA = getTownRefKey(refA);
+        const keyB = getTownRefKey(refB);
+        return universe.spaceRoutes.some(route => {
+            if (!route || !route.active) return false;
+            const from = getTownRefKey(route.from);
+            const to = getTownRefKey(route.to);
+            return (from === keyA && to === keyB) || (from === keyB && to === keyA);
+        });
+    }
+
+    function createSpaceRoute(refA, refB) {
+        const universe = getUniverse(false);
+        if (!universe) return null;
+        if (isSpaceRouteBetween(refA, refB)) return null;
+        if (universe.spaceRoutes.length >= SPACE_ROUTE_CONFIG.maxRoutes) return null;
+
+        const worldA = getWorldById(refA.worldId);
+        const worldB = getWorldById(refB.worldId);
+        if (!worldA || !worldB) return null;
+
+        const orbitDistance = Math.abs((worldA.orbitIndex || 0) - (worldB.orbitIndex || 0)) + 1;
+        const travelTime = SPACE_ROUTE_CONFIG.baseTravel + orbitDistance * SPACE_ROUTE_CONFIG.orbitTravel;
+
+        const route = {
+            id: universe.nextSpaceRouteId++,
+            from: refA,
+            to: refB,
+            established: getUniverseDay(),
+            travelTime,
+            nextArrivalDay: getUniverseDay() + travelTime,
+            active: true,
+            deliveries: 0
+        };
+        universe.spaceRoutes.push(route);
+        addSpaceWarRelation(refA, refB, 1);
+        const labelA = formatTownRef(refA);
+        const labelB = formatTownRef(refB);
+        noteSpaceEvent(`A space trade lane opens between ${labelA} and ${labelB}.`);
+        return route;
+    }
+
+    function applySpaceRouteDelivery(route) {
+        if (!route) return;
+        const fromTown = getTownByRef(route.from);
+        const toTown = getTownByRef(route.to);
+        if (!fromTown || !toTown) return;
+
+        const fromWorld = getWorldById(route.from.worldId);
+        const toWorld = getWorldById(route.to.worldId);
+        if (!fromWorld || !toWorld) return;
+
+        const applyInfluence = (world, town) => {
+            withWorldState(world, () => {
+                happen("Influence", null, town, { trade: 0.3, happy: 0.1, temp: true });
+                town.wealth = (town.wealth || 0) + 1;
+            }, { silent: world.id !== getCurrentWorldId() });
+        };
+
+        applyInfluence(fromWorld, fromTown);
+        applyInfluence(toWorld, toTown);
+        route.deliveries = (route.deliveries || 0) + 1;
+        addSpaceWarRelation(route.from, route.to, 0.2);
+    }
+
+    function processSpaceRoutes() {
+        const universe = getUniverse(false);
+        if (!universe || !Array.isArray(universe.spaceRoutes)) return;
+        const day = getUniverseDay();
+
+        universe.spaceRoutes.forEach(route => {
+            if (!route || !route.active) return;
+            const fromTown = getTownByRef(route.from);
+            const toTown = getTownByRef(route.to);
+            if (!fromTown || !toTown) {
+                route.active = false;
+                return;
+            }
+            if (day >= (route.nextArrivalDay || day)) {
+                applySpaceRouteDelivery(route);
+                route.nextArrivalDay = day + (route.travelTime || SPACE_ROUTE_CONFIG.baseTravel);
+                const activeWorldId = getCurrentWorldId();
+                if (route.from.worldId === activeWorldId || route.to.worldId === activeWorldId) {
+                    if (fromTown && toTown) {
+                        const fromLabel = formatTownRef(route.from);
+                        const toLabel = formatTownRef(route.to);
+                        logMessage(`Interworld shipments arrive between ${fromLabel} and ${toLabel}.`);
+                    }
+                }
+            }
+        });
+    }
+
+    function maybeCreateSpaceRoute() {
+        const universe = getUniverse(false);
+        if (!universe) return;
+        if ((universe.spaceTech || 0) < SPACE_ROUTE_CONFIG.minTech) return;
+        if (universe.spaceRoutes && universe.spaceRoutes.length >= SPACE_ROUTE_CONFIG.maxRoutes) return;
+        if (Math.random() > SPACE_ROUTE_CONFIG.routeChance) return;
+
+        const candidates = getWorldTownRefs((town, world) => {
+            if (!world.discovered) return false;
+            if ((town.influences?.trade || 0) < 4) return false;
+            if (town.pop < 40) return false;
+            return true;
+        });
+
+        if (candidates.length < 2) return;
+        const refA = choose(candidates);
+        const refB = choose(candidates.filter(r => r.worldId !== refA.worldId));
+        if (!refB) return;
+
+        const route = createSpaceRoute(refA, refB);
+        if (route) {
+            const townA = getTownByRef(refA);
+            const townB = getTownByRef(refB);
+            if (townA && townB) {
+                const labelA = formatTownRef(refA);
+                const labelB = formatTownRef(refB);
+                logMessage(`A space trade lane opens between ${labelA} and ${labelB}.`, "milestone");
+            }
+        }
+    }
+
+    function initSpaceWars() {
+        const universe = getUniverse(false);
+        if (!universe) return;
+        if (!Array.isArray(universe.spaceWars)) universe.spaceWars = [];
+        if (!universe.nextSpaceWarId) universe.nextSpaceWarId = 1;
+    }
+
+    function normalizeSpaceWar(war) {
+        if (!war) return null;
+        if (!Array.isArray(war.sides)) war.sides = [[], []];
+        war.sides = war.sides.map(side => Array.isArray(side) ? side : []);
+        if (!war.worldFronts) war.worldFronts = {};
+        return war;
+    }
+
+    function isSpaceWarBetween(refA, refB) {
+        const universe = getUniverse(false);
+        if (!universe) return false;
+        const keyA = getTownRefKey(refA);
+        const keyB = getTownRefKey(refB);
+        return universe.spaceWars.some(war => {
+            if (!war || war.endedDay) return false;
+            normalizeSpaceWar(war);
+            const sideA = war.sides[0].map(getTownRefKey);
+            const sideB = war.sides[1].map(getTownRefKey);
+            return (sideA.includes(keyA) && sideB.includes(keyB)) || (sideA.includes(keyB) && sideB.includes(keyA));
+        });
+    }
+
+    function addSpaceWarRelation(refA, refB, amount) {
+        const universe = getUniverse(false);
+        if (!universe) return;
+        const keyA = getTownRefKey(refA);
+        const keyB = getTownRefKey(refB);
+        if (!keyA || !keyB) return;
+        const key = keyA < keyB ? `${keyA}|${keyB}` : `${keyB}|${keyA}`;
+        universe.relations[key] = (universe.relations[key] || 0) + amount;
+    }
+
+    function getSpaceWarRelation(refA, refB) {
+        const universe = getUniverse(false);
+        if (!universe) return 0;
+        const keyA = getTownRefKey(refA);
+        const keyB = getTownRefKey(refB);
+        if (!keyA || !keyB) return 0;
+        const key = keyA < keyB ? `${keyA}|${keyB}` : `${keyB}|${keyA}`;
+        return universe.relations[key] || 0;
+    }
+
+    function getAllianceMemberRefs(ref) {
+        const world = getWorldById(ref.worldId);
+        if (!world || !world.state) return [];
+        const town = getTownByRef(ref);
+        if (!town) return [];
+        let members = [];
+        withWorldState(world, () => {
+            if (typeof getTownAlliance === "function") {
+                const alliance = getTownAlliance(town);
+                if (alliance && Array.isArray(alliance.members)) {
+                    members = alliance.members.map(id => ({ worldId: world.id, townId: id }));
+                }
+            }
+        }, { silent: true });
+        return members;
+    }
+
+    function createSpaceWar(refA, refB) {
+        const universe = getUniverse(false);
+        if (!universe) return null;
+        if (isSpaceWarBetween(refA, refB)) return null;
+        if (universe.spaceWars.length >= SPACE_WAR_CONFIG.maxActive) return null;
+
+        const war = {
+            id: universe.nextSpaceWarId++,
+            startDay: getUniverseDay(),
+            sides: [[], []],
+            worldFronts: {},
+            endedDay: null,
+            winnerSide: null
+        };
+
+        const sideA = [refA, ...getAllianceMemberRefs(refA)];
+        const sideB = [refB, ...getAllianceMemberRefs(refB)];
+        const seen = new Set();
+        war.sides[0] = sideA.filter(ref => {
+            const key = getTownRefKey(ref);
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        war.sides[1] = sideB.filter(ref => {
+            const key = getTownRefKey(ref);
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        universe.spaceWars.push(war);
+
+        const townA = getTownByRef(refA);
+        const townB = getTownByRef(refB);
+        const activeWorldId = getCurrentWorldId();
+        if (townA && townB && (refA.worldId === activeWorldId || refB.worldId === activeWorldId)) {
+            const labelA = formatTownRef(refA);
+            const labelB = formatTownRef(refB);
+            logMessage(`War reaches the stars: ${labelA} clashes with ${labelB}.`, "warning");
+        }
+        const labelA = formatTownRef(refA);
+        const labelB = formatTownRef(refB);
+        noteSpaceEvent(`War reaches the stars: ${labelA} clashes with ${labelB}.`);
+        return war;
+    }
+
+    function maybeStartSpaceWar() {
+        const universe = getUniverse(false);
+        if (!universe) return;
+        if ((universe.spaceTech || 0) < SPACE_WAR_CONFIG.minTech) return;
+        if (Math.random() > SPACE_WAR_CONFIG.baseChance) return;
+
+        const candidates = getWorldTownRefs((town, world) => {
+            if (!world.discovered) return false;
+            if (town.pop < 50) return false;
+            const mil = town.influences?.military || 0;
+            return mil > 2;
+        });
+        if (candidates.length < 2) return;
+
+        const attacker = weightedChoice(candidates, (ref) => {
+            const town = getTownByRef(ref);
+            const mil = town?.influences?.military || 0;
+            const pop = town?.pop || 0;
+            return 1 + mil * 0.6 + pop / 120;
+        });
+        if (!attacker) return;
+        const defenders = candidates.filter(ref => ref.worldId !== attacker.worldId);
+        if (defenders.length === 0) return;
+
+        const defender = weightedChoice(defenders, (ref) => {
+            const town = getTownByRef(ref);
+            const rel = getSpaceWarRelation(attacker, ref);
+            const mil = town?.influences?.military || 0;
+            return 1 + Math.max(0, -rel) * 0.4 + mil * 0.3;
+        });
+        if (!defender) return;
+
+        const relation = getSpaceWarRelation(attacker, defender);
+        if (relation > 4 && Math.random() < 0.7) return;
+
+        createSpaceWar(attacker, defender);
+    }
+
+    function ensureLocalWarFront(war, worldId, sideARefs, sideBRefs) {
+        if (!war || !worldId) return;
+        if (!sideARefs.length || !sideBRefs.length) return;
+
+        const world = getWorldById(worldId);
+        if (!world || !world.state) return;
+
+        withWorldState(world, () => {
+            const processId = war.worldFronts[worldId];
+            let process = processId ? regGet("process", processId) : null;
+            const sideAIds = sideARefs.map(r => r.townId);
+            const sideBIds = sideBRefs.map(r => r.townId);
+            const towns = [...new Set([...sideAIds, ...sideBIds])];
+
+            if (!process || process.done) {
+                process = regAdd("process", {
+                    type: "war",
+                    towns: towns,
+                    sides: [sideAIds, sideBIds],
+                    start: planet.day,
+                    _paultendoSpaceWarId: war.id
+                });
+                war.worldFronts[worldId] = process.id;
+            } else {
+                process.towns = towns;
+                process.sides = [sideAIds, sideBIds];
+            }
+
+            towns.forEach(townId => {
+                const town = regGet("town", townId);
+                if (!town) return;
+                ensureIssues(town);
+                town.issues.war = process.id;
+            });
+
+            if (typeof metaEvents !== "undefined" && metaEvents.processWar && typeof metaEvents.processWar.func === "function") {
+                metaEvents.processWar.func(process);
+            } else if (typeof processCoalitionWar === "function") {
+                processCoalitionWar(process);
+            }
+        }, { silent: worldId !== getCurrentWorldId() });
+    }
+
+    function processSpaceWarRaids(war) {
+        if (!war || !war.sides) return;
+        if (Math.random() > SPACE_WAR_CONFIG.raidChance) return;
+
+        const sideIndex = Math.random() < 0.5 ? 0 : 1;
+        const attackerRefs = war.sides[sideIndex] || [];
+        const defenderRefs = war.sides[sideIndex === 0 ? 1 : 0] || [];
+        if (!attackerRefs.length || !defenderRefs.length) return;
+
+        const attacker = weightedChoice(attackerRefs, (ref) => {
+            const town = getTownByRef(ref);
+            return 1 + (town?.influences?.military || 0);
+        });
+        const defenderOptions = defenderRefs.filter(ref => ref.worldId !== attacker.worldId);
+        const defender = defenderOptions.length ? choose(defenderOptions) : choose(defenderRefs);
+        if (!attacker || !defender) return;
+
+        const defenderTown = getTownByRef(defender);
+        const attackerTown = getTownByRef(attacker);
+        if (!defenderTown || !attackerTown) return;
+
+        const attackPower = (attackerTown.influences?.military || 0) + (attackerTown.pop || 0) / 100;
+        const defensePower = (defenderTown.influences?.military || 0) + (defenderTown.pop || 0) / 140;
+        const ratio = attackPower / Math.max(1, attackPower + defensePower);
+        const loss = Math.max(1, Math.floor((defenderTown.pop || 1) * (0.005 + ratio * 0.01)));
+
+        const defenderWorld = getWorldById(defender.worldId);
+        if (defenderWorld) {
+            withWorldState(defenderWorld, () => {
+                happen("Death", null, defenderTown, { count: loss, cause: "war" });
+                defenderTown.wealth = Math.max(0, (defenderTown.wealth || 0) - 2);
+            }, { silent: defenderWorld.id !== getCurrentWorldId() });
+        }
+
+        addSpaceWarRelation(attacker, defender, -0.5);
+
+        const activeWorldId = getCurrentWorldId();
+        if (defender.worldId === activeWorldId || attacker.worldId === activeWorldId) {
+            const label = formatTownRef(defender);
+            logMessage(`Orbital raids strike ${label}.`, "warning");
+        }
+    }
+
+    function closeSpaceWarFronts(war, reason = "peace") {
+        if (!war || !war.worldFronts) return;
+        const winnerSide = war.winnerSide;
+        const fronts = war.worldFronts;
+        Object.keys(fronts).forEach((worldIdStr) => {
+            const worldId = parseInt(worldIdStr);
+            const processId = fronts[worldIdStr];
+            if (!processId) return;
+            const world = getWorldById(worldId);
+            if (!world) return;
+            withWorldState(world, () => {
+                const process = regGet("process", processId);
+                if (!process || process.done) return;
+                if (reason === "victory" && winnerSide !== null && winnerSide !== undefined) {
+                    endCoalitionWar(process, winnerSide, "victory");
+                } else {
+                    endCoalitionWar(process, null, "peace");
+                }
+            }, { silent: worldId !== getCurrentWorldId() });
+        });
+        war.worldFronts = {};
+    }
+
+    function warInvolvesActiveWorld(war) {
+        if (!war || !war.sides) return false;
+        const activeId = getCurrentWorldId();
+        return war.sides.some(side => side.some(ref => ref.worldId === activeId));
+    }
+
+    function processSpaceWars() {
+        const universe = getUniverse(false);
+        if (!universe || !Array.isArray(universe.spaceWars)) return;
+        const day = getUniverseDay();
+
+        universe.spaceWars.forEach(war => {
+            if (!war || war.endedDay) return;
+            normalizeSpaceWar(war);
+
+            war.sides = war.sides.map(side => side.filter(ref => {
+                const town = getTownByRef(ref);
+                return town && !town.end;
+            }));
+
+            const sideA = war.sides[0];
+            const sideB = war.sides[1];
+            if (sideA.length === 0 || sideB.length === 0) {
+                war.endedDay = day;
+                war.winnerSide = sideA.length ? 0 : 1;
+                if (warInvolvesActiveWorld(war)) {
+                    logMessage("A space war ends with one side scattered.", "milestone");
+                }
+                closeSpaceWarFronts(war, "victory");
+                return;
+            }
+
+            const age = day - (war.startDay || day);
+            if (age > SPACE_WAR_CONFIG.peaceMinDays && Math.random() < SPACE_WAR_CONFIG.peaceChance) {
+                war.endedDay = day;
+                war.winnerSide = null;
+                if (warInvolvesActiveWorld(war)) {
+                    logMessage("A tense truce halts a space war.", "milestone");
+                }
+                closeSpaceWarFronts(war, "peace");
+                return;
+            }
+
+            const worlds = new Set();
+            sideA.forEach(ref => worlds.add(ref.worldId));
+            sideB.forEach(ref => worlds.add(ref.worldId));
+            worlds.forEach(worldId => {
+                const sideARefs = sideA.filter(ref => ref.worldId === worldId);
+                const sideBRefs = sideB.filter(ref => ref.worldId === worldId);
+                if (sideARefs.length && sideBRefs.length) {
+                    ensureLocalWarFront(war, worldId, sideARefs, sideBRefs);
+                }
+            });
+
+            processSpaceWarRaids(war);
+        });
+    }
+
+    function tickInactiveWorlds() {
+        const universe = getUniverse(false);
+        if (!universe) return;
+        const activeId = universe.currentWorldId;
+
+        for (const world of Object.values(universe.worlds)) {
+            if (!world || !world.state || world.id === activeId) continue;
+            withWorldState(world, () => {
+                planet.day = (planet.day || 1) + 1;
+
+                // lightweight background growth
+                const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+                towns.forEach(town => {
+                    const growth = Math.max(0, Math.round((town.pop || 0) * 0.001));
+                    if (growth > 0) {
+                        town.pop = (town.pop || 0) + growth;
+                        if (typeof statsAdd === "function") statsAdd("birth", growth);
+                        else if (planet && planet.stats) {
+                            planet.stats.birth = (planet.stats.birth || 0) + growth;
+                        }
+                    }
+                });
+
+                // keep local wars moving
+                const processes = regFilter("process", p => p && !p.done && p.type === "war");
+                processes.forEach(proc => {
+                    if (typeof metaEvents !== "undefined" && metaEvents.processWar && typeof metaEvents.processWar.func === "function") {
+                        metaEvents.processWar.func(proc);
+                    } else if (typeof processCoalitionWar === "function") {
+                        processCoalitionWar(proc);
+                    }
+                });
+            }, { silent: true });
+        }
+    }
+
+    function ensureSolarHooks() {
+        if (typeof initExecutive === "function" && !initExecutive._paultendoSolar) {
+            const baseInitExecutive = initExecutive;
+            initExecutive = function(...args) {
+                const result = baseInitExecutive.apply(this, args);
+                try { addSolarButton(); } catch {}
+                return result;
+            };
+            initExecutive._paultendoSolar = true;
+        }
+        if (typeof logMessage === "function" && !logMessage._paultendoLogSync) {
+            const baseLogMessage = logMessage;
+            logMessage = function(...args) {
+                const result = baseLogMessage.apply(this, args);
+                try {
+                    if (typeof window === "undefined" || !window._paultendoSuppressLogSync) {
+                        syncLogToPlanet();
+                    }
+                } catch {}
+                return result;
+            };
+            logMessage._paultendoLogSync = true;
+            logMessage._paultendoBase = baseLogMessage;
+        }
+    }
+
+    function initSpaceSystems() {
+        const universe = getUniverse(false);
+        if (!universe) return;
+        initSpaceRoutes();
+        initSpaceWars();
+    }
+
+    function wrapNextDayForUniverse() {
+        if (typeof nextDay !== "function" || nextDay._paultendoUniverse) return;
+        const baseNextDay = nextDay;
+        nextDay = function(...args) {
+            const result = baseNextDay.apply(this, args);
+            try { syncLogToPlanet(); } catch {}
+            try { updateSpaceTech(); } catch {}
+            try { updateSpaceDiscovery(); } catch {}
+            try { maybeCreateSpaceRoute(); } catch {}
+            try { maybeStartSpaceWar(); } catch {}
+            try { tickInactiveWorlds(); } catch {}
+            try { processSpaceRoutes(); } catch {}
+            try { processSpaceWars(); } catch {}
+            return result;
+        };
+        nextDay._paultendoUniverse = true;
+    }
+
+    function wrapInitGameForUniverse() {
+        if (typeof initGame !== "function" || initGame._paultendoUniverse) return;
+        const baseInitGame = initGame;
+        initGame = function(...args) {
+            const result = baseInitGame.apply(this, args);
+            try {
+                const universe = getUniverse();
+                if (universe) {
+                    universe.currentWorldId = getCurrentWorldId();
+                    syncCurrentWorldState(universe);
+                }
+                restoreLogFromPlanet({ merge: true });
+                syncLogToPlanet();
+            } catch {}
+            return result;
+        };
+        initGame._paultendoUniverse = true;
+    }
+
+    function wrapSaveLoadForUniverse() {
+        if (typeof generateSave === "function" && !generateSave._paultendoUniverse) {
+            const baseGenerateSave = generateSave;
+            generateSave = function(...args) {
+                const universe = getUniverse(false);
+                if (universe) {
+                    syncCurrentWorldState(universe);
+                }
+                const save = baseGenerateSave.apply(this, args);
+                try {
+                    save.paultendoUniverse = serializeUniverse(universe, baseGenerateSave);
+                } catch {}
+                return save;
+            };
+            generateSave._paultendoUniverse = true;
+        }
+
+        if (typeof parseSave === "function" && !parseSave._paultendoUniverse) {
+            const baseParseSave = parseSave;
+            parseSave = function(json) {
+                baseParseSave(json);
+                try { deserializeUniverse(json, baseParseSave); } catch {}
+            };
+            parseSave._paultendoUniverse = true;
+        }
+    }
+
+    function serializeUniverse(universe, baseGenerateSave) {
+        if (!universe) return null;
+        const data = {
+            version: UNIVERSE_VERSION,
+            currentWorldId: universe.currentWorldId,
+            homeWorldId: universe.homeWorldId,
+            worldOrder: universe.worldOrder || [],
+            baseDims: universe.baseDims || null,
+            spaceTech: universe.spaceTech || 0,
+            spaceFlags: {
+                orbitNoted: !!universe._spaceOrbitNoted,
+                moonNoted: !!universe._spaceMoonNoted
+            },
+            nextSpaceRouteId: universe.nextSpaceRouteId || 1,
+            nextSpaceWarId: universe.nextSpaceWarId || 1,
+            relations: universe.relations || {},
+            worlds: {},
+            worldSaves: {},
+            spaceRoutes: universe.spaceRoutes || [],
+            spaceWars: universe.spaceWars || []
+        };
+
+        for (const world of Object.values(universe.worlds || {})) {
+            if (!world) continue;
+            data.worlds[world.id] = {
+                id: world.id,
+                key: world.key,
+                type: world.type,
+                orbitIndex: world.orbitIndex,
+                sizeScale: world.sizeScale,
+                waterLevel: world.waterLevel,
+                habitable: world.habitable,
+                harsh: world.harsh,
+                label: world.label,
+                color: world.color,
+                discovery: world.discovery,
+                name: world.name,
+                discovered: world.discovered,
+                orbitAngle: world.orbitAngle,
+                createdDay: world.createdDay
+            };
+        }
+
+        if (baseGenerateSave) {
+            for (const world of Object.values(universe.worlds || {})) {
+                if (!world || !world.state) continue;
+                if (world.id === universe.currentWorldId) continue;
+                const state = world.state;
+                const worldSave = withWorldState(state, () => baseGenerateSave());
+                if (worldSave) data.worldSaves[world.id] = worldSave;
+            }
+        }
+
+        return data;
+    }
+
+    function deserializeUniverse(saveJson, baseParseSave) {
+        if (!saveJson || !saveJson.paultendoUniverse) return;
+        const saved = saveJson.paultendoUniverse;
+        const universe = getUniverse(false) || createDefaultUniverse();
+        if (!universe) return;
+
+        universe.version = saved.version || UNIVERSE_VERSION;
+        universe.currentWorldId = saved.currentWorldId || universe.currentWorldId;
+        universe.homeWorldId = saved.homeWorldId || universe.homeWorldId;
+        universe.worldOrder = saved.worldOrder || universe.worldOrder || [];
+        universe.baseDims = saved.baseDims || universe.baseDims;
+        universe.spaceTech = saved.spaceTech || 0;
+        if (saved.spaceFlags) {
+            universe._spaceOrbitNoted = !!saved.spaceFlags.orbitNoted;
+            universe._spaceMoonNoted = !!saved.spaceFlags.moonNoted;
+        }
+        universe.nextSpaceRouteId = saved.nextSpaceRouteId || 1;
+        universe.nextSpaceWarId = saved.nextSpaceWarId || 1;
+        universe.relations = saved.relations || {};
+        universe.spaceRoutes = saved.spaceRoutes || [];
+        universe.spaceWars = saved.spaceWars || [];
+
+        universe.worlds = {};
+        for (const id in saved.worlds || {}) {
+            const meta = saved.worlds[id];
+            universe.worlds[meta.id] = {
+                ...meta,
+                state: null
+            };
+        }
+
+        SOLAR_WORLD_TEMPLATES.forEach(template => {
+            if (!universe.worlds[template.id]) {
+                universe.worlds[template.id] = createWorldEntry(template);
+            }
+        });
+
+        if (!universe.worldOrder || universe.worldOrder.length === 0) {
+            universe.worldOrder = SOLAR_WORLD_TEMPLATES.map(t => t.id);
+        }
+
+        // Ensure active world is current planet
+        const activeId = universe.currentWorldId || 1;
+        const activeTemplate = universe.worlds[activeId] || getWorldTemplate(activeId);
+        if (activeTemplate) {
+            activeTemplate.state = captureWorldState();
+            applyWorldMetaToPlanet(activeTemplate);
+            universe.worlds[activeId] = activeTemplate;
+        }
+
+        if (baseParseSave && saved.worldSaves) {
+            for (const id in saved.worldSaves) {
+                if (parseInt(id) === activeId) continue;
+                const worldSave = saved.worldSaves[id];
+                const state = parseSaveToWorldState(worldSave, baseParseSave);
+                if (state) {
+                    if (!universe.worlds[id]) universe.worlds[id] = { id: parseInt(id) };
+                    universe.worlds[id].state = state;
+                    applyWorldMetaToPlanet(universe.worlds[id], state);
+                }
+            }
+        }
+
+        window._paultendoUniverse = universe;
+        ensureUniverseBase(universe);
+    }
+
+    function parseSaveToWorldState(saveObj, baseParseSave) {
+        if (!saveObj || !baseParseSave) return null;
+        const snapshot = {
+            planet: planet,
+            reg: reg,
+            planetWidth: planetWidth,
+            planetHeight: planetHeight,
+            chunkSize: chunkSize,
+            waterLevel: waterLevel,
+            currentPlayer: currentPlayer,
+            usedNames: typeof usedNames !== "undefined" ? JSON.parse(JSON.stringify(usedNames)) : null,
+            userSettings: typeof userSettings !== "undefined" ? JSON.parse(JSON.stringify(userSettings)) : null
+        };
+        const stubs = {
+            initGame: typeof initGame === "function" ? initGame : null,
+            setView: typeof setView === "function" ? setView : null,
+            logMessage: typeof logMessage === "function" ? logMessage : null,
+            clearLog: typeof clearLog === "function" ? clearLog : null,
+            updateStats: typeof updateStats === "function" ? updateStats : null,
+            renderMap: typeof renderMap === "function" ? renderMap : null,
+            renderHighlight: typeof renderHighlight === "function" ? renderHighlight : null,
+            updateCanvas: typeof updateCanvas === "function" ? updateCanvas : null,
+            fitToScreen: typeof fitToScreen === "function" ? fitToScreen : null,
+            updateTitle: typeof updateTitle === "function" ? updateTitle : null,
+            saveSettings: typeof saveSettings === "function" ? saveSettings : null,
+            killPlanet: typeof killPlanet === "function" ? killPlanet : null
+        };
+
+        if (stubs.initGame) initGame = function() {};
+        if (stubs.setView) setView = function() {};
+        if (stubs.logMessage) logMessage = function() {};
+        if (stubs.clearLog) clearLog = function() {};
+        if (stubs.updateStats) updateStats = function() {};
+        if (stubs.renderMap) renderMap = function() {};
+        if (stubs.renderHighlight) renderHighlight = function() {};
+        if (stubs.updateCanvas) updateCanvas = function() {};
+        if (stubs.fitToScreen) fitToScreen = function() {};
+        if (stubs.updateTitle) updateTitle = function() {};
+        if (stubs.saveSettings) saveSettings = function() {};
+        if (stubs.killPlanet) killPlanet = function() {};
+
+        let state = null;
+        try {
+            baseParseSave(saveObj);
+            state = captureWorldState();
+        } catch {}
+        finally {
+            if (stubs.initGame) initGame = stubs.initGame;
+            if (stubs.setView) setView = stubs.setView;
+            if (stubs.logMessage) logMessage = stubs.logMessage;
+            if (stubs.clearLog) clearLog = stubs.clearLog;
+            if (stubs.updateStats) updateStats = stubs.updateStats;
+            if (stubs.renderMap) renderMap = stubs.renderMap;
+            if (stubs.renderHighlight) renderHighlight = stubs.renderHighlight;
+            if (stubs.updateCanvas) updateCanvas = stubs.updateCanvas;
+            if (stubs.fitToScreen) fitToScreen = stubs.fitToScreen;
+            if (stubs.updateTitle) updateTitle = stubs.updateTitle;
+            if (stubs.saveSettings) saveSettings = stubs.saveSettings;
+            if (stubs.killPlanet) killPlanet = stubs.killPlanet;
+
+            planet = snapshot.planet;
+            reg = snapshot.reg;
+            planetWidth = snapshot.planetWidth;
+            planetHeight = snapshot.planetHeight;
+            chunkSize = snapshot.chunkSize;
+            waterLevel = snapshot.waterLevel;
+            currentPlayer = snapshot.currentPlayer;
+            if (snapshot.usedNames && typeof usedNames !== "undefined") {
+                for (const key in usedNames) {
+                    if (!(key in snapshot.usedNames)) delete usedNames[key];
+                }
+                for (const key in snapshot.usedNames) {
+                    usedNames[key] = snapshot.usedNames[key];
+                }
+            }
+
+            if (snapshot.userSettings && typeof userSettings !== "undefined") {
+                for (const key in userSettings) {
+                    if (!(key in snapshot.userSettings)) delete userSettings[key];
+                }
+                for (const key in snapshot.userSettings) {
+                    userSettings[key] = snapshot.userSettings[key];
+                }
+            }
+        }
+        return state;
+    }
+
+    function initMultiWorldSystem() {
+        ensureSolarHooks();
+        wrapNextDayForUniverse();
+        wrapInitGameForUniverse();
+        wrapSaveLoadForUniverse();
+        const universe = getUniverse();
+        if (universe) {
+            initSpaceSystems();
+        }
+        try { addSolarButton(); } catch {}
+        try { updateSpaceTech(); } catch {}
+        try { updateSpaceDiscovery(); } catch {}
+    }
+
+    // Harsh environments pressure early colonies
+    modEvent("harshWorldConditions", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        check: () => {
+            const world = getWorldById(getCurrentWorldId());
+            if (!world || !isWorldHarsh(world)) return false;
+            if ((planet.unlocks?.space || 0) >= 80) return false;
+            return true;
+        },
+        func: (subject) => {
+            if (!subject || subject.end) return;
+            happen("Influence", null, subject, { farm: -0.2, happy: -0.15, temp: true });
+            if (Math.random() < 0.05) {
+                const loss = Math.max(1, Math.floor((subject.pop || 0) * 0.002));
+                happen("Death", null, subject, { count: loss, cause: "environment" });
+            }
+        }
+    });
+
+    if (typeof window !== "undefined") {
+        window.addEventListener("load", () => {
+            try { initMultiWorldSystem(); } catch {}
+        });
+    }
+
+    if (typeof document !== "undefined") {
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            try { initMultiWorldSystem(); } catch {}
+        }
+    }
+
     // =========================================================================
     // DIVINE GUIDANCE COOLDOWNS (subtle hints, not faith penalties)
     // =========================================================================
@@ -1781,6 +3721,64 @@
         if (typeof town.x !== "number" || typeof town.y !== "number") return;
         const chunk = chunkAt(town.x, town.y);
         attachMarkerToChunk(marker, chunk);
+    }
+
+    function detachMarkerFromChunk(marker) {
+        if (!marker || typeof chunkAt !== "function") return;
+        if (typeof marker.x !== "number" || typeof marker.y !== "number") return;
+        const chunk = chunkAt(marker.x, marker.y);
+        if (chunk && chunk.v && chunk.v.m === marker.id) {
+            delete chunk.v.m;
+        }
+    }
+
+    function removeMarkerById(id) {
+        if (!id || typeof regGet !== "function") return false;
+        const marker = regGet("marker", id);
+        if (!marker) return false;
+        detachMarkerFromChunk(marker);
+        if (typeof regRemove === "function") {
+            regRemove("marker", id);
+        } else {
+            marker.delete = true;
+        }
+        return true;
+    }
+
+    function createTempMarker(town, def, durationDays = 12) {
+        if (!town || !def) return null;
+        const spot = findTownMarkerSpot(town);
+        const x = spot ? spot.x : town.x;
+        const y = spot ? spot.y : town.y;
+        if (typeof x !== "number" || typeof y !== "number") return null;
+        const marker = happen("Create", null, null, {
+            type: "landmark",
+            name: def.name || "Notice",
+            subtype: def.subtype || "notice",
+            symbol: def.symbol || "?",
+            color: def.color || [200, 200, 200],
+            x: x,
+            y: y
+        }, "marker");
+        if (marker) {
+            marker._paultendoTemp = true;
+            marker.expires = planet.day + durationDays;
+            if (spot) attachMarkerToChunk(marker, spot);
+            else attachMarkerToTownChunk(marker, town);
+            return marker;
+        }
+        return null;
+    }
+
+    function cleanupTempMarkers() {
+        if (!planet || !reg || !reg.marker) return;
+        const markers = regToArray("marker", true);
+        markers.forEach(marker => {
+            if (!marker || !marker._paultendoTemp || !marker.expires) return;
+            if (planet.day >= marker.expires) {
+                removeMarkerById(marker.id);
+            }
+        });
     }
 
     function findTownMarkerSpot(town) {
@@ -2756,6 +4754,75 @@
         return { dissolved: false, alliance };
     }
 
+    const ALLIANCE_MARKER_DEF = {
+        name: "Alliance Hall",
+        subtype: "allianceHall",
+        symbol: "A",
+        color: [120, 200, 255]
+    };
+
+    function getAllianceLeader(alliance) {
+        if (!alliance || !Array.isArray(alliance.members)) return null;
+        return alliance.members
+            .map(id => regGet("town", id))
+            .filter(t => t && !t.end)
+            .sort((a, b) => (b.pop || 0) - (a.pop || 0))[0] || null;
+    }
+
+    function ensureAllianceMarker(alliance) {
+        if (!alliance) return false;
+        let marker = alliance.markerId ? regGet("marker", alliance.markerId) : null;
+        const leader = getAllianceLeader(alliance);
+        if (!leader) return false;
+        const center = getTownCenter(leader);
+        if (!center) return false;
+
+        if (!marker) {
+            marker = happen("Create", null, null, {
+                type: "landmark",
+                name: ALLIANCE_MARKER_DEF.name,
+                subtype: ALLIANCE_MARKER_DEF.subtype,
+                symbol: ALLIANCE_MARKER_DEF.symbol,
+                color: ALLIANCE_MARKER_DEF.color,
+                x: center[0],
+                y: center[1]
+            }, "marker");
+            if (!marker) return false;
+            marker._paultendoAllianceId = alliance.id;
+            alliance.markerId = marker.id;
+            attachMarkerToChunk(marker, chunkAt(center[0], center[1]));
+            return true;
+        }
+
+        if (marker.x !== center[0] || marker.y !== center[1]) {
+            detachMarkerFromChunk(marker);
+            marker.x = center[0];
+            marker.y = center[1];
+            attachMarkerToChunk(marker, chunkAt(center[0], center[1]));
+        }
+        return true;
+    }
+
+    function removeAllianceMarker(alliance) {
+        if (!alliance || !alliance.markerId) return false;
+        const removed = removeMarkerById(alliance.markerId);
+        delete alliance.markerId;
+        return removed;
+    }
+
+    function syncAllianceMarkers() {
+        initAlliances();
+        if (!planet.alliances) return;
+        planet.alliances.forEach(alliance => {
+            ensureAllianceMarker(alliance);
+        });
+        const allianceMarkers = regFilter("marker", m => m.subtype === "allianceHall" && m._paultendoAllianceId);
+        allianceMarkers.forEach(marker => {
+            const alliance = planet.alliances.find(a => a.id === marker._paultendoAllianceId);
+            if (!alliance) removeMarkerById(marker.id);
+        });
+    }
+
     // Generate alliance name from founding towns
     function generateAllianceName(town1, town2) {
         const prefixes = ["The", "Grand", "United", "Holy", "Free", "Noble"];
@@ -2955,12 +5022,14 @@
             // Get the war process
             const warProcess = regGet("process", subject.issues.war);
             if (!warProcess || !warProcess.towns) return;
-
-            // Find the enemy (the town in the war that's not the subject)
-            const enemyId = warProcess.towns.find(id => id !== subject.id);
-            if (!enemyId) return;
-            const enemy = regGet("town", enemyId);
-            if (!enemy || enemy.end) return;
+            ensureWarSides(warProcess);
+            const subjectSide = getWarSideIndex(warProcess, subject.id);
+            if (subjectSide === null || subjectSide === undefined) return;
+            const enemySide = getOpposingSideIndex(warProcess, subjectSide);
+            const enemies = getWarSideTowns(warProcess, enemySide);
+            if (!enemies.length) return;
+            const enemy = choose(enemies);
+            const enemyId = enemy.id;
 
             // Check each ally
             for (const memberId of alliance.members) {
@@ -2983,9 +5052,7 @@
                     // Join the war on subject's side
                     ensureIssues(ally);
                     ally.issues.war = warProcess.id;
-                    if (!warProcess.towns.includes(ally.id)) {
-                        warProcess.towns.push(ally.id);
-                    }
+                    addTownToWarSide(warProcess, ally.id, subjectSide);
                     // Worsen relations with enemy
                     happen("AddRelation", ally, enemy, { amount: -3 });
 
@@ -4348,7 +6415,9 @@
             if (!winnerId || !subject.towns || subject.towns.length < 2) return;
 
             const winner = regGet("town", winnerId);
-            const defeatedId = subject.towns.find(id => id !== winnerId);
+            const defeatedId = (subject.losers && subject.losers.length)
+                ? choose(subject.losers)
+                : subject.towns.find(id => id !== winnerId);
             const defeated = regGet("town", defeatedId);
             if (!winner || !defeated || defeated.end) return;
 
@@ -5703,6 +7772,14 @@
         return { id: "tribal", ...GOVERNMENT_TYPES.tribal };
     }
 
+    function isAutocraticGov(govId) {
+        return ["dictatorship", "monarchy", "chiefdom", "oligarchy"].includes(govId);
+    }
+
+    function isCollectiveGov(govId) {
+        return ["commune", "council", "democracy", "republic"].includes(govId);
+    }
+
     // Check if a town qualifies for a government type
     function canHaveGovernment(town, govId) {
         const gov = GOVERNMENT_TYPES[govId];
@@ -5869,6 +7946,131 @@
         }
     });
 
+    // Governance ⇄ Economy feedback
+    modEvent("governanceEconomyFeedback", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!subject || subject.end) return false;
+            if (Math.random() > 0.04) return false;
+            return true;
+        },
+        func: (subject) => {
+            const gov = getTownGovernment(subject).id;
+            const law = subject.influences?.law || 0;
+            const trade = subject.influences?.trade || 0;
+            const education = subject.influences?.education || 0;
+            const happy = subject.influences?.happy || 0;
+            const crime = subject.influences?.crime || 0;
+            const faith = subject.influences?.faith || 0;
+
+            let influences = null;
+            let unrestDelta = 0;
+            let log = null;
+
+            if (gov === "democracy" || gov === "republic") {
+                if (education > 5 && law > 3 && trade > 3) {
+                    influences = { trade: 0.25, law: 0.2, temp: true };
+                    log = "Civic institutions in {{regname:town|ID}} smooth trade and law.";
+                } else if (education < 2 && trade > 4) {
+                    influences = { crime: 0.3, law: -0.1, temp: true };
+                    log = "Weak civic literacy in {{regname:town|ID}} strains institutions.";
+                }
+            } else if (gov === "oligarchy") {
+                if (trade > 6 && happy < 0) {
+                    influences = { crime: 0.3, trade: -0.2, temp: true };
+                    unrestDelta += 0.3;
+                    log = "Merchant elites in {{regname:town|ID}} face popular resentment.";
+                } else if (law > 3 && trade > 4) {
+                    influences = { trade: 0.2, temp: true };
+                }
+            } else if (gov === "dictatorship" || gov === "monarchy" || gov === "chiefdom") {
+                if (trade > 6 && law < 2) {
+                    influences = { crime: 0.4, trade: -0.3, temp: true };
+                    unrestDelta += 0.3;
+                    log = "Corruption sours commerce in {{regname:town|ID}}.";
+                } else if (law > 4 && trade > 3) {
+                    influences = { trade: 0.15, temp: true };
+                }
+            } else if (gov === "theocracy") {
+                if (faith > 5) {
+                    influences = { crime: -0.2, happy: 0.1, temp: true };
+                } else if (education > 6 && faith < 2) {
+                    influences = { law: -0.2, happy: -0.2, temp: true };
+                    unrestDelta += 0.4;
+                    log = "Doubt spreads in {{regname:town|ID}}'s halls of faith.";
+                }
+            } else if (gov === "commune" || gov === "council" || gov === "tribal") {
+                if (happy > 2 && trade > 2) {
+                    influences = { trade: 0.15, temp: true };
+                } else if (trade < 2 && happy < 0) {
+                    unrestDelta += 0.2;
+                }
+            } else if (gov === "anarchy") {
+                if (crime > 3) {
+                    influences = { trade: -0.3, temp: true };
+                    log = "Lawlessness in {{regname:town|ID}} disrupts commerce.";
+                } else if (happy > 3) {
+                    influences = { trade: 0.1, temp: true };
+                }
+            }
+
+            if (influences) {
+                happen("Influence", null, subject, influences);
+            }
+            if (unrestDelta > 0) {
+                initUnrest(subject);
+                subject.unrest = Math.min(100, subject.unrest + unrestDelta);
+            }
+            if (log && Math.random() < 0.35) {
+                modLog("governance", log.replace("ID", subject.id), null, { town: subject });
+            }
+        }
+    });
+
+    // Education drives reform pressure (or civic stability)
+    modEvent("educationReformPressure", {
+        random: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || subject.end) return false;
+            const gov = getTownGovernment(subject).id;
+            const education = subject.influences?.education || 0;
+            if (education < 6) return false;
+            args.gov = gov;
+            return true;
+        },
+        func: (subject, target, args) => {
+            const gov = args.gov;
+            const education = subject.influences?.education || 0;
+            const happy = subject.influences?.happy || 0;
+            if (isAutocraticGov(gov) && happy < 1) {
+                initUnrest(subject);
+                subject.unrest = Math.min(100, subject.unrest + 1.2);
+                happen("Influence", null, subject, { law: -0.2, happy: -0.2, temp: true });
+                if (Math.random() < 0.25) {
+                    modLog(
+                        "governance",
+                        `Educated voices in {{regname:town|${subject.id}}} press for reform.`,
+                        null,
+                        { town: subject }
+                    );
+                }
+            } else if (isCollectiveGov(gov) && education > 7) {
+                happen("Influence", null, subject, { law: 0.2, trade: 0.2, temp: true });
+                if (Math.random() < 0.2) {
+                    modLog(
+                        "governance",
+                        `Civic literacy strengthens institutions in {{regname:town|${subject.id}}}.`,
+                        null,
+                        { town: subject }
+                    );
+                }
+            }
+        }
+    });
+
     // -------------------------------------------------------------------------
     // EMERGENT WAR PRESSURE SYSTEM (no arbitrary timers)
     // -------------------------------------------------------------------------
@@ -5881,6 +8083,20 @@
         raidChance: 0.2,
         transferChance: 0.35,
         casualtyRate: 0.003
+    };
+
+    const COALITION_WAR_CONFIG = {
+        participationBase: 0.6,
+        participationSpread: 0.6,
+        surrenderThreshold: 0.25,
+        surrenderMinDays: 6,
+        surrenderChance: 0.25,
+        peaceMinDays: 4,
+        peaceRelationRatio: 0.6,
+        allySlackRatio: 0.5,
+        allySlackGrace: 3,
+        allySlackPenalty: -0.5,
+        allySlackMax: 3
     };
 
     const GOVERNMENT_WAR_PROFILE = {
@@ -6003,6 +8219,356 @@
         if (hasTownSpecialization(town, "fortress")) deterrence += 0.08;
         if (hasTownSpecialization(town, "warriorClan")) deterrence += 0.05;
         return clampValue(deterrence, 0, 0.5);
+    }
+
+    function ensureWarSides(process) {
+        if (!process || process.type !== "war") return null;
+        if (!process.towns || process.towns.length < 2) return null;
+
+        const uniqueTowns = [...new Set(process.towns)];
+        if (!process.sides || !Array.isArray(process.sides) || process.sides.length < 2) {
+            const sideA = [];
+            const sideB = [];
+            if (uniqueTowns[0] !== undefined) sideA.push(uniqueTowns[0]);
+            if (uniqueTowns[1] !== undefined) sideB.push(uniqueTowns[1]);
+
+            for (let i = 2; i < uniqueTowns.length; i++) {
+                const townId = uniqueTowns[i];
+                const town = regGet("town", townId);
+                if (!town || town.end) continue;
+
+                const affinityA = getSideAffinity(town, sideA);
+                const affinityB = getSideAffinity(town, sideB);
+
+                if (affinityA === affinityB) {
+                    (Math.random() < 0.5 ? sideA : sideB).push(townId);
+                } else if (affinityA > affinityB) {
+                    sideA.push(townId);
+                } else {
+                    sideB.push(townId);
+                }
+            }
+
+            process.sides = [sideA, sideB];
+        }
+
+        const sideMap = {};
+        process.sides = process.sides.map((side, index) => {
+            const clean = [];
+            if (!Array.isArray(side)) return clean;
+            for (let i = 0; i < side.length; i++) {
+                const townId = side[i];
+                if (townId === undefined || townId === null) continue;
+                if (clean.includes(townId)) continue;
+                clean.push(townId);
+                sideMap[townId] = index;
+            }
+            return clean;
+        });
+        process._paultendoSideMap = sideMap;
+
+        const allTowns = new Set(uniqueTowns);
+        process.sides.forEach(side => side.forEach(id => allTowns.add(id)));
+        process.towns = [...allTowns];
+        return process.sides;
+    }
+
+    function getSideAffinity(town, side) {
+        if (!town || !Array.isArray(side) || side.length === 0) return 0;
+        let score = 0;
+        let allied = false;
+        for (let i = 0; i < side.length; i++) {
+            const member = regGet("town", side[i]);
+            if (!member || member.end) continue;
+            score += getRelations(town, member);
+            if (areAllied(town, member)) allied = true;
+        }
+        if (allied) score += 6;
+        return score;
+    }
+
+    function getWarSideIndex(process, townId) {
+        if (!process || !process.sides) return null;
+        if (!process._paultendoSideMap) ensureWarSides(process);
+        const map = process._paultendoSideMap || {};
+        if (map[townId] !== undefined) return map[townId];
+        for (let i = 0; i < process.sides.length; i++) {
+            if (process.sides[i].includes(townId)) return i;
+        }
+        return null;
+    }
+
+    function addTownToWarSide(process, townId, sideIndex) {
+        if (!process || !townId || sideIndex === null || sideIndex === undefined) return false;
+        ensureWarSides(process);
+        if (!process.sides || !process.sides[sideIndex]) return false;
+        const currentSide = getWarSideIndex(process, townId);
+        if (currentSide !== null && currentSide !== undefined) return currentSide === sideIndex;
+        process.sides[sideIndex].push(townId);
+        if (!process.towns.includes(townId)) process.towns.push(townId);
+        if (!process._paultendoSideMap) process._paultendoSideMap = {};
+        process._paultendoSideMap[townId] = sideIndex;
+        return true;
+    }
+
+    function getOpposingSideIndex(process, sideIndex) {
+        if (!process || !process.sides || process.sides.length < 2) return null;
+        return sideIndex === 0 ? 1 : 0;
+    }
+
+    function getWarSideTowns(process, sideIndex) {
+        if (!process || !process.sides || !process.sides[sideIndex]) return [];
+        return process.sides[sideIndex].map(id => regGet("town", id)).filter(t => t && !t.end);
+    }
+
+    function getWarSideStrength(towns, early = false) {
+        if (!towns || towns.length === 0) return 0;
+        let strength = 0;
+        for (let i = 0; i < towns.length; i++) {
+            const town = towns[i];
+            if (!town || town.end) continue;
+            if (early) strength += getEarlyWarStrength(town);
+            else {
+                const soldiers = town.jobs?.soldier || 0;
+                const military = town.influences?.military || 0;
+                strength += soldiers * (1 + military * 0.05) + (town.pop || 0) * 0.05;
+            }
+        }
+        return strength;
+    }
+
+    function computeWarParticipation(town, enemies, process) {
+        if (!town || town.end) return 0.4;
+        let score = 1;
+        const military = town.influences?.military || 0;
+        score += military * 0.05;
+        if (hasTradition(town, "martial")) score += 0.12;
+        if (hasTradition(town, "festive")) score -= 0.06;
+
+        const distance = getClosestEnemyDistance(town, enemies);
+        if (distance !== null) {
+            const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+            const proximity = 1 - Math.min(distance / (maxDist * 0.6), 1);
+            score *= 0.7 + proximity * 0.6;
+        }
+
+        const unrest = town.unrest || 0;
+        if (unrest > 60) score *= 0.75;
+        if (hasIssue(town, "disaster") || hasIssue(town, "revolution")) score *= 0.6;
+        if (town.famine && !town.famine.ended) score *= 0.8;
+
+        const diplomacy = getTownDiplomacyBias(town);
+        if (diplomacy > 1.1) score *= 0.85;
+
+        const age = process ? (planet.day - (process.start || planet.day)) : 0;
+        if (age > 20) score *= 0.9;
+
+        return clampValue(score, 0.3, 1.6);
+    }
+
+    function getClosestEnemyDistance(town, enemies) {
+        if (!town || !enemies || enemies.length === 0) return null;
+        let best = null;
+        for (let i = 0; i < enemies.length; i++) {
+            const enemy = enemies[i];
+            if (!enemy || enemy.end) continue;
+            const dist = getTownDistance(town, enemy);
+            if (dist === null) continue;
+            if (best === null || dist < best) best = dist;
+        }
+        return best;
+    }
+
+    function handleAllyInvolvement(process, sideIndex, participationMap) {
+        if (!process || !process.sides || !process.sides[sideIndex]) return;
+        const sideIds = process.sides[sideIndex];
+        if (sideIds.length < 2) return;
+
+        const scores = sideIds.map(id => participationMap[id] || 0.4);
+        const avg = scores.reduce((sum, v) => sum + v, 0) / scores.length;
+        if (!process._paultendoAllySlack) process._paultendoAllySlack = {};
+        const slackMap = process._paultendoAllySlack;
+
+        for (let i = 0; i < sideIds.length; i++) {
+            const townId = sideIds[i];
+            const score = participationMap[townId] || 0;
+            if (score >= avg * COALITION_WAR_CONFIG.allySlackRatio) {
+                if (slackMap[townId]) slackMap[townId] = Math.max(0, slackMap[townId] - 1);
+                continue;
+            }
+            slackMap[townId] = (slackMap[townId] || 0) + 1;
+            if (slackMap[townId] <= COALITION_WAR_CONFIG.allySlackGrace) continue;
+            if (slackMap[townId] > COALITION_WAR_CONFIG.allySlackMax) continue;
+
+            const slacker = regGet("town", townId);
+            if (!slacker || slacker.end) continue;
+
+            for (let j = 0; j < sideIds.length; j++) {
+                const allyId = sideIds[j];
+                if (allyId === townId) continue;
+                const ally = regGet("town", allyId);
+                if (!ally || ally.end) continue;
+                happen("AddRelation", slacker, ally, { amount: COALITION_WAR_CONFIG.allySlackPenalty });
+            }
+
+            if (Math.random() < 0.3) {
+                logMessage(`Allies in the war grumble that {{regname:town|${townId}}} is not pulling their weight.`, "warning");
+            }
+        }
+    }
+
+    function getSideRelationStats(sideA, sideB) {
+        let total = 0;
+        let count = 0;
+        let positive = 0;
+        for (let i = 0; i < sideA.length; i++) {
+            const a = sideA[i];
+            if (!a || a.end) continue;
+            for (let j = 0; j < sideB.length; j++) {
+                const b = sideB[j];
+                if (!b || b.end) continue;
+                const rel = getRelations(a, b);
+                total += rel;
+                count += 1;
+                if (rel >= 0) positive += 1;
+            }
+        }
+        return {
+            avg: count ? total / count : 0,
+            positiveRatio: count ? positive / count : 0
+        };
+    }
+
+    function chooseEnemyTarget(attacker, enemies) {
+        if (!attacker || !enemies || enemies.length === 0) return null;
+        return weightedChoice(enemies, (enemy) => {
+            if (!enemy || enemy.end) return 0;
+            const dist = getTownDistance(attacker, enemy);
+            const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+            const proximity = dist === null ? 0.5 : (1 - Math.min(dist / (maxDist * 0.7), 1));
+            let weight = 1 + proximity * 2;
+            const deterrence = getTownDeterrence(enemy);
+            weight *= (1 - deterrence * 0.5);
+            return Math.max(0.05, weight);
+        });
+    }
+
+    function pickWarLeader(towns) {
+        if (!towns || towns.length === 0) return null;
+        return towns.reduce((best, town) => {
+            if (!best) return town;
+            const bestScore = (best.pop || 0) + (best.influences?.military || 0);
+            const score = (town.pop || 0) + (town.influences?.military || 0);
+            return score > bestScore ? town : best;
+        }, null);
+    }
+
+    function endCoalitionWar(process, winningSideIndex = null, reason = "peace") {
+        if (!process) return;
+        ensureWarSides(process);
+        if (winningSideIndex === null || winningSideIndex === undefined) {
+            process.winner = null;
+            process.winnerSide = null;
+            process.losers = [];
+            process.loserSide = null;
+        } else {
+            const winningTowns = getWarSideTowns(process, winningSideIndex);
+            const losingSideIndex = getOpposingSideIndex(process, winningSideIndex);
+            const losingTowns = getWarSideTowns(process, losingSideIndex);
+
+            const winnerTown = pickWarLeader(winningTowns);
+            process.winnerSide = winningSideIndex;
+            process.loserSide = losingSideIndex;
+            process.winner = winnerTown ? winnerTown.id : null;
+            process.losers = losingTowns.map(t => t.id);
+            if (winnerTown) {
+                winnerTown.won = (winnerTown.won || 0) + 1;
+            }
+        }
+
+        if (reason === "victory" && process.winner) {
+            const winnerTown = regGet("town", process.winner);
+            if (winnerTown) {
+                logMessage(`Victory! {{regadj:town|${winnerTown.id}}} forces prevail.`, "warning");
+            }
+        } else if (reason === "peace") {
+            logMessage(`{{c:Peace|Truce|Ceasefire}} settles between ${commaList(process.towns.map(t => `{{regname:town|${t}}}`))}.`);
+        }
+        happen("Finish", null, process);
+    }
+
+    const WARFRONT_MARKER_DEF = {
+        name: "War Front",
+        subtype: "warFront",
+        symbol: "X",
+        color: [255, 120, 120]
+    };
+
+    function getWarFrontPoint(process) {
+        if (!process) return null;
+        ensureWarSides(process);
+        const sideA = getWarSideTowns(process, 0);
+        const sideB = getWarSideTowns(process, 1);
+        if (!sideA.length || !sideB.length) return null;
+        const leaderA = pickWarLeader(sideA) || sideA[0];
+        const leaderB = pickWarLeader(sideB) || sideB[0];
+        const centerA = getTownCenter(leaderA);
+        const centerB = getTownCenter(leaderB);
+        if (!centerA || !centerB) return null;
+        return {
+            x: Math.round((centerA[0] + centerB[0]) / 2),
+            y: Math.round((centerA[1] + centerB[1]) / 2)
+        };
+    }
+
+    function ensureWarfrontMarker(process) {
+        if (!process || process.done) return false;
+        const point = getWarFrontPoint(process);
+        if (!point) return false;
+        let marker = process._paultendoWarMarker ? regGet("marker", process._paultendoWarMarker) : null;
+        if (!marker) {
+            marker = happen("Create", null, null, {
+                type: "landmark",
+                name: WARFRONT_MARKER_DEF.name,
+                subtype: WARFRONT_MARKER_DEF.subtype,
+                symbol: WARFRONT_MARKER_DEF.symbol,
+                color: WARFRONT_MARKER_DEF.color,
+                x: point.x,
+                y: point.y
+            }, "marker");
+            if (!marker) return false;
+            marker._paultendoWarProcess = process.id;
+            process._paultendoWarMarker = marker.id;
+            attachMarkerToChunk(marker, chunkAt(point.x, point.y));
+            return true;
+        }
+
+        if (marker.x !== point.x || marker.y !== point.y) {
+            detachMarkerFromChunk(marker);
+            marker.x = point.x;
+            marker.y = point.y;
+            attachMarkerToChunk(marker, chunkAt(point.x, point.y));
+        }
+        return true;
+    }
+
+    function syncWarfrontMarkers() {
+        const activeWars = regFilter("process", p => p.type === "war" && !p.done);
+        const activeMarkers = new Set();
+        activeWars.forEach(process => {
+            if (ensureWarfrontMarker(process) && process._paultendoWarMarker) {
+                activeMarkers.add(process._paultendoWarMarker);
+            }
+        });
+
+        const warMarkers = regFilter("marker", m => m.subtype === "warFront" && m._paultendoWarProcess);
+        warMarkers.forEach(marker => {
+            if (activeMarkers.has(marker.id)) return;
+            const process = regGet("process", marker._paultendoWarProcess);
+            if (!process || process.done) {
+                removeMarkerById(marker.id);
+            }
+        });
     }
 
     function getSeasonWarProfile() {
@@ -6253,6 +8819,31 @@
         }
     });
 
+    // Sync warfront markers once per day for visibility
+    modEvent("warfrontMarkerSync", {
+        daily: true,
+        subject: { reg: "nature", id: 1 },
+        func: () => {
+            try { syncWarfrontMarkers(); } catch {}
+        }
+    });
+
+    modEvent("allianceMarkerSync", {
+        daily: true,
+        subject: { reg: "nature", id: 1 },
+        func: () => {
+            try { syncAllianceMarkers(); } catch {}
+        }
+    });
+
+    modEvent("tempMarkerCleanup", {
+        daily: true,
+        subject: { reg: "nature", id: 1 },
+        func: () => {
+            try { cleanupTempMarkers(); } catch {}
+        }
+    });
+
     function isEarlyWarProcess(process) {
         if (!process || process.type !== "war") return false;
         if (process._paultendoEarly) return true;
@@ -6312,9 +8903,12 @@
             return true;
         }
 
-        const towns = process.towns.map(id => regGet("town", id)).filter(t => t && !t.end);
-        if (towns.length < 2) {
-            happen("Finish", null, process);
+        ensureWarSides(process);
+        let sideA = getWarSideTowns(process, 0);
+        let sideB = getWarSideTowns(process, 1);
+        if (sideA.length === 0 || sideB.length === 0) {
+            const winnerSide = sideA.length ? 0 : 1;
+            endCoalitionWar(process, winnerSide, "victory");
             return true;
         }
 
@@ -6322,53 +8916,200 @@
         const duration = getEarlyWarDuration(process);
         let endNow = age >= duration;
 
-        for (let i = 0; i < towns.length; i++) {
-            for (let j = i + 1; j < towns.length; j++) {
-                const town1 = towns[i];
-                const town2 = towns[j];
-                if (!town1 || !town2 || town1.end || town2.end) {
-                    happen("Finish", null, process);
-                    return true;
-                }
-                if (!town1.center) { try { happen("UpdateCenter", null, town1); } catch {} }
-                if (!town2.center) { try { happen("UpdateCenter", null, town2); } catch {} }
+        const relationStats = getSideRelationStats(sideA, sideB);
+        if (age >= COALITION_WAR_CONFIG.peaceMinDays &&
+            relationStats.positiveRatio >= COALITION_WAR_CONFIG.peaceRelationRatio) {
+            endNow = true;
+        }
 
-                happen("AddRelation", town1, town2, { amount: -0.05 });
-                happen("Influence", null, town1, { happy: -0.05, temp: true });
-                happen("Influence", null, town2, { happy: -0.05, temp: true });
+        const participation = {};
+        const sides = [sideA, sideB];
+        for (let s = 0; s < sides.length; s++) {
+            const towns = sides[s];
+            const enemies = sides[s === 0 ? 1 : 0];
+            for (let i = 0; i < towns.length; i++) {
+                const town = towns[i];
+                participation[town.id] = computeWarParticipation(town, enemies, process);
+            }
+            handleAllyInvolvement(process, s, participation);
 
-                const strength1 = getEarlyWarStrength(town1);
-                const strength2 = getEarlyWarStrength(town2);
+            for (let i = 0; i < towns.length; i++) {
+                const town = towns[i];
+                const participateChance = clampValue(COALITION_WAR_CONFIG.participationBase * (participation[town.id] || 0.5), 0.1, 0.85);
+                if (Math.random() > participateChance) continue;
+
+                const target = chooseEnemyTarget(town, enemies);
+                if (!target) continue;
+
+                happen("AddRelation", town, target, { amount: -0.05 });
+                happen("Influence", null, town, { happy: -0.05, temp: true });
+                happen("Influence", null, target, { happy: -0.05, temp: true });
+
+                const strength1 = getEarlyWarStrength(town);
+                const strength2 = getEarlyWarStrength(target);
                 const power = strength1 / Math.max(1, strength1 + strength2);
 
-                const scarcity = getTownScarcityPressure(town1) + getTownScarcityPressure(town2);
+                const scarcity = getTownScarcityPressure(town) + getTownScarcityPressure(target);
                 const skirmishChance = 0.12 + Math.min(0.12, scarcity * 0.03);
                 if (Math.random() < skirmishChance) {
-                    const attacker = Math.random() < power ? town1 : town2;
-                    const defender = attacker.id === town1.id ? town2 : town1;
-                    const loss = Math.max(1, Math.floor((defender.pop || 1) * EARLY_WAR_CONFIG.casualtyRate));
+                    const loss = Math.max(1, Math.floor((target.pop || 1) * EARLY_WAR_CONFIG.casualtyRate));
                     if (loss > 0) {
-                        happen("Death", null, defender, { count: loss, cause: "war" });
+                        happen("Death", null, target, { count: loss, cause: "war" });
+                        process.deaths = (process.deaths || 0) + loss;
                     }
-                    attemptEarlyRaid(attacker, defender, power);
-                }
-
-                if (getPairRelation(town1, town2) > -1 && age > 3) {
-                    endNow = true;
+                    attemptEarlyRaid(town, target, power);
                 }
             }
         }
 
+        sideA = getWarSideTowns(process, 0);
+        sideB = getWarSideTowns(process, 1);
+        if (sideA.length === 0 || sideB.length === 0) {
+            const winnerSide = sideA.length ? 0 : 1;
+            endCoalitionWar(process, winnerSide, "victory");
+            return true;
+        }
+
         if (!endNow) {
-            const diplomacy = towns.reduce((sum, t) => sum + getTownDiplomacyBias(t), 0) / towns.length;
+            const diplomacy = [...sideA, ...sideB].reduce((sum, t) => sum + getTownDiplomacyBias(t), 0) / (sideA.length + sideB.length);
             const endChance = 0.015 * diplomacy + Math.min(0.12, age / Math.max(1, duration) * 0.08);
             if (Math.random() < endChance) endNow = true;
         }
 
         if (endNow) {
-            logMessage(`Skirmishes between ${commaList(towns.map(t => `{{regname:town|${t.id}}}`))} fade into an uneasy peace.`);
+            logMessage(`Skirmishes between ${commaList(process.towns.map(t => `{{regname:town|${t}}}`))} fade into an uneasy peace.`);
+            endCoalitionWar(process, null, "peace");
+            return true;
+        }
+
+        return false;
+    }
+
+    function performLateWarAttack(attacker, defender, participation, warStats) {
+        if (!attacker || !defender || attacker.end || defender.end) return;
+        if (!attacker.center) { try { happen("UpdateCenter", null, attacker); } catch {} }
+        if (!defender.center) { try { happen("UpdateCenter", null, defender); } catch {} }
+
+        const attackerSoldiers = attacker.jobs?.soldier || 0;
+        const defenderSoldiers = defender.jobs?.soldier || 0;
+        const power = attackerSoldiers / Math.max(1, attackerSoldiers + defenderSoldiers);
+
+        let chunkCount = (Math.floor((planet.unlocks?.military || 0) / 10) + 2) * power;
+        chunkCount *= (0.6 + (participation || 0.6) * 0.6);
+        if (chunkCount < 1 && Math.random() < chunkCount) chunkCount = 1;
+        chunkCount = Math.floor(chunkCount);
+        chunkCount = Math.min(chunkCount, defender.size || 0);
+
+        let kill = 0;
+        for (let i = 0; i < chunkCount; i++) {
+            if (defender.end) break;
+            let chunk = nearestChunk(attacker.center[0], attacker.center[1], (c) => c && c.v && c.v.s === defender.id);
+            if (!chunk) break;
+
+            const density = (defender.pop || 0) / Math.max(1, defender.size || 1);
+            if (density < 1 && Math.random() < density) kill += 1;
+            else kill += Math.round(density);
+
+            const unclaimed = happen("Unclaim", attacker, defender, { x: chunk.x, y: chunk.y });
+            if (unclaimed && unclaimed.marker && warStats) {
+                warStats.destroyed.push(unclaimed.marker);
+            }
+
+            if (!defender.end && Math.random() < 0.5) {
+                chunk.v.s = attacker.id;
+                attacker.size = (attacker.size || 0) + 1;
+            }
+            happen("UpdateCenter", null, attacker);
+            happen("UpdateCenter", null, defender);
+        }
+
+        if (kill && !defender.end) {
+            const deaths = happen("Death", null, defender, { count: kill, cause: "war" }).count;
+            if (warStats) warStats.deaths += deaths;
+        }
+    }
+
+    function processCoalitionWar(process) {
+        if (!process || !process.towns || process.towns.length < 2) {
             happen("Finish", null, process);
             return true;
+        }
+
+        ensureWarSides(process);
+        let sideA = getWarSideTowns(process, 0);
+        let sideB = getWarSideTowns(process, 1);
+        if (sideA.length === 0 || sideB.length === 0) {
+            const winnerSide = sideA.length ? 0 : 1;
+            endCoalitionWar(process, winnerSide, "victory");
+            return true;
+        }
+
+        const age = planet.day - (process.start || planet.day);
+        const relationStats = getSideRelationStats(sideA, sideB);
+        if (age >= COALITION_WAR_CONFIG.peaceMinDays &&
+            relationStats.positiveRatio >= COALITION_WAR_CONFIG.peaceRelationRatio) {
+            endCoalitionWar(process, null, "peace");
+            return true;
+        }
+
+        const participation = {};
+        const sides = [sideA, sideB];
+        const warStats = { deaths: 0, destroyed: [] };
+
+        for (let s = 0; s < sides.length; s++) {
+            const towns = sides[s];
+            const enemies = sides[s === 0 ? 1 : 0];
+            for (let i = 0; i < towns.length; i++) {
+                const town = towns[i];
+                participation[town.id] = computeWarParticipation(town, enemies, process);
+            }
+            handleAllyInvolvement(process, s, participation);
+
+            for (let i = 0; i < towns.length; i++) {
+                const town = towns[i];
+                const participateChance = clampValue(COALITION_WAR_CONFIG.participationBase * (participation[town.id] || 0.5), 0.1, 0.85);
+                if (Math.random() > participateChance) continue;
+
+                const target = chooseEnemyTarget(town, enemies);
+                if (!target) continue;
+
+                happen("AddRelation", town, target, { amount: -0.1 });
+                happen("Influence", null, town, { happy: -0.1, temp: true });
+                happen("Influence", null, target, { happy: -0.1, temp: true });
+
+                performLateWarAttack(town, target, participation[town.id], warStats);
+            }
+        }
+
+        sideA = getWarSideTowns(process, 0);
+        sideB = getWarSideTowns(process, 1);
+        if (sideA.length === 0 || sideB.length === 0) {
+            const winnerSide = sideA.length ? 0 : 1;
+            endCoalitionWar(process, winnerSide, "victory");
+            return true;
+        }
+
+        if (age >= COALITION_WAR_CONFIG.surrenderMinDays) {
+            const strengthA = getWarSideStrength(sideA, false);
+            const strengthB = getWarSideStrength(sideB, false);
+            if (strengthA > 0 && strengthB > 0) {
+                if (strengthA < strengthB * COALITION_WAR_CONFIG.surrenderThreshold && Math.random() < COALITION_WAR_CONFIG.surrenderChance) {
+                    endCoalitionWar(process, 1, "victory");
+                    return true;
+                }
+                if (strengthB < strengthA * COALITION_WAR_CONFIG.surrenderThreshold && Math.random() < COALITION_WAR_CONFIG.surrenderChance) {
+                    endCoalitionWar(process, 0, "victory");
+                    return true;
+                }
+            }
+        }
+
+        if (warStats.deaths) {
+            process.deaths = (process.deaths || 0) + warStats.deaths;
+            logMessage(
+                `War between ${commaList(process.towns.map((t) => `{{regname:town|${t}}}`))} kills ${warStats.deaths}.` +
+                (warStats.destroyed.length ? " " + commaList(warStats.destroyed.map((id) => `{{regname:marker|${id}}}`)) + " " + (warStats.destroyed.length === 1 ? "was" : "were") + " destroyed." : "")
+            , "warning");
         }
 
         return false;
@@ -6378,8 +9119,13 @@
         !metaEvents.processWar.func._paultendoEarlyWar) {
         const baseProcessWar = metaEvents.processWar.func;
         metaEvents.processWar.func = function(subject, target, args) {
-            if (isEarlyWarProcess(subject)) {
-                processEarlyWar(subject);
+            const hasSides = ensureWarSides(subject);
+            if (hasSides) {
+                if (isEarlyWarProcess(subject)) {
+                    processEarlyWar(subject);
+                    return;
+                }
+                processCoalitionWar(subject);
                 return;
             }
             return baseProcessWar(subject, target, args);
@@ -8097,11 +10843,17 @@
             if (migrants > 0) {
                 args.source.pop -= migrants;
                 subject.pop += migrants;
+                try { markMigration(subject); } catch {}
 
                 if (Math.random() < 0.1) {
                     const traditions = getTownTraditions(subject);
                     const traditionName = traditions.length > 0 ? traditions[0].name : "rich";
-                    logMessage(`Drawn by {{regname:town|${subject.id}}}'s {{b:${traditionName}}} culture, ${migrants} {{c:migrate|move|relocate}} from {{regname:town|${args.source.id}}}.`);
+                    modLog(
+                        "migration",
+                        `Drawn by {{regname:town|${subject.id}}}'s {{b:${traditionName}}} culture, ${migrants} {{c:migrate|move|relocate}} from {{regname:town|${args.source.id}}}.`,
+                        null,
+                        { town: args.source }
+                    );
                 }
             }
         }
@@ -9366,7 +12118,15 @@
             }
 
             if (Math.random() < 0.2) {
-                logMessage(`${refugees} refugees flee from {{regname:town|${subject.id}}} to {{regname:town|${args.destination.id}}} during the ${args.disaster.subtype}.`);
+                modLog(
+                    "migration",
+                    `${refugees} refugees flee from {{regname:town|${subject.id}}} to {{regname:town|${args.destination.id}}} during the ${args.disaster.subtype}.`,
+                    null,
+                    { town: subject }
+                );
+            }
+            if (refugees > 0) {
+                try { markMigration(args.destination, true); } catch {}
             }
         }
     });
@@ -9416,7 +12176,13 @@
                 happen("Influence", null, subject, { disease: 0.3 });
             }
 
-            logMessage(`A ${jobType} leaves disaster-struck {{regname:town|${subject.id}}} for opportunities in {{regname:town|${args.destination.id}}}.`);
+            modLog(
+                "migration",
+                `A ${jobType} leaves disaster-struck {{regname:town|${subject.id}}} for opportunities in {{regname:town|${args.destination.id}}}.`,
+                null,
+                { town: subject }
+            );
+            try { markMigration(args.destination); } catch {}
         }
     });
 
@@ -10032,6 +12798,21 @@
         if (hasTownSpecialization(town, "academy")) score += 2;
         if (hasTownSpecialization(town, "healers")) score += 2;
 
+        // Trade routes boost attraction, disrupted routes hurt
+        if (planet.tradeRoutes && planet.tradeRoutes.length) {
+            const routes = planet.tradeRoutes.filter(r =>
+                (r.town1 === town.id || r.town2 === town.id)
+            );
+            const active = routes.filter(r => r.active !== false).length;
+            const inactive = routes.length - active;
+            if (active > 0) score += active * 1.2;
+            if (inactive > 0) score -= inactive * 1.5;
+        }
+
+        // Great Works bring prestige and migrants
+        const greatWorks = getTownGreatWorkCount(town, "completed");
+        if (greatWorks > 0) score += Math.min(8, greatWorks * 2);
+
         // Cultural prestige
         initTownCulture(town);
         score += (town.culture?.prestige || 0) * 0.1;
@@ -10050,6 +12831,100 @@
         if (atWar.length > 0) score -= 5;
 
         return score;
+    }
+
+    function getTownBiomeStats(town) {
+        if (!town) return null;
+        if (town._paultendoBiomeStatsDay === planet.day && town._paultendoBiomeStats) {
+            return town._paultendoBiomeStats;
+        }
+        const chunks = filterChunks(c => c.v.s === town.id);
+        if (!chunks.length) return null;
+        const counts = {};
+        chunks.forEach(c => {
+            const biome = c.b || "unknown";
+            counts[biome] = (counts[biome] || 0) + 1;
+        });
+        const total = chunks.length;
+        const shares = {};
+        Object.keys(counts).forEach(key => {
+            shares[key] = counts[key] / total;
+        });
+        town._paultendoBiomeStats = { counts, shares, total };
+        town._paultendoBiomeStatsDay = planet.day;
+        return town._paultendoBiomeStats;
+    }
+
+    function getTownResourceProfile(town) {
+        const stats = getTownBiomeStats(town);
+        if (!stats) return null;
+        let lumber = 0;
+        let fertile = 0;
+        let mineral = 0;
+        let arid = 0;
+
+        Object.entries(stats.shares).forEach(([biome, share]) => {
+            const def = biomes[biome] || {};
+            if (def.hasLumber) lumber += share;
+            if (!def.infertile && biome !== "mountain" && biome !== "water") fertile += share;
+            if (biome === "mountain" || biome === "badlands") mineral += share * 1.2;
+            if (biome === "desert" || biome === "badlands") arid += share;
+        });
+
+        const coastal = isTownCoastal(town) ? 1 : 0;
+        return {
+            lumber,
+            fertile,
+            mineral,
+            arid,
+            coastal
+        };
+    }
+
+    function getTownResourceTags(town) {
+        const profile = getTownResourceProfile(town);
+        if (!profile) return [];
+        const tags = [];
+        if (profile.mineral > 0.35) tags.push("mineral");
+        if (profile.lumber > 0.45) tags.push("lumber");
+        if (profile.fertile > 0.55) tags.push("fertile");
+        if (profile.coastal) tags.push("coastal");
+        if (profile.arid > 0.5) tags.push("arid");
+        return tags;
+    }
+
+    const MIGRATION_MARKER_DEF = {
+        name: "Migration",
+        subtype: "migration",
+        symbol: ">",
+        color: [120, 255, 170]
+    };
+    const REFUGEE_MARKER_DEF = {
+        name: "Refugees",
+        subtype: "refugees",
+        symbol: "!",
+        color: [255, 190, 120]
+    };
+
+    function markMigration(target, isRefugee = false) {
+        const def = isRefugee ? REFUGEE_MARKER_DEF : MIGRATION_MARKER_DEF;
+        return createTempMarker(target, def, isRefugee ? 16 : 10);
+    }
+
+    function getMigrationReason(subject, target) {
+        if (!subject || !target) return null;
+        if (subject.issues?.war) return `as war weighs on {{regname:town|${subject.id}}}`;
+        if (subject.activeEpidemic) return `as disease spreads in {{regname:town|${subject.id}}}`;
+        if (subject.famine && !subject.famine.ended) return `as famine grips {{regname:town|${subject.id}}}`;
+        if (subject.drought && !subject.drought.ended) return `as drought lingers in {{regname:town|${subject.id}}}`;
+
+        const tradeGap = (target.influences?.trade || 0) - (subject.influences?.trade || 0);
+        if (tradeGap >= 4) return `drawn by trade in {{regname:town|${target.id}}}`;
+        const eduGap = (target.influences?.education || 0) - (subject.influences?.education || 0);
+        if (eduGap >= 4) return `seeking learning in {{regname:town|${target.id}}}`;
+        const happyGap = (target.influences?.happy || 0) - (subject.influences?.happy || 0);
+        if (happyGap >= 3) return `hoping for better lives in {{regname:town|${target.id}}}`;
+        return null;
     }
 
     // Economic migration - people move toward prosperity
@@ -10085,9 +12960,14 @@
             if (migrants < 1) return;
 
             happen("Migrate", subject, target, { count: migrants });
+            try { markMigration(target); } catch {}
 
             if (Math.random() < 0.15) {
-                logMessage(`${migrants} people leave {{regname:town|${subject.id}}} seeking opportunity in {{regname:town|${target.id}}}.`);
+                const reason = getMigrationReason(subject, target);
+                const line = reason
+                    ? `${migrants} people leave {{regname:town|${subject.id}}} ${reason}.`
+                    : `${migrants} people leave {{regname:town|${subject.id}}} seeking opportunity in {{regname:town|${target.id}}}.`;
+                modLog("migration", line, null, { town: subject });
             }
         }
     });
@@ -10119,7 +12999,13 @@
             happen("Influence", null, subject, { education: -0.3 });
             happen("Influence", null, target, { education: 0.3 });
 
-            logMessage(`A scholar leaves {{regname:town|${subject.id}}} for the academy in {{regname:town|${target.id}}}.`);
+            modLog(
+                "migration",
+                `A scholar leaves {{regname:town|${subject.id}}} for the academy in {{regname:town|${target.id}}}.`,
+                null,
+                { town: subject }
+            );
+            try { markMigration(target); } catch {}
         }
     });
 
@@ -10146,7 +13032,13 @@
             target.jobs = target.jobs || {};
             target.jobs.doctor = (target.jobs.doctor || 0) + 1;
 
-            logMessage(`A doctor leaves {{regname:town|${subject.id}}} to practice in {{regname:town|${target.id}}}.`);
+            modLog(
+                "migration",
+                `A doctor leaves {{regname:town|${subject.id}}} to practice in {{regname:town|${target.id}}}.`,
+                null,
+                { town: subject }
+            );
+            try { markMigration(target); } catch {}
         }
     });
 
@@ -10185,7 +13077,13 @@
             target.jobs = target.jobs || {};
             target.jobs[jobType] = (target.jobs[jobType] || 0) + 1;
 
-            logMessage(`A ${jobType} leaves {{regname:town|${subject.id}}} for the cultural scene in {{regname:town|${target.id}}}.`);
+            modLog(
+                "migration",
+                `A ${jobType} leaves {{regname:town|${subject.id}}} for the cultural scene in {{regname:town|${target.id}}}.`,
+                null,
+                { town: subject }
+            );
+            try { markMigration(target); } catch {}
         }
     });
 
@@ -10217,6 +13115,7 @@
             if (actualMigrants < 1) return;
 
             happen("Migrate", subject, target, { count: actualMigrants });
+            try { markMigration(target); } catch {}
 
             // Priests may accompany
             if (subject.jobs && subject.jobs.priest > 0 && Math.random() < 0.2) {
@@ -10226,7 +13125,12 @@
             }
 
             if (Math.random() < 0.2) {
-                logMessage(`Pilgrims from {{regname:town|${subject.id}}} settle in holy {{regname:town|${target.id}}}.`);
+                modLog(
+                    "migration",
+                    `Pilgrims from {{regname:town|${subject.id}}} settle in holy {{regname:town|${target.id}}}.`,
+                    null,
+                    { town: subject }
+                );
             }
         }
     });
@@ -10259,8 +13163,14 @@
             const actualRefugees = Math.min(refugees, Math.floor(subject.pop * 0.1));
 
             happen("Migrate", subject, target, { count: actualRefugees });
+            try { markMigration(target, true); } catch {}
 
-            logMessage(`Religious refugees flee {{regname:town|${subject.id}}} for {{regname:town|${target.id}}}.`);
+            modLog(
+                "migration",
+                `Religious refugees flee {{regname:town|${subject.id}}} for {{regname:town|${target.id}}}.`,
+                null,
+                { town: subject }
+            );
 
             // This worsens relations
             worsenRelations(subject, target, 3);
@@ -10304,9 +13214,15 @@
             const actualRefugees = Math.min(refugees, Math.floor(subject.pop * 0.1));
 
             happen("Migrate", subject, target, { count: actualRefugees });
+            try { markMigration(target, true); } catch {}
 
             if (Math.random() < 0.2) {
-                logMessage(`${actualRefugees} refugees flee the war in {{regname:town|${subject.id}}} for safety in {{regname:town|${target.id}}}.`);
+                modLog(
+                    "migration",
+                    `${actualRefugees} refugees flee the war in {{regname:town|${subject.id}}} for safety in {{regname:town|${target.id}}}.`,
+                    null,
+                    { town: subject }
+                );
             }
         }
     });
@@ -10349,9 +13265,15 @@
             if (actualReturnees < 1) return;
 
             happen("Migrate", subject, args.destination, { count: actualReturnees });
+            try { markMigration(args.destination); } catch {}
 
             if (Math.random() < 0.15) {
-                logMessage(`Refugees return to rebuilt {{regname:town|${args.destination.id}}} from {{regname:town|${subject.id}}}.`);
+                modLog(
+                    "migration",
+                    `Refugees return to rebuilt {{regname:town|${args.destination.id}}} from {{regname:town|${subject.id}}}.`,
+                    null,
+                    { town: subject }
+                );
             }
         }
     });
@@ -11544,6 +14466,78 @@
         }
     });
 
+    // Faith inspires culture and learning
+    modEvent("sacredArtsBloom", {
+        random: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            const religion = getTownReligion(subject);
+            if (!religion) return false;
+            if ((subject.influences?.faith || 0) < 4) return false;
+            if (!hasTradition(subject, "art") &&
+                !hasTradition(subject, "music") &&
+                !hasTradition(subject, "literary") &&
+                !hasCulturalLandmark(subject, "theater") &&
+                !hasCulturalLandmark(subject, "gallery")) {
+                return false;
+            }
+            args.religion = religion;
+            return true;
+        },
+        func: (subject, target, args) => {
+            initTownCulture(subject);
+            subject.culture.prestige += 1;
+            happen("Influence", null, subject, { happy: 0.3, education: 0.2, temp: true });
+            if (Math.random() < 0.35) {
+                modLog(
+                    "religion",
+                    `Artisans in {{regname:town|${subject.id}}} create works honoring {{b:${args.religion.name}}}.`,
+                    null,
+                    { town: subject }
+                );
+            }
+        }
+    });
+
+    // Education-driven secular debates
+    modEvent("secularDebate", {
+        random: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        value: (subject) => {
+            if ((subject.influences?.education || 0) < 7) return false;
+            if ((subject.influences?.faith || 0) > 2) return false;
+            return true;
+        },
+        func: (subject) => {
+            const gov = getTownGovernment(subject).id;
+            if (gov === "theocracy") {
+                initUnrest(subject);
+                subject.unrest = Math.min(100, subject.unrest + 0.8);
+                happen("Influence", null, subject, { faith: -0.4, happy: -0.2, temp: true });
+                if (Math.random() < 0.3) {
+                    modLog(
+                        "religion",
+                        `Secular debates shake {{regname:town|${subject.id}}}'s theocracy.`,
+                        "warning",
+                        { town: subject }
+                    );
+                }
+            } else {
+                happen("Influence", null, subject, { education: 0.3, trade: 0.2, temp: true });
+                if (Math.random() < 0.2) {
+                    modLog(
+                        "religion",
+                        `Secular scholars in {{regname:town|${subject.id}}} reshape public life.`,
+                        null,
+                        { town: subject }
+                    );
+                }
+            }
+        }
+    });
+
     // ----------------------------------------
     // RELIGIOUS CONFLICTS
     // ----------------------------------------
@@ -12215,11 +15209,18 @@
     }
 
     const LORE_NUDGE_THEMES = ["war", "discovery", "faith", "revolution", "hardship", "myth", "diplomacy", "expansion", "culture"];
+    const LORE_ENDORSE_COOLDOWN = 12;
 
     function initLoreNudges() {
         if (!planet._paultendoLoreNudges) {
-            planet._paultendoLoreNudges = { lastDay: 0 };
+            planet._paultendoLoreNudges = { lastDay: 0, lastEndorseDay: -999 };
         }
+    }
+
+    function canEndorseLore() {
+        initLoreNudges();
+        const last = planet._paultendoLoreNudges.lastEndorseDay || -999;
+        return (planet.day - last) >= LORE_ENDORSE_COOLDOWN;
     }
 
     function isLoreNudgeCandidate(entry) {
@@ -12299,6 +15300,50 @@
             default:
                 return null;
         }
+    }
+
+    function endorseLoreEntry(entry) {
+        if (!entry) return false;
+        initLoreNudges();
+        if (!canEndorseLore()) {
+            logMessage("The Lore must settle before another endorsement.");
+            return false;
+        }
+
+        const town = resolveLoreTown(entry);
+        if (!town || town.end) {
+            planet._paultendoLoreNudges.lastEndorseDay = planet.day;
+            logMessage("The tale finds no immediate echo.");
+            return false;
+        }
+
+        if (!canReceiveGuidance(town, "loreEndorse", 25)) {
+            planet._paultendoLoreNudges.lastEndorseDay = planet.day;
+            logMessage(`The people of {{regname:town|${town.id}}} are unreceptive to omens right now.`);
+            return false;
+        }
+
+        const effect = getLoreNudgeEffect(entry);
+        if (!effect) {
+            planet._paultendoLoreNudges.lastEndorseDay = planet.day;
+            logMessage("The tale does not lend itself to action.");
+            return false;
+        }
+
+        const faith = town.influences?.faith || 0;
+        const successChance = clampValue(0.4 + Math.max(0, faith) * 0.04, 0.25, 0.8);
+        const success = Math.random() < successChance;
+
+        if (success) {
+            happen("Influence", null, town, { ...effect.influence, temp: true });
+            logMessage(`You bless the memory of ${formatLoreTitle(entry)} in {{regname:town|${town.id}}}.`);
+        } else {
+            logMessage(`{{regname:town|${town.id}}} hears ${formatLoreTitle(entry)}, but hesitates to act.`);
+        }
+
+        noteGuidance(town, "loreEndorse", success);
+        planet._paultendoLoreNudges.lastEndorseDay = planet.day;
+        return success;
     }
 
     // ----------------------------------------
@@ -12924,6 +15969,43 @@
         if (typeof saveSettings === "function") saveSettings();
     }
 
+    function getLoreFocusSetting() {
+        if (typeof userSettings === "undefined") return "balanced";
+        if (!userSettings.paultendoLoreFocus) userSettings.paultendoLoreFocus = "balanced";
+        return userSettings.paultendoLoreFocus;
+    }
+
+    function setLoreFocusSetting(value) {
+        if (typeof userSettings === "undefined") return;
+        userSettings.paultendoLoreFocus = value || "balanced";
+        if (typeof saveSettings === "function") saveSettings();
+    }
+
+    function getLoreFocusOptions() {
+        const options = [{ id: "balanced", label: "Balanced" }];
+        LORE_NUDGE_THEMES.forEach(theme => {
+            const label = ANNALS_THEME_NAMES[theme] || titleCase(theme);
+            options.push({ id: theme, label });
+        });
+        return options;
+    }
+
+    function chooseLoreFocus() {
+        const options = getLoreFocusOptions();
+        const current = getLoreFocusSetting();
+        doPrompt({
+            type: "choose",
+            message: "Select Lore focus:",
+            choices: options.map(o => o.label),
+            choiceValues: options.map(o => o.id),
+            selected: options.findIndex(o => o.id === current),
+            func: (value) => {
+                setLoreFocusSetting(value);
+                openAnnalsPanel();
+            }
+        });
+    }
+
     function getAnnalsEraOptions() {
         const options = [{ id: "all", label: "All Eras" }];
         if (planet.currentEra) {
@@ -12987,6 +16069,14 @@
         items.push({ text: `{{i:Voice:}} ${entry.voiceName || "Chronicler"}` });
         items.push({ spacer: true, text: formatAnnalsBody(entry) });
         items.push({ spacer: true });
+        const canEndorse = canEndorseLore();
+        items.push({
+            text: canEndorse ? "Endorse this tale" : "Endorse this tale (resting)",
+            func: () => {
+                endorseLoreEntry(entry);
+                openAnnalsEntry(entry);
+            }
+        });
         items.push({
             text: "◁ Back to Lore",
             func: () => openAnnalsPanel()
@@ -13043,6 +16133,9 @@
         const themeOptions = getAnnalsThemeOptions();
         const eraLabel = (eraOptions.find(o => o.id === state.era) || eraOptions[0]).label;
         const themeLabel = (themeOptions.find(o => o.id === state.theme) || themeOptions[0]).label;
+        const focusOptions = getLoreFocusOptions();
+        const focusSetting = getLoreFocusSetting();
+        const focusLabel = (focusOptions.find(o => o.id === focusSetting) || focusOptions[0]).label;
 
         const items = [];
         items.push({
@@ -13052,6 +16145,10 @@
         items.push({
             text: `Theme: ${themeLabel}`,
             func: () => chooseAnnalsFilter("theme", themeOptions)
+        });
+        items.push({
+            text: `Focus: ${focusLabel}`,
+            func: () => chooseLoreFocus()
         });
         items.push({ spacer: true, text: `Entries (${entries.length})` });
 
@@ -13097,6 +16194,7 @@
         window.addEventListener("load", () => {
             try { addAnnalsButton(); } catch {}
             try { updateSeasonState(); } catch {}
+            try { ensureGreatWorkForEra(planet.currentEra); } catch {}
         });
     }
 
@@ -13573,8 +16671,61 @@
         planet._paultendoDiscovery.boostUntil = Math.max(planet._paultendoDiscovery.boostUntil || 0, planet.day + duration);
 
         if (Math.random() < 0.18 * scale) {
-            logMessage(`Stolen charts from {{regname:town|${target.id}}} spur new explorations in {{regname:town|${subject.id}}}.`);
+            modLog(
+                "espionage",
+                `Stolen charts from {{regname:town|${target.id}}} spur new explorations in {{regname:town|${subject.id}}}.`,
+                null,
+                { town: subject }
+            );
         }
+        return true;
+    }
+
+    const SHADOW_MARKER_DEF = {
+        name: "Shadow Activity",
+        subtype: "shadowActivity",
+        symbol: "?",
+        color: [160, 160, 160]
+    };
+
+    function markEspionageActivity(town, duration = 12) {
+        if (!town) return null;
+        return createTempMarker(town, SHADOW_MARKER_DEF, duration);
+    }
+
+    function findActiveGreatWorkProject(town) {
+        if (!town) return null;
+        const projects = regFilter("process", p =>
+            p.type === "project" &&
+            !p.done &&
+            !p.end &&
+            p.town === town.id &&
+            isGreatWorkSubtype(p.subtype)
+        );
+        if (!projects.length) return null;
+        return choose(projects);
+    }
+
+    function maybeSabotageGreatWork(subject, target, scale = 1) {
+        if (!target || target.end) return false;
+        if (Math.random() > 0.12 * scale) return false;
+        const project = findActiveGreatWorkProject(target);
+        if (!project) return false;
+
+        const base = project.total || project.cost || 200;
+        const penalty = Math.max(10, Math.round(base * (0.05 + Math.random() * 0.05) * scale));
+        project.cost = Math.max(0, Math.round((project.cost || 0) + penalty));
+        project.total = Math.max(project.total || 0, project.cost);
+
+        const work = getGreatWorkBySubtype(project.subtype);
+        const title = work?.title || project.name || "a Great Work";
+        modLog(
+            "espionage",
+            `Saboteurs delay {{regname:town|${target.id}}}'s ${title}, draining resources from the project.`,
+            "warning",
+            { town: target }
+        );
+        try { markEspionageActivity(target, 16); } catch {}
         return true;
     }
 
@@ -13601,6 +16752,9 @@
 
         const ownerName = owner ? `{{regname:town|${owner.id}}}` : "A town";
         logMessage(`${ownerName}'s ${secret.title} are exposed to the world.`, "warning");
+        if (owner) {
+            try { markEspionageActivity(owner, 18); } catch {}
+        }
 
         try {
             const stage = getAnnalsStage();
@@ -13673,10 +16827,19 @@
                 addSecretKnowledge(secret, subject);
                 applySecretLeverage(secret, subject, target, effectScale);
                 maybeStealMaps(subject, target, effectScale);
+                maybeSabotageGreatWork(subject, target, effectScale);
                 bumpWarPressure(subject, target, 1 * effectScale);
 
                 if (Math.random() < 0.15 * effectScale) {
-                    logMessage(`Whispers say agents from {{regname:town|${subject.id}}} returned from {{regname:town|${target.id}}} with ${secret.title}.`);
+                    modLog(
+                        "espionage",
+                        `Whispers say agents from {{regname:town|${subject.id}}} returned from {{regname:town|${target.id}}} with ${secret.title}.`,
+                        null,
+                        { town: subject }
+                    );
+                }
+                if (Math.random() < 0.2 * effectScale) {
+                    markEspionageActivity(target, 10);
                 }
             } else {
                 const fallout = effectScale;
@@ -13686,6 +16849,7 @@
                 recordGrudge(target, subject.id, "Espionage exposed", grudgeHit);
                 bumpWarPressure(target, subject, 2 * fallout);
                 logMessage(`Spies from {{regname:town|${subject.id}}} are caught in {{regname:town|${target.id}}}!`, "warning");
+                markEspionageActivity(target, 18);
             }
         }
     });
@@ -13847,6 +17011,7 @@
                         });
 
                         logMessage(`A new age begins: {{b:${name}}}.`, "milestone");
+                        try { onEraBegan(planet.currentEra); } catch {}
                         break;
                     }
                 }
@@ -13871,45 +17036,63 @@
         func: (subject) => {
             subject._historyRecorded = true;
 
-            const victor = subject.winner ? regGet("town", subject.winner) : null;
+            ensureWarSides(subject);
             const towns = subject.towns || [];
-            const loser = towns.find(id => id !== subject.winner);
-            const loserTown = loser ? regGet("town", loser) : null;
+            const winnerSide = subject.winnerSide !== undefined ? subject.winnerSide : null;
+            let victorTown = subject.winner ? regGet("town", subject.winner) : null;
+            if (!victorTown && winnerSide !== null) {
+                victorTown = pickWarLeader(getWarSideTowns(subject, winnerSide));
+                if (victorTown) subject.winner = victorTown.id;
+            }
+
+            let losers = Array.isArray(subject.losers) ? subject.losers.slice() : [];
+            if (losers.length === 0 && winnerSide !== null) {
+                const losingSideIndex = getOpposingSideIndex(subject, winnerSide);
+                losers = getWarSideTowns(subject, losingSideIndex).map(t => t.id);
+            }
+            const losingSideTowns = losers.map(id => regGet("town", id)).filter(t => t && !t.end);
+            const loserLeader = pickWarLeader(losingSideTowns);
 
             const entry = recordHistory(HISTORY_TYPES.WAR, {
-                victor: subject.winner,
-                victorName: victor?.name,
-                loser: loser,
-                loserName: loserTown?.name,
+                victor: victorTown ? victorTown.id : null,
+                victorName: victorTown?.name,
+                loser: loserLeader ? loserLeader.id : (losers[0] || null),
+                loserName: loserLeader?.name || (losers[0] ? getTownNameById(losers[0]) : null),
+                losers: losers,
                 towns: towns,
+                winnerSide: winnerSide,
+                loserSide: subject.loserSide,
                 deaths: subject.deaths || 0,
                 duration: subject.done - subject.start,
-                name: victor && loserTown ?
-                    `The ${victor.name}-${loserTown.name} War` :
+                name: victorTown && loserLeader ?
+                    `The ${victorTown.name}-${loserLeader.name} War` :
                     `The War of Day ${subject.start}`
             });
 
             // Create war hero from victor
-            if (victor && !victor.end && subject.deaths > 10 && Math.random() < 0.3) {
+            if (victorTown && !victorTown.end && subject.deaths > 10 && Math.random() < 0.3) {
                 const hero = createFigure("GENERAL", {
-                    town: victor.id,
-                    deeds: [`Led ${victor.name} to victory in ${entry.name}`]
+                    town: victorTown.id,
+                    deeds: [`Led ${victorTown.name} to victory in ${entry.name}`]
                 });
-                logMessage(`{{b:${hero.fullTitle}}} emerges as a celebrated general in {{regname:town|${victor.id}}}.`);
+                logMessage(`{{b:${hero.fullTitle}}} emerges as a celebrated general in {{regname:town|${victorTown.id}}}.`);
             }
 
             // Record grudges
-            if (victor && loserTown && !loserTown.end) {
-                recordGrudge(loserTown, victor.id, `Defeated in ${entry.name}`, 5);
+            if (victorTown && losingSideTowns.length) {
+                for (let i = 0; i < losingSideTowns.length; i++) {
+                    const losingTown = losingSideTowns[i];
+                    if (!losingTown || losingTown.end) continue;
+                    recordGrudge(losingTown, victorTown.id, `Defeated in ${entry.name}`, 5);
 
-                // Martyr may emerge from defeated side
-                if (subject.deaths > 20 && Math.random() < 0.2) {
-                    const martyr = createFigure("MARTYR", {
-                        town: loser,
-                        deeds: [`Fell defending ${loserTown.name} in ${entry.name}`]
-                    });
-                    killFigure(martyr, "battle", loser);
-                    logMessage(`{{regname:town|${loser}}} mourns {{b:${martyr.name}}}, martyred in the war.`);
+                    if (subject.deaths > 20 && Math.random() < 0.15) {
+                        const martyr = createFigure("MARTYR", {
+                            town: losingTown.id,
+                            deeds: [`Fell defending ${losingTown.name} in ${entry.name}`]
+                        });
+                        killFigure(martyr, "battle", losingTown.id);
+                        logMessage(`{{regname:town|${losingTown.id}}} mourns {{b:${martyr.name}}}, martyred in the war.`);
+                    }
                 }
             }
         }
@@ -14069,9 +17252,19 @@
             // Record bonds between founding members
             recordBond(town1, town2.id, `Co-founded ${alliance.name}`, 3);
             recordBond(town2, town1.id, `Co-founded ${alliance.name}`, 3);
+            try { ensureAllianceMarker(alliance); } catch {}
         }
 
         return alliance;
+    };
+
+    const originalLeaveAlliance = leaveAlliance;
+    leaveAlliance = function(town) {
+        const result = originalLeaveAlliance(town);
+        if (result && result.dissolved && result.alliance) {
+            try { removeAllianceMarker(result.alliance); } catch {}
+        }
+        return result;
     };
 
     // ----------------------------------------
@@ -14325,6 +17518,830 @@
     });
 
     // ----------------------------------------
+    // GREAT WORKS & WONDERS (one per era, dynamic, sometimes autonomous)
+    // ----------------------------------------
+
+    const GREAT_WORK_CONFIG = {
+        minPop: 70,
+        minTowns: 3,
+        baseCost: 240,
+        costPerPop: 4.5,
+        costPerTown: 45,
+        eraCostScale: 0.08,
+        proposalCooldown: 40,
+        declineCooldown: 30,
+        autonomousChance: 0.06,
+        contributionChance: 0.22,
+        contributionBase: 8,
+        contributionMax: 30
+    };
+
+    const GREAT_WORK_EPITHETS = [
+        "Radiant", "Eternal", "Golden", "Obsidian", "Ivory", "Luminous",
+        "Verdant", "Crimson", "Sapphire", "Starlit", "Silent", "Iron",
+        "Hallowed", "Enduring", "Celestial", "Ancient", "Emerald", "Azure"
+    ];
+
+    const GREAT_WORK_TEMPLATES = [
+        {
+            id: "library",
+            baseNames: ["Great Library", "Grand Archive", "Vault of Knowledge", "Hall of Records"],
+            tags: ["learning", "culture"],
+            symbol: "☗",
+            color: [235, 218, 120],
+            influences: { education: [2, 3, 0.5], trade: [0.5, 1, 0.5], happy: [0.5, 1, 0.5] },
+            needsUnlock: { education: 20 },
+            effect: "library",
+            theme: "learning",
+            description: "A monumental archive meant to preserve the knowledge of the age."
+        },
+        {
+            id: "observatory",
+            baseNames: ["Grand Observatory", "Celestial Watch", "Sky Compass", "Astral Vault"],
+            tags: ["learning", "expansion"],
+            symbol: "✶",
+            color: [180, 200, 255],
+            influences: { education: [2, 2.5, 0.5], travel: [1, 1.5, 0.5] },
+            needsUnlock: { education: 30, travel: 30 },
+            effect: "observatory",
+            theme: "discovery",
+            description: "The heavens are charted in stone and brass, guiding explorers beyond the horizon."
+        },
+        {
+            id: "cathedral",
+            baseNames: ["Grand Temple", "Sacred Basilica", "Hallowed Spire", "Pilgrim's Sanctuary"],
+            tags: ["faith", "peace"],
+            symbol: "⛪",
+            color: [220, 160, 220],
+            influences: { faith: [2.5, 3.5, 0.5], happy: [0.5, 1, 0.5] },
+            needsUnlock: { farm: 20 },
+            effect: "cathedral",
+            theme: "faith",
+            description: "A sacred center that draws the faithful from across the world."
+        },
+        {
+            id: "monument",
+            baseNames: ["World Monument", "Triumphal Colossus", "Pillar of Ages", "Stone of Unity"],
+            tags: ["peace", "culture", "diplomacy"],
+            symbol: "⟡",
+            color: [190, 190, 170],
+            influences: { happy: [1.5, 2.5, 0.5], law: [0.5, 1.5, 0.5] },
+            needsUnlock: { government: 10 },
+            effect: "monument",
+            theme: "culture",
+            description: "A colossal monument meant to remind the world of unity and shared memory."
+        },
+        {
+            id: "citadel",
+            baseNames: ["Great Citadel", "Iron Bastion", "Crown Fortress", "Shield Wall"],
+            tags: ["war", "military"],
+            symbol: "▟",
+            color: [180, 150, 160],
+            influences: { military: [2, 3, 0.5], law: [0.5, 1.5, 0.5] },
+            needsUnlock: { military: 15 },
+            effect: "citadel",
+            theme: "war",
+            description: "A fortress of legend, built to stand against any foe."
+        },
+        {
+            id: "harbor",
+            baseNames: ["Great Harbor", "Lighthouse of Nations", "Ocean Gate", "Mariner's Beacon"],
+            tags: ["expansion", "trade"],
+            symbol: "⚓",
+            color: [120, 200, 200],
+            influences: { trade: [2, 3, 0.5], travel: [1, 1.5, 0.5] },
+            needsUnlock: { travel: 40, trade: 20 },
+            effect: "harbor",
+            theme: "diplomacy",
+            description: "A vast harbor whose beacons draw ships from distant shores."
+        },
+        {
+            id: "sanctuary",
+            baseNames: ["Healing Sanctuary", "Grand Infirmary", "House of Mercy", "Garden of Remedies"],
+            tags: ["health", "plague"],
+            symbol: "+",
+            color: [200, 120, 120],
+            influences: { disease: [-2.5, -1.5, 0.5], happy: [0.5, 1, 0.5] },
+            needsUnlock: { smith: 20, education: 20 },
+            effect: "sanctuary",
+            theme: "hardship",
+            description: "A haven for the sick, where knowledge and compassion meet."
+        },
+        {
+            id: "charter",
+            baseNames: ["Charter Hall", "Hall of Justice", "Civic Forum", "Council Rotunda"],
+            tags: ["revolution", "governance", "peace"],
+            symbol: "⚖",
+            color: [200, 200, 140],
+            influences: { law: [2, 3, 0.5], happy: [0.5, 1, 0.5] },
+            needsUnlock: { government: 15 },
+            effect: "charter",
+            theme: "revolution",
+            description: "A chamber where laws are forged and disputes settled."
+        }
+    ];
+
+    const GREAT_WORK_ERA_TAGS = {
+        peace: ["peace", "culture", "diplomacy"],
+        war: ["war", "military"],
+        plague: ["health", "plague"],
+        expansion: ["expansion", "trade", "learning"],
+        faith: ["faith"],
+        revolution: ["revolution", "governance"],
+        learning: ["learning"],
+        culture: ["culture"]
+    };
+
+    function initGreatWorks() {
+        if (!planet._paultendoGreatWorks) {
+            planet._paultendoGreatWorks = {
+                works: {},
+                bySubtype: {},
+                lastProposalDay: -999,
+                lastAutonomousDay: -999
+            };
+        }
+        if (!planet._paultendoGreatWorks.bySubtype) {
+            planet._paultendoGreatWorks.bySubtype = {};
+        }
+        if (planet._paultendoGreatWorks.works && Object.keys(planet._paultendoGreatWorks.bySubtype).length === 0) {
+            Object.values(planet._paultendoGreatWorks.works).forEach(work => {
+                if (work && work.subtype) {
+                    planet._paultendoGreatWorks.bySubtype[work.subtype] = work.id;
+                }
+            });
+        }
+    }
+
+    function getGreatWorkEraKey(era) {
+        if (!era) return null;
+        const type = era.type || era.eraType || "era";
+        const name = era.name || era.eraName || "Era";
+        const started = era.started || era.start || 0;
+        return `${type}:${name}:${started}`;
+    }
+
+    function sanitizeGreatWorkId(text) {
+        if (!text) return "great_work";
+        return text.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    }
+
+    function generateGreatWorkEpithet() {
+        if (typeof generateWord === "function" && Math.random() < 0.35) {
+            return titleCase(generateWord(randRange(2, 3), true));
+        }
+        return choose(GREAT_WORK_EPITHETS);
+    }
+
+    function rollInfluenceValue(value) {
+        if (Array.isArray(value)) {
+            const min = value[0];
+            const max = value[1];
+            const step = value[2] || 0.1;
+            const raw = min + Math.random() * (max - min);
+            return Math.round(raw / step) * step;
+        }
+        return value;
+    }
+
+    function selectGreatWorkTemplate(eraType) {
+        const tags = getGreatWorkContextTags(eraType);
+        return weightedChoice(GREAT_WORK_TEMPLATES, (template) => {
+            let weight = 1;
+            if (tags.length) {
+                const matches = template.tags.filter(tag => tags.includes(tag)).length;
+                weight += matches * 2;
+            }
+
+            // Pressure-driven nudges
+            const wars = regFilter("process", p => p.type === "war" && !p.done);
+            const epidemics = planet.epidemics && planet.epidemics.length ? planet.epidemics.length : 0;
+            const alliances = planet.alliances && planet.alliances.length ? planet.alliances.length : 0;
+            const routes = planet.tradeRoutes && planet.tradeRoutes.length ? planet.tradeRoutes.length : 0;
+
+            if (wars.length && template.id === "citadel") weight += 3;
+            if (epidemics && template.id === "sanctuary") weight += 3;
+            if (alliances >= 2 && (template.id === "monument" || template.id === "charter")) weight += 2;
+            if (routes >= 3 && template.id === "harbor") weight += 2;
+
+            return weight;
+        });
+    }
+
+    function getGreatWorkContextTags(eraType) {
+        const tagSet = new Set(GREAT_WORK_ERA_TAGS[eraType] || []);
+        const wars = regFilter("process", p => p.type === "war" && !p.done);
+        if (wars.length) {
+            tagSet.add("war");
+            tagSet.add("military");
+        }
+        if (planet.epidemics && planet.epidemics.length) {
+            tagSet.add("plague");
+            tagSet.add("health");
+        }
+        if (planet.alliances && planet.alliances.length >= 2) {
+            tagSet.add("diplomacy");
+            tagSet.add("peace");
+        }
+        if (planet.tradeRoutes && planet.tradeRoutes.length >= 3) {
+            tagSet.add("trade");
+            tagSet.add("expansion");
+        }
+        if (planet._paultendoDiscovery && planet._paultendoDiscovery.tier >= 2) {
+            tagSet.add("expansion");
+        }
+        try {
+            const universe = getUniverse(false);
+            if (universe && (universe.spaceTech || 0) > 0) tagSet.add("learning");
+        } catch {}
+        return Array.from(tagSet);
+    }
+
+    function buildGreatWorkTitle(work, town) {
+        const base = work.baseName || "Great Work";
+        const epithet = work.epithet || generateGreatWorkEpithet();
+        const pattern = work.namePattern || "{Base} of {Epithet}";
+        return pattern
+            .replace(/\{Base\}/g, base)
+            .replace(/\{Epithet\}/g, epithet)
+            .replace(/\{Town\}/g, town ? town.name : "")
+            .replace(/\{Era\}/g, work.eraName || "the Age")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function registerGreatWorkSubtype(work) {
+        if (typeof actionables === "undefined" || !actionables.process || !actionables.process._projectSubtypes) return false;
+        actionables.process._projectSubtypes[work.subtype] = {
+            symbol: work.symbol,
+            color: work.color,
+            influences: work.influences,
+            nameTemplate: work.nameTemplate || work.title
+        };
+        return true;
+    }
+
+    function generateGreatWorkDefinition(era) {
+        const template = selectGreatWorkTemplate(era.type);
+        if (!template) return null;
+        const eraKey = getGreatWorkEraKey(era);
+        const subtype = `greatwork_${sanitizeGreatWorkId(eraKey)}_${template.id}`;
+        const namePatterns = template.namePatterns || [
+            "{Base} of {Epithet}",
+            "The {Epithet} {Base}"
+        ];
+        const baseName = choose(template.baseNames);
+        const epithet = generateGreatWorkEpithet();
+        const namePattern = choose(namePatterns);
+        const influences = {};
+        Object.entries(template.influences).forEach(([key, value]) => {
+            influences[key] = rollInfluenceValue(value);
+        });
+        const work = {
+            id: `${subtype}_${Math.floor(Math.random() * 10000)}`,
+            eraKey,
+            eraType: era.type,
+            eraName: era.name,
+            templateId: template.id,
+            subtype,
+            baseName,
+            epithet,
+            namePattern,
+            title: "",
+            symbol: template.symbol,
+            color: template.color,
+            influences,
+            needsUnlock: template.needsUnlock || null,
+            effect: template.effect,
+            theme: template.theme || "culture",
+            description: template.description,
+            status: "available"
+        };
+        work.title = buildGreatWorkTitle(work, null);
+        return work;
+    }
+
+    function ensureGreatWorkForEra(era) {
+        if (!era) return null;
+        initGreatWorks();
+        const eraKey = getGreatWorkEraKey(era);
+        if (!eraKey) return null;
+        if (planet._paultendoGreatWorks.works[eraKey]) {
+            const existing = planet._paultendoGreatWorks.works[eraKey];
+            registerGreatWorkSubtype(existing);
+            return existing;
+        }
+        const work = generateGreatWorkDefinition(era);
+        if (!work) return null;
+        planet._paultendoGreatWorks.works[eraKey] = work;
+        planet._paultendoGreatWorks.bySubtype[work.subtype] = work.id;
+        registerGreatWorkSubtype(work);
+        return work;
+    }
+
+    function getGreatWorkBySubtype(subtype) {
+        initGreatWorks();
+        const workId = planet._paultendoGreatWorks.bySubtype[subtype];
+        const works = Object.values(planet._paultendoGreatWorks.works);
+        if (!workId) {
+            return works.find(w => w.subtype === subtype) || null;
+        }
+        return works.find(w => w.id === workId || w.subtype === subtype) || null;
+    }
+
+    function isGreatWorkSubtype(subtype) {
+        return !!getGreatWorkBySubtype(subtype);
+    }
+
+    function canStartGreatWork(work) {
+        if (!work) return false;
+        if (work.status === "started" || work.status === "completed") return false;
+        if (work.declinedDay && planet.day - work.declinedDay < GREAT_WORK_CONFIG.declineCooldown) return false;
+        return true;
+    }
+
+    function meetsGreatWorkUnlocks(work) {
+        if (!work || !work.needsUnlock) return true;
+        const needs = work.needsUnlock;
+        for (const key of Object.keys(needs)) {
+            if ((planet.unlocks?.[key] || 0) < needs[key]) return false;
+        }
+        return true;
+    }
+
+    function getGreatWorkLeadScore(town, work) {
+        if (!town) return 0;
+        let score = (town.pop || 0) * 0.02;
+        score += (town.influences?.trade || 0) * 1.2;
+        score += (town.influences?.education || 0) * 1.2;
+        score += (town.influences?.faith || 0) * 0.8;
+        score += (town.influences?.military || 0) * 0.6;
+        score += (town.influences?.happy || 0) * 0.5;
+        if (work && work.influences) {
+            Object.keys(work.influences).forEach(key => {
+                score += (town.influences?.[key] || 0) * 1.5;
+            });
+        }
+        return Math.max(0, score);
+    }
+
+    function getGreatWorkPartners(town) {
+        if (!town) return [];
+        const partners = new Map();
+        const alliance = getTownAlliance(town);
+        if (alliance && alliance.members) {
+            alliance.members.forEach(id => {
+                if (id === town.id) return;
+                const ally = regGet("town", id);
+                if (ally && !ally.end) partners.set(id, ally);
+            });
+        }
+        try {
+            const routes = getTownRoutes(town) || [];
+            routes.forEach(route => {
+                const partner = getRoutePartner(route, town);
+                if (partner && !partner.end && partner.id !== town.id) {
+                    partners.set(partner.id, partner);
+                }
+            });
+        } catch {}
+        return Array.from(partners.values());
+    }
+
+    function greatWorkNeedsPartners(work) {
+        if (!work) return false;
+        const template = GREAT_WORK_TEMPLATES.find(t => t.id === work.templateId);
+        const tags = template?.tags || [];
+        return tags.some(tag => ["diplomacy", "trade", "peace", "expansion"].includes(tag));
+    }
+
+    function getTownGreatWorkCount(town, status = "completed") {
+        if (!town) return 0;
+        initGreatWorks();
+        const works = Object.values(planet._paultendoGreatWorks.works || {});
+        return works.filter(w =>
+            w &&
+            w.townId === town.id &&
+            (!status || w.status === status)
+        ).length;
+    }
+
+    function pickGreatWorkLeadTown(work) {
+        const towns = regFilter("town", t => {
+            if (!t || t.end) return false;
+            if ((t.pop || 0) < GREAT_WORK_CONFIG.minPop) return false;
+            if (regExists("process", p => p.type === "project" && !p.done && p.town === t.id)) return false;
+            if (greatWorkNeedsPartners(work)) {
+                const partners = getGreatWorkPartners(t);
+                if (partners.length === 0) return false;
+            }
+            return true;
+        });
+        if (towns.length < 1) return null;
+        return weightedChoice(towns, t => getGreatWorkLeadScore(t, work) + 1);
+    }
+
+    function computeGreatWorkCost(town) {
+        const townCount = regCount("town");
+        const eraIndex = planet.eras ? planet.eras.length : 0;
+        let cost = GREAT_WORK_CONFIG.baseCost;
+        cost += (town.pop || 0) * GREAT_WORK_CONFIG.costPerPop;
+        cost += townCount * GREAT_WORK_CONFIG.costPerTown;
+        cost *= (1 + eraIndex * GREAT_WORK_CONFIG.eraCostScale);
+        return Math.round(cost);
+    }
+
+    function startGreatWork(work, town, options = {}) {
+        if (!work || !town) return null;
+        if (!canStartGreatWork(work)) return null;
+        if (!meetsGreatWorkUnlocks(work)) return null;
+
+        const title = buildGreatWorkTitle(work, town);
+        work.title = title;
+        try {
+            if (actionables?.process?._projectSubtypes?.[work.subtype]) {
+                actionables.process._projectSubtypes[work.subtype].nameTemplate = work.title;
+            }
+        } catch {}
+
+        const cost = computeGreatWorkCost(town);
+        const project = happen("Create", town, null, {
+            type: "project",
+            subtype: work.subtype,
+            cost: cost,
+            name: title
+        }, "process");
+
+        if (!project) return null;
+        project._paultendoGreatWork = true;
+        project.greatWorkId = work.id;
+        project.workName = title;
+        project.eraKey = work.eraKey;
+
+        work.status = "started";
+        work.startedDay = planet.day;
+        work.projectId = project.id;
+        work.townId = town.id;
+        work.startedBy = options.autonomous ? "autonomous" : "prompt";
+
+        const prefix = getGreatWorkContextPrefix(work, town);
+        logMessage(`${prefix}{{regname:town|${town.id}}} begins construction of the {{b:${title}}}.`, "milestone");
+        try {
+            recordAnnalsEntry({
+                theme: work.theme || "culture",
+                title: `${title} Begins`,
+                body: `${townRef(town.id)} sets its hands to the ${title}, seeking to shape the era.`,
+                sourceType: "great_work_start",
+                sourceId: project.id
+            });
+        } catch {}
+
+        return project;
+    }
+
+    function getGreatWorkRegionTowns(town) {
+        const ids = new Set();
+        if (!town) return [];
+        ids.add(town.id);
+        const alliance = getTownAlliance(town);
+        if (alliance && alliance.members) {
+            alliance.members.forEach(id => ids.add(id));
+        }
+        try {
+            const routes = getTownRoutes(town) || [];
+            routes.forEach(route => {
+                const partner = getRoutePartner(route, town);
+                if (partner) ids.add(partner.id);
+            });
+        } catch {}
+        return Array.from(ids)
+            .map(id => regGet("town", id))
+            .filter(t => t && !t.end);
+    }
+
+    function applyGreatWorkCompletion(work, town, process) {
+        if (!work || !town) return;
+        const region = getGreatWorkRegionTowns(town);
+
+        switch (work.effect) {
+            case "library":
+                region.forEach(t => happen("Influence", null, t, { education: 0.3, temp: true }));
+                if (planet._paultendoDiscovery) {
+                    planet._paultendoDiscovery.boost = Math.min(0.03, (planet._paultendoDiscovery.boost || 0) + 0.006);
+                    planet._paultendoDiscovery.boostUntil = Math.max(planet._paultendoDiscovery.boostUntil || 0, planet.day + 80);
+                }
+                break;
+            case "observatory":
+                region.forEach(t => happen("Influence", null, t, { travel: 0.3, education: 0.2, temp: true }));
+                try {
+                    const universe = getUniverse(false);
+                    if (universe) universe.spaceTech = (universe.spaceTech || 0) + 1;
+                } catch {}
+                break;
+            case "cathedral":
+                region.forEach(t => happen("Influence", null, t, { faith: 0.4, happy: 0.2, temp: true }));
+                break;
+            case "monument":
+                region.forEach(t => happen("Influence", null, t, { happy: 0.3, law: 0.2, temp: true }));
+                initTownCulture(town);
+                town.culture.prestige += 2;
+                break;
+            case "citadel":
+                region.forEach(t => happen("Influence", null, t, { military: 0.3, law: 0.2, temp: true }));
+                break;
+            case "harbor":
+                region.forEach(t => happen("Influence", null, t, { trade: 0.3, travel: 0.2, temp: true }));
+                try {
+                    const candidates = regFilter("town", t => !t.end && t.id !== town.id && (t.influences?.trade || 0) > 4);
+                    if (candidates.length > 0) {
+                        const partner = choose(candidates);
+                        createTradeRoute(town, partner);
+                    }
+                } catch {}
+                break;
+            case "sanctuary":
+                region.forEach(t => happen("Influence", null, t, { disease: -0.4, happy: 0.2, temp: true }));
+                if (town.activeEpidemic) {
+                    town.activeEpidemic.ended = true;
+                }
+                break;
+            case "charter":
+                region.forEach(t => happen("Influence", null, t, { law: 0.4, happy: 0.2, temp: true }));
+                initUnrest(town);
+                town.unrest = Math.max(0, town.unrest - 5);
+                break;
+            default:
+                break;
+        }
+
+        try {
+            recordHistory("great_work", {
+                town: town.id,
+                name: work.title,
+                eraName: work.eraName,
+                subtype: work.templateId
+            });
+        } catch {}
+
+        try {
+            recordAnnalsEntry({
+                theme: work.theme || "culture",
+                title: `${work.title} Completed`,
+                body: `${townRef(town.id)} completes the ${work.title}. The era remembers.`,
+                sourceType: "great_work_complete",
+                sourceId: work.id
+            });
+        } catch {}
+
+        if (process && process.marker) {
+            const marker = regGet("marker", process.marker);
+            if (marker) {
+                marker.name = work.title;
+                marker.named = true;
+                if (work.description) marker.desc = work.description;
+            }
+        }
+    }
+
+    function onEraBegan(era) {
+        if (!era) return;
+        ensureGreatWorkForEra(era);
+    }
+
+    // Player prompt to begin a Great Work
+    modEvent("greatWorkProposal", {
+        random: true,
+        weight: $c.VERY_RARE,
+        subject: { reg: "player", id: 1 },
+        value: () => {
+            if (!planet.currentEra) return false;
+            if (planet.day - planet.currentEra.started < 20) return false;
+            if (regCount("town") < GREAT_WORK_CONFIG.minTowns) return false;
+            initGreatWorks();
+
+            const work = ensureGreatWorkForEra(planet.currentEra);
+            if (!work || !canStartGreatWork(work)) return false;
+            if (!meetsGreatWorkUnlocks(work)) return false;
+
+            if (planet.day - planet._paultendoGreatWorks.lastProposalDay < GREAT_WORK_CONFIG.proposalCooldown) return false;
+
+            const town = pickGreatWorkLeadTown(work);
+            if (!town) return false;
+
+            return { work, town };
+        },
+        message: (subject, target, args) => {
+            const work = args.value.work;
+            const town = args.value.town;
+            const desc = work.description ? ` ${work.description}` : "";
+            const context = getGreatWorkContextPrefix(work, town);
+            const note = context ? `${context}the era calls for bold works.` : "";
+            return `In ${planet.currentEra.name}, {{regname:town|${town.id}}} proposes the {{b:${work.title}}}.${desc} ${note} Endorse the undertaking? {{should}}`;
+        },
+        func: (subject, target, args) => {
+            const work = args.value.work;
+            const town = args.value.town;
+            const project = startGreatWork(work, town, { autonomous: false });
+        if (project) {
+            planet._paultendoGreatWorks.lastProposalDay = planet.day;
+        }
+        },
+        messageDone: () => "Plans are set in motion for the Great Work.",
+        messageNo: () => "The proposal is set aside for now.",
+        funcNo: (subject, target, args) => {
+            const work = args.value?.work;
+            if (work) work.declinedDay = planet.day;
+            planet._paultendoGreatWorks.lastProposalDay = planet.day;
+        }
+    });
+
+    // Sometimes towns begin Great Works on their own
+    modEvent("greatWorkAutonomousStart", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        value: () => {
+            if (!planet.currentEra) return false;
+            if (planet.day - planet.currentEra.started < 20) return false;
+            if (Math.random() > GREAT_WORK_CONFIG.autonomousChance) return false;
+            if (regCount("town") < GREAT_WORK_CONFIG.minTowns) return false;
+            initGreatWorks();
+
+            const work = ensureGreatWorkForEra(planet.currentEra);
+            if (!work || !canStartGreatWork(work)) return false;
+            if (!meetsGreatWorkUnlocks(work)) return false;
+
+            const town = pickGreatWorkLeadTown(work);
+            if (!town) return false;
+
+            return { work, town };
+        },
+        func: (subject, target, args) => {
+            const work = args.value.work;
+            const town = args.value.town;
+            const project = startGreatWork(work, town, { autonomous: true });
+            if (project) {
+                planet._paultendoGreatWorks.lastAutonomousDay = planet.day;
+            }
+        }
+    });
+
+    // Allies and trade partners contribute to Great Works
+    modEvent("greatWorkContributions", {
+        daily: true,
+        subject: { reg: "process", all: true },
+        value: (subject) => {
+            if (!subject || subject.type !== "project" || subject.done || subject.end) return false;
+            if (!isGreatWorkSubtype(subject.subtype)) return false;
+            return true;
+        },
+        func: (subject) => {
+            const work = getGreatWorkBySubtype(subject.subtype);
+            if (!work) return;
+            const town = regGet("town", subject.town);
+            if (!town || town.end) return;
+
+            const contributors = getGreatWorkRegionTowns(town).filter(t => t.id !== town.id);
+            contributors.forEach(contributor => {
+                if (Math.random() > GREAT_WORK_CONFIG.contributionChance) return;
+                const cash = contributor.resources?.cash || 0;
+                if (cash <= 0) return;
+                const trade = contributor.influences?.trade || 0;
+                let amount = Math.min(
+                    GREAT_WORK_CONFIG.contributionMax,
+                    Math.round(GREAT_WORK_CONFIG.contributionBase + trade * 2)
+                );
+                let multiplier = 1;
+                const alliance = getTownAlliance(town);
+                const isAlly = alliance && alliance.members.includes(contributor.id);
+                if (isAlly) multiplier += 0.4;
+                const relation = getRelations(contributor, town);
+                if (relation > 6) multiplier += 0.2;
+                if (work.theme === "faith") {
+                    const townReligion = getTownReligion(town);
+                    const contributorReligion = getTownReligion(contributor);
+                    if (townReligion && contributorReligion && townReligion.id === contributorReligion.id) {
+                        multiplier += 0.2;
+                    }
+                }
+                amount = Math.round(amount * multiplier);
+                const contribution = Math.min(amount, cash);
+                if (contribution <= 0) return;
+                happen("RemoveResource", null, contributor, { type: "cash", count: contribution });
+                subject.cost = Math.max(0, Math.round((subject.cost || 0) - contribution));
+
+                if (Math.random() < 0.15) {
+                    modLog(
+                        "trade",
+                        `Support arrives from {{regname:town|${contributor.id}}} to aid the {{b:${work.title}}}.`,
+                        null,
+                        { town: contributor }
+                    );
+                }
+            });
+        }
+    });
+
+    // War/peace conditions influence Great Work progress
+    modEvent("greatWorkMomentum", {
+        daily: true,
+        subject: { reg: "process", all: true },
+        value: (subject) => {
+            if (!subject || subject.type !== "project" || subject.done || subject.end) return false;
+            if (!isGreatWorkSubtype(subject.subtype)) return false;
+            return true;
+        },
+        func: (subject) => {
+            const town = regGet("town", subject.town);
+            if (!town || town.end) return;
+            const work = getGreatWorkBySubtype(subject.subtype);
+            if (!work) return;
+
+            const atWar = regFilter("process", p =>
+                p.type === "war" && !p.done && p.towns?.includes(town.id)
+            ).length > 0;
+
+            if (atWar && Math.random() < 0.06) {
+                const base = subject.total || subject.cost || 200;
+                const penalty = Math.max(8, Math.round(base * 0.03));
+                subject.cost = Math.round((subject.cost || 0) + penalty);
+                subject.total = Math.max(subject.total || 0, subject.cost);
+                if (Math.random() < 0.3) {
+                    modLog(
+                        "governance",
+                        `War pressures slow work on the {{b:${work.title}}} in {{regname:town|${town.id}}}.`,
+                        "warning",
+                        { town }
+                    );
+                }
+                return;
+            }
+
+            if (!atWar && (town.influences?.trade || 0) > 6 && Math.random() < 0.05) {
+                const boost = Math.max(6, Math.round((subject.total || 200) * 0.02));
+                subject.cost = Math.max(0, Math.round((subject.cost || 0) - boost));
+                if (Math.random() < 0.25) {
+                    modLog(
+                        "trade",
+                        `Prosperity accelerates work on the {{b:${work.title}}} in {{regname:town|${town.id}}}.`,
+                        null,
+                        { town }
+                    );
+                }
+            }
+        }
+    });
+
+    // Detect Great Work completion to apply extra effects
+    modEvent("greatWorkCompletion", {
+        daily: true,
+        subject: { reg: "process", all: true },
+        value: (subject) => {
+            if (!subject || subject.type !== "project" || !subject.done) return false;
+            if (!isGreatWorkSubtype(subject.subtype)) return false;
+            if (subject._paultendoGreatWorkCompleted) return false;
+            return true;
+        },
+        func: (subject) => {
+            subject._paultendoGreatWorkCompleted = true;
+            const work = getGreatWorkBySubtype(subject.subtype);
+            if (work) {
+                work.status = "completed";
+                work.completedDay = planet.day;
+                work.projectId = subject.id;
+            }
+
+            const town = regGet("town", subject.town);
+            if (town && work) {
+                logMessage(`The {{b:${work.title}}} stands completed in {{regname:town|${town.id}}}.`, "milestone");
+                applyGreatWorkCompletion(work, town, subject);
+            }
+        }
+    });
+
+    // Recover from abandoned Great Works (town falls or project canceled)
+    modEvent("greatWorkRecovery", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        func: () => {
+            initGreatWorks();
+            const works = Object.values(planet._paultendoGreatWorks.works);
+            works.forEach(work => {
+                if (!work || work.status !== "started") return;
+                const process = work.projectId ? regGet("process", work.projectId) : null;
+                if (process && !process.end) return;
+                work.status = "available";
+                work.projectId = null;
+                work.declinedDay = planet.day;
+                if (work.townId) {
+                    logMessage(`Work on the {{b:${work.title}}} falters after hardship in {{regname:town|${work.townId}}}.`, "warning");
+                } else {
+                    logMessage(`Work on the {{b:${work.title}}} falters.`, "warning");
+                }
+            });
+        }
+    });
+
+    // ----------------------------------------
     // LEGENDS & MYTHOLOGY EVENTS
     // ----------------------------------------
 
@@ -14429,6 +18446,7 @@
             const pilgrims = Math.min(4, Math.max(1, Math.floor((source.pop || 0) * 0.02)));
             if (pilgrims > 0) {
                 happen("Migrate", source, destination, { count: pilgrims });
+                try { markMigration(destination); } catch {}
             }
 
             happen("Influence", null, source, { travel: 0.4, faith: 0.3, temp: true });
@@ -14448,12 +18466,18 @@
             if (!planet.annals || planet.annals.length === 0) return false;
             initLoreNudges();
 
-            const candidates = planet.annals.filter(entry => {
+            let candidates = planet.annals.filter(entry => {
                 if (!isLoreNudgeCandidate(entry)) return false;
                 if (entry._paultendoNudgedDay) return false;
                 if (planet.day - entry.day > 120) return false;
                 return true;
             });
+
+            const focus = getLoreFocusSetting();
+            if (focus && focus !== "balanced") {
+                const focused = candidates.filter(entry => entry.theme === focus);
+                if (focused.length) candidates = focused;
+            }
 
             if (candidates.length === 0) return false;
             const entry = choose(candidates);
@@ -14677,6 +18701,23 @@
         };
     }
 
+    function getGreatWorkContextPrefix(work, town) {
+        if (!work) return "";
+        const wars = regFilter("process", p => p.type === "war" && !p.done);
+        const epidemics = planet.epidemics && planet.epidemics.length ? planet.epidemics.length : 0;
+        const alliances = planet.alliances && planet.alliances.length ? planet.alliances.length : 0;
+        const routes = planet.tradeRoutes && planet.tradeRoutes.length ? planet.tradeRoutes.length : 0;
+
+        if (wars.length && work.effect === "citadel") return "With war on the horizon, ";
+        if (epidemics && work.effect === "sanctuary") return "As sickness spreads, ";
+        if (alliances >= 2 && (work.effect === "monument" || work.effect === "charter")) return "In an age of alliances, ";
+        if (routes >= 3 && work.effect === "harbor") return "With trade booming, ";
+        if (work.effect === "library" && (planet.unlocks?.education || 0) > 20) return "As learning deepens, ";
+        if (work.effect === "observatory" && (planet.unlocks?.travel || 0) > 30) return "As horizons widen, ";
+        if (work.effect === "cathedral" && town && (town.influences?.faith || 0) > 4) return "With faith ascendant, ";
+        return "";
+    }
+
     // Climate descriptors for flavor text
     function getClimateDescription(temp, moisture) {
         let tempDesc = "";
@@ -14839,6 +18880,94 @@
         return null;
     }
 
+    function initTradeBrowserExtra() {
+        if (typeof regBrowserExtra === "undefined") return;
+        if (window._paultendoTradeBrowserExtra) return;
+        window._paultendoTradeBrowserExtra = true;
+
+        if (typeof regBrowserKeys === "undefined") regBrowserKeys = {};
+        if (typeof regBrowserValues === "undefined") regBrowserValues = {};
+
+        if (!regBrowserKeys.trade_) regBrowserKeys.trade_ = "Trade";
+        if (!regBrowserKeys.trade_routes) regBrowserKeys.trade_routes = "Routes";
+        if (!regBrowserKeys.trade_embargoes) regBrowserKeys.trade_embargoes = "Embargoes";
+        if (!regBrowserKeys.trade_loans) regBrowserKeys.trade_loans = "Loans";
+        if (!regBrowserKeys.trade_space) regBrowserKeys.trade_space = "Space Links";
+        if (!regBrowserKeys.trade_goods) regBrowserKeys.trade_goods = "Goods Moved";
+        if (!regBrowserKeys.trade_cash) regBrowserKeys.trade_cash = "Cash";
+        if (!regBrowserKeys.trade_wealth) regBrowserKeys.trade_wealth = "Wealth";
+
+        if (!regBrowserValues.trade_cash) {
+            regBrowserValues.trade_cash = (value, town) => `{{currency:${town.id}}}{{num:${Math.round(value)}|K}}`;
+        }
+        if (!regBrowserValues.trade_wealth) {
+            regBrowserValues.trade_wealth = (value, town) => `{{currency:${town.id}}}{{num:${Math.round(value)}|K}}`;
+        }
+
+        if (!regBrowserExtra.town) regBrowserExtra.town = {};
+        if (regBrowserExtra.town._paultendoTradeExtra) return;
+        regBrowserExtra.town._paultendoTradeExtra = true;
+
+        regBrowserExtra.town.trade_ = (town) => {
+            if (!town || town.end) return;
+            const data = {};
+
+            if (planet.tradeRoutes && planet.tradeRoutes.length) {
+                const routes = planet.tradeRoutes.filter(r =>
+                    (r.town1 === town.id || r.town2 === town.id)
+                );
+                if (routes.length) {
+                    const active = routes.filter(r => r.active !== false).length;
+                    data.trade_routes = active === routes.length
+                        ? `${active}`
+                        : `${active} active / ${routes.length}`;
+                    const goods = routes.reduce((sum, r) => sum + (r.totalGoods || 0), 0);
+                    if (goods > 0) data.trade_goods = Math.round(goods);
+                }
+            }
+
+            if (planet.embargoes && planet.embargoes.length) {
+                const outgoing = planet.embargoes.filter(e => e.fromId === town.id).length;
+                const incoming = planet.embargoes.filter(e => e.toId === town.id).length;
+                const total = outgoing + incoming;
+                if (total > 0) {
+                    data.trade_embargoes = (outgoing && incoming)
+                        ? `${total} (${outgoing} out / ${incoming} in)`
+                        : `${total}`;
+                }
+            }
+
+            if (planet.loans && planet.loans.length) {
+                const owed = getLoansFor(town).length;
+                const owedTo = getLoansFrom(town).length;
+                if (owed || owedTo) {
+                    data.trade_loans = (owed && owedTo)
+                        ? `${owed} owed / ${owedTo} lent`
+                        : (owed ? `${owed} owed` : `${owedTo} lent`);
+                }
+            }
+
+            const universe = getUniverse(false);
+            if (universe && Array.isArray(universe.spaceRoutes)) {
+                const currentWorld = getCurrentWorldId();
+                const spaceLinks = universe.spaceRoutes.filter(route =>
+                    route &&
+                    route.active &&
+                    ((route.from.worldId === currentWorld && route.from.townId === town.id) ||
+                     (route.to.worldId === currentWorld && route.to.townId === town.id))
+                ).length;
+                if (spaceLinks > 0) data.trade_space = spaceLinks;
+            }
+
+            if (town.resources && town.resources.cash) data.trade_cash = town.resources.cash;
+            if (town.wealth) data.trade_wealth = town.wealth;
+
+            return Object.keys(data).length ? data : undefined;
+        };
+    }
+
+    try { initTradeBrowserExtra(); } catch {}
+
     // ----------------------------------------
     // TRADE ROUTE EVENTS
     // ----------------------------------------
@@ -14883,9 +19012,19 @@
 
             // Log based on route difficulty
             if (route.needsShips) {
-                logMessage(`A sea trade route connects {{regname:town|${subject.id}}} and {{regname:town|${target.id}}}.`);
+                modLog(
+                    "trade",
+                    `A sea trade route connects {{regname:town|${subject.id}}} and {{regname:town|${target.id}}}.`,
+                    null,
+                    { town: subject }
+                );
             } else if (route.difficulty > 1.5) {
-                logMessage(`A challenging trade route through difficult terrain links {{regname:town|${subject.id}}} and {{regname:town|${target.id}}}.`);
+                modLog(
+                    "trade",
+                    `A challenging trade route through difficult terrain links {{regname:town|${subject.id}}} and {{regname:town|${target.id}}}.`,
+                    null,
+                    { town: subject }
+                );
             }
 
             // Initial trade boost
@@ -14956,7 +19095,12 @@
 
                 // Occasional notable trade
                 if (Math.random() < 0.1) {
-                    logMessage(`A prosperous caravan arrives in {{regname:town|${partner.id}}} from {{regname:town|${subject.id}}}.`);
+                    modLog(
+                        "trade",
+                        `A prosperous caravan arrives in {{regname:town|${partner.id}}} from {{regname:town|${subject.id}}}.`,
+                        null,
+                        { town: subject }
+                    );
                 }
             } else {
                 // Caravan lost or delayed
@@ -14983,12 +19127,21 @@
                     if (route.active) {
                         route.active = false;
                         logMessage(`War disrupts the trade route between {{regname:town|${subject.id}}} and {{regname:town|${partner.id}}}.`, "warning");
+                        happen("Influence", null, subject, { trade: -0.4, temp: true });
+                        happen("Influence", null, partner, { trade: -0.4, temp: true });
                     }
                 } else if (!route.active) {
                     // Restore after peace (with some delay)
                     if (Math.random() < 0.05) {
                         route.active = true;
-                        logMessage(`Trade resumes between {{regname:town|${subject.id}}} and {{regname:town|${partner.id}}}.`);
+                        modLog(
+                            "trade",
+                            `Trade resumes between {{regname:town|${subject.id}}} and {{regname:town|${partner.id}}}.`,
+                            null,
+                            { town: subject }
+                        );
+                        happen("Influence", null, subject, { trade: 0.2, temp: true });
+                        happen("Influence", null, partner, { trade: 0.2, temp: true });
                     }
                 }
             });
@@ -15553,11 +19706,76 @@
                         if (Math.random() < 0.2) {
                             const goods = climate.temp > partnerClimate.temp ?
                                 "spices and exotic fruits" : "furs and preserved meats";
-                            logMessage(`Merchants bring ${goods} from {{regname:town|${subject.id}}} to {{regname:town|${partner.id}}}.`);
+                            modLog(
+                                "trade",
+                                `Merchants bring ${goods} from {{regname:town|${subject.id}}} to {{regname:town|${partner.id}}}.`,
+                                null,
+                                { town: subject }
+                            );
                         }
                     }
                 }
             });
+        }
+    });
+
+    // Resource advantages drive trade or conflict
+    modEvent("resourceDrivenTensions", {
+        random: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || subject.end) return false;
+            const tags = getTownResourceTags(subject);
+            if (tags.length === 0) return false;
+
+            const candidates = regFilter("town", t => {
+                if (!t || t.end || t.id === subject.id) return false;
+                const otherTags = getTownResourceTags(t);
+                if (otherTags.length === 0) return false;
+                const shared = tags.filter(tag => otherTags.includes(tag));
+                return shared.length < tags.length;
+            });
+            if (candidates.length === 0) return false;
+
+            args.target = choose(candidates);
+            args.tags = tags;
+            return true;
+        },
+        func: (subject, target, args) => {
+            const other = args.target;
+            if (!other) return;
+            const relation = getRelations(subject, other);
+            const tag = choose(args.tags);
+
+            if (relation > 2) {
+                // Trade synergy
+                const route = createTradeRoute(subject, other);
+                happen("Influence", null, subject, { trade: 0.3, temp: true });
+                happen("Influence", null, other, { trade: 0.3, temp: true });
+                if (Math.random() < 0.3) {
+                    modLog(
+                        "resource",
+                        `Resource exchanges deepen between {{regname:town|${subject.id}}} and {{regname:town|${other.id}}}.`,
+                        null,
+                        { town: subject }
+                    );
+                }
+                if (route && typeof recordBond === "function") {
+                    recordBond(subject, other, "resource_trade", 6);
+                }
+            } else if (relation < -5) {
+                // Competition fuels conflict
+                bumpWarPressure(subject, other, 2);
+                if (Math.random() < 0.25) {
+                    modLog(
+                        "resource",
+                        `Competition for scarce ${tag} resources strains {{regname:town|${subject.id}}} and {{regname:town|${other.id}}}.`,
+                        "warning",
+                        { town: subject }
+                    );
+                }
+            }
         }
     });
 
