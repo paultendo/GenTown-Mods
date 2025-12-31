@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.1.11";
+    const MOD_VERSION = "1.1.12";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -356,6 +356,16 @@
     const FOG_CONFIG = {
         enabled: true,
         opaqueAlpha: 0.98,
+        shroudAlpha: 0.55,
+        baseSight: 3,
+        sizeSight: 0.35,
+        travelSight: 0.15,
+        elevationSight: 4,
+        maxSight: 12,
+        falloffPower: 1.6,
+        exploreThreshold: 0.15,
+        hideMarkersOutsideSight: false,
+        hideBiomeOutsideSight: true,
         townRevealRadius: 1,
         expeditionRevealRadius: 2,
         expeditionRevealCount: 3
@@ -456,6 +466,7 @@
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
             if (!chunk || typeof chunk.x !== "number" || typeof chunk.y !== "number") continue;
+            if (chunk.v && chunk.v.g && !isLandmassDiscovered(chunk.v.g)) continue;
             const key = getChunkKey(chunk.x, chunk.y);
             if (fog.explored[key]) continue;
             fog.explored[key] = 1;
@@ -492,27 +503,139 @@
         return [];
     }
 
-    function markTownExplored(town) {
-        if (!town || town.end) return false;
-        const chunks = getTownClaimedChunks(town);
-        const reveal = [];
-        if (chunks.length) reveal.push(...chunks);
+    function getChunkDimensions() {
+        const width = typeof planetWidth === "number" && typeof chunkSize === "number" ? Math.floor(planetWidth / chunkSize) : null;
+        const height = typeof planetHeight === "number" && typeof chunkSize === "number" ? Math.floor(planetHeight / chunkSize) : null;
+        return { width, height };
+    }
 
-        if (FOG_CONFIG.townRevealRadius > 0 && town.center && typeof circleCoords === "function") {
-            const coords = circleCoords(town.center[0], town.center[1], FOG_CONFIG.townRevealRadius);
-            for (let i = 0; i < coords.length; i++) {
-                const chunk = typeof chunkAt === "function" ? chunkAt(coords[i].x, coords[i].y) : null;
-                if (chunk) reveal.push(chunk);
+    function resetFogVisibilityForDay(force = false) {
+        if (!initFogOfWarState()) return false;
+        if (force || planet._paultendoFog.visibilityDay !== planet.day) {
+            planet._paultendoFog.visibilityDay = planet.day;
+            planet._paultendoFog.visible = {};
+        }
+        return true;
+    }
+
+    function getChunkVisibility(x, y) {
+        if (!initFogOfWarState()) return 0;
+        return planet._paultendoFog.visible[getChunkKey(x, y)] || 0;
+    }
+
+    function setChunkVisibility(x, y, value) {
+        if (!initFogOfWarState()) return;
+        const key = getChunkKey(x, y);
+        const existing = planet._paultendoFog.visible[key] || 0;
+        if (value > existing) planet._paultendoFog.visible[key] = value;
+    }
+
+    function getChunkElevation(chunk) {
+        if (!chunk) return 0;
+        return typeof chunk.e === "number" ? chunk.e : 0;
+    }
+
+    function computeTownSightRadius(town) {
+        if (!town) return FOG_CONFIG.baseSight;
+        const base = FOG_CONFIG.baseSight;
+        const size = town.size || 1;
+        const travel = town.influences?.travel || 0;
+        const center = town.center ? chunkAt(town.center[0], town.center[1]) : null;
+        const elevation = center ? getChunkElevation(center) : 0;
+        const elevationBonus = Math.max(0, (elevation - (typeof waterLevel === "number" ? waterLevel : 0.3)) * FOG_CONFIG.elevationSight);
+        const sizeBonus = Math.sqrt(Math.max(1, size)) * FOG_CONFIG.sizeSight;
+        const travelBonus = Math.max(0, travel) * FOG_CONFIG.travelSight;
+        const radius = base + sizeBonus + travelBonus + elevationBonus;
+        return clampValue(radius, base, FOG_CONFIG.maxSight);
+    }
+
+    function computeVisibilityStrength(distance, radius, observerElev, targetElev) {
+        if (radius <= 0) return 0;
+        const ratio = clampValue(distance / radius, 0, 1);
+        let strength = 1 - Math.pow(ratio, FOG_CONFIG.falloffPower);
+        const elevBoost = Math.max(0, observerElev - (typeof waterLevel === "number" ? waterLevel : 0.3));
+        strength *= 1 + elevBoost * 0.15;
+        if (typeof targetElev === "number") {
+            strength *= 0.85 + Math.min(0.3, targetElev * 0.3);
+        }
+        return clampValue(strength, 0, 1);
+    }
+
+    function updateFogVisibilityForTown(town, opts = {}) {
+        if (!town || town.end) return false;
+        if (!resetFogVisibilityForDay(!!opts.forceReset)) return false;
+        if (!town.center && typeof happen === "function") {
+            try { happen("UpdateCenter", null, town); } catch {}
+        }
+        if (!town.center) return false;
+
+        const { width, height } = getChunkDimensions();
+        if (!width || !height) return false;
+
+        const centerX = town.center[0];
+        const centerY = town.center[1];
+        const radius = computeTownSightRadius(town);
+        const radiusCeil = Math.ceil(radius);
+
+        const observerChunk = chunkAt(centerX, centerY);
+        const observerElev = observerChunk ? getChunkElevation(observerChunk) : 0;
+        const explored = [];
+
+        const minX = Math.max(0, centerX - radiusCeil);
+        const maxX = Math.min(width - 1, centerX + radiusCeil);
+        const minY = Math.max(0, centerY - radiusCeil);
+        const maxY = Math.min(height - 1, centerY + radiusCeil);
+
+        for (let x = minX; x <= maxX; x++) {
+            for (let y = minY; y <= maxY; y++) {
+                const dx = x - centerX;
+                const dy = y - centerY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > radius) continue;
+
+                const chunk = chunkAt(x, y);
+                if (!chunk) continue;
+                if (chunk.v && chunk.v.g && !isLandmassDiscovered(chunk.v.g)) continue;
+
+                const targetElev = getChunkElevation(chunk);
+                const visibility = computeVisibilityStrength(dist, radius, observerElev, targetElev);
+                if (visibility <= 0) continue;
+
+                setChunkVisibility(x, y, visibility);
+                if (visibility >= FOG_CONFIG.exploreThreshold) explored.push(chunk);
             }
         }
 
-        if (reveal.length) {
-            markChunksExplored(reveal);
+        const claimed = getTownClaimedChunks(town);
+        if (claimed.length) explored.push(...claimed);
+
+        if (explored.length) {
+            markChunksExplored(explored, { deferRefresh: true });
         }
 
         town._paultendoFogInit = true;
         town._paultendoFogSize = town.size || 0;
+        if (!opts.deferRefresh) scheduleFogRefresh();
         return true;
+    }
+
+    function rebuildFogVisibility() {
+        if (!initFogOfWarState()) return false;
+        resetFogVisibilityForDay(true);
+        const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+        for (let i = 0; i < towns.length; i++) {
+            updateFogVisibilityForTown(towns[i], { deferRefresh: true, forceReset: false });
+        }
+        scheduleFogRefresh();
+        return true;
+    }
+
+    function isChunkVisible(x, y) {
+        return getChunkVisibility(x, y) > 0;
+    }
+
+    function markTownExplored(town) {
+        return updateFogVisibilityForTown(town);
     }
 
     function revealLandmassFootprint(landmassId, sourceTown) {
@@ -567,6 +690,7 @@
             if (typeof resizeCanvases === "function") {
                 resizeCanvases();
             }
+            try { rebuildFogVisibility(); } catch {}
         }
         return !!canvasLayers.fog;
     }
@@ -587,15 +711,39 @@
         if (!isFogActive()) return;
         if (!planet || !planet.chunks) return;
         if (typeof chunkSize === "undefined") return;
+        if (!planet._paultendoDiscoveryReady) {
+            try { ensureDiscoveryReadyForFog(); } catch {}
+        }
 
-        const alpha = getFogOpacity();
-        ctx.fillStyle = `rgba(8, 10, 14, ${alpha})`;
+        const opaqueAlpha = getFogOpacity();
+        const shroudAlpha = clampValue(FOG_CONFIG.shroudAlpha, 0, 0.9);
+
+        const fogState = planet._paultendoFog || {};
+        const explored = fogState.explored || {};
+        const visible = fogState.visible || {};
 
         for (const chunkKey in planet.chunks) {
             const chunk = planet.chunks[chunkKey];
             if (!chunk || !chunk.v) continue;
-            if (isChunkExplored(chunk.x, chunk.y)) continue;
-            ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
+            if (chunk.v.g && !isLandmassDiscovered(chunk.v.g)) {
+                ctx.fillStyle = `rgba(8, 10, 14, ${opaqueAlpha})`;
+                ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
+                continue;
+            }
+
+            const key = getChunkKey(chunk.x, chunk.y);
+            if (!explored[key]) {
+                ctx.fillStyle = `rgba(8, 10, 14, ${opaqueAlpha})`;
+                ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
+                continue;
+            }
+
+            const visibility = visible[key] || 0;
+            const alpha = visibility > 0 ? shroudAlpha * (1 - visibility) : shroudAlpha;
+            if (alpha > 0.02) {
+                ctx.fillStyle = `rgba(8, 10, 14, ${alpha})`;
+                ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
+            }
         }
     }
 
@@ -951,12 +1099,16 @@
         if (!isLandmassDiscovered(landmassId)) return false;
         if (!FOG_CONFIG.enabled || !isFogActive()) return true;
         if (marker && typeof marker.x === "number" && typeof marker.y === "number") {
-            return isChunkExplored(marker.x, marker.y);
+            if (!isChunkExplored(marker.x, marker.y)) return false;
+            if (FOG_CONFIG.hideMarkersOutsideSight && !isChunkVisible(marker.x, marker.y)) return false;
+            return true;
         }
         if (marker && marker.town) {
             const town = regGet("town", marker.town);
             if (town && town.center) {
-                return isChunkExplored(town.center[0], town.center[1]);
+                if (!isChunkExplored(town.center[0], town.center[1])) return false;
+                if (FOG_CONFIG.hideMarkersOutsideSight && !isChunkVisible(town.center[0], town.center[1])) return false;
+                return true;
             }
         }
         return true;
@@ -1218,7 +1370,9 @@
         const chunk = planet && planet.chunks ? planet.chunks[chunkKey] : null;
         const biome = chunk?.b ? chunk.b : "unknown";
         const explored = chunk ? isChunkExplored(chunk.x, chunk.y) : true;
-        overlay.textContent = `x:${mousePos.x} y:${mousePos.y} · ${explored ? biome : "unknown"}`;
+        const visible = chunk ? isChunkVisible(chunk.x, chunk.y) : true;
+        const canShowBiome = explored && (!FOG_CONFIG.hideBiomeOutsideSight || visible);
+        overlay.textContent = `x:${mousePos.x} y:${mousePos.y} · ${canShowBiome ? biome : "unknown"}`;
     }
 
     function drawCursorCrosshair() {
@@ -1409,13 +1563,11 @@
             if (!FOG_CONFIG.enabled) return false;
             if (!subject || subject.end) return false;
             if (!initFogOfWarState()) return false;
-            const size = subject.size || 0;
-            if (size <= 0) return false;
-            if (!subject._paultendoFogInit) return true;
-            return size > (subject._paultendoFogSize || 0);
+            if ((subject.size || 0) <= 0) return false;
+            return true;
         },
         func: (subject) => {
-            markTownExplored(subject);
+            updateFogVisibilityForTown(subject);
         }
     });
 
