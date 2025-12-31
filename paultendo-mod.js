@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.2.4";
+    const MOD_VERSION = "1.2.5";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -35,7 +35,121 @@
 
         const valueFn = typeof data.value === "function" ? data.value : null;
         const checkFn = typeof data.check === "function" ? data.check : null;
-        const funcFn = typeof data.func === "function" ? data.func : null;
+        let funcFn = typeof data.func === "function" ? data.func : null;
+        let funcNoFn = typeof data.funcNo === "function" ? data.funcNo : null;
+
+        const subjectIsTown = !!(data.subject && data.subject.reg === "town");
+        const targetIsTown = !!(data.target && data.target.reg === "town");
+
+        const prepEntities = (subject, target) => {
+            ensurePlanetState();
+            if (subjectIsTown) ensureTownState(subject);
+            if (targetIsTown) ensureTownState(target);
+        };
+
+        const decisionConfig = (() => {
+            const mapEntry = (typeof DECISION_VALUE_MAP !== "undefined") ? DECISION_VALUE_MAP[id] : null;
+            const yesSpec = data.valuesYesFn || data.valuesYes || (mapEntry && mapEntry.yes);
+            const noSpec = data.valuesNoFn || data.valuesNo || (mapEntry && mapEntry.no);
+            if (!yesSpec && !noSpec) return null;
+            return {
+                yes: yesSpec,
+                no: noSpec,
+                town: data.valuesTown !== undefined ? data.valuesTown : (mapEntry && mapEntry.town),
+                reasonYes: data.valuesReasonYes || (mapEntry && mapEntry.reasonYes),
+                reasonNo: data.valuesReasonNo || (mapEntry && mapEntry.reasonNo)
+            };
+        })();
+
+        const resolveDecisionTowns = (townSpec, subject, target, args) => {
+            let spec = townSpec;
+            if (typeof spec === "function") {
+                spec = spec(subject, target, args);
+            }
+
+            if (spec === "all") {
+                return regFilter("town", t => t && !t.end);
+            }
+
+            const towns = [];
+            const addTown = (t) => {
+                if (t && typeof t === "object" && t.id !== undefined && !t.end) {
+                    towns.push(t);
+                }
+            };
+
+            if (spec === "both") {
+                if (subjectIsTown) addTown(subject);
+                if (targetIsTown) addTown(target);
+                return towns;
+            }
+
+            if (spec === "subject") {
+                addTown(subject);
+                return towns;
+            }
+
+            if (spec === "target") {
+                addTown(target);
+                return towns;
+            }
+
+            if (spec) {
+                if (typeof spec === "object") addTown(spec);
+                if (typeof spec === "number") {
+                    const town = regGet("town", spec);
+                    addTown(town);
+                }
+                return towns;
+            }
+
+            if (subjectIsTown) addTown(subject);
+            else if (targetIsTown) addTown(target);
+
+            return towns;
+        };
+
+        const applyDecisionValues = (choice, subject, target, args) => {
+            if (!decisionConfig) return;
+            const spec = choice === "yes" ? decisionConfig.yes : decisionConfig.no;
+            if (!spec) return;
+            const values = (typeof spec === "function") ? spec(subject, target, args) : spec;
+            if (!values || typeof values !== "object") return;
+            const towns = resolveDecisionTowns(decisionConfig.town, subject, target, args);
+            if (!towns || towns.length === 0) return;
+            const reason = choice === "yes" ? decisionConfig.reasonYes : decisionConfig.reasonNo;
+            for (const town of towns) {
+                ensureTownState(town);
+                for (const [axis, amount] of Object.entries(values)) {
+                    shiftTownValue(town, axis, amount, reason || `decision:${id}:${choice}`);
+                }
+            }
+        };
+
+        if (decisionConfig) {
+            if (decisionConfig.yes) {
+                const original = funcFn;
+                funcFn = (subject, target, args) => {
+                    let result;
+                    if (original) result = original(subject, target, args);
+                    applyDecisionValues("yes", subject, target, args);
+                    return result;
+                };
+            }
+
+            if (decisionConfig.no) {
+                const originalNo = funcNoFn;
+                funcNoFn = (subject, target, args) => {
+                    let result;
+                    if (originalNo) result = originalNo(subject, target, args);
+                    applyDecisionValues("no", subject, target, args);
+                    return result;
+                };
+            }
+        }
+
+        if (funcFn) data.func = funcFn;
+        if (funcNoFn) data.funcNo = funcNoFn;
 
         // Base game runs value/check once with array when subject/target all.
         // For daily events, move value/check into per-entity func so logic runs per town.
@@ -54,6 +168,8 @@
                         const t = targets[j];
                         const localArgs = Object.assign({}, baseArgs);
 
+                        prepEntities(s, t);
+
                         if (valueFn) {
                             const valueResult = valueFn(s, t, localArgs);
                             if (valueResult === false) continue;
@@ -69,6 +185,33 @@
                     }
                 }
             };
+        }
+
+        if (!(isDaily && (hasAllSubject || hasAllTarget) && (valueFn || checkFn))) {
+            if (valueFn) {
+                data.value = (subject, target, args) => {
+                    prepEntities(subject, target);
+                    return valueFn(subject, target, args);
+                };
+            }
+            if (checkFn) {
+                data.check = (subject, target, args) => {
+                    prepEntities(subject, target);
+                    return checkFn(subject, target, args);
+                };
+            }
+            if (funcFn) {
+                data.func = (subject, target, args) => {
+                    prepEntities(subject, target);
+                    return funcFn(subject, target, args);
+                };
+            }
+            if (funcNoFn) {
+                data.funcNo = (subject, target, args) => {
+                    prepEntities(subject, target);
+                    return funcNoFn(subject, target, args);
+                };
+            }
         }
 
         return _paultendoEvent(id, data);
@@ -187,6 +330,34 @@
         if (town && !town.issues) town.issues = {};
     }
 
+    function ensurePlanetState() {
+        if (typeof planet === "undefined" || !planet) return;
+        if (!planet.unlocks || typeof planet.unlocks !== "object") {
+            planet.unlocks = {};
+        }
+    }
+
+    function ensureTownState(town) {
+        if (Array.isArray(town)) {
+            town.forEach(ensureTownState);
+            return;
+        }
+        if (!town || typeof town !== "object") return;
+        if (!town.influences || typeof town.influences !== "object") {
+            town.influences = {};
+        }
+        if (!town.jobs || typeof town.jobs !== "object") {
+            town.jobs = {};
+        }
+        if (!town.relations || typeof town.relations !== "object") {
+            town.relations = {};
+        }
+        ensureIssues(town);
+        initTownCulture(town);
+        initTownSpecializations(town);
+        initTownValues(town);
+    }
+
     function hasIssue(town, issueKey) {
         return !!(town && town.issues && town.issues[issueKey]);
     }
@@ -195,10 +366,18 @@
     // GENERAL HELPERS
     // =========================================================================
 
+    const SWAY_BASE_CHANCE = 0.4;
+    const DEFAULT_CHANCE_MIN = 0.05;
+    const DEFAULT_CHANCE_MAX = 0.95;
+
     function clampValue(value, min, max) {
         if (value < min) return min;
         if (value > max) return max;
         return value;
+    }
+
+    function clampChance(value, min = DEFAULT_CHANCE_MIN, max = DEFAULT_CHANCE_MAX) {
+        return clampValue(value, min, max);
     }
 
     function weightedChoice(items, weightFn) {
@@ -217,6 +396,497 @@
         }
         return items[items.length - 1];
     }
+
+    // =========================================================================
+    // VALUES SYSTEM (moral axes + drift + revolution re-roll)
+    // =========================================================================
+
+    const VALUES_CONFIG = {
+        axes: ["justice", "wealth", "openness", "order", "change"],
+        range: { min: -10, max: 10 },
+        shift: { minor: 0.5, standard: 1, major: 1.5 },
+        drift: { enabled: true, rate: 0.005, threshold: 3 },
+        historyLimit: 120
+    };
+
+    const VALUE_SHIFT = VALUES_CONFIG.shift;
+
+    const GOVERNMENT_VALUE_BIASES = {
+        tribal: { order: -1, change: -2, openness: -1 },
+        council: { order: 1, change: -1, justice: 1 },
+        anarchy: { order: -4, change: 2, openness: 1, wealth: 1, justice: 1 },
+        chiefdom: { order: 2, change: -1, openness: -1, justice: -1 },
+        monarchy: { order: 3, change: -2, openness: -1, justice: -1, wealth: -1 },
+        dictatorship: { order: 4, change: -1, openness: -2, justice: -2, wealth: -1 },
+        theocracy: { order: 3, change: -2, openness: -2, justice: 1 },
+        oligarchy: { order: 2, change: -1, openness: -1, justice: -2, wealth: -3 },
+        commune: { order: -1, change: 1, openness: 1, justice: 1, wealth: 3 },
+        republic: { order: -1, change: 1, openness: 1, justice: 2, wealth: 1 },
+        democracy: { order: -2, change: 2, openness: 2, justice: 2, wealth: 1 }
+    };
+
+    const REVOLUTION_VALUE_PROFILES = {
+        military: { justice: -3, wealth: -2, openness: -3, order: 6, change: -1 },
+        religious: { justice: 1, wealth: 0, openness: -3, order: 4, change: -3 },
+        popular: { justice: 3, wealth: 1, openness: 2, order: -2, change: 2 },
+        radical: { justice: 2, wealth: 3, openness: 1, order: -4, change: 4 },
+        oligarchic: { justice: -2, wealth: -3, openness: -1, order: 2, change: -1 },
+        reactionary: { justice: -1, wealth: -1, openness: -2, order: 3, change: -4 }
+    };
+
+    const REVOLUTION_REROLL_STRENGTH = {
+        military: 0.65,
+        religious: 0.75,
+        popular: 0.8,
+        radical: 0.95,
+        oligarchic: 0.7,
+        reactionary: 0.6
+    };
+
+    const REVOLUTION_REROLL_VARIANCE = {
+        military: 1.8,
+        religious: 1.6,
+        popular: 2.4,
+        radical: 3.0,
+        oligarchic: 1.6,
+        reactionary: 1.4
+    };
+
+    function initTownValues(town) {
+        if (!town) return;
+        if (!town.values) {
+            town.values = {
+                justice: 0,
+                wealth: 0,
+                openness: 0,
+                order: 0,
+                change: 0
+            };
+        }
+        if (!town.valueHistory) {
+            town.valueHistory = [];
+        }
+    }
+
+    function recordValueHistory(town, entry) {
+        initTownValues(town);
+        town.valueHistory.push(entry);
+        if (town.valueHistory.length > VALUES_CONFIG.historyLimit) {
+            town.valueHistory.splice(0, town.valueHistory.length - VALUES_CONFIG.historyLimit);
+        }
+    }
+
+    function shiftTownValue(town, axis, amount, reason) {
+        initTownValues(town);
+        if (!VALUES_CONFIG.axes.includes(axis)) return false;
+        const oldValue = town.values[axis] || 0;
+        const newValue = clampValue(oldValue + amount, VALUES_CONFIG.range.min, VALUES_CONFIG.range.max);
+        town.values[axis] = newValue;
+        recordValueHistory(town, {
+            day: planet.day,
+            axis,
+            change: amount,
+            reason: reason || "value shift",
+            newValue: newValue
+        });
+        return true;
+    }
+
+    function getRevolutionType(town, newGovId, oldGovId) {
+        const scores = {
+            military: 0,
+            religious: 0,
+            popular: 0,
+            radical: 0,
+            oligarchic: 0,
+            reactionary: 0
+        };
+
+        const military = town.influences?.military || 0;
+        const faith = town.influences?.faith || 0;
+        const education = town.influences?.education || 0;
+        const trade = town.influences?.trade || 0;
+        const crime = town.influences?.crime || 0;
+
+        if (military > 6) scores.military += 2;
+        if (faith > 6) scores.religious += 2;
+        if (education > 6) scores.popular += 2;
+        if (trade > 6) scores.oligarchic += 2;
+        if (crime > 6) scores.radical += 1;
+
+        switch (newGovId) {
+            case "dictatorship":
+                scores.military += 3;
+                break;
+            case "theocracy":
+                scores.religious += 3;
+                break;
+            case "democracy":
+            case "republic":
+                scores.popular += 3;
+                break;
+            case "commune":
+            case "anarchy":
+                scores.radical += 3;
+                break;
+            case "oligarchy":
+                scores.oligarchic += 3;
+                break;
+            case "monarchy":
+            case "chiefdom":
+            case "council":
+            case "tribal":
+                scores.reactionary += 3;
+                break;
+            default:
+                break;
+        }
+
+        if (oldGovId && oldGovId === "dictatorship" && newGovId !== "dictatorship") {
+            scores.popular += 1;
+        }
+
+        const candidates = Object.entries(scores).map(([id, weight]) => ({ id, weight }));
+        const pick = weightedChoice(candidates, c => c.weight);
+        return pick ? pick.id : "popular";
+    }
+
+    function applyRevolutionValues(town, revolutionType, newGovId) {
+        initTownValues(town);
+        const profile = REVOLUTION_VALUE_PROFILES[revolutionType] || {};
+        const govBias = GOVERNMENT_VALUE_BIASES[newGovId] || {};
+        const strength = REVOLUTION_REROLL_STRENGTH[revolutionType] || 0.75;
+        const variance = REVOLUTION_REROLL_VARIANCE[revolutionType] || 2;
+
+        for (const axis of VALUES_CONFIG.axes) {
+            const base = (profile[axis] || 0) + (govBias[axis] || 0);
+            const target = clampValue(base + (Math.random() * (variance * 2) - variance), VALUES_CONFIG.range.min, VALUES_CONFIG.range.max);
+            const oldValue = town.values[axis] || 0;
+            const blended = (oldValue * (1 - strength)) + (target * strength);
+            town.values[axis] = clampValue(blended, VALUES_CONFIG.range.min, VALUES_CONFIG.range.max);
+        }
+
+        recordValueHistory(town, {
+            day: planet.day,
+            axis: "revolution",
+            change: strength,
+            reason: `revolution:${revolutionType}`,
+            newValue: null
+        });
+    }
+
+    function invertValueMap(values) {
+        if (!values || typeof values !== "object") return null;
+        const inverted = {};
+        for (const [axis, amount] of Object.entries(values)) {
+            inverted[axis] = -amount;
+        }
+        return inverted;
+    }
+
+    function getLoreValueShift(theme) {
+        switch (theme) {
+            case "war":
+                return { order: VALUE_SHIFT.minor, justice: -VALUE_SHIFT.minor, openness: -VALUE_SHIFT.minor };
+            case "discovery":
+                return { openness: VALUE_SHIFT.minor, change: VALUE_SHIFT.minor };
+            case "faith":
+            case "myth":
+                return { order: VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor };
+            case "revolution":
+                return { order: VALUE_SHIFT.minor, change: VALUE_SHIFT.minor };
+            case "hardship":
+                return { wealth: VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor };
+            case "diplomacy":
+                return { openness: VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor };
+            case "expansion":
+                return { openness: VALUE_SHIFT.minor, change: VALUE_SHIFT.minor };
+            case "culture":
+                return { change: -VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor };
+            default:
+                return null;
+        }
+    }
+
+    const DECISION_VALUE_MAP = {};
+
+    function addDecisionValues(id, config) {
+        DECISION_VALUE_MAP[id] = config;
+    }
+
+    const TECH_CHANGE_EVENTS = [
+        "unlockFertilization",
+        "unlockSelectiveBreeding",
+        "unlockMechanizedFarming",
+        "unlockAgriculturalScience",
+        "unlockSteamPower",
+        "unlockRailways",
+        "unlockKilns",
+        "unlockForges",
+        "unlockEngines",
+        "unlockSteel",
+        "unlockArchitecture",
+        "unlockMachinery",
+        "unlockPrecisionEngineering"
+    ];
+
+    const TECH_TRAVEL_EVENTS = [
+        "unlockRoads",
+        "unlockSailingShips",
+        "unlockNavigation"
+    ];
+
+    const TECH_ECON_EVENTS = [
+        "unlockBanking",
+        "unlockContracts",
+        "unlockMarkets",
+        "unlockGuilds",
+        "unlockCorporations"
+    ];
+
+    const TECH_GOV_EVENTS = [
+        "unlockBureaucracy",
+        "unlockCourts",
+        "unlockConstitution"
+    ];
+
+    const TECH_KNOWLEDGE_EVENTS = [
+        "unlockWriting",
+        "unlockLibraries",
+        "unlockPrinting",
+        "unlockUniversities",
+        "unlockScientificMethod",
+        "unlockMedicine"
+    ];
+
+    const TECH_MILITARY_EVENTS = [
+        "unlockFortifications",
+        "unlockStandingArmies",
+        "unlockFirearms",
+        "unlockArtillery"
+    ];
+
+    const TECH_FAITH_EVENTS = [
+        "unlockRituals",
+        "unlockTemples",
+        "unlockPriesthood",
+        "unlockScripture",
+        "unlockMonasteries"
+    ];
+
+    TECH_CHANGE_EVENTS.forEach(id => addDecisionValues(id, {
+        town: "all",
+        yes: { change: VALUE_SHIFT.standard },
+        no: { change: -VALUE_SHIFT.standard }
+    }));
+
+    TECH_TRAVEL_EVENTS.forEach(id => addDecisionValues(id, {
+        town: "all",
+        yes: { change: VALUE_SHIFT.standard, openness: VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.standard, openness: -VALUE_SHIFT.minor }
+    }));
+
+    TECH_ECON_EVENTS.forEach(id => addDecisionValues(id, {
+        town: "all",
+        yes: { change: VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor, order: VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor, order: -VALUE_SHIFT.minor }
+    }));
+
+    TECH_GOV_EVENTS.forEach(id => addDecisionValues(id, {
+        town: "all",
+        yes: { order: VALUE_SHIFT.standard, change: VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor },
+        no: { order: -VALUE_SHIFT.standard, change: -VALUE_SHIFT.minor, justice: -VALUE_SHIFT.minor }
+    }));
+
+    TECH_KNOWLEDGE_EVENTS.forEach(id => addDecisionValues(id, {
+        town: "all",
+        yes: { change: VALUE_SHIFT.standard, openness: VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.standard, openness: -VALUE_SHIFT.minor }
+    }));
+
+    TECH_MILITARY_EVENTS.forEach(id => addDecisionValues(id, {
+        town: "all",
+        yes: { order: VALUE_SHIFT.standard, justice: -VALUE_SHIFT.minor, openness: -VALUE_SHIFT.minor, change: VALUE_SHIFT.minor },
+        no: { order: -VALUE_SHIFT.standard, justice: VALUE_SHIFT.minor, openness: VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor }
+    }));
+
+    TECH_FAITH_EVENTS.forEach(id => addDecisionValues(id, {
+        town: "all",
+        yes: { order: VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor, openness: -VALUE_SHIFT.minor },
+        no: { order: -VALUE_SHIFT.minor, change: VALUE_SHIFT.minor, openness: VALUE_SHIFT.minor }
+    }));
+
+    addDecisionValues("unlockTaxation", {
+        town: "all",
+        yes: { order: VALUE_SHIFT.standard, wealth: VALUE_SHIFT.minor, change: VALUE_SHIFT.minor },
+        no: { order: -VALUE_SHIFT.standard, wealth: -VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("swayDiscoveryExpedition", {
+        town: "target",
+        yes: { openness: VALUE_SHIFT.minor, change: VALUE_SHIFT.minor },
+        no: { openness: -VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("swayDisasterRelief", {
+        town: "target",
+        yes: { wealth: VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor, openness: VALUE_SHIFT.minor },
+        no: { wealth: -VALUE_SHIFT.minor, justice: -VALUE_SHIFT.minor, openness: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("disasterMemorial", {
+        town: "subject",
+        yes: { change: -VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor },
+        no: { change: VALUE_SHIFT.minor, justice: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("droughtBegins", {
+        town: "subject",
+        yes: { order: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+        no: { order: -VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("swayAddressGrievances", {
+        town: "target",
+        yes: { justice: VALUE_SHIFT.standard, order: -VALUE_SHIFT.minor, change: VALUE_SHIFT.minor },
+        no: { justice: -VALUE_SHIFT.standard, order: VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("religionEmerges", {
+        town: "subject",
+        yes: { openness: VALUE_SHIFT.standard, change: VALUE_SHIFT.minor },
+        no: { openness: -VALUE_SHIFT.standard, change: -VALUE_SHIFT.minor, order: VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("religiousReform", {
+        town: "subject",
+        yes: { change: VALUE_SHIFT.standard, openness: VALUE_SHIFT.minor, order: -VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.standard, openness: -VALUE_SHIFT.minor, order: VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("swayReligiousConversion", {
+        town: "target",
+        yes: { openness: VALUE_SHIFT.minor, change: VALUE_SHIFT.minor, order: VALUE_SHIFT.minor },
+        no: { openness: -VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor, order: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("swayReligiousTolerance", {
+        town: "target",
+        yes: { openness: VALUE_SHIFT.standard, justice: VALUE_SHIFT.minor, order: -VALUE_SHIFT.minor },
+        no: { openness: -VALUE_SHIFT.standard, justice: -VALUE_SHIFT.minor, order: VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("buildFigureMonument", {
+        town: "subject",
+        yes: { change: -VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor },
+        no: { change: VALUE_SHIFT.minor, justice: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("buildEventMonument", {
+        town: "subject",
+        yes: { change: -VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor },
+        no: { change: VALUE_SHIFT.minor, justice: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("greatWorkProposal", {
+        town: (subject, target, args) => args.value?.town,
+        yes: { change: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("loreGuidance", {
+        town: (subject, target, args) => args.town,
+        yes: (subject, target, args) => getLoreValueShift(args.entry?.theme),
+        no: (subject, target, args) => invertValueMap(getLoreValueShift(args.entry?.theme))
+    });
+
+    addDecisionValues("establishTradeRoute", {
+        town: "both",
+        yes: { openness: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+        no: { openness: -VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("establishSeaRoute", {
+        town: "both",
+        yes: { openness: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+        no: { openness: -VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("tradeHubEmerges", {
+        town: "subject",
+        yes: { openness: VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor, change: VALUE_SHIFT.minor },
+        no: { openness: -VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("climateDisease", {
+        town: "subject",
+        yes: { order: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+        no: { order: -VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("coldHardship", {
+        town: "subject",
+        yes: { wealth: VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor },
+        no: { wealth: -VALUE_SHIFT.minor, justice: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("heatWave", {
+        town: "subject",
+        yes: { order: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+        no: { order: -VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("localDeforestation", {
+        town: "subject",
+        yes: { change: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("soilExhaustion", {
+        town: "subject",
+        yes: { change: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("desertificationRisk", {
+        town: "subject",
+        yes: { change: VALUE_SHIFT.minor, order: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.minor, order: -VALUE_SHIFT.minor, wealth: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("irrigationSuccess", {
+        town: "subject",
+        yes: { change: VALUE_SHIFT.minor, order: VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.minor, order: -VALUE_SHIFT.minor }
+    });
+
+    addDecisionValues("industrialPollution", {
+        town: "subject",
+        yes: { change: VALUE_SHIFT.minor, order: VALUE_SHIFT.minor },
+        no: { change: -VALUE_SHIFT.minor, order: -VALUE_SHIFT.minor }
+    });
+
+    // Values drift slowly toward center over time
+    modEvent("valuesDrift", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!VALUES_CONFIG.drift.enabled) return false;
+            initTownValues(subject);
+            return VALUES_CONFIG.axes.some(axis => Math.abs(subject.values[axis] || 0) >= VALUES_CONFIG.drift.threshold);
+        },
+        func: (subject) => {
+            const rate = VALUES_CONFIG.drift.rate;
+            const threshold = VALUES_CONFIG.drift.threshold;
+            for (const axis of VALUES_CONFIG.axes) {
+                const current = subject.values[axis] || 0;
+                if (Math.abs(current) < threshold) continue;
+                let next = current - Math.sign(current) * rate;
+                if (Math.abs(next) < rate) next = 0;
+                subject.values[axis] = clampValue(next, VALUES_CONFIG.range.min, VALUES_CONFIG.range.max);
+            }
+        }
+    });
 
     const MOD_LOG_BUDGETS = {
         migration: { perDay: 2, perTownCooldown: 12 },
@@ -3854,8 +4524,11 @@
 
     // Calculate success chance for swaying a town against another
     function calcSwaySuccess(town, targetTown) {
+        if (!town || !targetTown) return 0.4;
+        ensureTownState(town);
+        ensureTownState(targetTown);
         // Base 40% chance
-        let chance = 0.40;
+        let chance = SWAY_BASE_CHANCE;
 
         // Faith: +8% per point (towns that trust you believe you)
         const faith = town.influences.faith || 0;
@@ -3879,7 +4552,7 @@
         chance -= trade * 0.04;
 
         // Clamp between 5% and 95%
-        return Math.max(0.05, Math.min(0.95, chance));
+        return clampChance(chance);
     }
 
     // Helper: Get landmarks for a town
@@ -3974,7 +4647,7 @@
             } else {
                 args.successChance -= Math.abs(relation) * 0.03;
             }
-            args.successChance = Math.max(0.05, Math.min(0.95, args.successChance));
+            args.successChance = clampChance(args.successChance);
             return true;
         },
         check: (subject, target, args) => {
@@ -4034,7 +4707,7 @@
             // Faith bonus is doubled for temple proclamations
             const faith = target.influences.faith || 0;
             args.successChance += faith * 0.08; // Extra faith bonus on top of base
-            args.successChance = Math.max(0.10, Math.min(0.90, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.10, 0.90);
             args.temple = getTownLandmarks(target).find((m) => m.subtype === "temple");
             return true;
         },
@@ -4100,7 +4773,7 @@
             if (trade > 0) {
                 args.successChance = 0.5 + (args.successChance - 0.5) * 0.7; // Pull toward 50%
             }
-            args.successChance = Math.max(0.05, Math.min(0.95, args.successChance));
+            args.successChance = clampChance(args.successChance);
             return true;
         },
         check: (subject, target, args) => {
@@ -4160,7 +4833,7 @@
             if (relation > 0) {
                 args.successChance += 0.15; // Easier when already friendly
             }
-            args.successChance = Math.max(0.05, Math.min(0.95, args.successChance));
+            args.successChance = clampChance(args.successChance);
             return true;
         },
         check: (subject, target, args) => {
@@ -4219,7 +4892,7 @@
             // Military towns are more receptive to threat warnings
             const military = target.influences.military || 0;
             args.successChance += military * 0.05;
-            args.successChance = Math.max(0.05, Math.min(0.95, args.successChance));
+            args.successChance = clampChance(args.successChance);
             return true;
         },
         check: (subject, target, args) => {
@@ -4281,7 +4954,7 @@
             } else {
                 args.successChance -= Math.abs(relation) * 0.04;
             }
-            args.successChance = Math.max(0.05, Math.min(0.95, args.successChance));
+            args.successChance = clampChance(args.successChance);
             return true;
         },
         check: (subject, target, args) => {
@@ -4341,7 +5014,7 @@
             // Educated towns are harder to manipulate but also more competitive
             const education = target.influences.education || 0;
             args.successChance += education * 0.02; // Small boost for pride
-            args.successChance = Math.max(0.05, Math.min(0.95, args.successChance));
+            args.successChance = clampChance(args.successChance);
             return true;
         },
         check: (subject, target, args) => {
@@ -4400,7 +5073,7 @@
             // Easier with existing good relations
             const relation = target.relations[args.otherTown.id] || 0;
             if (relation > 0) args.successChance += 0.10;
-            args.successChance = Math.max(0.05, Math.min(0.95, args.successChance));
+            args.successChance = clampChance(args.successChance);
             return true;
         },
         check: (subject, target, args) => {
@@ -4516,7 +5189,7 @@
             // Happy towns are more receptive to festivals
             const happy = target.influences.happy || 0;
             args.successChance += happy * 0.04;
-            args.successChance = Math.max(0.05, Math.min(0.95, args.successChance));
+            args.successChance = clampChance(args.successChance);
             return true;
         },
         check: (subject, target, args) => {
@@ -4580,7 +5253,7 @@
             // But high faith helps a lot
             const faith = target.influences.faith || 0;
             args.successChance += faith * 0.06;
-            args.successChance = Math.max(0.10, Math.min(0.80, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.10, 0.80);
             return true;
         },
         check: (subject, target, args) => {
@@ -4651,7 +5324,7 @@
             args.successChance = calcSwaySuccess(target, args.newTarget);
             // Riskier than normal sway
             args.successChance -= 0.10;
-            args.successChance = Math.max(0.05, Math.min(0.85, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.05, 0.85);
             return true;
         },
         check: (subject, target, args) => {
@@ -5123,7 +5796,7 @@
             // Easier when relations are better
             const relation = target.relations[args.otherTown.id] || 0;
             args.successChance += relation * 0.05;
-            args.successChance = Math.max(0.10, Math.min(0.90, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.10, 0.90);
             return true;
         },
         check: (subject, target, args) => {
@@ -5187,7 +5860,7 @@
             args.successChance = calcSwaySuccess(target, args.otherMember);
             // Harder to break alliances
             args.successChance -= 0.15;
-            args.successChance = Math.max(0.05, Math.min(0.70, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.05, 0.70);
             return true;
         },
         check: (subject, target, args) => {
@@ -5979,7 +6652,9 @@
     };
 
     const SPECIALIZATION_ALIASES = {
-        holy_order: "holyOrder"
+        holy_order: "holyOrder",
+        trade_hub: "tradingHub",
+        tradeHub: "tradingHub"
     };
 
     function normalizeSpecId(specId) {
@@ -6096,7 +6771,7 @@
 
     // Add or increase a specialization
     function addSpecialization(town, specId, amount = 1) {
-        initTownSpecializations(town);
+        ensureTownState(town);
         const rawId = specId;
         specId = normalizeSpecId(specId);
         const spec = SPECIALIZATIONS[specId];
@@ -6122,7 +6797,7 @@
 
     // Remove or decrease a specialization
     function removeSpecialization(town, specId, amount = 1) {
-        initTownSpecializations(town);
+        ensureTownState(town);
         const rawId = specId;
         specId = normalizeSpecId(specId);
         const spec = SPECIALIZATIONS[specId];
@@ -6624,7 +7299,7 @@
             args.successChance = 0.40;
             // Higher faith = more likely to follow guidance
             args.successChance += (target.influences.faith || 0) * 0.05;
-            args.successChance = Math.max(0.10, Math.min(0.80, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.10, 0.80);
             return true;
         },
         message: (subject, target, args) => {
@@ -6673,6 +7348,7 @@
             if (candidates.length === 0) return false;
 
             args.victim = choose(candidates);
+            ensureTownState(args.victim);
             const victimSpecs = getTownSpecializations(args.victim);
             const stealable = victimSpecs.filter(s => !hasSpecialization(target, s.id));
             args.spec = choose(stealable);
@@ -6682,7 +7358,7 @@
             args.successChance += (target.influences.education || 0) * 0.05;
             // But victim's education makes it harder
             args.successChance -= (args.victim.influences.education || 0) * 0.03;
-            args.successChance = Math.max(0.05, Math.min(0.60, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.05, 0.60);
             return true;
         },
         message: (subject, target, args) => {
@@ -6745,6 +7421,7 @@
             if (friends.length === 0) return false;
 
             args.friend = choose(friends);
+            ensureTownState(args.friend);
             const teachable = targetSpecs.filter(s => {
                 if (hasSpecialization(args.friend, s.id)) return false;
                 const def = SPECIALIZATIONS[s.id];
@@ -6757,7 +7434,7 @@
             // Good relations help
             const relation = target.relations[args.friend.id] || 0;
             args.successChance += relation * 0.05;
-            args.successChance = Math.max(0.20, Math.min(0.90, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.20, 0.90);
             return true;
         },
         message: (subject, target, args) => {
@@ -6805,7 +7482,7 @@
             args.successChance = 0.25;
             // High faith needed for such drastic change
             args.successChance += (target.influences.faith || 0) * 0.08;
-            args.successChance = Math.max(0.05, Math.min(0.50, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.05, 0.50);
             return true;
         },
         message: (subject, target, args) => {
@@ -9152,7 +9829,7 @@
             args.oldGov = getTownGovernment(target);
             args.successChance = 0.25;
             args.successChance += (target.influences.faith || 0) * 0.05;
-            args.successChance = Math.max(0.05, Math.min(0.60, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.05, 0.60);
             return true;
         },
         message: (subject, target, args) => {
@@ -9203,7 +9880,7 @@
             args.successChance += (target.influences.education || 0) * 0.03;
             args.successChance += (target.influences.crime || 0) * 0.02;
             args.successChance -= (target.influences.military || 0) * 0.02;
-            args.successChance = Math.max(0.05, Math.min(0.50, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.05, 0.50);
             return true;
         },
         message: (subject, target, args) => {
@@ -9815,7 +10492,7 @@
             args.successChance = 0.50;
             args.successChance += (target.influences.faith || 0) * 0.05;
             args.successChance -= (target.influences.trade || 0) * 0.03;
-            args.successChance = Math.max(0.20, Math.min(0.80, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.20, 0.80);
             return true;
         },
         message: (subject, target, args) => {
@@ -9965,7 +10642,7 @@
 
             const fatigue = guidanceFatigue(target, "publicHealthcare");
             args.successChance -= fatigue * 0.05;
-            args.successChance = Math.max(0.10, Math.min(0.80, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.10, 0.80);
             return true;
         },
         message: (subject, target, args) => {
@@ -10045,7 +10722,7 @@
             args.successChance += (target.influences.faith || 0) * 0.05;
             const fatigue = guidanceFatigue(target, "buildHospital");
             args.successChance -= fatigue * 0.05;
-            args.successChance = Math.max(0.15, Math.min(0.75, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.15, 0.75);
             return true;
         },
         message: (subject, target, args) => {
@@ -10096,7 +10773,7 @@
             args.successChance += (target.influences.faith || 0) * 0.03;
             const fatigue = guidanceFatigue(target, "trainHealers");
             args.successChance -= fatigue * 0.05;
-            args.successChance = Math.max(0.20, Math.min(0.80, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.20, 0.80);
             return true;
         },
         message: (subject, target, args) => {
@@ -10285,7 +10962,7 @@
 
     // Add or strengthen a tradition
     function addTradition(town, traditionId, amount = 1) {
-        initTownCulture(town);
+        ensureTownState(town);
         const tradition = CULTURAL_TRADITIONS[traditionId];
         if (!tradition) return false;
 
@@ -10315,7 +10992,7 @@
 
     // Weaken or remove a tradition
     function weakenTradition(town, traditionId, amount = 1) {
-        initTownCulture(town);
+        ensureTownState(town);
         const tradition = CULTURAL_TRADITIONS[traditionId];
         if (!tradition) return false;
 
@@ -10893,7 +11570,7 @@
             args.successChance = 0.40;
             args.successChance += (target.influences.faith || 0) * 0.05;
             args.successChance += (target.influences.happy || 0) * 0.03;
-            args.successChance = Math.max(0.15, Math.min(0.80, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.15, 0.80);
             return true;
         },
         message: (subject, target, args) => {
@@ -10939,7 +11616,7 @@
             args.successChance += (target.influences.faith || 0) * 0.05;
             args.successChance += (target.influences.happy || 0) * 0.05;
             if (hasTradition(target, "festive")) args.successChance += 0.20;
-            args.successChance = Math.max(0.20, Math.min(0.90, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.20, 0.90);
             return true;
         },
         message: (subject, target, args) => {
@@ -11010,7 +11687,7 @@
             args.successChance += (target.influences.faith || 0) * 0.05;
             const relation = target.relations[args.partner.id] || 0;
             args.successChance += relation * 0.05;
-            args.successChance = Math.max(0.15, Math.min(0.75, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.15, 0.75);
             return true;
         },
         message: (subject, target, args) => {
@@ -11073,7 +11750,7 @@
             args.tradition = choose(traditions);
             args.successChance = 0.20;
             args.successChance += (target.influences.faith || 0) * 0.05;
-            args.successChance = Math.max(0.05, Math.min(0.50, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.05, 0.50);
             return true;
         },
         message: (subject, target, args) => {
@@ -11247,7 +11924,7 @@
             args.successChance += (target.influences.happy || 0) * 0.05;
             args.successChance += (target.influences.faith || 0) * 0.05;
             if (hasTradition(target, "theatrical")) args.successChance += 0.15;
-            args.successChance = Math.max(0.15, Math.min(0.75, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.15, 0.75);
             return true;
         },
         message: (subject, target, args) => {
@@ -11291,7 +11968,7 @@
             args.successChance = 0.30;
             args.successChance += (target.influences.education || 0) * 0.05;
             args.successChance += (target.influences.faith || 0) * 0.05;
-            args.successChance = Math.max(0.15, Math.min(0.70, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.15, 0.70);
             return true;
         },
         message: (subject, target, args) => {
@@ -11336,7 +12013,7 @@
             args.successChance += (target.influences.trade || 0) * 0.03;
             args.successChance += (target.influences.faith || 0) * 0.05;
             if (hasTradition(target, "art")) args.successChance += 0.15;
-            args.successChance = Math.max(0.15, Math.min(0.75, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.15, 0.75);
             return true;
         },
         message: (subject, target, args) => {
@@ -11620,7 +12297,7 @@
             args.successChance = 0.50;
             args.successChance += (target.influences.faith || 0) * 0.05;
             args.successChance += (target.influences.military || 0) * 0.03;
-            args.successChance = Math.max(0.25, Math.min(0.85, args.successChance));
+            args.successChance = clampChance(args.successChance, 0.25, 0.85);
             return true;
         },
         message: (subject, target, args) => {
@@ -12093,6 +12770,7 @@
             }
 
             args.destination = destination;
+            ensureTownState(args.destination);
             args.disaster = disaster;
             return true;
         },
@@ -12157,6 +12835,7 @@
             if (betterTowns.length === 0) return false;
 
             args.destination = choose(betterTowns);
+            ensureTownState(args.destination);
             args.disaster = disaster;
             return true;
         },
@@ -13256,6 +13935,7 @@
             if (subject.pop < 20) return false;
 
             args.destination = choose(recoveredNeighbors);
+            ensureTownState(args.destination);
             return true;
         },
         func: (subject, target, args) => {
@@ -13581,6 +14261,9 @@
             }
 
             applyGovernmentType(subject, newGov);
+            const revolutionType = getRevolutionType(subject, newGov, oldGov);
+            applyRevolutionValues(subject, revolutionType, newGov);
+            subject._lastRevolutionType = revolutionType;
 
             // Apply government tensions with neighbors
             const neighbors = regFilter("town", t => t.id !== subject.id && !t.end);
@@ -13698,7 +14381,10 @@
                 // Counter-revolution succeeds
                 initGovernment(subject);
                 const options = ["monarchy", "oligarchy", "republic"];
-                applyGovernmentType(subject, choose(options));
+                const newGov = choose(options);
+                applyGovernmentType(subject, newGov);
+                applyRevolutionValues(subject, "reactionary", newGov);
+                subject._lastRevolutionType = "reactionary";
                 subject.unrest = 20;
 
                 logMessage(`Counter-revolution succeeds in {{regname:town|${subject.id}}}. Order is restored.`);
@@ -14075,7 +14761,7 @@
             const alliance = getTownAlliance(subject);
             if (alliance && alliance.members.includes(target.id)) chance += 0.05;
 
-            chance = Math.max(0.05, Math.min(0.7, chance));
+            chance = clampChance(chance, 0.05, 0.7);
 
             if (Math.random() > chance) return;
 
@@ -14131,7 +14817,7 @@
             const share = args.religion.followers.length / totalTowns;
             if (share > 0.5) chance -= 0.1;
             if (share > 0.7) chance -= 0.15;
-            chance = Math.max(0.05, Math.min(0.6, chance));
+            chance = clampChance(chance, 0.05, 0.6);
 
             if (Math.random() < chance) {
                 // Success
@@ -18429,6 +19115,8 @@
             args.myth = myth;
             args.source = source;
             args.destination = destination;
+            ensureTownState(args.source);
+            ensureTownState(args.destination);
             return true;
         },
         func: (subject, target, args) => {
@@ -19163,7 +19851,7 @@
             if ((subject.influences?.trade || 0) < 7) return false;
 
             // Not already a trade hub
-            if (subject.specializations?.some(s => s.type === "trade_hub")) return false;
+            if (hasSpecialization(subject, "tradingHub")) return false;
 
             return true;
         },
@@ -19173,13 +19861,7 @@
         messageDone: "The settlement becomes renowned as a center of trade.",
         messageNo: "Trade continues without formal recognition.",
         func: (subject) => {
-            if (!subject.specializations) subject.specializations = [];
-            subject.specializations.push({
-                type: "trade_hub",
-                established: planet.day
-            });
-
-            happen("Influence", null, subject, { trade: 3, happy: 1 });
+            addSpecialization(subject, "tradingHub");
             logMessage(`{{regname:town|${subject.id}}} becomes a renowned trade hub.`, "milestone");
 
             // Create figure: famous merchant
