@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.1.12";
+    const MOD_VERSION = "1.1.15";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -466,7 +466,7 @@
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
             if (!chunk || typeof chunk.x !== "number" || typeof chunk.y !== "number") continue;
-            if (chunk.v && chunk.v.g && !isLandmassDiscovered(chunk.v.g)) continue;
+            if (!opts.force && chunk.v && chunk.v.g && !isLandmassDiscovered(chunk.v.g)) continue;
             const key = getChunkKey(chunk.x, chunk.y);
             if (fog.explored[key]) continue;
             fog.explored[key] = 1;
@@ -561,6 +561,24 @@
         return clampValue(strength, 0, 1);
     }
 
+    const FOG_SIGHT_OFFSETS = {};
+
+    function getSightOffsets(radius) {
+        const key = Math.max(1, Math.round(radius * 10) / 10);
+        if (FOG_SIGHT_OFFSETS[key]) return FOG_SIGHT_OFFSETS[key];
+        const rCeil = Math.ceil(radius);
+        const list = [];
+        for (let dx = -rCeil; dx <= rCeil; dx++) {
+            for (let dy = -rCeil; dy <= rCeil; dy++) {
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > radius) continue;
+                list.push({ dx, dy, dist });
+            }
+        }
+        FOG_SIGHT_OFFSETS[key] = list;
+        return list;
+    }
+
     function updateFogVisibilityForTown(town, opts = {}) {
         if (!town || town.end) return false;
         if (!resetFogVisibilityForDay(!!opts.forceReset)) return false;
@@ -571,34 +589,64 @@
 
         const { width, height } = getChunkDimensions();
         if (!width || !height) return false;
-
-        const centerX = town.center[0];
-        const centerY = town.center[1];
         const radius = computeTownSightRadius(town);
-        const radiusCeil = Math.ceil(radius);
 
-        const observerChunk = chunkAt(centerX, centerY);
-        const observerElev = observerChunk ? getChunkElevation(observerChunk) : 0;
+        const claimed = getTownClaimedChunks(town);
         const explored = [];
+        const claimedSet = new Set();
+        for (let i = 0; i < claimed.length; i++) {
+            const c = claimed[i];
+            if (!c) continue;
+            claimedSet.add(getChunkKey(c.x, c.y));
+            setChunkVisibility(c.x, c.y, 1); // 100% visibility inside town territory
+        }
 
-        const minX = Math.max(0, centerX - radiusCeil);
-        const maxX = Math.min(width - 1, centerX + radiusCeil);
-        const minY = Math.max(0, centerY - radiusCeil);
-        const maxY = Math.min(height - 1, centerY + radiusCeil);
+        const adjacency = (typeof adjacentCoords !== "undefined" && Array.isArray(adjacentCoords) && adjacentCoords.length)
+            ? adjacentCoords
+            : [[0, -1], [1, 0], [0, 1], [-1, 0]];
 
-        for (let x = minX; x <= maxX; x++) {
-            for (let y = minY; y <= maxY; y++) {
-                const dx = x - centerX;
-                const dy = y - centerY;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist > radius) continue;
+        const edgeChunks = [];
+        for (let i = 0; i < claimed.length; i++) {
+            const c = claimed[i];
+            if (!c) continue;
+            let isEdge = false;
+            for (let j = 0; j < adjacency.length; j++) {
+                const dx = adjacency[j][0];
+                const dy = adjacency[j][1];
+                const nx = c.x + dx;
+                const ny = c.y + dy;
+                if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+                    isEdge = true;
+                    break;
+                }
+                if (!claimedSet.has(getChunkKey(nx, ny))) {
+                    isEdge = true;
+                    break;
+                }
+            }
+            if (isEdge) edgeChunks.push(c);
+        }
+
+        const sources = edgeChunks.length ? edgeChunks : claimed;
+        const offsets = getSightOffsets(radius);
+        for (let i = 0; i < sources.length; i++) {
+            const source = sources[i];
+            if (!source) continue;
+            const observerElev = getChunkElevation(source);
+
+            for (let j = 0; j < offsets.length; j++) {
+                const offset = offsets[j];
+                const x = source.x + offset.dx;
+                const y = source.y + offset.dy;
+                if (x < 0 || y < 0 || x >= width || y >= height) continue;
+                if (claimedSet.has(getChunkKey(x, y))) continue;
 
                 const chunk = chunkAt(x, y);
                 if (!chunk) continue;
                 if (chunk.v && chunk.v.g && !isLandmassDiscovered(chunk.v.g)) continue;
 
                 const targetElev = getChunkElevation(chunk);
-                const visibility = computeVisibilityStrength(dist, radius, observerElev, targetElev);
+                const visibility = computeVisibilityStrength(offset.dist, radius, observerElev, targetElev);
                 if (visibility <= 0) continue;
 
                 setChunkVisibility(x, y, visibility);
@@ -606,11 +654,11 @@
             }
         }
 
-        const claimed = getTownClaimedChunks(town);
-        if (claimed.length) explored.push(...claimed);
-
         if (explored.length) {
             markChunksExplored(explored, { deferRefresh: true });
+        }
+        if (claimed.length) {
+            markChunksExplored(claimed, { deferRefresh: true, force: true });
         }
 
         town._paultendoFogInit = true;
@@ -725,7 +773,7 @@
         for (const chunkKey in planet.chunks) {
             const chunk = planet.chunks[chunkKey];
             if (!chunk || !chunk.v) continue;
-            if (chunk.v.g && !isLandmassDiscovered(chunk.v.g)) {
+            if (chunk.v.g && !isLandmassDiscovered(chunk.v.g) && !chunk.v.s) {
                 ctx.fillStyle = `rgba(8, 10, 14, ${opaqueAlpha})`;
                 ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
                 continue;
@@ -9535,8 +9583,8 @@
                 subtype: "memorial",
                 name: `${args.disaster.type.charAt(0).toUpperCase() + args.disaster.type.slice(1)} Memorial`,
                 symbol: "🕯",
-                x: subject.x,
-                y: subject.y
+                x: getTownCenter(subject)?.[0],
+                y: getTownCenter(subject)?.[1]
             });
 
             // Cultural impact
@@ -11743,13 +11791,24 @@
             }
             planet._paultendoHistoryNormalized = true;
         }
+        if (!planet._paultendoFiguresNormalized) {
+            for (const figure of planet.figures) {
+                normalizeFigure(figure);
+            }
+            planet._paultendoFiguresNormalized = true;
+        }
     }
 
     function normalizeHistoryEntry(entry) {
-        if (!entry || entry.historyType) return;
+        if (!entry) return;
+        if (entry.historyType) {
+            ensureHistoryName(entry);
+            return;
+        }
         const knownTypes = Object.values(HISTORY_TYPES);
         if (knownTypes.includes(entry.type)) {
             entry.historyType = entry.type;
+            ensureHistoryName(entry);
             return;
         }
         const mapped = HISTORY_DETAIL_TYPE_MAP[entry.type];
@@ -11759,9 +11818,160 @@
                 entry.achievementType = entry.type;
             }
             if (entry.subtype === undefined) entry.subtype = entry.type;
+            ensureHistoryName(entry);
             return;
         }
         if (entry.type) entry.historyType = entry.type;
+        ensureHistoryName(entry);
+    }
+
+    function safeTitleCase(value) {
+        if (!value) return "";
+        if (typeof titleCase === "function") return titleCase(value);
+        return value.toString().replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+
+    function getTownNameById(id) {
+        if (!id) return null;
+        const town = regGet("town", id);
+        return town && town.name ? town.name : null;
+    }
+
+    function getAllianceNameById(id) {
+        if (!id || !planet.alliances) return null;
+        const alliance = planet.alliances.find(a => a.id === id);
+        return alliance ? alliance.name : null;
+    }
+
+    function getReligionNameById(id) {
+        if (!id || !planet.religions) return null;
+        const religion = planet.religions.find(r => r.id === id);
+        return religion ? religion.name : null;
+    }
+
+    function getFigureDisplayNameById(id) {
+        if (!id || !planet.figures) return null;
+        const figure = planet.figures.find(f => f.id === id);
+        if (!figure) return null;
+        return figure.fullTitle || figure.name || null;
+    }
+
+    function normalizeFigure(figure) {
+        if (!figure) return;
+        const typeDef = FIGURE_TYPES[figure.type] || { title: "Figure", adjectives: ["noted"] };
+        if (!figure.title) figure.title = typeDef.title;
+        if (!figure.adjective) figure.adjective = (typeDef.adjectives && typeDef.adjectives[0]) ? typeDef.adjectives[0] : "noted";
+        if (!figure.name) figure.name = "Unknown";
+        if (!figure.fullTitle) {
+            figure.fullTitle = figure.adjective && figure.name
+                ? `${figure.name} the ${figure.adjective}`
+                : (figure.name || figure.title || "Figure");
+        }
+    }
+
+    function getFigureDisplayName(figure) {
+        if (!figure) return "a figure";
+        normalizeFigure(figure);
+        return figure.fullTitle || figure.name || "a figure";
+    }
+
+    function ensureHistoryName(entry) {
+        if (!entry) return null;
+        if (entry.name && entry.name !== "undefined") return entry.name;
+
+        const type = entry.historyType || entry.type;
+        const day = entry.day !== undefined ? entry.day : (planet ? planet.day : 0);
+        let name = null;
+
+        switch (type) {
+            case HISTORY_TYPES.WAR: {
+                const victor = entry.victorName || getTownNameById(entry.victor);
+                const loser = entry.loserName || getTownNameById(entry.loser);
+                if (victor && loser) name = `The ${victor}-${loser} War`;
+                else if (Array.isArray(entry.towns) && entry.towns.length >= 2) {
+                    const t1 = getTownNameById(entry.towns[0]);
+                    const t2 = getTownNameById(entry.towns[1]);
+                    if (t1 && t2) name = `The ${t1}-${t2} War`;
+                }
+                if (!name) name = `War of Day ${day}`;
+                break;
+            }
+            case HISTORY_TYPES.TOWN_FOUNDED: {
+                const townName = entry.townName || getTownNameById(entry.town);
+                name = townName ? `Founding of ${townName}` : `Founding Day ${day}`;
+                break;
+            }
+            case HISTORY_TYPES.TOWN_FALLEN: {
+                const townName = entry.townName || getTownNameById(entry.town);
+                name = townName ? `Fall of ${townName}` : `A Town Falls (Day ${day})`;
+                break;
+            }
+            case HISTORY_TYPES.ALLIANCE_FORMED: {
+                const allianceName = entry.allianceName || getAllianceNameById(entry.alliance);
+                name = allianceName ? `Formation of ${allianceName}` : `Alliance Forged (Day ${day})`;
+                break;
+            }
+            case HISTORY_TYPES.ALLIANCE_DISSOLVED: {
+                const allianceName = entry.allianceName || getAllianceNameById(entry.alliance);
+                name = allianceName ? `Dissolution of ${allianceName}` : `Alliance Dissolved (Day ${day})`;
+                break;
+            }
+            case HISTORY_TYPES.RELIGION_FOUNDED: {
+                const religionName = entry.religionName || getReligionNameById(entry.religion);
+                name = religionName ? `${religionName} Founded` : `Religion Founded (Day ${day})`;
+                break;
+            }
+            case HISTORY_TYPES.RELIGION_SCHISM: {
+                const religionName = entry.religionName || getReligionNameById(entry.religion);
+                name = religionName ? `${religionName} Schism` : `Religious Schism (Day ${day})`;
+                break;
+            }
+            case HISTORY_TYPES.REVOLUTION: {
+                const townName = entry.townName || getTownNameById(entry.town);
+                name = townName ? `The ${townName} Revolution` : `Revolution of Day ${day}`;
+                break;
+            }
+            case HISTORY_TYPES.DISASTER: {
+                const subtype = entry.subtype || entry.detailType || entry.disasterType;
+                if (subtype) name = `The ${safeTitleCase(subtype)} of Day ${day}`;
+                else name = `Disaster of Day ${day}`;
+                break;
+            }
+            case HISTORY_TYPES.ERA_BEGAN: {
+                const eraName = entry.eraName || entry.era;
+                name = eraName ? `Beginning of the ${eraName} Era` : `Era Begins (Day ${day})`;
+                break;
+            }
+            case HISTORY_TYPES.FIGURE_BORN: {
+                const figureName = entry.figureName || getFigureDisplayNameById(entry.figureId);
+                name = figureName ? `Birth of ${figureName}` : `Birth of a Figure (Day ${day})`;
+                break;
+            }
+            case HISTORY_TYPES.FIGURE_DIED: {
+                const figureName = entry.figureName || getFigureDisplayNameById(entry.figureId);
+                name = figureName ? `Death of ${figureName}` : `Death of a Figure (Day ${day})`;
+                break;
+            }
+            case HISTORY_TYPES.CULTURAL_ACHIEVEMENT: {
+                if (entry.title) name = entry.title;
+                else if (entry.achievementType) name = `${safeTitleCase(entry.achievementType)} Achievement`;
+                else name = `Cultural Achievement (Day ${day})`;
+                break;
+            }
+            default: {
+                if (entry.title) name = entry.title;
+                else if (entry.subtype) name = safeTitleCase(entry.subtype);
+                else name = `${safeTitleCase(type || "Event")} (Day ${day})`;
+            }
+        }
+
+        entry.name = name || entry.name || `Event (Day ${day})`;
+        return entry.name;
+    }
+
+    function getHistoryDisplayName(entry) {
+        if (!entry) return "an event";
+        return ensureHistoryName(entry) || "an event";
     }
 
     // Record a historical event
@@ -11788,6 +11998,7 @@
             if (entry.subtype === undefined) entry.subtype = detailType;
         }
 
+        ensureHistoryName(entry);
         planet.history.push(entry);
         return entry;
     }
@@ -13902,7 +14113,7 @@
             if (args.wasVictor) {
                 happen("Influence", null, subject, { happy: 1, military: 0.3, temp: true });
                 if (Math.random() < 0.3) {
-                    logMessage(`{{regname:town|${subject.id}}} commemorates their victory in {{b:${args.war.name}}} ${args.years * 100} days ago.`);
+                    logMessage(`{{regname:town|${subject.id}}} commemorates their victory in {{b:${getHistoryDisplayName(args.war)}}} ${args.years * 100} days ago.`);
                 }
             } else {
                 // Defeated side may still hold grudge
@@ -13911,7 +14122,7 @@
                     if (victor && !victor.end && hasGrudge(subject, args.war.victor)) {
                         happen("Influence", null, subject, { military: 0.5, happy: -0.3, temp: true });
                         if (Math.random() < 0.3) {
-                            logMessage(`{{regname:town|${subject.id}}} grimly remembers their defeat in {{b:${args.war.name}}}.`);
+                            logMessage(`{{regname:town|${subject.id}}} grimly remembers their defeat in {{b:${getHistoryDisplayName(args.war)}}}.`);
                         }
                     }
                 }
@@ -13947,7 +14158,7 @@
             happen("Influence", null, subject, { faith: 0.5, happy: 0.3, temp: true });
 
             if (Math.random() < 0.4) {
-                logMessage(`{{regname:town|${subject.id}}} honors the memory of {{b:${figure.fullTitle}}}.`);
+                logMessage(`{{regname:town|${subject.id}}} honors the memory of {{b:${getFigureDisplayName(figure)}}}.`);
             }
         }
     });
@@ -13990,15 +14201,15 @@
 
             if (wasVictor) {
                 happen("Influence", null, subject, { military: 1, happy: 0.5, temp: true });
-                logMessage(`{{regname:town|${subject.id}}} draws courage from their past victory over {{regname:town|${enemy.id}}} in {{b:${args.pastWar.name}}}.`);
+                logMessage(`{{regname:town|${subject.id}}} draws courage from their past victory over {{regname:town|${enemy.id}}} in {{b:${getHistoryDisplayName(args.pastWar)}}}.`);
             } else {
                 // Could go either way - revenge motivation or fear
                 if (Math.random() < 0.5) {
                     happen("Influence", null, subject, { military: 1.5, temp: true });
-                    logMessage(`{{regname:town|${subject.id}}} seeks revenge for their defeat in {{b:${args.pastWar.name}}}.`);
+                    logMessage(`{{regname:town|${subject.id}}} seeks revenge for their defeat in {{b:${getHistoryDisplayName(args.pastWar)}}}.`);
                 } else {
                     happen("Influence", null, subject, { happy: -0.5, temp: true });
-                    logMessage(`The specter of {{b:${args.pastWar.name}}} haunts {{regname:town|${subject.id}}} as they face {{regname:town|${enemy.id}}} again.`);
+                    logMessage(`The specter of {{b:${getHistoryDisplayName(args.pastWar)}}} haunts {{regname:town|${subject.id}}} as they face {{regname:town|${enemy.id}}} again.`);
                 }
             }
         }
@@ -14028,7 +14239,8 @@
             return true;
         },
         message: (subject, target, args) => {
-            return `{{people}} wish to build a monument to {{b:${args.figure.fullTitle}}}. {{should}}`;
+            const displayName = getFigureDisplayName(args.figure);
+            return `{{people}} wish to build a monument to {{b:${displayName}}}. {{should}}`;
         },
         messageDone: "A statue is raised in their honor.",
         messageNo: "Their memory lives on without stone.",
@@ -14039,10 +14251,10 @@
             happen("Create", null, null, {
                 type: "landmark",
                 subtype: "monument",
-                name: `Statue of ${args.figure.name}`,
+                name: `Statue of ${getFigureDisplayName(args.figure)}`,
                 symbol: "🗿",
-                x: subject.x,
-                y: subject.y
+                x: getTownCenter(subject)?.[0],
+                y: getTownCenter(subject)?.[1]
             });
 
             initTownCulture(subject);
@@ -14050,7 +14262,7 @@
 
             happen("Influence", null, subject, { happy: 1, faith: 0.5 });
 
-            logMessage(`A monument to {{b:${args.figure.fullTitle}}} is unveiled in {{regname:town|${subject.id}}}.`, "milestone");
+            logMessage(`A monument to {{b:${getFigureDisplayName(args.figure)}}} is unveiled in {{regname:town|${subject.id}}}.`, "milestone");
         }
     });
 
@@ -14077,7 +14289,8 @@
             return true;
         },
         message: (subject, target, args) => {
-            return `{{people}} propose a monument commemorating {{b:${args.event.name}}}. {{should}}`;
+            const eventName = getHistoryDisplayName(args.event);
+            return `{{people}} propose a monument commemorating {{b:${eventName}}}. {{should}}`;
         },
         messageDone: "History is preserved in stone.",
         messageNo: "The past needs no monuments.",
@@ -14096,10 +14309,10 @@
             happen("Create", null, null, {
                 type: "landmark",
                 subtype: "monument",
-                name: `${args.event.name} Monument`,
+                name: `${getHistoryDisplayName(args.event)} Monument`,
                 symbol: symbolMap[args.event.type] || "🗿",
-                x: subject.x,
-                y: subject.y
+                x: getTownCenter(subject)?.[0],
+                y: getTownCenter(subject)?.[1]
             });
 
             initTownCulture(subject);
@@ -14107,7 +14320,7 @@
 
             happen("Influence", null, subject, { happy: 1 });
 
-            logMessage(`{{regname:town|${subject.id}}} erects a monument to {{b:${args.event.name}}}.`, "milestone");
+            logMessage(`{{regname:town|${subject.id}}} erects a monument to {{b:${getHistoryDisplayName(args.event)}}}.`, "milestone");
         }
     });
 
