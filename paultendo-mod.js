@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.0.2";
+    const MOD_VERSION = "1.0.3";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -63,6 +63,9 @@
                         }
                         if (checkFn && !checkFn(s, t, localArgs)) continue;
                         if (funcFn) funcFn(s, t, localArgs);
+                        if (data.messageDone) {
+                            Object.assign(baseArgs, localArgs);
+                        }
                     }
                 }
             };
@@ -7272,7 +7275,8 @@
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
-            return subject.drought && !subject.drought.ended;
+            if (!subject.drought || subject.drought.ended) return false;
+            return true;
         },
         func: (subject) => {
             const daysSinceStart = planet.day - subject.drought.day;
@@ -7336,7 +7340,8 @@
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
-            return subject.famine && !subject.famine.ended;
+            if (!subject.famine || subject.famine.ended) return false;
+            return true;
         },
         func: (subject) => {
             // Ongoing deaths
