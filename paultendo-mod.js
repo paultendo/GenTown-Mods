@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.1.6";
+    const MOD_VERSION = "1.1.9";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -685,7 +685,7 @@
 
         const ctx = canvasLayersCtx.terrain;
         const size = chunkSize;
-        const fogAlpha = DISCOVERY_CONFIG.fogAlpha;
+        const fogAlpha = getDiscoveryFogAlpha();
         if (fogAlpha <= 0) return;
 
         ctx.fillStyle = `rgba(8, 10, 14, ${fogAlpha})`;
@@ -696,6 +696,14 @@
             if (isLandmassDiscovered(chunk.v.g)) continue;
             ctx.fillRect(chunk.x * size, chunk.y * size, size, size);
         }
+    }
+
+    function getDiscoveryFogAlpha() {
+        const base = DISCOVERY_CONFIG.fogAlpha;
+        const scale = typeof getWorldScaleSetting === "function" ? getWorldScaleSetting() : 1;
+        if (!scale || scale <= 1) return base;
+        const divisor = 1 + (scale - 1) * 0.6;
+        return clampValue(base / divisor, 0.25, base);
     }
 
     function getMarkerLandmassId(marker) {
@@ -842,6 +850,160 @@
         return userSettings.paultendoWorldScale || 1;
     }
 
+    function updateMarkerResolutionForScale(scaleOverride = null) {
+        if (typeof $c === "undefined") return;
+        if (!$c._paultendoMarkerResolutionBase) {
+            $c._paultendoMarkerResolutionBase = $c.markerResolution || 2;
+        }
+        const scale = scaleOverride || (typeof getWorldScaleSetting === "function" ? getWorldScaleSetting() : 1);
+        if (!scale || scale <= 1) {
+            $c.markerResolution = $c._paultendoMarkerResolutionBase;
+            return;
+        }
+        const boost = 1 + (scale - 1) * 0.4;
+        const target = $c._paultendoMarkerResolutionBase * boost;
+        $c.markerResolution = Math.max(1.5, Math.min(3, target));
+    }
+
+    function setMapZoom(scale) {
+        if (typeof mapCanvas === "undefined" || !mapCanvas) return false;
+        const clamped = Math.max(0.6, Math.min(2, scale));
+        mapCanvas.style.scale = clamped.toString();
+        if (typeof currentZoom !== "undefined") currentZoom = clamped;
+        if (clamped <= 1) {
+            mapCanvas.classList.remove("zoomed");
+            mapCanvas.style.translate = "";
+        } else {
+            mapCanvas.classList.add("zoomed");
+        }
+        return true;
+    }
+
+    function getMapFitScale() {
+        if (typeof mapCanvas === "undefined" || !mapCanvas) return 1;
+        const mapDiv = document.getElementById("mapDiv");
+        if (!mapDiv) return 1;
+        const canvasRect = mapCanvas.getBoundingClientRect();
+        const divRect = mapDiv.getBoundingClientRect();
+        if (!canvasRect.width || !canvasRect.height) return 1;
+        const scaleW = divRect.width / canvasRect.width;
+        const scaleH = divRect.height / canvasRect.height;
+        return Math.min(1, scaleW, scaleH);
+    }
+
+    function applyScaleAwareZoom(force = false) {
+        if (typeof mapCanvas === "undefined" || !mapCanvas) return false;
+        const current = parseFloat(mapCanvas.style.scale) || 1;
+        if (!force && current !== 1) return false;
+        const scale = getWorldScaleSetting();
+        if (!scale || scale <= 1) return false;
+        const fitScale = getMapFitScale();
+        if (fitScale >= 0.98) return false;
+        return setMapZoom(fitScale);
+    }
+
+    function ensureMapControls() {
+        if (typeof document === "undefined") return;
+        const mapDiv = document.getElementById("mapDiv");
+        if (!mapDiv || document.getElementById("paultendoMapControls")) return;
+
+        const controls = document.createElement("div");
+        controls.id = "paultendoMapControls";
+        controls.style.position = "absolute";
+        controls.style.top = "6px";
+        controls.style.right = "6px";
+        controls.style.display = "flex";
+        controls.style.gap = "6px";
+        controls.style.zIndex = "6";
+        controls.style.pointerEvents = "auto";
+
+        const makeButton = (label, handler) => {
+            const btn = document.createElement("button");
+            btn.textContent = label;
+            btn.style.background = "rgba(40,40,40,0.8)";
+            btn.style.color = "white";
+            btn.style.border = "1px solid rgba(200,200,200,0.4)";
+            btn.style.borderRadius = "6px";
+            btn.style.padding = "2px 6px";
+            btn.style.fontFamily = "VT323, monospace";
+            btn.style.fontSize = "14px";
+            btn.style.cursor = "pointer";
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                handler();
+            });
+            return btn;
+        };
+
+        controls.appendChild(makeButton("Fit", () => {
+            applyScaleAwareZoom(true);
+        }));
+        controls.appendChild(makeButton("Reset", () => {
+            setMapZoom(1);
+        }));
+
+        mapDiv.appendChild(controls);
+    }
+
+    function ensureMapHoverOverlay() {
+        if (typeof document === "undefined") return null;
+        const mapDiv = document.getElementById("mapDiv");
+        if (!mapDiv) return null;
+        let overlay = document.getElementById("paultendoMapHover");
+        if (!overlay) {
+            overlay = document.createElement("div");
+            overlay.id = "paultendoMapHover";
+            overlay.style.position = "absolute";
+            overlay.style.left = "6px";
+            overlay.style.bottom = "6px";
+            overlay.style.padding = "2px 6px";
+            overlay.style.borderRadius = "6px";
+            overlay.style.background = "rgba(15,15,15,0.65)";
+            overlay.style.color = "rgba(255,255,255,0.9)";
+            overlay.style.fontFamily = "VT323, monospace";
+            overlay.style.fontSize = "14px";
+            overlay.style.pointerEvents = "none";
+            overlay.style.zIndex = "6";
+            mapDiv.appendChild(overlay);
+        }
+        return overlay;
+    }
+
+    function updateMapHoverOverlay() {
+        const overlay = ensureMapHoverOverlay();
+        if (!overlay) return;
+        if (!mousePos) {
+            overlay.style.opacity = "0";
+            return;
+        }
+        overlay.style.opacity = "1";
+        const chunkKey = mousePos.chunkX + "," + mousePos.chunkY;
+        const chunk = planet && planet.chunks ? planet.chunks[chunkKey] : null;
+        const biome = chunk?.b ? chunk.b : "unknown";
+        overlay.textContent = `x:${mousePos.x} y:${mousePos.y} · ${biome}`;
+    }
+
+    function drawCursorCrosshair() {
+        if (!mousePos || typeof canvasLayersCtx === "undefined") return;
+        const ctx = canvasLayersCtx.cursor;
+        if (!ctx || typeof chunkSize === "undefined") return;
+        const size = chunkSize;
+        const x0 = mousePos.chunkX * size;
+        const y0 = mousePos.chunkY * size;
+        const midX = x0 + size / 2;
+        const midY = y0 + size / 2;
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.lineWidth = Math.max(1, Math.floor(size / 4));
+        ctx.beginPath();
+        ctx.moveTo(x0, midY);
+        ctx.lineTo(x0 + size, midY);
+        ctx.moveTo(midX, y0);
+        ctx.lineTo(midX, y0 + size);
+        ctx.stroke();
+        ctx.restore();
+    }
+
     function applyWorldScale() {
         if (typeof generatePlanet !== "function") return;
         if (generatePlanet._paultendoWorldScale) return;
@@ -874,6 +1036,7 @@
                 planetWidth = baseWidth;
                 planetHeight = baseHeight;
             }
+            updateMarkerResolutionForScale(scale);
             const planet = baseGeneratePlanet.apply(this, args);
             if (typeof resizeCanvases === "function") {
                 try { resizeCanvases(); } catch {}
@@ -881,6 +1044,8 @@
             if (typeof fitToScreen === "function") {
                 try { fitToScreen(); } catch {}
             }
+            try { applyScaleAwareZoom(); } catch {}
+            try { ensureMapControls(); } catch {}
             return planet;
         };
 
@@ -897,6 +1062,7 @@
         const mismatch = mapCanvas.width !== expectedW || mapCanvas.height !== expectedH;
         if (!mismatch) return false;
 
+        updateMarkerResolutionForScale();
         if (typeof resizeCanvases === "function") {
             try { resizeCanvases(); } catch {}
         } else {
@@ -906,6 +1072,8 @@
         if (typeof fitToScreen === "function") {
             try { fitToScreen(); } catch {}
         }
+        try { applyScaleAwareZoom(); } catch {}
+        try { ensureMapControls(); } catch {}
         return true;
     }
 
@@ -915,6 +1083,8 @@
     if (typeof window !== "undefined") {
         window.addEventListener("load", () => {
             try { ensureMapCanvasSync(); } catch {}
+            try { ensureMapControls(); } catch {}
+            try { applyScaleAwareZoom(); } catch {}
         });
     }
 
@@ -947,6 +1117,27 @@
 
     if (!initDiscoveryRenderHooks() && typeof window !== "undefined") {
         window.addEventListener("load", () => { initDiscoveryRenderHooks(); });
+    }
+
+    if (typeof renderCursor === "function" && !renderCursor._paultendoCrosshair) {
+        const baseRenderCursor = renderCursor;
+        renderCursor = function(...args) {
+            const result = baseRenderCursor.apply(this, args);
+            try { drawCursorCrosshair(); } catch {}
+            try { updateMapHoverOverlay(); } catch {}
+            return result;
+        };
+        renderCursor._paultendoCrosshair = true;
+    }
+
+    if (typeof handleCursor === "function" && !handleCursor._paultendoHoverOverlay) {
+        const baseHandleCursor = handleCursor;
+        handleCursor = function(...args) {
+            const result = baseHandleCursor.apply(this, args);
+            try { updateMapHoverOverlay(); } catch {}
+            return result;
+        };
+        handleCursor._paultendoHoverOverlay = true;
     }
 
     // -------------------------------------------------------------------------
@@ -10900,6 +11091,12 @@
         CULTURAL_ACHIEVEMENT: "cultural_achievement"
     };
 
+    const HISTORY_DETAIL_TYPE_MAP = {
+        art: HISTORY_TYPES.CULTURAL_ACHIEVEMENT,
+        scholarship: HISTORY_TYPES.CULTURAL_ACHIEVEMENT,
+        desertification: "ENVIRONMENTAL"
+    };
+
     // Figure types
     const FIGURE_TYPES = {
         HERO: { title: "Hero", adjectives: ["brave", "valiant", "legendary", "renowned"] },
@@ -10928,18 +11125,56 @@
         if (!planet.currentEra) {
             planet.currentEra = null;
         }
+        if (!planet._paultendoHistoryNormalized) {
+            for (const entry of planet.history) {
+                normalizeHistoryEntry(entry);
+            }
+            planet._paultendoHistoryNormalized = true;
+        }
+    }
+
+    function normalizeHistoryEntry(entry) {
+        if (!entry || entry.historyType) return;
+        const knownTypes = Object.values(HISTORY_TYPES);
+        if (knownTypes.includes(entry.type)) {
+            entry.historyType = entry.type;
+            return;
+        }
+        const mapped = HISTORY_DETAIL_TYPE_MAP[entry.type];
+        if (mapped) {
+            entry.historyType = mapped;
+            if (mapped === HISTORY_TYPES.CULTURAL_ACHIEVEMENT && !entry.achievementType) {
+                entry.achievementType = entry.type;
+            }
+            if (entry.subtype === undefined) entry.subtype = entry.type;
+            return;
+        }
+        if (entry.type) entry.historyType = entry.type;
     }
 
     // Record a historical event
     function recordHistory(type, data) {
         initHistory();
 
+        const payload = data ? { ...data } : {};
+        let detailType;
+        if (payload && Object.prototype.hasOwnProperty.call(payload, "type")) {
+            detailType = payload.type;
+            delete payload.type;
+        }
+
         const entry = {
             id: planet.history.length + 1,
             type: type,
+            historyType: type,
             day: planet.day,
-            ...data
+            ...payload
         };
+
+        if (detailType !== undefined) {
+            entry.detailType = detailType;
+            if (entry.subtype === undefined) entry.subtype = detailType;
+        }
 
         planet.history.push(entry);
         return entry;
@@ -10973,6 +11208,14 @@
         if (!planet._paultendoAnnalsMeta) {
             const maxId = planet.annals.reduce((max, entry) => Math.max(max, entry.id || 0), 0);
             planet._paultendoAnnalsMeta = { lastId: maxId };
+        }
+        if (!planet._paultendoAnnalsNormalized) {
+            for (const entry of planet.annals) {
+                if (!entry) continue;
+                if (typeof entry.title === "string") entry.title = normalizeLoreEntities(entry.title);
+                if (typeof entry.body === "string") entry.body = normalizeLoreEntities(entry.body);
+            }
+            planet._paultendoAnnalsNormalized = true;
         }
     }
 
@@ -11019,6 +11262,9 @@
     function recordAnnalsEntry(data) {
         if (!data || !data.title || !data.body) return null;
         initAnnals();
+
+        if (typeof data.title === "string") data.title = normalizeLoreEntities(data.title);
+        if (typeof data.body === "string") data.body = normalizeLoreEntities(data.body);
 
         if (data.sourceType && data.sourceId) {
             const existing = planet.annals.find(a =>
@@ -11113,6 +11359,36 @@
             default:
                 return null;
         }
+    }
+
+    function stripHtmlTags(text) {
+        if (!text || typeof text !== "string") return text;
+        if (text.indexOf("<") === -1) return text;
+        return text
+            .replace(/<[^>]*>/g, "")
+            .replace(/&nbsp;/g, " ")
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, "\"")
+            .replace(/&#39;/g, "'")
+            .trim();
+    }
+
+    function normalizeLoreEntities(text) {
+        if (!text || typeof text !== "string" || text.indexOf("entityName") === -1) return text;
+        let result = text;
+        result = result.replace(/<span[^>]*class=['"]entityName[^'"]*['"][^>]*data-reg=['"]([^'"]+)['"][^>]*data-id=['"]([^'"]+)['"][^>]*>[^<]*<\/span>/gi, (match, reg, id) => {
+            if (!reg || !id) return match;
+            return `{{regname:${reg}|${id}}}`;
+        });
+        return stripHtmlTags(result);
+    }
+
+    function formatLoreTitle(entry) {
+        const rawTitle = entry && entry.title ? normalizeLoreEntities(entry.title) : "a tale";
+        if (rawTitle.includes("{{")) return rawTitle;
+        return `{{b:${rawTitle}}}`;
     }
 
     const LORE_NUDGE_THEMES = ["war", "discovery", "faith", "revolution", "hardship", "myth", "diplomacy", "expansion", "culture"];
@@ -12083,7 +12359,7 @@
     // Query history by type
     function getHistoryByType(type, limit = null) {
         initHistory();
-        let results = planet.history.filter(h => h.type === type);
+        let results = planet.history.filter(h => (h.historyType || h.type) === type);
         if (limit) results = results.slice(-limit);
         return results;
     }
@@ -12106,7 +12382,8 @@
         initHistory();
         return planet.history.filter(h => {
             if (planet.day - h.day > days) return false;
-            if (types && !types.includes(h.type)) return false;
+            const historyType = h.historyType || h.type;
+            if (types && !types.includes(historyType)) return false;
             return true;
         });
     }
@@ -13369,7 +13646,7 @@
         },
         message: (subject, target, args) => {
             const townName = `{{regname:town|${args.town.id}}}`;
-            return `The Lore recalls {{b:${args.entry.title}}}. Perhaps you subtly encourage ${townName} to ${args.effect.label}? {{should}}`;
+            return `The Lore recalls ${formatLoreTitle(args.entry)}. Perhaps you subtly encourage ${townName} to ${args.effect.label}? {{should}}`;
         },
         func: (subject, target, args) => {
             const town = args.town;
