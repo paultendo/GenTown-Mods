@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.0.3";
+    const MOD_VERSION = "1.0.8";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -155,6 +155,820 @@
 
     function hasIssue(town, issueKey) {
         return !!(town && town.issues && town.issues[issueKey]);
+    }
+
+    // =========================================================================
+    // GENERAL HELPERS
+    // =========================================================================
+
+    function clampValue(value, min, max) {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
+
+    function weightedChoice(items, weightFn) {
+        if (!Array.isArray(items) || items.length === 0) return null;
+        let total = 0;
+        const weights = items.map((item) => {
+            const w = Math.max(0, weightFn(item));
+            total += w;
+            return w;
+        });
+        if (total <= 0) return null;
+        let roll = Math.random() * total;
+        for (let i = 0; i < items.length; i++) {
+            roll -= weights[i];
+            if (roll <= 0) return items[i];
+        }
+        return items[items.length - 1];
+    }
+
+    function getTownCenter(town) {
+        if (!town) return null;
+        if (!town.center && typeof happen === "function") {
+            try { happen("UpdateCenter", null, town); } catch {}
+        }
+        if (town.center && town.center.length >= 2) return town.center;
+        if (typeof town.x === "number" && typeof town.y === "number") return [town.x, town.y];
+        return null;
+    }
+
+    function getTownLandmassId(town) {
+        if (!town || typeof chunkAt !== "function") return null;
+        const center = getTownCenter(town);
+        if (!center) return null;
+        const chunk = chunkAt(center[0], center[1]);
+        return (chunk && chunk.v) ? chunk.v.g : null;
+    }
+
+    // =========================================================================
+    // DISCOVERY TIERS (progressive world discovery, tiered expansion)
+    // =========================================================================
+
+    const DISCOVERY_CONFIG = {
+        maxTier: 3, // 0 = homeland, 1..3 = farther horizons
+        fogAlpha: 0.55,
+        worldScaleDefault: 1.5
+    };
+
+    const DISCOVERY_TIER_NAMES = {
+        0: "Homelands",
+        1: "Near Seas",
+        2: "New World",
+        3: "Far East"
+    };
+
+    const DISCOVERY_TIER_REQUIREMENTS = {
+        1: { travel: 30, trade: 10, education: 5, towns: 2 },
+        2: { travel: 60, trade: 25, education: 15, towns: 4 },
+        3: { travel: 80, trade: 40, education: 30, towns: 6 }
+    };
+
+    function initDiscoveryState() {
+        if (!planet || !reg || !reg.landmass) return false;
+        if (!planet._paultendoDiscovery) {
+            planet._paultendoDiscovery = {
+                tier: 0,
+                discovered: [],
+                tiers: null,
+                centers: null,
+                maxTier: 0,
+                boost: 0,
+                boostUntil: 0
+            };
+        }
+        if (!Array.isArray(planet._paultendoDiscovery.discovered)) {
+            planet._paultendoDiscovery.discovered = [];
+        }
+        return true;
+    }
+
+    function getDiscoveryTier() {
+        if (!initDiscoveryState()) return 0;
+        return planet._paultendoDiscovery.tier || 0;
+    }
+
+    function setDiscoveryTier(tier) {
+        if (!initDiscoveryState()) return;
+        planet._paultendoDiscovery.tier = tier;
+    }
+
+    function getDiscoveryMaxTier() {
+        if (!initDiscoveryState()) return 0;
+        return planet._paultendoDiscovery.maxTier || 0;
+    }
+
+    function getDiscoveryTierName(tier) {
+        return DISCOVERY_TIER_NAMES[tier] || `Tier ${tier}`;
+    }
+
+    function computeLandmassCenters() {
+        if (!planet || !planet.chunks) return null;
+        const sums = {};
+        const counts = {};
+        for (const chunkKey in planet.chunks) {
+            const chunk = planet.chunks[chunkKey];
+            if (!chunk || !chunk.v || !chunk.v.g) continue;
+            const id = chunk.v.g;
+            if (!sums[id]) {
+                sums[id] = { x: 0, y: 0 };
+                counts[id] = 0;
+            }
+            sums[id].x += chunk.x;
+            sums[id].y += chunk.y;
+            counts[id] += 1;
+        }
+        const centers = {};
+        for (const [id, sum] of Object.entries(sums)) {
+            const count = counts[id] || 1;
+            centers[id] = { x: sum.x / count, y: sum.y / count };
+        }
+        if (initDiscoveryState()) {
+            planet._paultendoDiscovery.centers = centers;
+        }
+        return centers;
+    }
+
+    function getLandmassCenter(landmassId) {
+        if (!initDiscoveryState()) return null;
+        if (!planet._paultendoDiscovery.centers) {
+            computeLandmassCenters();
+        }
+        return planet._paultendoDiscovery.centers ? planet._paultendoDiscovery.centers[landmassId] : null;
+    }
+
+    function computeLandmassTiers() {
+        if (!initDiscoveryState()) return false;
+        const originTown = getOriginTown();
+        if (!originTown) return false;
+        const originLandmass = getTownLandmassId(originTown);
+        if (!originLandmass) return false;
+
+        const centers = planet._paultendoDiscovery.centers || computeLandmassCenters();
+        const originCenter = centers ? centers[originLandmass] : null;
+        if (!originCenter) return false;
+
+        const allLandmasses = regToArray("landmass");
+        if (!allLandmasses || allLandmasses.length === 0) return false;
+
+        const mainLandmasses = allLandmasses.filter(l => l && l.type !== "mountain");
+        const mountains = allLandmasses.filter(l => l && l.type === "mountain");
+
+        const others = mainLandmasses.filter(l => l.id !== originLandmass);
+        const distances = others.map(l => {
+            const center = centers[l.id];
+            if (!center) return null;
+            const dx = center.x - originCenter.x;
+            const dy = center.y - originCenter.y;
+            return { id: l.id, dist: Math.sqrt(dx * dx + dy * dy) };
+        }).filter(Boolean);
+
+        distances.sort((a, b) => a.dist - b.dist);
+
+        const maxTier = Math.min(DISCOVERY_CONFIG.maxTier, distances.length > 0 ? DISCOVERY_CONFIG.maxTier : 0);
+        const perTier = maxTier > 0 ? Math.ceil(distances.length / maxTier) : distances.length;
+
+        const tiers = {};
+        tiers[originLandmass] = 0;
+        for (let i = 0; i < distances.length; i++) {
+            const tier = maxTier > 0 ? Math.min(maxTier, Math.floor(i / perTier) + 1) : 0;
+            tiers[distances[i].id] = tier;
+        }
+
+        // Assign mountain landmasses to nearest main landmass tier
+        for (let i = 0; i < mountains.length; i++) {
+            const mountain = mountains[i];
+            const center = centers[mountain.id];
+            if (!center) continue;
+            const nearest = weightedChoice(mainLandmasses, (m) => {
+                const mCenter = centers[m.id];
+                if (!mCenter) return 0;
+                const dx = mCenter.x - center.x;
+                const dy = mCenter.y - center.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                return dist > 0 ? 1 / dist : 1;
+            });
+            if (nearest && tiers[nearest.id] !== undefined) {
+                tiers[mountain.id] = tiers[nearest.id];
+            } else {
+                tiers[mountain.id] = 0;
+            }
+        }
+
+        planet._paultendoDiscovery.tiers = tiers;
+        planet._paultendoDiscovery.maxTier = maxTier;
+        return true;
+    }
+
+    function getLandmassTier(landmassId) {
+        if (!initDiscoveryState()) return 0;
+        if (!planet._paultendoDiscovery.tiers) {
+            computeLandmassTiers();
+        }
+        return planet._paultendoDiscovery.tiers && planet._paultendoDiscovery.tiers[landmassId] !== undefined
+            ? planet._paultendoDiscovery.tiers[landmassId]
+            : 0;
+    }
+
+    function isLandmassDiscovered(landmassId) {
+        if (!initDiscoveryState()) return true;
+        return planet._paultendoDiscovery.discovered.includes(landmassId);
+    }
+
+    function discoverLandmass(landmassId, town, reason = "discovered") {
+        if (!initDiscoveryState()) return false;
+        if (!landmassId) return false;
+        if (planet._paultendoDiscovery.discovered.includes(landmassId)) return false;
+        planet._paultendoDiscovery.discovered.push(landmassId);
+
+        const landmass = regGet("landmass", landmassId);
+        const name = landmass ? landmass.name : "unknown lands";
+        if (town) {
+            logMessage(`Explorers from {{regname:town|${town.id}}} ${reason} {{regname:landmass|${landmassId}}}!`, "milestone");
+        } else {
+            logMessage(`The ${name} are ${reason}.`, "milestone");
+        }
+        return true;
+    }
+
+    function isLandmassReachable(landmassId) {
+        if (!initDiscoveryState()) return true;
+        if (!landmassId) return false;
+        if (isLandmassDiscovered(landmassId)) return true;
+        return getLandmassTier(landmassId) <= getDiscoveryTier();
+    }
+
+    function getOriginTown() {
+        const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+        if (!towns.length) return null;
+        return towns.reduce((oldest, town) => {
+            if (!oldest) return town;
+            const oldStart = oldest.start || 0;
+            const newStart = town.start || 0;
+            return newStart < oldStart ? town : oldest;
+        }, null);
+    }
+
+    function refreshDiscoveryForExistingTowns() {
+        if (!initDiscoveryState()) return;
+        const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+        for (const town of towns) {
+            const landmassId = getTownLandmassId(town);
+            if (landmassId && !isLandmassDiscovered(landmassId)) {
+                discoverLandmass(landmassId, town, "establish contact with");
+            }
+        }
+    }
+
+    function discoveryTierPrereqsMet(tier) {
+        const req = DISCOVERY_TIER_REQUIREMENTS[tier];
+        if (!req) return false;
+        const travel = planet.unlocks?.travel || 0;
+        const trade = planet.unlocks?.trade || 0;
+        const education = planet.unlocks?.education || 0;
+        const towns = regCount("town");
+
+        if (travel < req.travel) return false;
+        if (trade < req.trade) return false;
+        if (education < req.education) return false;
+        if (towns < req.towns) return false;
+        return true;
+    }
+
+    function getDiscoveryAdvanceChance(tier) {
+        const req = DISCOVERY_TIER_REQUIREMENTS[tier];
+        if (!req) return 0;
+        const travel = planet.unlocks?.travel || 0;
+        const trade = planet.unlocks?.trade || 0;
+        const education = planet.unlocks?.education || 0;
+        const towns = regCount("town");
+
+        let chance = tier === 1 ? 0.002 : tier === 2 ? 0.0015 : 0.001;
+        chance += Math.max(0, travel - req.travel) * 0.0002;
+        chance += Math.max(0, trade - req.trade) * 0.00015;
+        chance += Math.max(0, education - req.education) * 0.00015;
+        chance += Math.max(0, towns - req.towns) * 0.0003;
+
+        if (planet._paultendoDiscovery && planet._paultendoDiscovery.boostUntil > planet.day) {
+            chance += planet._paultendoDiscovery.boost || 0;
+        }
+
+        return Math.min(0.05, chance);
+    }
+
+    function attemptDiscoveryTierAdvance() {
+        if (!initDiscoveryState()) return false;
+        if (!planet || !planet.unlocks) return false;
+        if (!planet._paultendoDiscovery.tiers) {
+            computeLandmassTiers();
+        }
+        const currentTier = getDiscoveryTier();
+        const maxTier = getDiscoveryMaxTier();
+        if (currentTier >= maxTier) return false;
+
+        const nextTier = currentTier + 1;
+        if (!discoveryTierPrereqsMet(nextTier)) return false;
+
+        const chance = getDiscoveryAdvanceChance(nextTier);
+        if (Math.random() < chance) {
+            setDiscoveryTier(nextTier);
+            logMessage(`New horizons open: {{b:${getDiscoveryTierName(nextTier)}}} now lie within reach.`, "milestone");
+            return true;
+        }
+        return false;
+    }
+
+    function discoverReachableLandmass() {
+        if (!initDiscoveryState()) return false;
+        const reachableTier = getDiscoveryTier();
+        const undiscovered = regFilter("landmass", l =>
+            l && !isLandmassDiscovered(l.id) && getLandmassTier(l.id) <= reachableTier
+        );
+        if (undiscovered.length === 0) return false;
+
+        const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+        if (towns.length === 0) return false;
+
+        const explorer = weightedChoice(towns, (t) => {
+            const travel = t.influences?.travel || 0;
+            const trade = t.influences?.trade || 0;
+            const education = t.influences?.education || 0;
+            return 1 + travel * 0.6 + trade * 0.4 + education * 0.2;
+        }) || choose(towns);
+
+        const targetLandmass = weightedChoice(undiscovered, (l) => {
+            const tier = getLandmassTier(l.id);
+            return tier === reachableTier ? 1.5 : 1;
+        });
+
+        if (!targetLandmass) return false;
+        discoverLandmass(targetLandmass.id, explorer, "chart");
+        return true;
+    }
+
+    function renderDiscoveryFog() {
+        if (!initDiscoveryState()) return;
+        if (!canvasLayersCtx || !canvasLayersCtx.terrain) return;
+        if (typeof chunkSize === "undefined") return;
+
+        const ctx = canvasLayersCtx.terrain;
+        const size = chunkSize;
+        const fogAlpha = DISCOVERY_CONFIG.fogAlpha;
+        if (fogAlpha <= 0) return;
+
+        ctx.fillStyle = `rgba(8, 10, 14, ${fogAlpha})`;
+
+        for (const chunkKey in planet.chunks) {
+            const chunk = planet.chunks[chunkKey];
+            if (!chunk || !chunk.v || !chunk.v.g) continue;
+            if (isLandmassDiscovered(chunk.v.g)) continue;
+            ctx.fillRect(chunk.x * size, chunk.y * size, size, size);
+        }
+    }
+
+    function getMarkerLandmassId(marker) {
+        if (!marker || typeof chunkAt !== "function") return null;
+        if (typeof marker.x === "number" && typeof marker.y === "number") {
+            const chunk = chunkAt(marker.x, marker.y);
+            return chunk && chunk.v ? chunk.v.g : null;
+        }
+        if (marker.town) {
+            const town = regGet("town", marker.town);
+            return town ? getTownLandmassId(town) : null;
+        }
+        return null;
+    }
+
+    function shouldShowMarker(marker) {
+        const landmassId = getMarkerLandmassId(marker);
+        if (!landmassId) return true;
+        return isLandmassDiscovered(landmassId);
+    }
+
+    // Apply discovery-aware filters to chunk selection during expansion
+    function withDiscoveryFilter(filterFn, func) {
+        const prev = window._paultendoDiscoveryFilter;
+        window._paultendoDiscoveryFilter = filterFn;
+        try { return func(); } finally { window._paultendoDiscoveryFilter = prev; }
+    }
+
+    function initDiscoveryChunkFilters() {
+        if (typeof filterChunks === "function" && !filterChunks._paultendoDiscovery) {
+            const baseFilterChunks = filterChunks;
+            filterChunks = function(check) {
+                const filter = window._paultendoDiscoveryFilter;
+                if (!filter) return baseFilterChunks(check);
+                const combined = (c) => filter(c) && check(c);
+                return baseFilterChunks(combined);
+            };
+            filterChunks._paultendoDiscovery = true;
+        }
+        if (typeof nearestChunk === "function" && !nearestChunk._paultendoDiscovery) {
+            const baseNearestChunk = nearestChunk;
+            nearestChunk = function(chunkX, chunkY, check, stop) {
+                const filter = window._paultendoDiscoveryFilter;
+                if (!filter) return baseNearestChunk(chunkX, chunkY, check, stop);
+                const combined = (c) => filter(c) && check(c);
+                return baseNearestChunk(chunkX, chunkY, combined, stop);
+            };
+            nearestChunk._paultendoDiscovery = true;
+        }
+        if (typeof floodFill === "function" && !floodFill._paultendoDiscovery) {
+            const baseFloodFill = floodFill;
+            floodFill = function(chunkX, chunkY, check, limit, stopAt) {
+                const filter = window._paultendoDiscoveryFilter;
+                if (!filter) return baseFloodFill(chunkX, chunkY, check, limit, stopAt);
+                const combined = (c) => filter(c) && check(c);
+                return baseFloodFill(chunkX, chunkY, combined, limit, stopAt);
+            };
+            floodFill._paultendoDiscovery = true;
+        }
+    }
+
+    function initDiscoveryHooks() {
+        initDiscoveryChunkFilters();
+
+        let hooked = false;
+        if (typeof gameEvents !== "undefined" && gameEvents) {
+            if (gameEvents.townExpand && typeof gameEvents.townExpand.func === "function" &&
+                !gameEvents.townExpand.func._paultendoDiscovery) {
+                const baseExpand = gameEvents.townExpand.func;
+                gameEvents.townExpand.func = function(subject, target, args) {
+                    return withDiscoveryFilter(
+                        (chunk) => {
+                            if (!chunk || !chunk.v || !chunk.v.g) return false;
+                            return isLandmassReachable(chunk.v.g);
+                        },
+                        () => baseExpand(subject, target, args)
+                    );
+                };
+                gameEvents.townExpand.func._paultendoDiscovery = true;
+                hooked = true;
+            }
+
+            if (gameEvents.townBoat && typeof gameEvents.townBoat.func === "function" &&
+                !gameEvents.townBoat.func._paultendoDiscovery) {
+                const baseBoat = gameEvents.townBoat.func;
+                gameEvents.townBoat.func = function(subject, target, args) {
+                    return withDiscoveryFilter(
+                        (chunk) => {
+                            if (!chunk || !chunk.v || !chunk.v.g) return false;
+                            return isLandmassReachable(chunk.v.g);
+                        },
+                        () => {
+                            const result = baseBoat(subject, target, args);
+                            if (args && args.value && args.value.v && args.value.v.g) {
+                                const landmassId = args.value.v.g;
+                                if (!isLandmassDiscovered(landmassId)) {
+                                    discoverLandmass(landmassId, subject, "reach");
+                                }
+                            }
+                            return result;
+                        }
+                    );
+                };
+                gameEvents.townBoat.func._paultendoDiscovery = true;
+                hooked = true;
+            }
+        }
+        return hooked;
+    }
+
+    // World scale adjustment (new worlds only, optional)
+    function createGeneratedPerlinWithResizing(scale) {
+        function generatePerlinNoise(x, y, octaves, persistence) {
+            x *= scale;
+            y *= scale;
+            let total = 0;
+            let frequency = 1;
+            let amplitude = 1;
+            let maxValue = 0;
+
+            for (let i = 0; i < octaves; i++) {
+                total += noise.perlin2(x * frequency, y * frequency) * amplitude;
+                maxValue += amplitude;
+                amplitude *= persistence;
+                frequency *= 2;
+            }
+            return total / maxValue;
+        }
+        return generatePerlinNoise;
+    }
+
+    function getWorldScaleSetting() {
+        if (typeof userSettings === "undefined" || !userSettings) return 1;
+        if (userSettings.worldConfigurator__resolution ||
+            userSettings.worldConfigurator__continentSize ||
+            userSettings.worldConfigurator__chunkScale ||
+            userSettings.worldConfigurator__waterLevel) {
+            return 1;
+        }
+        if (userSettings.paultendoWorldScale === undefined) {
+            userSettings.paultendoWorldScale = DISCOVERY_CONFIG.worldScaleDefault;
+            if (typeof saveSettings === "function") saveSettings();
+        }
+        return userSettings.paultendoWorldScale || 1;
+    }
+
+    function applyWorldScale() {
+        if (typeof generatePlanet !== "function") return;
+        if (generatePlanet._paultendoWorldScale) return;
+
+        const baseWidth = (typeof $c !== "undefined" && $c.defaultPlanetWidth) ? $c.defaultPlanetWidth : 200;
+        const baseHeight = (typeof $c !== "undefined" && $c.defaultPlanetHeight) ? $c.defaultPlanetHeight : 120;
+        const baseGeneratePlanet = generatePlanet;
+        const basePerlin = typeof generatePerlinNoise === "function" ? generatePerlinNoise : null;
+
+        generatePlanet = function(...args) {
+            const scale = getWorldScaleSetting();
+            if (scale && scale !== 1) {
+                const scaledWidth = Math.round(baseWidth * scale);
+                const scaledHeight = Math.round(baseHeight * scale);
+                planetWidth = scaledWidth;
+                planetHeight = scaledHeight;
+                if (typeof $c !== "undefined") {
+                    $c.defaultPlanetWidth = scaledWidth;
+                    $c.defaultPlanetHeight = scaledHeight;
+                }
+                if (typeof noise !== "undefined" && typeof createGeneratedPerlinWithResizing === "function") {
+                    generatePerlinNoise = createGeneratedPerlinWithResizing(1 / scale);
+                }
+            } else if (basePerlin) {
+                generatePerlinNoise = basePerlin;
+                if (typeof $c !== "undefined") {
+                    $c.defaultPlanetWidth = baseWidth;
+                    $c.defaultPlanetHeight = baseHeight;
+                }
+                planetWidth = baseWidth;
+                planetHeight = baseHeight;
+            }
+            return baseGeneratePlanet.apply(this, args);
+        };
+
+        generatePlanet._paultendoWorldScale = true;
+    }
+
+    applyWorldScale();
+    if (!initDiscoveryHooks() && typeof window !== "undefined") {
+        window.addEventListener("load", () => { initDiscoveryHooks(); });
+    }
+
+    function initDiscoveryRenderHooks() {
+        let hooked = false;
+        if (typeof regToArray === "function" && !regToArray._paultendoMarkerFilter) {
+            const baseRegToArray = regToArray;
+            regToArray = function(regName, includeDead) {
+                const results = baseRegToArray(regName, includeDead);
+                if (regName !== "marker" || !window._paultendoMarkerFilter) return results;
+                return results.filter(shouldShowMarker);
+            };
+            regToArray._paultendoMarkerFilter = true;
+            hooked = true;
+        }
+        if (typeof renderMarkers === "function" && !renderMarkers._paultendoDiscovery) {
+            const baseRenderMarkers = renderMarkers;
+            renderMarkers = function() {
+                if (!initDiscoveryState()) return baseRenderMarkers();
+                const prev = window._paultendoMarkerFilter;
+                window._paultendoMarkerFilter = true;
+                try { return baseRenderMarkers(); }
+                finally { window._paultendoMarkerFilter = prev; }
+            };
+            renderMarkers._paultendoDiscovery = true;
+            hooked = true;
+        }
+        return hooked;
+    }
+
+    if (!initDiscoveryRenderHooks() && typeof window !== "undefined") {
+        window.addEventListener("load", () => { initDiscoveryRenderHooks(); });
+    }
+
+    // -------------------------------------------------------------------------
+    // Discovery Events (tiers, expeditions, and landmass reveals)
+    // -------------------------------------------------------------------------
+
+    modEvent("discoveryInit", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        value: () => {
+            if (!planet || !reg || !reg.landmass) return false;
+            if (planet._paultendoDiscoveryReady) return false;
+            return true;
+        },
+        func: () => {
+            initDiscoveryState();
+            const ok = computeLandmassTiers();
+            if (ok) {
+                refreshDiscoveryForExistingTowns();
+                planet._paultendoDiscoveryReady = true;
+            }
+        }
+    });
+
+    modEvent("discoveryTierAdvance", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        func: () => {
+            attemptDiscoveryTierAdvance();
+        }
+    });
+
+    modEvent("discoveryTownReveal", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject, target, args) => {
+            const landmassId = getTownLandmassId(subject);
+            if (!landmassId) return false;
+            if (isLandmassDiscovered(landmassId)) return false;
+            args.landmassId = landmassId;
+            return true;
+        },
+        func: (subject, target, args) => {
+            discoverLandmass(args.landmassId, subject, "establish contact with");
+        }
+    });
+
+    modEvent("discoveryExpedition", {
+        random: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!initDiscoveryState()) return false;
+            if (!planet.unlocks?.travel || planet.unlocks.travel < 30) return false;
+            const tier = getDiscoveryTier();
+            if (tier < 1) return false;
+            const undiscovered = regFilter("landmass", l =>
+                l && !isLandmassDiscovered(l.id) && getLandmassTier(l.id) <= tier
+            );
+            if (undiscovered.length === 0) return false;
+            if ((subject.influences?.travel || 0) < 1) return false;
+            return true;
+        },
+        func: () => {
+            discoverReachableLandmass();
+        }
+    });
+
+    modEvent("swayDiscoveryExpedition", {
+        random: true,
+        weight: $c.VERY_RARE,
+        subject: { reg: "player", id: 1 },
+        target: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!initDiscoveryState()) return false;
+            const nextTier = getDiscoveryTier() + 1;
+            if (nextTier > getDiscoveryMaxTier()) return false;
+            const req = DISCOVERY_TIER_REQUIREMENTS[nextTier];
+            if (!req) return false;
+            if ((planet.unlocks?.travel || 0) < Math.max(10, req.travel - 10)) return false;
+            if ((target.influences?.travel || 0) < 1) return false;
+            args.tier = nextTier;
+            return true;
+        },
+        message: (subject, target, args) => {
+            return `Navigators in {{regname:town|${target.id}}} propose an ambitious expedition toward the {{b:${getDiscoveryTierName(args.tier)}}}. Support it? {{should}}`;
+        },
+        messageDone: "You fund the expedition's preparations.",
+        messageNo: "You let the idea fade for now.",
+        func: (subject, target, args) => {
+            initDiscoveryState();
+            planet._paultendoDiscovery.boost = Math.min(0.01, (planet._paultendoDiscovery.boost || 0) + 0.002);
+            planet._paultendoDiscovery.boostUntil = planet.day + 30;
+            happen("Influence", null, target, { travel: 0.5, education: 0.2, temp: true });
+            logMessage(`Explorers from {{regname:town|${target.id}}} outfit ships and charts for distant horizons.`);
+        }
+    });
+
+    // =========================================================================
+    // DIVINE GUIDANCE COOLDOWNS (subtle hints, not faith penalties)
+    // =========================================================================
+
+    function initGuidanceState(town) {
+        if (!town) return null;
+        if (!town._paultendoGuidance) {
+            town._paultendoGuidance = { last: {}, fatigue: {} };
+        }
+        return town._paultendoGuidance;
+    }
+
+    function canReceiveGuidance(town, key, cooldownDays) {
+        const state = initGuidanceState(town);
+        if (!state) return false;
+        const last = state.last[key];
+        if (last === undefined) return true;
+        return (planet.day - last) >= cooldownDays;
+    }
+
+    function guidanceFatigue(town, key) {
+        const state = initGuidanceState(town);
+        if (!state) return 0;
+        return state.fatigue[key] || 0;
+    }
+
+    function noteGuidance(town, key, success) {
+        const state = initGuidanceState(town);
+        if (!state) return;
+        state.last[key] = planet.day;
+        if (success === true) {
+            state.fatigue[key] = Math.max(0, (state.fatigue[key] || 0) - 1);
+        } else if (success === false) {
+            state.fatigue[key] = Math.min(3, (state.fatigue[key] || 0) + 1);
+        }
+    }
+
+    // =========================================================================
+    // HOSPITAL HELPERS (marker-backed when possible)
+    // =========================================================================
+
+    function getTownHospitalsRaw(town) {
+        if (!town) return [];
+        return regFilter("marker", m => m.town === town.id && m.subtype === "hospital");
+    }
+
+    function getTownMarkersBySubtype(town, subtype) {
+        if (!town) return [];
+        return regFilter("marker", m => m.town === town.id && m.subtype === subtype);
+    }
+
+    function attachMarkerToChunk(marker, chunk) {
+        if (!marker || !chunk || !chunk.v || chunk.v.m) return;
+        chunk.v.m = marker.id;
+    }
+
+    function attachMarkerToTownChunk(marker, town) {
+        if (!marker || !town) return;
+        if (typeof chunkAt !== "function") return;
+        if (typeof town.x !== "number" || typeof town.y !== "number") return;
+        const chunk = chunkAt(town.x, town.y);
+        attachMarkerToChunk(marker, chunk);
+    }
+
+    function findTownMarkerSpot(town) {
+        if (!town) return null;
+        if (typeof filterChunks !== "function" || typeof chunkAt !== "function") return null;
+        if (typeof adjacentCoords === "undefined") return null;
+
+        const choices = filterChunks((c) => {
+            if (!c || !c.v) return false;
+            if (c.v.s !== town.id) return false;
+            if (c.v.m) return false;
+            for (let i = 0; i < adjacentCoords.length; i++) {
+                const coords = adjacentCoords[i];
+                const c2 = chunkAt(c.x + coords[0], c.y + coords[1]);
+                if (!c2 || !c2.v || c2.v.s !== c.v.s) return false;
+            }
+            return true;
+        });
+        if (!choices || choices.length === 0) return null;
+        return choose(choices);
+    }
+
+    function ensureHospitalMarker(town) {
+        if (!town || !town.hasHospital) return;
+        const existing = getTownHospitalsRaw(town);
+        if (existing.length === 0) {
+            const created = createHospital(town);
+            if (!created) return;
+        }
+        delete town.hasHospital;
+    }
+
+    function getTownHospitals(town) {
+        ensureHospitalMarker(town);
+        return getTownHospitalsRaw(town);
+    }
+
+    function hasHospital(town) {
+        if (!town) return false;
+        return getTownHospitals(town).length > 0;
+    }
+
+    function createHospital(town) {
+        if (!town) return false;
+        const existing = getTownHospitalsRaw(town);
+        if (existing.length > 0) return false;
+        const spot = findTownMarkerSpot(town);
+        const x = spot ? spot.x : town.x;
+        const y = spot ? spot.y : town.y;
+        if (typeof x === "number" && typeof y === "number") {
+            const marker = happen("Create", null, null, {
+                type: "landmark",
+                name: "Hospital",
+                subtype: "hospital",
+                symbol: "H",
+                color: [200, 60, 60],
+                x: x,
+                y: y
+            }, "marker");
+            if (marker) {
+                if (spot) attachMarkerToChunk(marker, spot);
+                else attachMarkerToTownChunk(marker, town);
+                return true;
+            }
+        }
+        return false;
     }
 
     // =========================================================================
@@ -2227,6 +3041,81 @@
         return SPECIALIZATION_ALIASES[specId] || specId;
     }
 
+    // Specializations that imply a notable place get map markers
+    const SPECIALIZATION_MARKERS = {
+        grandLibrary: {
+            name: "Grand Library",
+            subtype: "grandLibrary",
+            symbol: "L",
+            color: [214, 180, 79]
+        },
+        academy: {
+            name: "Academy",
+            subtype: "academy",
+            symbol: "A",
+            color: [235, 218, 66]
+        },
+        merchantGuild: {
+            name: "Merchant Guildhall",
+            subtype: "merchantGuild",
+            symbol: "G",
+            color: [0, 145, 82]
+        },
+        tradingHub: {
+            name: "Trading Hub",
+            subtype: "tradingHub",
+            symbol: "$",
+            color: [0, 170, 100]
+        },
+        fortress: {
+            name: "Fortress",
+            subtype: "fortress",
+            symbol: "F",
+            color: [176, 148, 172]
+        },
+        sacredSite: {
+            name: "Sacred Site",
+            subtype: "sacredSite",
+            symbol: "*",
+            color: [204, 82, 192]
+        },
+        masterSmiths: {
+            name: "Great Forge",
+            subtype: "masterSmiths",
+            symbol: "S",
+            color: [176, 176, 176],
+            condition: (town) => (planet.unlocks?.smith || 0) >= 30
+        },
+        holyOrder: {
+            name: "Holy Order",
+            subtype: "holyOrder",
+            symbol: "O",
+            color: [204, 82, 192],
+            condition: (town) => getTownMarkersBySubtype(town, "temple").length > 0 ||
+                ((town.influences?.faith || 0) >= 8 && (town.pop || 0) >= 80)
+        },
+        warriorClan: {
+            name: "Warrior Hall",
+            subtype: "warriorClan",
+            symbol: "W",
+            color: [176, 148, 172],
+            condition: (town) => (
+                ((planet.unlocks?.military || 0) >= 20 || (town.influences?.military || 0) >= 8) &&
+                (town.pop || 0) >= 80 &&
+                getTownMarkersBySubtype(town, "fortress").length === 0
+            )
+        },
+        healers: {
+            name: "Clinic",
+            subtype: "clinic",
+            symbol: "+",
+            color: [200, 60, 60],
+            condition: (town) => !hasHospital(town) &&
+                (planet.unlocks?.education || 0) >= 40 &&
+                (town.pop || 0) >= 80
+        }
+    };
+
     // Initialize specializations for a town
     function initTownSpecializations(town) {
         if (!town.specializations) {
@@ -2281,6 +3170,7 @@
             for (const [influence, bonus] of Object.entries(spec.bonuses)) {
                 town.influences[influence] = (town.influences[influence] || 0) + bonus;
             }
+            ensureSpecializationMarker(town, specId);
         }
         return true;
     }
@@ -2312,6 +3202,40 @@
 
     function hasTownSpecialization(town, specId) {
         return hasSpecialization(town, specId);
+    }
+
+    function ensureSpecializationMarker(town, specId) {
+        const normalizedId = normalizeSpecId(specId);
+        const def = SPECIALIZATION_MARKERS[normalizedId];
+        if (!def) return false;
+        if (def.condition && !def.condition(town)) return false;
+        if (getTownMarkersBySubtype(town, def.subtype).length > 0) return false;
+        const spot = findTownMarkerSpot(town);
+        const x = spot ? spot.x : town.x;
+        const y = spot ? spot.y : town.y;
+        if (typeof x !== "number" || typeof y !== "number") return false;
+        const marker = happen("Create", null, null, {
+            type: "landmark",
+            name: def.name,
+            subtype: def.subtype,
+            symbol: def.symbol,
+            color: def.color,
+            x: x,
+            y: y
+        }, "marker");
+        if (marker) {
+            if (spot) attachMarkerToChunk(marker, spot);
+            else attachMarkerToTownChunk(marker, town);
+            return true;
+        }
+        return false;
+    }
+
+    function syncSpecializationMarkers(town) {
+        const specs = getTownSpecializations(town);
+        for (const spec of specs) {
+            ensureSpecializationMarker(town, spec.id);
+        }
     }
 
     // Check if a town qualifies to develop a specialization
@@ -2415,6 +3339,17 @@
         func: (subject, target, args) => {
             removeSpecialization(subject, args.fadingSpec.id);
             logMessage(`{{regname:town|${subject.id}}} {{c:loses|forgets|abandons}} its reputation as {{b:${args.fadingSpec.name}}}.`, "warning");
+        }
+    });
+
+    // Ensure specialization landmarks appear once conditions are met
+    modEvent("specializationMarkerSync", {
+        daily: true,
+        subject: {
+            reg: "town", all: true
+        },
+        func: (subject) => {
+            syncSpecializationMarkers(subject);
         }
     });
 
@@ -4018,6 +4953,302 @@
     });
 
     // -------------------------------------------------------------------------
+    // EMERGENT WAR PRESSURE SYSTEM (no arbitrary timers)
+    // -------------------------------------------------------------------------
+
+    const GOVERNMENT_WAR_PROFILE = {
+        tribal: { aggression: 1.05, diplomacy: 0.95 },
+        council: { aggression: 0.9, diplomacy: 1.1 },
+        anarchy: { aggression: 1.0, diplomacy: 0.9 },
+        chiefdom: { aggression: 1.15, diplomacy: 0.9 },
+        monarchy: { aggression: 1.2, diplomacy: 0.95 },
+        dictatorship: { aggression: 1.3, diplomacy: 0.8 },
+        theocracy: { aggression: 1.15, diplomacy: 0.9 },
+        oligarchy: { aggression: 0.95, diplomacy: 1.05 },
+        commune: { aggression: 0.85, diplomacy: 1.15 },
+        republic: { aggression: 0.8, diplomacy: 1.2 },
+        democracy: { aggression: 0.75, diplomacy: 1.25 }
+    };
+
+    function getGovernmentWarProfile(govId) {
+        return GOVERNMENT_WAR_PROFILE[govId] || { aggression: 1, diplomacy: 1 };
+    }
+
+    function getTownAggression(town) {
+        const gov = getTownGovernment(town);
+        const profile = getGovernmentWarProfile(gov.id);
+        let score = profile.aggression || 1;
+
+        const religion = getTownReligion(town);
+        if (religion) {
+            if (religion.tenets.includes("militarism")) score += 0.2;
+            if (religion.tenets.includes("pacifism")) score -= 0.2;
+        }
+
+        if (hasTradition(town, "martial")) score += 0.15;
+        if (hasTradition(town, "festive")) score -= 0.05;
+
+        const unrest = town.unrest || 0;
+        if (unrest > 30 && unrest < 70) score += 0.1;
+        if (unrest >= 70) score -= 0.1;
+
+        const happy = town.influences?.happy || 0;
+        const trade = town.influences?.trade || 0;
+        const law = town.influences?.law || 0;
+        if (happy > 4) score -= 0.05;
+        if (trade > 5) score -= 0.05;
+        if (law > 3) score -= 0.05;
+
+        const military = town.influences?.military || 0;
+        if (military > 5 && (trade > 4 || happy > 4 || (religion && religion.tenets.includes("pacifism")))) {
+            score -= 0.1; // armed but defensive
+        }
+
+        return clampValue(score, 0.6, 1.6);
+    }
+
+    function getTownDiplomacyBias(town) {
+        const gov = getTownGovernment(town);
+        const profile = getGovernmentWarProfile(gov.id);
+        return profile.diplomacy || 1;
+    }
+
+    function getTownWarReadiness(town, other) {
+        const military = town.influences?.military || 0;
+        const otherMilitary = other?.influences?.military || 0;
+        const ratio = (military + 2) / (otherMilitary + 2);
+        let readiness = 0.85 + (ratio - 1) * 0.2;
+
+        const soldierRatio = (town.jobs?.soldier || 0) / Math.max(1, town.pop || 1);
+        if (soldierRatio < 0.02) readiness -= 0.1;
+        if (soldierRatio > 0.06) readiness += 0.1;
+
+        if (hasIssue(town, "disaster") || hasIssue(town, "revolution")) readiness -= 0.2;
+        if (town.famine && !town.famine.ended) readiness -= 0.1;
+        if (town.drought && !town.drought.ended) readiness -= 0.1;
+
+        return clampValue(readiness, 0.5, 1.4);
+    }
+
+    function getTownDeterrence(town) {
+        let deterrence = (town.influences?.military || 0) * 0.02;
+        if (hasTownSpecialization(town, "fortress")) deterrence += 0.08;
+        if (hasTownSpecialization(town, "warriorClan")) deterrence += 0.05;
+        return clampValue(deterrence, 0, 0.5);
+    }
+
+    function hasEmbargoBetween(town1, town2) {
+        if (!planet.embargoes) return false;
+        return planet.embargoes.some(e =>
+            (e.from === town1.id && e.to === town2.id) ||
+            (e.from === town2.id && e.to === town1.id)
+        );
+    }
+
+    function getTownScarcityPressure(town) {
+        let pressure = 0;
+        if (town.famine && !town.famine.ended) pressure += 1.5;
+        if (town.drought && !town.drought.ended) pressure += 1;
+        if ((town.influences?.hunger || 0) > 4) pressure += 0.5;
+        return pressure;
+    }
+
+    function getTownDistance(town1, town2) {
+        const c1 = getTownCenter(town1);
+        const c2 = getTownCenter(town2);
+        if (!c1 || !c2) return null;
+        const dx = c1[0] - c2[0];
+        const dy = c1[1] - c2[1];
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function getWarPressureKey(town1, town2) {
+        return town1.id < town2.id ? `${town1.id}|${town2.id}` : `${town2.id}|${town1.id}`;
+    }
+
+    function initWarPressure() {
+        if (!planet._paultendoWarPressure) {
+            planet._paultendoWarPressure = {};
+        }
+    }
+
+    function getWarPressureRecord(town1, town2) {
+        initWarPressure();
+        const key = getWarPressureKey(town1, town2);
+        if (!planet._paultendoWarPressure[key]) {
+            planet._paultendoWarPressure[key] = { value: 0, lastDay: planet.day };
+        }
+        return planet._paultendoWarPressure[key];
+    }
+
+    function getWarPressureValue(town1, town2) {
+        initWarPressure();
+        const key = getWarPressureKey(town1, town2);
+        const record = planet._paultendoWarPressure[key];
+        return record ? (record.value || 0) : 0;
+    }
+
+    function getPairRelation(town1, town2) {
+        const rel1 = getRelations(town1, town2);
+        const rel2 = getRelations(town2, town1);
+        return (rel1 + rel2) / 2;
+    }
+
+    function computeWarPressureDelta(town1, town2) {
+        let delta = 0;
+
+        const relation = getPairRelation(town1, town2);
+        if (relation < 0) delta += Math.min(30, -relation) * 0.25;
+        if (relation > 5) delta -= (relation - 5) * 0.2;
+
+        const govTension = getGovernmentTension(getTownGovernment(town1).id, getTownGovernment(town2).id);
+        delta += govTension * 0.8;
+
+        const religion1 = getTownReligion(town1);
+        const religion2 = getTownReligion(town2);
+        if (religion1 && religion2) {
+            const compat = getReligiousCompatibility(religion1, religion2);
+            if (compat < 0.2) delta += (0.2 - compat) * 2;
+            if (compat > 0.5) delta -= (compat - 0.5);
+        }
+
+        if (hasGrudge(town1, town2.id)) {
+            delta += (town1.memory?.grudges?.[town2.id]?.severity || 1) * 0.4;
+        }
+        if (hasGrudge(town2, town1.id)) {
+            delta += (town2.memory?.grudges?.[town1.id]?.severity || 1) * 0.4;
+        }
+
+        if (hasEmbargoBetween(town1, town2)) delta += 1.5;
+
+        const distance = getTownDistance(town1, town2);
+        if (distance !== null) {
+            const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+            const proximity = 1 - Math.min(distance / (maxDist * 0.8), 1);
+            delta += proximity * 2;
+        }
+
+        const landmass1 = getTownLandmassId(town1);
+        const landmass2 = getTownLandmassId(town2);
+        if (landmass1 && landmass1 === landmass2) delta += 0.5;
+
+        delta += (getTownScarcityPressure(town1) + getTownScarcityPressure(town2)) * 0.5;
+
+        const raidValue = typeof getRaidAttractiveness === "function" ? getRaidAttractiveness(town2) : 0;
+        if (raidValue > 2) delta += Math.min(2, raidValue * 0.2);
+
+        // Alliances and strong bonds dampen pressure
+        if (areAllied(town1, town2)) delta -= 3;
+        if (hasBond(town1, town2.id) || hasBond(town2, town1.id)) delta -= 1;
+
+        const aggression = (getTownAggression(town1) + getTownAggression(town2)) / 2;
+        delta *= aggression;
+
+        return delta;
+    }
+
+    function getWarPressureDecay(town1, town2) {
+        const diplomacy = (getTownDiplomacyBias(town1) + getTownDiplomacyBias(town2)) / 2;
+        let decay = 0.2 * diplomacy;
+        if (areAllied(town1, town2)) decay += 1;
+        return decay;
+    }
+
+    function updateWarPressure(town1, town2) {
+        const record = getWarPressureRecord(town1, town2);
+        const daysSince = Math.max(0, planet.day - (record.lastDay || planet.day));
+        let pressure = record.value || 0;
+
+        if (daysSince > 0) {
+            pressure = Math.max(0, pressure - daysSince * getWarPressureDecay(town1, town2));
+        }
+
+        pressure = clampValue(pressure + computeWarPressureDelta(town1, town2), 0, 100);
+        record.value = pressure;
+        record.lastDay = planet.day;
+        return pressure;
+    }
+
+    function hadRecentWar(town1, town2, withinDays = 60) {
+        if (!planet.history) return false;
+        const id1 = town1.id;
+        const id2 = town2.id;
+        return planet.history.some(h => {
+            if (!h || !h.day || planet.day - h.day > withinDays) return false;
+            if (h.type !== HISTORY_TYPES.WAR) return false;
+            if (h.towns && h.towns.includes(id1) && h.towns.includes(id2)) return true;
+            if ((h.victor === id1 && h.loser === id2) || (h.victor === id2 && h.loser === id1)) return true;
+            return false;
+        });
+    }
+
+    function maybeStartWarFromPressure(town1, town2, pressure) {
+        if (!planet.unlocks?.military) return false;
+        if (town1.end || town2.end) return false;
+        if (areAllied(town1, town2)) return false;
+        if (hasIssue(town1, "war") || hasIssue(town2, "war")) return false;
+        if (hasIssue(town1, "revolution") || hasIssue(town2, "revolution")) return false;
+        if (hadRecentWar(town1, town2, 50)) return false;
+
+        const aggression1 = getTownAggression(town1);
+        const aggression2 = getTownAggression(town2);
+        const readiness1 = getTownWarReadiness(town1, town2);
+        const readiness2 = getTownWarReadiness(town2, town1);
+
+        const threshold = 35 - (aggression1 + aggression2 - 2) * 6;
+        if (pressure < threshold) return false;
+
+        const instigator = (aggression1 * readiness1) >= (aggression2 * readiness2) ? town1 : town2;
+        const defender = instigator.id === town1.id ? town2 : town1;
+        const deterrence = getTownDeterrence(defender);
+
+        const baseChance = Math.max(0, (pressure - threshold) / 200);
+        const chance = clampValue(baseChance * getTownAggression(instigator) * getTownWarReadiness(instigator, defender) * (1 - deterrence), 0, 0.2);
+
+        if (Math.random() < chance) {
+            startWar(instigator, defender);
+            logMessage(`Tensions boil over. {{regname:town|${instigator.id}}} declares war on {{regname:town|${defender.id}}}!`, "warning");
+            return true;
+        }
+        return false;
+    }
+
+    modEvent("warPressureDynamics", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject, target, args) => {
+            if (!planet.unlocks?.military) return false;
+            if (subject.end || subject.pop <= 0) return false;
+            if (Math.random() > 0.5) return false; // sample a subset each day
+
+            const candidates = regFilter("town", t => t && !t.end && t.pop > 0 && t.id !== subject.id);
+            if (candidates.length === 0) return false;
+
+            const picked = weightedChoice(candidates, (t) => {
+                const relation = getRelations(subject, t);
+                const distance = getTownDistance(subject, t);
+                const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+                const proximity = distance === null ? 0.5 : (1 - Math.min(distance / (maxDist * 0.8), 1));
+                let weight = 1 + proximity;
+                if (relation < 0) weight += Math.min(10, -relation) * 0.2;
+                if (relation > 4) weight -= 0.3;
+                weight += getWarPressureValue(subject, t) / 30;
+                return weight;
+            });
+
+            if (!picked) return false;
+            args.other = picked;
+            return true;
+        },
+        func: (subject, target, args) => {
+            const other = args.other;
+            if (!other) return;
+            const pressure = updateWarPressure(subject, other);
+            maybeStartWarFromPressure(subject, other, pressure);
+        }
+    });
+
+    // -------------------------------------------------------------------------
     // Player Sway - Government Manipulation
     // -------------------------------------------------------------------------
 
@@ -4322,6 +5553,13 @@
         }
     };
 
+    const EPIDEMIC_COLORS = {
+        plague: [90, 170, 120],
+        fever: [120, 200, 130],
+        pox: [160, 150, 200],
+        consumption: [110, 170, 200]
+    };
+
     // Check if a town has an active epidemic
     function getTownEpidemic(town) {
         initEpidemics();
@@ -4342,7 +5580,7 @@
         resistance += doctors * 0.5;
 
         // Hospitals help
-        const hospitals = regFilter("marker", m => m.town === town.id && m.subtype === "hospital");
+        const hospitals = getTownHospitals(town);
         resistance += hospitals.length * 1.0;
 
         // Medicine tech helps
@@ -4377,7 +5615,9 @@
             endDay: planet.day + duration,
             diseaseInfluence: epidemicDef.diseaseInfluence,
             deathMultiplier: epidemicDef.deathMultiplier,
-            spreadRate: epidemicDef.spreadRate
+            spreadRate: epidemicDef.spreadRate,
+            color: EPIDEMIC_COLORS[type] || [110, 180, 140],
+            spreadLog: []
         };
 
         planet.epidemics.push(epidemic);
@@ -4399,7 +5639,7 @@
     }
 
     // Spread epidemic to a new town
-    function spreadEpidemicTo(epidemic, town) {
+    function spreadEpidemicTo(epidemic, town, sourceTown) {
         if (epidemic.affectedTowns.includes(town.id)) return false;
 
         // Check resistance
@@ -4410,6 +5650,10 @@
 
         epidemic.affectedTowns.push(town.id);
         town.influences.disease = (town.influences.disease || 0) + epidemic.diseaseInfluence;
+        if (sourceTown) {
+            epidemic.spreadLog = epidemic.spreadLog || [];
+            epidemic.spreadLog.push({ from: sourceTown.id, to: town.id, day: planet.day });
+        }
 
         return true;
     }
@@ -4528,7 +5772,7 @@
             const finalChance = Math.max(0.01, baseSpread - (resistance * 0.03));
 
             if (Math.random() < finalChance) {
-                spreadEpidemicTo(args.epidemic, subject);
+                spreadEpidemicTo(args.epidemic, subject, args.source);
                 logMessage(`The {{b:${args.epidemic.name}}} spreads to {{regname:town|${subject.id}}} from {{regname:town|${args.source.id}}}.`, "warning");
             }
         }
@@ -4558,6 +5802,71 @@
             logMessage(`The {{b:${args.epidemic.name}}} finally subsides. The survivors recover.`, "milestone");
         }
     });
+
+    // -------------------------------------------------------------------------
+    // Epidemic Map Visualization (overlay + spread lines)
+    // -------------------------------------------------------------------------
+
+    function renderEpidemicOverlay() {
+        if (!planet || !planet.epidemics || planet.epidemics.length === 0) return;
+        if (!canvasLayersCtx || !canvasLayersCtx.terrain) return;
+        if (typeof chunkSize === "undefined") return;
+        if (typeof filterChunks !== "function") return;
+
+        const ctx = canvasLayersCtx.terrain;
+        const size = chunkSize;
+
+        planet.epidemics.forEach((epidemic) => {
+            if (!epidemic || !Array.isArray(epidemic.affectedTowns) || epidemic.affectedTowns.length === 0) return;
+
+            const color = epidemic.color || [110, 180, 140];
+            const alpha = Math.min(0.15 + (epidemic.severity || 1) * 0.08, 0.5);
+            ctx.fillStyle = `rgba(${color.join(",")}, ${alpha})`;
+
+            epidemic.affectedTowns.forEach((townId) => {
+                const town = regGet("town", townId);
+                if (!town || town.end) return;
+                const chunks = filterChunks(c => c.v.s === town.id);
+                for (let i = 0; i < chunks.length; i++) {
+                    const c = chunks[i];
+                    ctx.fillRect(c.x * size, c.y * size, size, size);
+                }
+            });
+
+            if (Array.isArray(epidemic.spreadLog) && epidemic.spreadLog.length > 0) {
+                const recent = epidemic.spreadLog.filter(s => (planet.day - s.day) <= 20);
+                if (recent.length > 0) {
+                    ctx.strokeStyle = `rgba(${color.join(",")}, 0.6)`;
+                    ctx.lineWidth = Math.max(1, Math.floor(size / 4));
+                    for (let i = 0; i < recent.length; i++) {
+                        const step = recent[i];
+                        const fromTown = regGet("town", step.from);
+                        const toTown = regGet("town", step.to);
+                        if (!fromTown || !toTown || fromTown.end || toTown.end) continue;
+                        if (typeof fromTown.x !== "number" || typeof fromTown.y !== "number") continue;
+                        if (typeof toTown.x !== "number" || typeof toTown.y !== "number") continue;
+                        ctx.beginPath();
+                        ctx.moveTo((fromTown.x + 0.5) * size, (fromTown.y + 0.5) * size);
+                        ctx.lineTo((toTown.x + 0.5) * size, (toTown.y + 0.5) * size);
+                        ctx.stroke();
+                    }
+                }
+            }
+        });
+    }
+
+    if (typeof renderMap === "function" && !renderMap._paultendoEpidemicOverlay) {
+        const baseRenderMap = renderMap;
+        const wrappedRenderMap = function() {
+            baseRenderMap();
+            try { renderEpidemicOverlay(); } catch {}
+            try { renderDiscoveryFog(); } catch {}
+            try { renderMarkers(); } catch {}
+        };
+        wrappedRenderMap._paultendoEpidemicOverlay = true;
+        wrappedRenderMap._paultendoBase = baseRenderMap;
+        renderMap = wrappedRenderMap;
+    }
 
     // Epidemics cause extra deaths
     modEvent("epidemicDeaths", {
@@ -4693,7 +6002,7 @@
             if (!subject.injuries || subject.injuries <= 0) return false;
 
             // Need a hospital or doctors
-            const hospitals = regFilter("marker", m => m.town === subject.id && m.subtype === "hospital");
+            const hospitals = getTownHospitals(subject);
             const doctors = subject.jobs?.doctor || 0;
 
             if (hospitals.length === 0 && doctors === 0) return false;
@@ -4757,6 +6066,8 @@
             if ((target.influences.faith || 0) < -2) return false;
             if (planet.unlocks.education < 40) return false; // Need Libraries
             if (target.publicHealthcare) return false;
+            if ((target.pop || 0) < 80) return false;
+            if (!canReceiveGuidance(target, "publicHealthcare", 60)) return false;
 
             args.successChance = 0.40;
             args.successChance += (target.influences.education || 0) * 0.05;
@@ -4767,6 +6078,8 @@
             if (gov.id === "democracy" || gov.id === "republic") args.successChance += 0.15;
             if (gov.id === "oligarchy") args.successChance -= 0.15;
 
+            const fatigue = guidanceFatigue(target, "publicHealthcare");
+            args.successChance -= fatigue * 0.05;
             args.successChance = Math.max(0.10, Math.min(0.80, args.successChance));
             return true;
         },
@@ -4781,17 +6094,19 @@
                 target.publicHealthcare = true;
                 happen("Influence", subject, target, { disease: -2, happy: 1, trade: -1 });
                 happen("Influence", subject, target, { faith: 1 });
-            } else {
-                happen("Influence", subject, target, { faith: -1 });
             }
+            noteGuidance(target, "publicHealthcare", success);
         },
         messageDone: (subject, target, args) => {
             if (args.success) {
                 return `{{regname:town|${target.id}}} establishes public healthcare. The sick are tended to.`;
             }
-            return `{{residents:${target.id}}} {{c:reject|refuse|won't fund}} public healthcare.`;
+            return `{{regname:town|${target.id}}} decides to delay public healthcare for now.`;
         },
-        messageNo: () => `Healthcare remains a private matter.`
+        messageNo: () => `Healthcare remains a private matter.`,
+        funcNo: (subject, target) => {
+            noteGuidance(target, "publicHealthcare", null);
+        }
     });
 
     // Public healthcare provides ongoing benefits
@@ -4831,16 +6146,20 @@
         value: (subject, target, args) => {
             if ((target.influences.faith || 0) < -2) return false;
             if (planet.unlocks.smith < 20) return false;
+            if (planet.unlocks.education < 40) return false;
+            if ((target.pop || 0) < 80) return false;
+            if (!canReceiveGuidance(target, "buildHospital", 45)) return false;
 
             // Check if they already have a hospital
-            const hospitals = regFilter("marker", m => m.town === target.id && m.subtype === "hospital");
-            if (hospitals.length > 0) return false;
+            if (hasHospital(target)) return false;
 
             // More likely if disease is high
             const disease = target.influences.disease || 0;
             args.successChance = 0.30;
             args.successChance += disease * 0.05;
             args.successChance += (target.influences.faith || 0) * 0.05;
+            const fatigue = guidanceFatigue(target, "buildHospital");
+            args.successChance -= fatigue * 0.05;
             args.successChance = Math.max(0.15, Math.min(0.75, args.successChance));
             return true;
         },
@@ -4852,22 +6171,24 @@
             args.success = success;
 
             if (success) {
-                // Create a hospital marker
-                // Note: This is a simplified version - the base game has more complex marker creation
+                // Create a hospital marker when possible
+                createHospital(target);
                 happen("Influence", subject, target, { disease: -2 });
                 happen("Influence", subject, target, { faith: 1 });
                 logMessage(`{{regname:town|${target.id}}} {{c:builds|establishes|founds}} a hospital.`, "milestone");
-            } else {
-                happen("Influence", subject, target, { faith: -1 });
             }
+            noteGuidance(target, "buildHospital", success);
         },
         messageDone: (subject, target, args) => {
             if (args.success) {
                 return `The sick now have a place to heal.`;
             }
-            return `{{residents:${target.id}}} {{c:see no need|refuse|won't prioritize}} a hospital.`;
+            return `{{regname:town|${target.id}}} is not ready to fund a hospital yet.`;
         },
-        messageNo: () => `You leave their health in their own hands.`
+        messageNo: () => `You leave their health in their own hands.`,
+        funcNo: (subject, target) => {
+            noteGuidance(target, "buildHospital", null);
+        }
     });
 
     // Sway to train doctors
@@ -4878,15 +6199,18 @@
         target: { reg: "town", random: true },
         value: (subject, target, args) => {
             if ((target.influences.faith || 0) < -1) return false;
-            if (planet.unlocks.education < 40) return false;
+            if (planet.unlocks.education < 40 && (target.influences.faith || 0) < 4) return false;
+            if (!canReceiveGuidance(target, "trainHealers", 25)) return false;
 
             const doctors = target.jobs?.doctor || 0;
             if (doctors >= 5) return false; // Enough doctors
 
             args.currentDoctors = doctors;
-            args.successChance = 0.45;
+            args.successChance = 0.40;
             args.successChance += (target.influences.education || 0) * 0.05;
             args.successChance += (target.influences.faith || 0) * 0.03;
+            const fatigue = guidanceFatigue(target, "trainHealers");
+            args.successChance -= fatigue * 0.05;
             args.successChance = Math.max(0.20, Math.min(0.80, args.successChance));
             return true;
         },
@@ -4904,17 +6228,19 @@
                 target.jobs = target.jobs || {};
                 target.jobs.doctor = (target.jobs.doctor || 0) + 1;
                 happen("Influence", subject, target, { education: 0.5 });
-            } else {
-                happen("Influence", subject, target, { faith: -0.5 });
             }
+            noteGuidance(target, "trainHealers", success);
         },
         messageDone: (subject, target, args) => {
             if (args.success) {
                 return `A new healer begins training in {{regname:town|${target.id}}}.`;
             }
-            return `{{residents:${target.id}}} {{c:prefer|choose|favor}} other professions.`;
+            return `{{regname:town|${target.id}}} delays expanding healer training for now.`;
         },
-        messageNo: () => `You let them choose their own trades.`
+        messageNo: () => `You let them choose their own trades.`,
+        funcNo: (subject, target) => {
+            noteGuidance(target, "trainHealers", null);
+        }
     });
 
     // =========================================================================
@@ -5848,29 +7174,116 @@
     // Theater, Museum, Gallery - provide cultural bonuses
     // =========================================================================
 
-    // Track cultural landmarks (since we can't easily add to the base game's marker system,
-    // we'll track them on the town and provide their effects)
+    // Cultural landmarks now use the base marker system so they appear on the map.
 
-    function initCulturalLandmarks(town) {
-        if (!town.culturalLandmarks) {
-            town.culturalLandmarks = {
-                theater: 0,
-                museum: 0,
-                gallery: 0
-            };
+    const CULTURAL_LANDMARK_DEFS = {
+        theater: {
+            name: "Theater",
+            symbol: "T",
+            color: [180, 120, 200]
+        },
+        museum: {
+            name: "Museum",
+            symbol: "M",
+            color: [120, 150, 200]
+        },
+        gallery: {
+            name: "Gallery",
+            symbol: "G",
+            color: [200, 160, 100]
+        }
+    };
+
+    function createCulturalLandmarkMarker(town, type) {
+        const def = CULTURAL_LANDMARK_DEFS[type];
+        if (!def || !town) return false;
+        const spot = findTownMarkerSpot(town);
+        const x = spot ? spot.x : town.x;
+        const y = spot ? spot.y : town.y;
+        if (typeof x !== "number" || typeof y !== "number") return false;
+        const marker = happen("Create", null, null, {
+            type: "landmark",
+            name: def.name,
+            subtype: type,
+            symbol: def.symbol,
+            color: def.color,
+            x: x,
+            y: y
+        }, "marker");
+        if (marker) {
+            if (spot) attachMarkerToChunk(marker, spot);
+            else attachMarkerToTownChunk(marker, town);
+            return true;
+        }
+        return false;
+    }
+
+    function createWarMemorialMarker(town, wasVictor) {
+        if (!town) return false;
+        const spot = findTownMarkerSpot(town);
+        const x = spot ? spot.x : town.x;
+        const y = spot ? spot.y : town.y;
+        if (typeof x !== "number" || typeof y !== "number") return false;
+        const marker = happen("Create", null, null, {
+            type: "landmark",
+            name: wasVictor ? "Victory Monument" : "War Memorial",
+            subtype: "warMemorial",
+            symbol: wasVictor ? "V" : "W",
+            color: wasVictor ? [170, 150, 90] : [150, 150, 150],
+            x: x,
+            y: y
+        }, "marker");
+        if (marker) {
+            if (spot) attachMarkerToChunk(marker, spot);
+            else attachMarkerToTownChunk(marker, town);
+            return true;
+        }
+        return false;
+    }
+
+    function migrateLegacyCulturalLandmarks(town) {
+        if (!town || !town.culturalLandmarks) return;
+        const legacy = town.culturalLandmarks;
+        let migratedAll = true;
+        const theaterCount = legacy.theater || 0;
+        const museumCount = legacy.museum || 0;
+        const galleryCount = legacy.gallery || 0;
+        const memorialCount = legacy.warMemorial || 0;
+
+        if (theaterCount > 0 && getTownMarkersBySubtype(town, "theater").length === 0) {
+            if (!createCulturalLandmarkMarker(town, "theater")) migratedAll = false;
+        }
+        if (museumCount > 0 && getTownMarkersBySubtype(town, "museum").length === 0) {
+            if (!createCulturalLandmarkMarker(town, "museum")) migratedAll = false;
+        }
+        if (galleryCount > 0 && getTownMarkersBySubtype(town, "gallery").length === 0) {
+            if (!createCulturalLandmarkMarker(town, "gallery")) migratedAll = false;
+        }
+        if (memorialCount > 0 && getTownMarkersBySubtype(town, "warMemorial").length === 0) {
+            if (!createWarMemorialMarker(town, false)) migratedAll = false;
+        }
+
+        if (migratedAll) {
+            delete town.culturalLandmarks;
         }
     }
 
     // Check if town has a cultural landmark
     function hasCulturalLandmark(town, type) {
-        initCulturalLandmarks(town);
-        return (town.culturalLandmarks[type] || 0) > 0;
+        migrateLegacyCulturalLandmarks(town);
+        return getTownMarkersBySubtype(town, type).length > 0;
+    }
+
+    function getCulturalLandmarkCount(town, type) {
+        migrateLegacyCulturalLandmarks(town);
+        return getTownMarkersBySubtype(town, type).length;
     }
 
     // Add a cultural landmark
     function addCulturalLandmark(town, type) {
-        initCulturalLandmarks(town);
-        town.culturalLandmarks[type] = (town.culturalLandmarks[type] || 0) + 1;
+        migrateLegacyCulturalLandmarks(town);
+        if (hasCulturalLandmark(town, type)) return false;
+        if (!createCulturalLandmarkMarker(town, type)) return false;
 
         // Apply one-time bonuses
         if (type === "theater") {
@@ -5885,6 +7298,7 @@
             town.influences.happy = (town.influences.happy || 0) + 1.5;
             addTradition(town, "art");
         }
+        return true;
     }
 
     // Player can encourage building cultural landmarks
@@ -5913,10 +7327,14 @@
             args.success = success;
 
             if (success) {
-                addCulturalLandmark(target, "theater");
-                happen("Influence", subject, target, { faith: 1 });
-                logMessage(`{{regname:town|${target.id}}} builds a grand {{b:Theater}}!`, "milestone");
-            } else {
+                const built = addCulturalLandmark(target, "theater");
+                args.success = built;
+                if (built) {
+                    happen("Influence", subject, target, { faith: 1 });
+                    logMessage(`{{regname:town|${target.id}}} builds a grand {{b:Theater}}!`, "milestone");
+                }
+            }
+            if (!args.success) {
                 happen("Influence", subject, target, { faith: -0.5 });
             }
         },
@@ -5953,10 +7371,14 @@
             args.success = success;
 
             if (success) {
-                addCulturalLandmark(target, "museum");
-                happen("Influence", subject, target, { faith: 1 });
-                logMessage(`{{regname:town|${target.id}}} opens a {{b:Museum}}!`, "milestone");
-            } else {
+                const built = addCulturalLandmark(target, "museum");
+                args.success = built;
+                if (built) {
+                    happen("Influence", subject, target, { faith: 1 });
+                    logMessage(`{{regname:town|${target.id}}} opens a {{b:Museum}}!`, "milestone");
+                }
+            }
+            if (!args.success) {
                 happen("Influence", subject, target, { faith: -0.5 });
             }
         },
@@ -5994,10 +7416,14 @@
             args.success = success;
 
             if (success) {
-                addCulturalLandmark(target, "gallery");
-                happen("Influence", subject, target, { faith: 1 });
-                logMessage(`{{regname:town|${target.id}}} opens an {{b:Art Gallery}}!`, "milestone");
-            } else {
+                const built = addCulturalLandmark(target, "gallery");
+                args.success = built;
+                if (built) {
+                    happen("Influence", subject, target, { faith: 1 });
+                    logMessage(`{{regname:town|${target.id}}} opens an {{b:Art Gallery}}!`, "milestone");
+                }
+            }
+            if (!args.success) {
                 happen("Influence", subject, target, { faith: -0.5 });
             }
         },
@@ -6015,28 +7441,27 @@
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
-            initCulturalLandmarks(subject);
-            const hasAny = subject.culturalLandmarks.theater > 0 ||
-                           subject.culturalLandmarks.museum > 0 ||
-                           subject.culturalLandmarks.gallery > 0;
+            const hasAny = getCulturalLandmarkCount(subject, "theater") > 0 ||
+                           getCulturalLandmarkCount(subject, "museum") > 0 ||
+                           getCulturalLandmarkCount(subject, "gallery") > 0;
             return hasAny;
         },
         func: (subject, target, args) => {
             initTownCulture(subject);
 
             // Theater attracts performers
-            if (subject.culturalLandmarks.theater > 0 && Math.random() < 0.02) {
+            if (getCulturalLandmarkCount(subject, "theater") > 0 && Math.random() < 0.02) {
                 subject.jobs = subject.jobs || {};
                 subject.jobs.performer = (subject.jobs.performer || 0) + 1;
             }
 
             // Museum builds prestige slowly
-            if (subject.culturalLandmarks.museum > 0 && Math.random() < 0.05) {
+            if (getCulturalLandmarkCount(subject, "museum") > 0 && Math.random() < 0.05) {
                 subject.culture.prestige += 0.5;
             }
 
             // Gallery attracts artists
-            if (subject.culturalLandmarks.gallery > 0 && Math.random() < 0.02) {
+            if (getCulturalLandmarkCount(subject, "gallery") > 0 && Math.random() < 0.02) {
                 subject.jobs = subject.jobs || {};
                 subject.jobs.artist = (subject.jobs.artist || 0) + 1;
             }
@@ -6100,6 +7525,7 @@
         subject: { reg: "player", id: 1 },
         target: { reg: "town", random: true },
         value: (subject, target, args) => {
+            migrateLegacyCulturalLandmarks(target);
             // Need to have been in a war
             const pastWars = regFilter("process", p =>
                 p.type === "war" &&
@@ -6111,8 +7537,7 @@
             if (pastWars.length === 0) return false;
 
             // Check if already has memorial
-            initCulturalLandmarks(target);
-            if (target.culturalLandmarks.warMemorial) return false;
+            if (getTownMarkersBySubtype(target, "warMemorial").length > 0) return false;
 
             args.war = pastWars[pastWars.length - 1];
             args.wasVictor = args.war.winner === target.id;
@@ -6125,9 +7550,9 @@
             return `{{regname:town|${target.id}}} could build a {{b:War Memorial}} to honor the fallen...`;
         },
         func: (subject, target, args) => {
-            initCulturalLandmarks(target);
-            target.culturalLandmarks.warMemorial = 1;
-
+            const built = createWarMemorialMarker(target, args.wasVictor);
+            args.built = built;
+            if (!built) return;
             initTownCulture(target);
             target.culture.prestige += 2;
 
@@ -6141,6 +7566,7 @@
             }
         },
         messageDone: (subject, target, args) => {
+            if (!args.built) return null;
             if (args.wasVictor) {
                 return `The monument stands as a symbol of {{regadj:town|${target.id}}} might.`;
             }
@@ -6833,7 +8259,9 @@
             args.disaster = disaster;
             return true;
         },
-        message: "{{regname:town|$target.id}} is recovering from a devastating $args.disaster.subtype. Sending relief supplies would earn their gratitude. {{should}}",
+        message: (subject, target, args) => {
+            return `{{regname:town|${target.id}}} is recovering from a devastating ${args.disaster.subtype}. Sending relief supplies would earn their gratitude. {{should}}`;
+        },
         messageDone: "Aid convoys are dispatched to help the survivors.",
         messageNo: "They must fend for themselves.",
         func: (subject, target, args) => {
@@ -6961,7 +8389,9 @@
             args.disaster = majorDisaster;
             return true;
         },
-        message: "{{people}} propose building a memorial to honor those lost in the $args.disaster.type. {{should}}",
+        message: (subject, target, args) => {
+            return `{{people}} propose building a memorial to honor those lost in the ${args.disaster.type}. {{should}}`;
+        },
         messageDone: "A solemn memorial stands as testament to tragedy and resilience.",
         messageNo: "The past is best left buried.",
         func: (subject, target, args) => {
@@ -7255,7 +8685,9 @@
             // (Would need chunk data to check biome, simplified here)
             return Math.random() < 0.3;
         },
-        message: "The rains have not come to {{regname:town|$subject.id}}. The crops wither. {{should}}",
+        message: (subject) => {
+            return `The rains have not come to {{regname:town|${subject.id}}}. The crops wither. {{should}}`;
+        },
         messageDone: "The people pray for rain.",
         messageNo: "Surely the rains will come soon.",
         func: (subject) => {
@@ -7954,7 +9386,9 @@
             initUnrest(target);
             return target.unrest >= 30;
         },
-        message: "Unrest grows in {{regname:town|$target.id}}. The people demand change. Address their grievances? {{should}}",
+        message: (subject, target) => {
+            return `Unrest grows in {{regname:town|${target.id}}}. The people demand change. Address their grievances? {{should}}`;
+        },
         messageDone: "Reforms are enacted to calm the populace.",
         messageNo: "The troublemakers will tire eventually.",
         func: (subject, target) => {
@@ -8457,7 +9891,9 @@
 
             return true;
         },
-        message: "In {{regname:town|$subject.id}}, a new spiritual movement is taking shape. Allow it to flourish? {{should}}",
+        message: (subject) => {
+            return `In {{regname:town|${subject.id}}}, a new spiritual movement is taking shape. Allow it to flourish? {{should}}`;
+        },
         messageDone: "A new faith is born.",
         messageNo: "The movement fades into obscurity.",
         func: (subject) => {
@@ -8647,7 +10083,9 @@
             args.religion = religion;
             return true;
         },
-        message: "Scholars in {{regname:town|$subject.id}} propose reforms to {{b:$args.religion.name}}. Allow the reformation? {{should}}",
+        message: (subject, target, args) => {
+            return `Scholars in {{regname:town|${subject.id}}} propose reforms to {{b:${args.religion.name}}}. Allow the reformation? {{should}}`;
+        },
         messageDone: "The faith evolves with new interpretations.",
         messageNo: "Tradition must be preserved.",
         func: (subject, target, args) => {
@@ -9055,7 +10493,9 @@
             args.religion = nearbyReligion;
             return true;
         },
-        message: "{{regname:town|$target.id}} has no established faith. Encourage them to embrace {{b:$args.religion.name}}? {{should}}",
+        message: (subject, target, args) => {
+            return `{{regname:town|${target.id}}} has no established faith. Encourage them to embrace {{b:${args.religion.name}}}? {{should}}`;
+        },
         messageDone: "The faith finds new followers.",
         messageNo: "They will find their own spiritual path.",
         func: (subject, target, args) => {
@@ -9094,7 +10534,9 @@
             args.rivalReligion = getTownReligion(rivalTown);
             return true;
         },
-        message: "Religious tensions simmer between {{regname:town|$target.id}} and {{regname:town|$args.rivalTown.id}}. Encourage tolerance? {{should}}",
+        message: (subject, target, args) => {
+            return `Religious tensions simmer between {{regname:town|${target.id}}} and {{regname:town|${args.rivalTown.id}}}. Encourage tolerance? {{should}}`;
+        },
         messageDone: "Peace is urged between the faiths.",
         messageNo: "Faith must be defended.",
         func: (subject, target, args) => {
@@ -9931,7 +11373,9 @@
             args.figure = choose(deadHeroes);
             return true;
         },
-        message: "{{people}} wish to build a monument to {{b:$args.figure.fullTitle}}. {{should}}",
+        message: (subject, target, args) => {
+            return `{{people}} wish to build a monument to {{b:${args.figure.fullTitle}}}. {{should}}`;
+        },
         messageDone: "A statue is raised in their honor.",
         messageNo: "Their memory lives on without stone.",
         func: (subject, target, args) => {
@@ -9978,7 +11422,9 @@
             args.event = choose(events);
             return true;
         },
-        message: "{{people}} propose a monument commemorating {{b:$args.event.name}}. {{should}}",
+        message: (subject, target, args) => {
+            return `{{people}} propose a monument commemorating {{b:${args.event.name}}}. {{should}}`;
+        },
         messageDone: "History is preserved in stone.",
         messageNo: "The past needs no monuments.",
         func: (subject, target, args) => {
@@ -10391,7 +11837,9 @@
 
             return true;
         },
-        message: "Merchants from {{regname:town|$subject}} propose establishing a formal trade route with {{regname:town|$target}}. {{should}}",
+        message: (subject, target) => {
+            return `Merchants from {{regname:town|${subject.id}}} propose establishing a formal trade route with {{regname:town|${target.id}}}. {{should}}`;
+        },
         messageDone: "A trade route is established between the two settlements.",
         messageNo: "Trade continues informally, without official routes.",
         func: (subject, target) => {
@@ -10530,7 +11978,9 @@
 
             return true;
         },
-        message: "{{regname:town|$subject}} has become a crossroads of commerce. Merchants propose formalizing it as a major trade hub. {{should}}",
+        message: (subject) => {
+            return `{{regname:town|${subject.id}}} has become a crossroads of commerce. Merchants propose formalizing it as a major trade hub. {{should}}`;
+        },
         messageDone: "The settlement becomes renowned as a center of trade.",
         messageNo: "Trade continues without formal recognition.",
         func: (subject) => {
@@ -10579,7 +12029,11 @@
 
             return false;
         },
-        message: "The {{climate:hot and humid/swampy}} conditions around {{regname:town|$subject}} breed illness. Healers urge preventive measures. {{should}}",
+        message: (subject) => {
+            const climate = getTownClimate(subject);
+            const desc = getClimateDescription(climate.temp, climate.moisture);
+            return `The ${desc.full} conditions around {{regname:town|${subject.id}}} breed illness. Healers urge preventive measures. {{should}}`;
+        },
         messageDone: "Efforts are made to combat the spread of disease.",
         messageNo: "The people trust their natural resilience.",
         influences: { disease: 1.5 },
@@ -10609,7 +12063,9 @@
 
             return false;
         },
-        message: "The bitter cold tests {{regname:town|$subject}}. Extra provisions could ease the hardship. {{should}}",
+        message: (subject) => {
+            return `The bitter cold tests {{regname:town|${subject.id}}}. Extra provisions could ease the hardship. {{should}}`;
+        },
         messageDone: "The settlement weathers the cold season.",
         messageNo: "The people endure as best they can.",
         influences: { happy: 0.5 },
@@ -10631,7 +12087,9 @@
 
             return false;
         },
-        message: "A scorching heat wave strikes {{regname:town|$subject}}. Water must be rationed carefully. {{should}}",
+        message: (subject) => {
+            return `A scorching heat wave strikes {{regname:town|${subject.id}}}. Water must be rationed carefully. {{should}}`;
+        },
         messageDone: "The settlement survives the heat.",
         messageNo: "The people suffer through without intervention.",
         influences: { farm: -0.5 },
@@ -10750,7 +12208,9 @@
             initEnvironmentalPressure(subject);
             return subject.environmentalPressure.deforestation > 0.5;
         },
-        message: "The forests around {{regname:town|$subject}} are thinning. Some urge replanting efforts. {{should}}",
+        message: (subject) => {
+            return `The forests around {{regname:town|${subject.id}}} are thinning. Some urge replanting efforts. {{should}}`;
+        },
         messageDone: "Trees are planted to restore the woodland.",
         messageNo: "The demand for lumber continues unabated.",
         func: (subject, _, args) => {
@@ -10779,7 +12239,9 @@
             initEnvironmentalPressure(subject);
             return subject.environmentalPressure.overfarming > 0.6;
         },
-        message: "The soil around {{regname:town|$subject}} grows less fertile. Farmers urge letting fields lie fallow. {{should}}",
+        message: (subject) => {
+            return `The soil around {{regname:town|${subject.id}}} grows less fertile. Farmers urge letting fields lie fallow. {{should}}`;
+        },
         messageDone: "Fields are rotated to restore the soil.",
         messageNo: "Every plot must produce to feed the people.",
         influences: { farm: -1 },
@@ -10817,7 +12279,9 @@
 
             return true;
         },
-        message: "The land around {{regname:town|$subject}} shows signs of turning to dust. Drastic measures may be needed. {{should}}",
+        message: (subject) => {
+            return `The land around {{regname:town|${subject.id}}} shows signs of turning to dust. Drastic measures may be needed. {{should}}`;
+        },
         messageDone: "Major efforts begin to restore the land.",
         messageNo: "The land must provide, whatever the cost.",
         func: (subject, _, args) => {
@@ -10866,7 +12330,9 @@
             const climate = getTownClimate(subject);
             return climate.moisture < 0.45;
         },
-        message: "Irrigation projects around {{regname:town|$subject}} could make the land more fertile. {{should}}",
+        message: (subject) => {
+            return `Irrigation projects around {{regname:town|${subject.id}}} could make the land more fertile. {{should}}`;
+        },
         messageDone: "Canals and wells bring water to thirsty fields.",
         messageNo: "The land remains as nature made it.",
         func: (subject) => {
@@ -10901,7 +12367,9 @@
             // Industrial techs present
             return (planet.unlocks?.smith || 0) >= 60 || (planet.unlocks?.fire || 0) >= 60;
         },
-        message: "Smoke and waste from {{regname:town|$subject}} darken the skies. Some call for cleaner methods. {{should}}",
+        message: (subject) => {
+            return `Smoke and waste from {{regname:town|${subject.id}}} darken the skies. Some call for cleaner methods. {{should}}`;
+        },
         messageDone: "Efforts are made to reduce pollution.",
         messageNo: "Progress has its costs.",
         influences: { happy: 0.5, disease: -0.5 },
@@ -10958,7 +12426,9 @@
 
             return true;
         },
-        message: "Sailors from {{regname:town|$subject}} propose a sea trade route to {{regname:town|$target}}. {{should}}",
+        message: (subject, target) => {
+            return `Sailors from {{regname:town|${subject.id}}} propose a sea trade route to {{regname:town|${target.id}}}. {{should}}`;
+        },
         messageDone: "Ships begin sailing between the two ports.",
         messageNo: "The seas remain uncrossed.",
         func: (subject, target) => {
