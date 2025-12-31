@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.1.2";
+    const MOD_VERSION = "1.1.4";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -3771,6 +3771,45 @@
         }
     });
 
+    // Winter raids intensify skirmishes (more raids, fewer full wars)
+    modEvent("winterRaidSkirmish", {
+        random: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        target: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || !target) return false;
+            if (subject.id === target.id) return false;
+            if (!planet.unlocks?.military) return false;
+            const season = getSeasonInfo();
+            if (!season || season.id !== "winter") return false;
+            if (subject.end || target.end) return false;
+            if (hasIssue(subject, "war") || hasIssue(target, "war")) return false;
+            if (areAllied(subject, target)) return false;
+
+            const subjectMilitary = subject.influences?.military || 0;
+            if (subjectMilitary < 3) return false;
+
+            const raidValue = typeof getRaidAttractiveness === "function" ? getRaidAttractiveness(target) : 0;
+            if (raidValue < 2) return false;
+
+            const relation = getRelations(subject, target);
+            if (relation > 2) return false;
+
+            args.raidValue = raidValue;
+            return true;
+        },
+        func: (subject, target, args) => {
+            const profile = getSeasonWarProfile();
+            const pressure = 1 * (profile.raidBoost || 1);
+            bumpWarPressure(subject, target, pressure);
+            worsenRelations(target, subject, 1);
+            happen("Influence", null, subject, { military: 0.4, temp: true });
+            happen("Influence", null, target, { happy: -0.2, temp: true });
+            logMessage(`Winter raiders from {{regname:town|${subject.id}}} harry the outskirts of {{regname:town|${target.id}}}.`, "warning");
+        }
+    });
+
     // People migrate toward towns with cultural specializations
     modEvent("specializationMigration", {
         random: true,
@@ -5234,6 +5273,23 @@
         return clampValue(deterrence, 0, 0.5);
     }
 
+    function getSeasonWarProfile() {
+        const season = getSeasonInfo();
+        if (!season) return { warChance: 1, raidBoost: 1 };
+        switch (season.id) {
+            case "winter":
+                return { warChance: 0.6, raidBoost: 1.6 };
+            case "summer":
+                return { warChance: 1.25, raidBoost: 0.9 };
+            case "spring":
+                return { warChance: 1.05, raidBoost: 1 };
+            case "autumn":
+                return { warChance: 0.9, raidBoost: 1.1 };
+            default:
+                return { warChance: 1, raidBoost: 1 };
+        }
+    }
+
     function hasEmbargoBetween(town1, town2) {
         if (!planet.embargoes) return false;
         return planet.embargoes.some(e =>
@@ -5401,8 +5457,10 @@
 
         const baseChance = Math.max(0, (pressure - threshold) / 200);
         const chance = clampValue(baseChance * getTownAggression(instigator) * getTownWarReadiness(instigator, defender) * (1 - deterrence), 0, 0.2);
+        const seasonProfile = getSeasonWarProfile();
+        const adjustedChance = clampValue(chance * seasonProfile.warChance, 0, 0.25);
 
-        if (Math.random() < chance) {
+        if (Math.random() < adjustedChance) {
             startWar(instigator, defender);
             logMessage(`Tensions boil over. {{regname:town|${instigator.id}}} declares war on {{regname:town|${defender.id}}}!`, "warning");
             return true;
@@ -10869,6 +10927,7 @@
         expansion: "Expansion",
         learning: "Learning",
         hardship: "Hardship",
+        myth: "Myth",
         nature: "Nature"
     };
 
@@ -10949,6 +11008,10 @@
             body: data.body,
             voiceId: voice.id,
             voiceName: voice.name,
+            townId: data.townId || null,
+            historyId: data.historyId || null,
+            religionId: data.religionId || null,
+            figureId: data.figureId || null,
             sourceType: data.sourceType,
             sourceId: data.sourceId
         };
@@ -10959,6 +11022,7 @@
         if (planet.annals.length > ANNALS_MAX_ENTRIES) {
             planet.annals.splice(0, planet.annals.length - ANNALS_MAX_ENTRIES);
         }
+        try { noteLoreEntry(entry); } catch {}
         return entry;
     }
 
@@ -11007,9 +11071,489 @@
                     : stage === "scribe"
                         ? "Settlers crossed rivers and staked new ground."
                         : "Demographers marked a clear frontier shift.";
+            case "myth":
+                return stage === "oral"
+                    ? "Old tales grow taller with each retelling."
+                    : stage === "scribe"
+                        ? "The story passes into copied lore."
+                        : "Scholars debate how truth became legend.";
             default:
                 return null;
         }
+    }
+
+    const LORE_NUDGE_THEMES = ["war", "discovery", "faith", "revolution", "hardship", "myth", "diplomacy", "expansion", "culture"];
+
+    function initLoreNudges() {
+        if (!planet._paultendoLoreNudges) {
+            planet._paultendoLoreNudges = { lastDay: 0 };
+        }
+    }
+
+    function isLoreNudgeCandidate(entry) {
+        if (!entry || !entry.day) return false;
+        if (!LORE_NUDGE_THEMES.includes(entry.theme)) return false;
+        return true;
+    }
+
+    function noteLoreEntry(entry) {
+        if (!entry) return;
+        initLoreNudges();
+        if (isLoreNudgeCandidate(entry)) {
+            planet._paultendoLoreNudges.lastEntryId = entry.id;
+        }
+    }
+
+    function resolveLoreTown(entry) {
+        if (!entry) return null;
+        if (entry.townId) {
+            const town = regGet("town", entry.townId);
+            if (town && !town.end) return town;
+        }
+
+        if (entry.historyId && planet.history) {
+            const hist = planet.history.find(h => h.id === entry.historyId);
+            if (hist) {
+                const candidates = [hist.town, hist.victor, hist.loser]
+                    .filter(id => id !== undefined && id !== null)
+                    .map(id => regGet("town", id))
+                    .filter(t => t && !t.end);
+                if (candidates.length) return choose(candidates);
+            }
+        }
+
+        if (entry.sourceId && planet.history) {
+            const hist = planet.history.find(h =>
+                h.id === entry.sourceId && (h.type === entry.sourceType || h.historyType === entry.sourceType)
+            );
+            if (hist) {
+                const candidates = [hist.town, hist.victor, hist.loser]
+                    .filter(id => id !== undefined && id !== null)
+                    .map(id => regGet("town", id))
+                    .filter(t => t && !t.end);
+                if (candidates.length) return choose(candidates);
+            }
+        }
+
+        if (entry.sourceType && entry.sourceType.startsWith("discovery")) {
+            const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+            return towns.length ? weightedChoice(towns, t => 1 + (t.influences?.travel || 0)) : null;
+        }
+
+        const fallback = regFilter("town", t => t && !t.end && t.pop > 0);
+        return fallback.length ? choose(fallback) : null;
+    }
+
+    function getLoreNudgeEffect(entry) {
+        if (!entry) return null;
+        switch (entry.theme) {
+            case "war":
+                return { label: "prepare their defenses", influence: { military: 0.6, happy: 0.1 } };
+            case "discovery":
+                return { label: "sponsor exploration and travel", influence: { travel: 0.6, education: 0.3 } };
+            case "faith":
+            case "myth":
+                return { label: "honor their traditions", influence: { faith: 0.6, happy: 0.2 } };
+            case "revolution":
+                return { label: "steady their institutions", influence: { law: 0.5, happy: 0.1 } };
+            case "hardship":
+                return { label: "secure stores and relief", influence: { farm: 0.5, happy: 0.1 } };
+            case "diplomacy":
+                return { label: "seek wiser counsel", influence: { trade: 0.4, happy: 0.1 } };
+            case "expansion":
+                return { label: "open new paths", influence: { travel: 0.4, trade: 0.2 } };
+            case "culture":
+                return { label: "celebrate memory", influence: { education: 0.2, happy: 0.3 } };
+            default:
+                return null;
+        }
+    }
+
+    // ----------------------------------------
+    // LEGENDS & MYTHOLOGY
+    // ----------------------------------------
+
+    const MYTH_CONFIG = {
+        originMinDays: 50,
+        figureMinDays: 80,
+        historyMinDays: 100,
+        dailyChance: 0.015,
+        maxGlobal: 120,
+        maxPerTown: 5
+    };
+
+    function initMyths() {
+        if (!planet._paultendoMyths) {
+            planet._paultendoMyths = [];
+        }
+        if (!planet._paultendoMythId) {
+            planet._paultendoMythId = 1;
+        }
+    }
+
+    function getTownMyths(town) {
+        initMyths();
+        const townId = typeof town === "object" ? town.id : town;
+        if (!townId) return [];
+        return planet._paultendoMyths.filter(m => m.townId === townId);
+    }
+
+    function canAddTownMyth(town) {
+        if (!town) return false;
+        return getTownMyths(town).length < MYTH_CONFIG.maxPerTown;
+    }
+
+    function recordMyth(data) {
+        if (!data || !data.title || !data.body) return null;
+        initMyths();
+
+        if (data.sourceType && data.sourceId !== undefined) {
+            const existing = planet._paultendoMyths.find(m =>
+                m.sourceType === data.sourceType && m.sourceId === data.sourceId
+            );
+            if (existing) return existing;
+        }
+
+        const myth = {
+            id: planet._paultendoMythId++,
+            type: data.type || "legend",
+            title: data.title,
+            body: data.body,
+            theme: data.theme || "myth",
+            townId: data.townId || null,
+            religionId: data.religionId || null,
+            figureId: data.figureId || null,
+            historyId: data.historyId || null,
+            day: data.day !== undefined ? data.day : planet.day,
+            sourceType: data.sourceType,
+            sourceId: data.sourceId
+        };
+
+        planet._paultendoMyths.push(myth);
+        if (planet._paultendoMyths.length > MYTH_CONFIG.maxGlobal) {
+            planet._paultendoMyths.splice(0, planet._paultendoMyths.length - MYTH_CONFIG.maxGlobal);
+        }
+
+        try {
+            recordAnnalsEntry({
+                theme: myth.theme || "myth",
+                title: myth.title,
+                body: myth.body,
+                townId: myth.townId,
+                religionId: myth.religionId,
+                figureId: myth.figureId,
+                historyId: myth.historyId,
+                sourceType: "myth",
+                sourceId: myth.id,
+                day: myth.day
+            });
+        } catch {}
+
+        return myth;
+    }
+
+    function getReligionMyths(religion) {
+        if (!religion || !religion._paultendoMyths || !religion._paultendoMyths.length) return [];
+        initMyths();
+        return religion._paultendoMyths
+            .map(id => planet._paultendoMyths.find(m => m.id === id))
+            .filter(m => m);
+    }
+
+    function getMythTown(myth) {
+        if (!myth || !myth.townId) return null;
+        return regGet("town", myth.townId);
+    }
+
+    function createOriginMyth(town, force = false) {
+        if (!town || town.end) return null;
+        if (!force && planet.day - (town.start || planet.day) < MYTH_CONFIG.originMinDays) return null;
+        if (town._paultendoOriginMythId) return null;
+        if (!canAddTownMyth(town)) return null;
+
+        const stage = getAnnalsStage();
+        const townName = townRef(town.id);
+        const climate = getTownClimate(town);
+        const climateDesc = getClimateDescription(climate.temp, climate.moisture).full;
+
+        const title = choose([
+            `The Founding of ${town.name}`,
+            `The First Fire of ${town.name}`,
+            `${town.name}'s Origin`
+        ]);
+
+        let body = stage === "oral"
+            ? `${townName} tells how its founders followed signs to a ${climateDesc} land and raised the first hearth.`
+            : stage === "scribe"
+                ? `Early chronicles of ${townName} describe a journey to a ${climateDesc} land and the lighting of the first fire.`
+                : `Later historians trace ${townName}'s beginnings to a migration into a ${climateDesc} land.`;
+
+        const myth = recordMyth({
+            type: "origin",
+            theme: "myth",
+            title,
+            body,
+            townId: town.id,
+            sourceType: "origin_story",
+            sourceId: town.id,
+            day: town.start || planet.day
+        });
+
+        if (myth) {
+            town._paultendoOriginMythId = myth.id;
+            happen("Influence", null, town, { faith: 0.3, happy: 0.2, temp: true });
+        }
+
+        return myth;
+    }
+
+    function createFigureLegend(figure) {
+        if (!figure || !figure.died) return null;
+        if (figure._paultendoLegendId) return null;
+        if (planet.day - figure.died < MYTH_CONFIG.figureMinDays) return null;
+
+        const townId = figure.hometown;
+        const town = townId ? regGet("town", townId) : null;
+        if (town && !canAddTownMyth(town)) return null;
+
+        const stage = getAnnalsStage();
+        const townName = town ? townRef(town.id) : "the people";
+        const deed = figure.deeds && figure.deeds.length ? choose(figure.deeds) : null;
+
+        const title = `The Legend of ${figure.name}`;
+        let body = stage === "oral"
+            ? `${townName} keep songs of {{b:${figure.fullTitle}}}, who ${deed || "walked with purpose and courage"}.`
+            : stage === "scribe"
+                ? `Scribes note {{b:${figure.fullTitle}}} of ${townName}, remembered for ${deed || "remarkable deeds"}.`
+                : `Later scholars frame {{b:${figure.fullTitle}}} of ${townName} as a figure whose ${deed || "deeds shaped local memory"}.`;
+
+        const myth = recordMyth({
+            type: "figure",
+            theme: "myth",
+            title,
+            body,
+            townId: town ? town.id : null,
+            figureId: figure.id,
+            sourceType: "figure_legend",
+            sourceId: figure.id
+        });
+
+        if (myth) {
+            figure._paultendoLegendId = myth.id;
+            if (town) {
+                initTownCulture(town);
+                town.culture.prestige += 1;
+                happen("Influence", null, town, { faith: 0.4, happy: 0.2, temp: true });
+            }
+        }
+
+        return myth;
+    }
+
+    function isMythworthyHistory(entry) {
+        if (!entry) return false;
+        if (entry._paultendoMythId) return false;
+        if (planet.day - entry.day < MYTH_CONFIG.historyMinDays) return false;
+        const historyType = entry.historyType || entry.type;
+
+        switch (historyType) {
+            case HISTORY_TYPES.WAR:
+                return (entry.deaths || 0) >= 15 || (entry.duration || 0) >= 20;
+            case HISTORY_TYPES.DISASTER:
+                return (entry.deaths || 0) >= 10 || entry.subtype === "epidemic";
+            case HISTORY_TYPES.REVOLUTION:
+                return true;
+            case HISTORY_TYPES.RELIGION_FOUNDED:
+                return true;
+            case HISTORY_TYPES.ALLIANCE_FORMED:
+                return (entry.founders || []).length >= 2;
+            case HISTORY_TYPES.CULTURAL_ACHIEVEMENT:
+                return true;
+            case HISTORY_TYPES.TOWN_FOUNDED:
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    function historyMythWeight(entry) {
+        const historyType = entry.historyType || entry.type;
+        if (historyType === HISTORY_TYPES.WAR) return 1.4 + Math.min(2, (entry.deaths || 0) / 20);
+        if (historyType === HISTORY_TYPES.DISASTER) return 1.2 + Math.min(2, (entry.deaths || 0) / 15);
+        if (historyType === HISTORY_TYPES.REVOLUTION) return 1.4;
+        if (historyType === HISTORY_TYPES.RELIGION_FOUNDED) return 1.2;
+        if (historyType === HISTORY_TYPES.ALLIANCE_FORMED) return 0.9;
+        if (historyType === HISTORY_TYPES.CULTURAL_ACHIEVEMENT) return 0.8;
+        return 0.6;
+    }
+
+    function createHistoryMyth(entry) {
+        if (!entry) return null;
+        const historyType = entry.historyType || entry.type;
+        const stage = getAnnalsStage();
+
+        let title = "A Legend Emerges";
+        let body = "A story passes into legend.";
+        let townId = entry.town || entry.victor || entry.loser || null;
+        let theme = "myth";
+
+        if (historyType === HISTORY_TYPES.WAR) {
+            const victor = entry.victor ? townRef(entry.victor) : "a kingdom";
+            const loser = entry.loser ? townRef(entry.loser) : "their foes";
+            title = `The Tale of ${entry.name || "a Great War"}`;
+            body = stage === "oral"
+                ? `Around the fires, ${victor} and ${loser} are said to have clashed in ${entry.name || "a war of old"}.`
+                : stage === "scribe"
+                    ? `Records preserve ${entry.name || "a war"} between ${victor} and ${loser}.`
+                    : `Historians debate how ${entry.name || "the war"} reshaped the balance between ${victor} and ${loser}.`;
+        } else if (historyType === HISTORY_TYPES.DISASTER) {
+            const townName = entry.town ? townRef(entry.town) : "a town";
+            const subtype = entry.subtype || "disaster";
+            title = `The ${subtype} of ${townName}`;
+            body = stage === "oral"
+                ? `${townName} speaks in hushed tones of the ${subtype} and the scars it left.`
+                : stage === "scribe"
+                    ? `Chroniclers describe the ${subtype} that struck ${townName}.`
+                    : `Later accounts place the ${subtype} among the defining trials of ${townName}.`;
+            theme = "hardship";
+        } else if (historyType === HISTORY_TYPES.REVOLUTION) {
+            const townName = entry.town ? townRef(entry.town) : "a town";
+            title = `The Turning of ${townName}`;
+            body = stage === "oral"
+                ? `${townName} tells of the day the old order fell and new banners rose.`
+                : stage === "scribe"
+                    ? `The revolution in ${townName} is recorded as a watershed.`
+                    : `Later scholars cite the revolution in ${townName} as a decisive break.`;
+            theme = "revolution";
+        } else if (historyType === HISTORY_TYPES.RELIGION_FOUNDED) {
+            const townName = entry.town ? townRef(entry.town) : "a town";
+            const name = entry.religionName || "a faith";
+            title = `The Dawn of ${name}`;
+            body = stage === "oral"
+                ? `${townName} tells how ${name} first took root among their people.`
+                : stage === "scribe"
+                    ? `Accounts from ${townName} describe the founding of ${name}.`
+                    : `Later commentators frame ${name}'s founding in ${townName} as a lasting spiritual shift.`;
+            theme = "faith";
+        } else if (historyType === HISTORY_TYPES.ALLIANCE_FORMED) {
+            const founders = (entry.founders || []).map(id => townRef(id)).join(" and ");
+            title = `The Pact of ${entry.allianceName || "the Allies"}`;
+            body = stage === "oral"
+                ? `The pact between ${founders || "old rivals"} is told as a turning point.`
+                : stage === "scribe"
+                    ? `The alliance between ${founders || "founders"} is remembered in treaty-lists.`
+                    : `Scholars note how the alliance between ${founders || "founders"} reshaped the region.`;
+            theme = "diplomacy";
+        } else if (historyType === HISTORY_TYPES.CULTURAL_ACHIEVEMENT) {
+            const townName = entry.town ? townRef(entry.town) : "a town";
+            title = `The Masterwork of ${townName}`;
+            body = stage === "oral"
+                ? `${townName} remembers a work of art that lives on in memory.`
+                : stage === "scribe"
+                    ? `Scribes record a cultural achievement in ${townName}.`
+                    : `Later critics trace a local legend to a masterwork in ${townName}.`;
+            theme = "culture";
+        }
+
+        const myth = recordMyth({
+            type: "event",
+            theme,
+            title,
+            body,
+            townId,
+            historyId: entry.id,
+            sourceType: "history_myth",
+            sourceId: entry.id
+        });
+
+        if (myth) {
+            entry._paultendoMythId = myth.id;
+            if (townId) {
+                const town = regGet("town", townId);
+                if (town) {
+                    initTownCulture(town);
+                    town.culture.prestige += 0.6;
+                    happen("Influence", null, town, { faith: 0.3, happy: 0.2, temp: true });
+                }
+            }
+        }
+
+        return myth;
+    }
+
+    function incorporateMythIntoReligion(religion, town) {
+        if (!religion || !town) return null;
+        initMyths();
+        const myths = getTownMyths(town);
+        let myth = myths.length ? choose(myths) : null;
+        if (!myth && Math.random() < 0.4) {
+            myth = createOriginMyth(town, true);
+        }
+        if (!myth) return null;
+
+        if (!religion._paultendoMyths) religion._paultendoMyths = [];
+        if (!religion._paultendoMyths.includes(myth.id)) {
+            religion._paultendoMyths.push(myth.id);
+        }
+
+        try {
+            const stage = getAnnalsStage();
+            const townName = townRef(town.id);
+            const title = `${religion.name} Embraces a Local Legend`;
+            let body = stage === "oral"
+                ? `In ${townName}, ${religion.name} folds the tale of ${myth.title} into its rites.`
+                : stage === "scribe"
+                    ? `Clerics in ${townName} note that ${religion.name} adopts the legend of ${myth.title}.`
+                    : `Later histories show ${religion.name} weaving the legend of ${myth.title} into doctrine.`;
+            recordAnnalsEntry({
+                theme: "faith",
+                title,
+                body,
+                sourceType: "religion_myth",
+                sourceId: `${religion.id}-${myth.id}`
+            });
+        } catch {}
+
+        return myth;
+    }
+
+    function pickMythCandidate() {
+        if (!planet) return null;
+        initHistory();
+        initMyths();
+
+        const candidates = [];
+
+        if (typeof regToArray === "function") {
+            const towns = regToArray("town");
+            towns.forEach(town => {
+                if (!town || town.end) return;
+                if (town._paultendoOriginMythId) return;
+                if (planet.day - (town.start || planet.day) < MYTH_CONFIG.originMinDays) return;
+                if (!canAddTownMyth(town)) return;
+                candidates.push({ type: "origin", town, weight: 1.6 });
+            });
+        }
+
+        if (planet.figures && planet.figures.length) {
+            planet.figures.forEach(figure => {
+                if (!figure || !figure.died) return;
+                if (figure._paultendoLegendId) return;
+                if (planet.day - figure.died < MYTH_CONFIG.figureMinDays) return;
+                const weight = ["HERO", "GENERAL", "PROPHET", "FOUNDER", "MARTYR"].includes(figure.type) ? 1.6 : 1.1;
+                candidates.push({ type: "figure", figure, weight });
+            });
+        }
+
+        if (planet.history && planet.history.length) {
+            planet.history.forEach(entry => {
+                if (!isMythworthyHistory(entry)) return;
+                candidates.push({ type: "history", entry, weight: historyMythWeight(entry) });
+            });
+        }
+
+        if (candidates.length === 0) return null;
+        return weightedChoice(candidates, c => c.weight);
     }
 
     function buildAnnalsFromHistory(entry) {
@@ -11875,6 +12419,32 @@
         }
     }
 
+    function maybeStealMaps(subject, target, scale = 1) {
+        if (!subject || !target) return false;
+        if (!initDiscoveryState()) return false;
+        const travel = target.influences?.travel || 0;
+        const trade = target.influences?.trade || 0;
+        const education = target.influences?.education || 0;
+        const mapValue = travel * 0.6 + trade * 0.3 + education * 0.2;
+
+        const hasRouteKnowledge = hasTownSpecialization(target, "tradingHub") || hasTownSpecialization(target, "merchantGuild");
+        const hasScholars = hasTownSpecialization(target, "grandLibrary") || hasTownSpecialization(target, "academy");
+        const bonus = (hasRouteKnowledge ? 0.6 : 0) + (hasScholars ? 0.4 : 0);
+
+        if ((mapValue + bonus) < 2.5) return false;
+
+        const boost = clampValue((0.0009 * (mapValue + bonus)) * scale, 0.0006, 0.008);
+        const duration = Math.max(10, Math.round(20 * scale));
+
+        planet._paultendoDiscovery.boost = Math.min(0.02, (planet._paultendoDiscovery.boost || 0) + boost);
+        planet._paultendoDiscovery.boostUntil = Math.max(planet._paultendoDiscovery.boostUntil || 0, planet.day + duration);
+
+        if (Math.random() < 0.18 * scale) {
+            logMessage(`Stolen charts from {{regname:town|${target.id}}} spur new explorations in {{regname:town|${subject.id}}}.`);
+        }
+        return true;
+    }
+
     function exposeSecret(secret, exposedBy = null) {
         if (!secret || secret.exposed) return false;
         secret.exposed = true;
@@ -11969,6 +12539,7 @@
                 const secret = secrets.length > 0 ? choose(secrets) : createSecret(target, chooseSecretType(target));
                 addSecretKnowledge(secret, subject);
                 applySecretLeverage(secret, subject, target, effectScale);
+                maybeStealMaps(subject, target, effectScale);
                 bumpWarPressure(subject, target, 1 * effectScale);
 
                 if (Math.random() < 0.15 * effectScale) {
@@ -12342,6 +12913,10 @@
             }
         }
 
+        if (foundingTown && Math.random() < 0.6) {
+            try { incorporateMythIntoReligion(religion, foundingTown); } catch {}
+        }
+
         return religion;
     };
 
@@ -12612,6 +13187,166 @@
 
             logMessage(`{{regname:town|${subject.id}}} erects a monument to {{b:${args.event.name}}}.`, "milestone");
         }
+    });
+
+    // ----------------------------------------
+    // LEGENDS & MYTHOLOGY EVENTS
+    // ----------------------------------------
+
+    modEvent("mythFormation", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        value: (subject, target, args) => {
+            if (Math.random() > MYTH_CONFIG.dailyChance) return false;
+            const candidate = pickMythCandidate();
+            if (!candidate) return false;
+            args.candidate = candidate;
+            return true;
+        },
+        func: (subject, target, args) => {
+            const candidate = args.candidate;
+            let myth = null;
+            if (candidate.type === "origin") {
+                myth = createOriginMyth(candidate.town);
+            } else if (candidate.type === "figure") {
+                myth = createFigureLegend(candidate.figure);
+            } else if (candidate.type === "history") {
+                myth = createHistoryMyth(candidate.entry);
+            }
+
+            if (myth && Math.random() < 0.35) {
+                const townName = myth.townId ? townRef(myth.townId) : "the world";
+                logMessage(`A legend spreads from ${townName}: {{b:${myth.title}}}.`);
+            }
+        }
+    });
+
+    modEvent("mythRetelling", {
+        random: true,
+        weight: $c.VERY_RARE,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            const myths = getTownMyths(subject);
+            if (myths.length === 0) return false;
+            args.myth = choose(myths);
+            return true;
+        },
+        func: (subject, target, args) => {
+            const myth = args.myth;
+            happen("Influence", null, subject, { faith: 0.2, happy: 0.2, temp: true });
+            logMessage(`{{regname:town|${subject.id}}} retells the legend of {{b:${myth.title}}}.`);
+        }
+    });
+
+    // Myth-driven pilgrimages establish routes and boost travel/trade
+    modEvent("mythPilgrimageRoute", {
+        random: true,
+        weight: $c.RARE,
+        subject: { reg: "player", id: 1 },
+        value: (subject, target, args) => {
+            if (!planet.religions || planet.religions.length === 0) return false;
+            if ((planet.unlocks?.travel || 0) < 20) return false;
+            const season = getSeasonInfo();
+            if (season && season.id === "winter" && Math.random() < 0.6) return false;
+
+            const religions = planet.religions.filter(r => !r.extinct && r.followers && r.followers.length >= 2);
+            if (religions.length === 0) return false;
+
+            const candidates = religions.map(r => {
+                const myths = getReligionMyths(r);
+                return { religion: r, myths, weight: 1 + myths.length * 0.6 };
+            }).filter(r => r.myths.length > 0);
+
+            if (candidates.length === 0) return false;
+
+            const pick = weightedChoice(candidates, c => c.weight);
+            const religion = pick.religion;
+            const myth = choose(pick.myths);
+            const destination = getMythTown(myth);
+            if (!destination || destination.end) return false;
+
+            const followerIds = religion.followers.filter(id => id !== destination.id);
+            if (followerIds.length === 0) return false;
+            const sources = followerIds.map(id => regGet("town", id)).filter(t => t && !t.end && t.pop >= 20);
+            if (sources.length === 0) return false;
+
+            const source = choose(sources);
+            if (!source || source.id === destination.id) return false;
+
+            args.religion = religion;
+            args.myth = myth;
+            args.source = source;
+            args.destination = destination;
+            return true;
+        },
+        func: (subject, target, args) => {
+            const source = args.source;
+            const destination = args.destination;
+            const myth = args.myth;
+
+            const existingRoute = getTradeRouteBetween(source, destination);
+            const route = existingRoute || createTradeRoute(source, destination);
+            if (route) {
+                route.purpose = route.purpose || "pilgrimage";
+                route.pilgrimage = true;
+            }
+
+            const pilgrims = Math.min(4, Math.max(1, Math.floor((source.pop || 0) * 0.02)));
+            if (pilgrims > 0) {
+                happen("Migrate", source, destination, { count: pilgrims });
+            }
+
+            happen("Influence", null, source, { travel: 0.4, faith: 0.3, temp: true });
+            happen("Influence", null, destination, { trade: 0.3, faith: 0.4, happy: 0.2, temp: true });
+
+            const routeLine = route?.needsShips ? "by sea" : "along well-worn roads";
+            logMessage(`Pilgrims from {{regname:town|${source.id}}} journey ${routeLine} to honor {{b:${myth.title}}} in {{regname:town|${destination.id}}}.`);
+        }
+    });
+
+    // Lore-guided nudges (rare, optional, gentle)
+    modEvent("loreGuidance", {
+        random: true,
+        weight: $c.VERY_RARE,
+        subject: { reg: "player", id: 1 },
+        value: (subject, target, args) => {
+            if (!planet.annals || planet.annals.length === 0) return false;
+            initLoreNudges();
+
+            const candidates = planet.annals.filter(entry => {
+                if (!isLoreNudgeCandidate(entry)) return false;
+                if (entry._paultendoNudgedDay) return false;
+                if (planet.day - entry.day > 120) return false;
+                return true;
+            });
+
+            if (candidates.length === 0) return false;
+            const entry = choose(candidates);
+            const town = resolveLoreTown(entry);
+            if (!town || town.end) return false;
+            if (!canReceiveGuidance(town, "loreNudge", 40)) return false;
+
+            const effect = getLoreNudgeEffect(entry);
+            if (!effect) return false;
+
+            args.entry = entry;
+            args.town = town;
+            args.effect = effect;
+            return true;
+        },
+        message: (subject, target, args) => {
+            const townName = `{{regname:town|${args.town.id}}}`;
+            return `The Lore recalls {{b:${args.entry.title}}}. Perhaps you subtly encourage ${townName} to ${args.effect.label}? {{should}}`;
+        },
+        func: (subject, target, args) => {
+            const town = args.town;
+            const effect = args.effect;
+            happen("Influence", null, town, { ...effect.influence, temp: true });
+            args.entry._paultendoNudgedDay = planet.day;
+            noteGuidance(town, "loreNudge", true);
+        },
+        messageDone: () => "You offer a gentle nudge. The lesson settles.",
+        messageNo: () => "You let the lesson rest."
     });
 
     // ----------------------------------------
@@ -12950,6 +13685,15 @@
         initTradeRoutes();
         return planet.tradeRoutes.filter(r =>
             (r.town1 === town.id || r.town2 === town.id) && r.active
+        );
+    }
+
+    function getTradeRouteBetween(town1, town2) {
+        initTradeRoutes();
+        if (!town1 || !town2) return null;
+        return planet.tradeRoutes.find(r =>
+            (r.town1 === town1.id && r.town2 === town2.id) ||
+            (r.town1 === town2.id && r.town2 === town1.id)
         );
     }
 
