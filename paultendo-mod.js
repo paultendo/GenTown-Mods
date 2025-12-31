@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.1.9";
+    const MOD_VERSION = "1.1.11";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -142,6 +142,14 @@
             towns: [town1.id, town2.id]
         }, "process");
         if (!process) return false;
+        const early = isEarlyWarEra();
+        if (early) {
+            process._paultendoEarly = true;
+            const min = EARLY_WAR_CONFIG.minDuration;
+            const max = EARLY_WAR_CONFIG.maxDuration;
+            process._paultendoEarlyDuration = min + Math.floor(Math.random() * (max - min + 1));
+            process._paultendoEarlyStart = planet.day;
+        }
         ensureIssues(town1);
         ensureIssues(town2);
         town1.issues.war = process.id;
@@ -345,6 +353,14 @@
         worldScaleDefault: 1.5
     };
 
+    const FOG_CONFIG = {
+        enabled: true,
+        opaqueAlpha: 0.98,
+        townRevealRadius: 1,
+        expeditionRevealRadius: 2,
+        expeditionRevealCount: 3
+    };
+
     const DISCOVERY_TIER_NAMES = {
         0: "Homelands",
         1: "Near Seas",
@@ -394,6 +410,211 @@
 
     function getDiscoveryTierName(tier) {
         return DISCOVERY_TIER_NAMES[tier] || `Tier ${tier}`;
+    }
+
+    // =========================================================================
+    // TRUE FOG OF WAR (chunk-level exploration tracking)
+    // =========================================================================
+
+    function initFogOfWarState() {
+        if (!planet) return false;
+        if (!planet._paultendoFog) {
+            planet._paultendoFog = {
+                explored: {},
+                lastUpdate: planet.day
+            };
+        }
+        if (!planet._paultendoFog.explored || typeof planet._paultendoFog.explored !== "object") {
+            planet._paultendoFog.explored = {};
+        }
+        return true;
+    }
+
+    function getChunkKey(x, y) {
+        return `${x},${y}`;
+    }
+
+    function isFogActive() {
+        if (!FOG_CONFIG.enabled) return false;
+        if (!planet || typeof regCount !== "function") return false;
+        if (regCount("town") <= 0) return false;
+        return true;
+    }
+
+    function isChunkExplored(x, y) {
+        if (!FOG_CONFIG.enabled) return true;
+        if (!planet || typeof regCount !== "function") return true;
+        if (regCount("town") <= 0) return true;
+        if (!initFogOfWarState()) return true;
+        return !!planet._paultendoFog.explored[getChunkKey(x, y)];
+    }
+
+    function markChunksExplored(chunks, opts = {}) {
+        if (!initFogOfWarState() || !Array.isArray(chunks)) return 0;
+        const fog = planet._paultendoFog;
+        let added = 0;
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            if (!chunk || typeof chunk.x !== "number" || typeof chunk.y !== "number") continue;
+            const key = getChunkKey(chunk.x, chunk.y);
+            if (fog.explored[key]) continue;
+            fog.explored[key] = 1;
+            added += 1;
+        }
+        if (added > 0 && !opts.deferRefresh) scheduleFogRefresh();
+        return added;
+    }
+
+    function markChunkExplored(x, y) {
+        const chunk = typeof x === "object" ? x : (typeof chunkAt === "function" ? chunkAt(x, y) : null);
+        if (!chunk) return 0;
+        return markChunksExplored([chunk]);
+    }
+
+    function getTownClaimedChunks(town) {
+        if (!town) return [];
+        if (!town.center && typeof happen === "function") {
+            try { happen("UpdateCenter", null, town); } catch {}
+        }
+        if (town.center && typeof floodFill === "function") {
+            const limit = Math.max(1, town.size || 1);
+            const chunks = floodFill(
+                town.center[0],
+                town.center[1],
+                (c) => c && c.v && c.v.s === town.id,
+                limit
+            );
+            if (Array.isArray(chunks) && chunks.length) return chunks;
+        }
+        if (typeof filterChunks === "function") {
+            return filterChunks((c) => c && c.v && c.v.s === town.id);
+        }
+        return [];
+    }
+
+    function markTownExplored(town) {
+        if (!town || town.end) return false;
+        const chunks = getTownClaimedChunks(town);
+        const reveal = [];
+        if (chunks.length) reveal.push(...chunks);
+
+        if (FOG_CONFIG.townRevealRadius > 0 && town.center && typeof circleCoords === "function") {
+            const coords = circleCoords(town.center[0], town.center[1], FOG_CONFIG.townRevealRadius);
+            for (let i = 0; i < coords.length; i++) {
+                const chunk = typeof chunkAt === "function" ? chunkAt(coords[i].x, coords[i].y) : null;
+                if (chunk) reveal.push(chunk);
+            }
+        }
+
+        if (reveal.length) {
+            markChunksExplored(reveal);
+        }
+
+        town._paultendoFogInit = true;
+        town._paultendoFogSize = town.size || 0;
+        return true;
+    }
+
+    function revealLandmassFootprint(landmassId, sourceTown) {
+        if (!landmassId || !initFogOfWarState()) return false;
+        if (typeof filterChunks !== "function") return false;
+        const chunks = filterChunks((c) => c && c.v && c.v.g === landmassId);
+        if (!chunks.length) return false;
+
+        const revealCount = Math.max(1, Math.min(FOG_CONFIG.expeditionRevealCount, Math.ceil(chunks.length / 120)));
+        const picks = [];
+        for (let i = 0; i < revealCount; i++) {
+            picks.push(choose(chunks));
+        }
+
+        const reveal = [];
+        for (let i = 0; i < picks.length; i++) {
+            const pick = picks[i];
+            if (!pick) continue;
+            reveal.push(pick);
+            if (FOG_CONFIG.expeditionRevealRadius > 0 && typeof circleCoords === "function") {
+                const coords = circleCoords(pick.x, pick.y, FOG_CONFIG.expeditionRevealRadius);
+                for (let j = 0; j < coords.length; j++) {
+                    const chunk = typeof chunkAt === "function" ? chunkAt(coords[j].x, coords[j].y) : null;
+                    if (chunk) reveal.push(chunk);
+                }
+            }
+        }
+
+        if (sourceTown && sourceTown.center && typeof circleCoords === "function") {
+            const coords = circleCoords(sourceTown.center[0], sourceTown.center[1], 1);
+            for (let i = 0; i < coords.length; i++) {
+                const chunk = typeof chunkAt === "function" ? chunkAt(coords[i].x, coords[i].y) : null;
+                if (chunk) reveal.push(chunk);
+            }
+        }
+
+        if (reveal.length) markChunksExplored(reveal);
+        return true;
+    }
+
+    function ensureFogLayer() {
+        if (typeof addCanvasLayer !== "function") return false;
+        if (typeof canvasLayers === "undefined" || typeof canvasLayersOrder === "undefined") return false;
+        if (!canvasLayers.fog) {
+            addCanvasLayer("fog");
+            const fogIndex = canvasLayersOrder.indexOf("fog");
+            const cursorIndex = canvasLayersOrder.indexOf("cursor");
+            if (cursorIndex >= 0 && fogIndex > cursorIndex) {
+                canvasLayersOrder.splice(fogIndex, 1);
+                canvasLayersOrder.splice(cursorIndex, 0, "fog");
+            }
+            if (typeof resizeCanvases === "function") {
+                resizeCanvases();
+            }
+        }
+        return !!canvasLayers.fog;
+    }
+
+    function getFogOpacity() {
+        const base = FOG_CONFIG.opaqueAlpha;
+        return clampValue(base, 0.85, 1);
+    }
+
+    function renderFogOfWar() {
+        if (!ensureFogLayer()) return;
+        const ctx = canvasLayersCtx ? canvasLayersCtx.fog : null;
+        if (!ctx || typeof canvasLayers === "undefined") return;
+        const fogCanvas = canvasLayers.fog;
+        if (!fogCanvas) return;
+
+        ctx.clearRect(0, 0, fogCanvas.width, fogCanvas.height);
+        if (!isFogActive()) return;
+        if (!planet || !planet.chunks) return;
+        if (typeof chunkSize === "undefined") return;
+
+        const alpha = getFogOpacity();
+        ctx.fillStyle = `rgba(8, 10, 14, ${alpha})`;
+
+        for (const chunkKey in planet.chunks) {
+            const chunk = planet.chunks[chunkKey];
+            if (!chunk || !chunk.v) continue;
+            if (isChunkExplored(chunk.x, chunk.y)) continue;
+            ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
+        }
+    }
+
+    function scheduleFogRefresh() {
+        if (!planet) return;
+        if (planet._paultendoFogRefreshPending) return;
+        planet._paultendoFogRefreshPending = true;
+
+        const refresh = () => {
+            planet._paultendoFogRefreshPending = false;
+            try { renderFogOfWar(); } catch {}
+            try { if (typeof updateCanvas === "function") updateCanvas(); } catch {}
+        };
+
+        if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+            window.setTimeout(refresh, 30);
+        } else {
+            refresh();
+        }
     }
 
     function computeLandmassCenters() {
@@ -541,6 +762,16 @@
                 sourceId: landmassId
             });
         } catch {}
+        try { revealLandmassFootprint(landmassId, town); } catch {}
+        try {
+            if (typeof renderMap === "function" && typeof updateCanvas === "function") {
+                renderMap();
+                if (typeof renderHighlight === "function") {
+                    renderHighlight();
+                }
+                updateCanvas();
+            }
+        } catch {}
         return true;
     }
 
@@ -679,23 +910,18 @@
     }
 
     function renderDiscoveryFog() {
-        if (!initDiscoveryState()) return;
-        if (!canvasLayersCtx || !canvasLayersCtx.terrain) return;
-        if (typeof chunkSize === "undefined") return;
+        try { renderFogOfWar(); } catch {}
+    }
 
-        const ctx = canvasLayersCtx.terrain;
-        const size = chunkSize;
-        const fogAlpha = getDiscoveryFogAlpha();
-        if (fogAlpha <= 0) return;
-
-        ctx.fillStyle = `rgba(8, 10, 14, ${fogAlpha})`;
-
-        for (const chunkKey in planet.chunks) {
-            const chunk = planet.chunks[chunkKey];
-            if (!chunk || !chunk.v || !chunk.v.g) continue;
-            if (isLandmassDiscovered(chunk.v.g)) continue;
-            ctx.fillRect(chunk.x * size, chunk.y * size, size, size);
-        }
+    function ensureDiscoveryReadyForFog() {
+        if (!initDiscoveryState()) return false;
+        const townCount = regCount("town");
+        if (townCount <= 0) return false;
+        const ok = computeLandmassTiers();
+        if (!ok) return false;
+        refreshDiscoveryForExistingTowns();
+        planet._paultendoDiscoveryReady = true;
+        return true;
     }
 
     function getDiscoveryFogAlpha() {
@@ -722,7 +948,18 @@
     function shouldShowMarker(marker) {
         const landmassId = getMarkerLandmassId(marker);
         if (!landmassId) return true;
-        return isLandmassDiscovered(landmassId);
+        if (!isLandmassDiscovered(landmassId)) return false;
+        if (!FOG_CONFIG.enabled || !isFogActive()) return true;
+        if (marker && typeof marker.x === "number" && typeof marker.y === "number") {
+            return isChunkExplored(marker.x, marker.y);
+        }
+        if (marker && marker.town) {
+            const town = regGet("town", marker.town);
+            if (town && town.center) {
+                return isChunkExplored(town.center[0], town.center[1]);
+            }
+        }
+        return true;
     }
 
     // Apply discovery-aware filters to chunk selection during expansion
@@ -980,7 +1217,8 @@
         const chunkKey = mousePos.chunkX + "," + mousePos.chunkY;
         const chunk = planet && planet.chunks ? planet.chunks[chunkKey] : null;
         const biome = chunk?.b ? chunk.b : "unknown";
-        overlay.textContent = `x:${mousePos.x} y:${mousePos.y} · ${biome}`;
+        const explored = chunk ? isChunkExplored(chunk.x, chunk.y) : true;
+        overlay.textContent = `x:${mousePos.x} y:${mousePos.y} · ${explored ? biome : "unknown"}`;
     }
 
     function drawCursorCrosshair() {
@@ -1074,6 +1312,7 @@
         }
         try { applyScaleAwareZoom(); } catch {}
         try { ensureMapControls(); } catch {}
+        try { ensureFogLayer(); } catch {}
         return true;
     }
 
@@ -1085,6 +1324,7 @@
             try { ensureMapCanvasSync(); } catch {}
             try { ensureMapControls(); } catch {}
             try { applyScaleAwareZoom(); } catch {}
+            try { ensureFogLayer(); } catch {}
         });
     }
 
@@ -1159,6 +1399,23 @@
                 refreshDiscoveryForExistingTowns();
                 planet._paultendoDiscoveryReady = true;
             }
+        }
+    });
+
+    modEvent("fogOfWarUpdate", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!FOG_CONFIG.enabled) return false;
+            if (!subject || subject.end) return false;
+            if (!initFogOfWarState()) return false;
+            const size = subject.size || 0;
+            if (size <= 0) return false;
+            if (!subject._paultendoFogInit) return true;
+            return size > (subject._paultendoFogSize || 0);
+        },
+        func: (subject) => {
+            markTownExplored(subject);
         }
     });
 
@@ -5416,6 +5673,16 @@
     // EMERGENT WAR PRESSURE SYSTEM (no arbitrary timers)
     // -------------------------------------------------------------------------
 
+    const EARLY_WAR_CONFIG = {
+        eraThreshold: 10,
+        minDuration: 6,
+        maxDuration: 14,
+        raidDistance: 7,
+        raidChance: 0.2,
+        transferChance: 0.35,
+        casualtyRate: 0.003
+    };
+
     const GOVERNMENT_WAR_PROFILE = {
         tribal: { aggression: 1.05, diplomacy: 0.95 },
         council: { aggression: 0.9, diplomacy: 1.1 },
@@ -5432,6 +5699,47 @@
 
     function getGovernmentWarProfile(govId) {
         return GOVERNMENT_WAR_PROFILE[govId] || { aggression: 1, diplomacy: 1 };
+    }
+
+    function getMilitaryLevel() {
+        return planet && planet.unlocks && planet.unlocks.military ? planet.unlocks.military : 0;
+    }
+
+    function isEarlyWarEra() {
+        return getMilitaryLevel() < EARLY_WAR_CONFIG.eraThreshold;
+    }
+
+    function getEarlyWarStrength(town) {
+        if (!town) return 1;
+        const pop = town.pop || 0;
+        const military = town.influences?.military || 0;
+        const unrest = town.unrest || 0;
+        let strength = Math.max(1, pop) * (1 + military * 0.04);
+        if (hasTradition(town, "martial")) strength *= 1.15;
+        if (unrest > 60) strength *= 0.9;
+        if (town.famine && !town.famine.ended) strength *= 0.8;
+        return strength;
+    }
+
+    function getEarlyWarReadiness(town, other) {
+        if (!town) return 0.7;
+        let readiness = 0.85;
+        const strength = getEarlyWarStrength(town);
+        const otherStrength = getEarlyWarStrength(other);
+        const ratio = strength / Math.max(1, strength + otherStrength);
+        readiness += (ratio - 0.5) * 0.3;
+
+        if (hasTradition(town, "martial")) readiness += 0.1;
+        if (hasTradition(town, "festive")) readiness -= 0.05;
+
+        const scarcity = getTownScarcityPressure(town);
+        readiness += Math.min(0.2, scarcity * 0.05);
+
+        if (hasIssue(town, "disaster") || hasIssue(town, "revolution")) readiness -= 0.15;
+        if (town.drought && !town.drought.ended) readiness -= 0.05;
+        if (town.famine && !town.famine.ended) readiness -= 0.08;
+
+        return clampValue(readiness, 0.5, 1.25);
     }
 
     function getTownAggression(town) {
@@ -5660,7 +5968,6 @@
     }
 
     function maybeStartWarFromPressure(town1, town2, pressure) {
-        if (!planet.unlocks?.military) return false;
         if (town1.end || town2.end) return false;
         if (areAllied(town1, town2)) return false;
         if (hasIssue(town1, "war") || hasIssue(town2, "war")) return false;
@@ -5669,24 +5976,40 @@
 
         const aggression1 = getTownAggression(town1);
         const aggression2 = getTownAggression(town2);
-        const readiness1 = getTownWarReadiness(town1, town2);
-        const readiness2 = getTownWarReadiness(town2, town1);
+        const earlyEra = isEarlyWarEra();
+        const readiness1 = earlyEra ? getEarlyWarReadiness(town1, town2) : getTownWarReadiness(town1, town2);
+        const readiness2 = earlyEra ? getEarlyWarReadiness(town2, town1) : getTownWarReadiness(town2, town1);
 
-        const threshold = 35 - (aggression1 + aggression2 - 2) * 6;
+        const thresholdBase = earlyEra ? 45 : 35;
+        const threshold = thresholdBase - (aggression1 + aggression2 - 2) * 6;
         if (pressure < threshold) return false;
 
         const instigator = (aggression1 * readiness1) >= (aggression2 * readiness2) ? town1 : town2;
         const defender = instigator.id === town1.id ? town2 : town1;
         const deterrence = getTownDeterrence(defender);
 
+        if (earlyEra) {
+            const distance = getTownDistance(instigator, defender);
+            const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+            const limit = Math.min(maxDist * 0.25, EARLY_WAR_CONFIG.raidDistance * 2);
+            if (distance !== null && distance > limit) return false;
+        }
+
         const baseChance = Math.max(0, (pressure - threshold) / 200);
-        const chance = clampValue(baseChance * getTownAggression(instigator) * getTownWarReadiness(instigator, defender) * (1 - deterrence), 0, 0.2);
+        const readiness = earlyEra ? getEarlyWarReadiness(instigator, defender) : getTownWarReadiness(instigator, defender);
+        const deterrenceFactor = earlyEra ? (1 - deterrence * 0.6) : (1 - deterrence);
+        const maxChance = earlyEra ? 0.08 : 0.2;
+        const chance = clampValue(baseChance * getTownAggression(instigator) * readiness * deterrenceFactor, 0, maxChance);
         const seasonProfile = getSeasonWarProfile();
-        const adjustedChance = clampValue(chance * seasonProfile.warChance, 0, 0.25);
+        const adjustedChance = clampValue(chance * seasonProfile.warChance, 0, earlyEra ? 0.12 : 0.25);
 
         if (Math.random() < adjustedChance) {
             startWar(instigator, defender);
-            logMessage(`Tensions boil over. {{regname:town|${instigator.id}}} declares war on {{regname:town|${defender.id}}}!`, "warning");
+            if (earlyEra) {
+                logMessage(`Skirmishes erupt between {{regname:town|${instigator.id}}} and {{regname:town|${defender.id}}}!`, "warning");
+            } else {
+                logMessage(`Tensions boil over. {{regname:town|${instigator.id}}} declares war on {{regname:town|${defender.id}}}!`, "warning");
+            }
             return true;
         }
         return false;
@@ -5696,9 +6019,12 @@
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
-            if (!planet.unlocks?.military) return false;
             if (subject.end || subject.pop <= 0) return false;
-            if (Math.random() > 0.5) return false; // sample a subset each day
+            if (planet.day < 5) return false;
+            const earlyEra = isEarlyWarEra();
+            if (earlyEra && subject.pop < 4) return false;
+            const sampleRate = earlyEra ? 0.35 : 0.5;
+            if (Math.random() > sampleRate) return false; // sample a subset each day
 
             const candidates = regFilter("town", t => t && !t.end && t.pop > 0 && t.id !== subject.id);
             if (candidates.length === 0) return false;
@@ -5726,6 +6052,140 @@
             maybeStartWarFromPressure(subject, other, pressure);
         }
     });
+
+    function isEarlyWarProcess(process) {
+        if (!process || process.type !== "war") return false;
+        if (process._paultendoEarly) return true;
+        return isEarlyWarEra();
+    }
+
+    function getEarlyWarDuration(process) {
+        if (!process) return EARLY_WAR_CONFIG.minDuration;
+        if (!process._paultendoEarlyDuration) {
+            const min = EARLY_WAR_CONFIG.minDuration;
+            const max = EARLY_WAR_CONFIG.maxDuration;
+            process._paultendoEarlyDuration = min + Math.floor(Math.random() * (max - min + 1));
+        }
+        return process._paultendoEarlyDuration;
+    }
+
+    function attemptEarlyRaid(attacker, defender, power = 0.5) {
+        if (!attacker || !defender || attacker.end || defender.end) return false;
+        if (!attacker.center || !defender.center) return false;
+        if (Math.random() > EARLY_WAR_CONFIG.raidChance) return false;
+
+        const distance = getTownDistance(attacker, defender);
+        if (distance !== null && distance > EARLY_WAR_CONFIG.raidDistance) return false;
+
+        const chunk = typeof nearestChunk === "function"
+            ? nearestChunk(attacker.center[0], attacker.center[1], (c) => c && c.v && c.v.s === defender.id)
+            : null;
+        if (!chunk) return false;
+
+        if (typeof distanceCoords === "function") {
+            const distToChunk = distanceCoords(attacker.center[0], attacker.center[1], chunk.x, chunk.y);
+            if (distToChunk > EARLY_WAR_CONFIG.raidDistance) return false;
+        }
+
+        happen("Unclaim", attacker, defender, { x: chunk.x, y: chunk.y });
+
+        if (!defender.end && Math.random() < EARLY_WAR_CONFIG.transferChance) {
+            chunk.v.s = attacker.id;
+            attacker.size = (attacker.size || 0) + 1;
+        }
+
+        if (typeof happen === "function") {
+            try { happen("UpdateCenter", null, attacker); } catch {}
+            try { happen("UpdateCenter", null, defender); } catch {}
+        }
+
+        if (Math.random() < 0.2) {
+            logMessage(`Border raids between {{regname:town|${attacker.id}}} and {{regname:town|${defender.id}}} flare up.`);
+        }
+
+        return true;
+    }
+
+    function processEarlyWar(process) {
+        if (!process || !process.towns || process.towns.length < 2) {
+            happen("Finish", null, process);
+            return true;
+        }
+
+        const towns = process.towns.map(id => regGet("town", id)).filter(t => t && !t.end);
+        if (towns.length < 2) {
+            happen("Finish", null, process);
+            return true;
+        }
+
+        const age = planet.day - (process.start || planet.day);
+        const duration = getEarlyWarDuration(process);
+        let endNow = age >= duration;
+
+        for (let i = 0; i < towns.length; i++) {
+            for (let j = i + 1; j < towns.length; j++) {
+                const town1 = towns[i];
+                const town2 = towns[j];
+                if (!town1 || !town2 || town1.end || town2.end) {
+                    happen("Finish", null, process);
+                    return true;
+                }
+                if (!town1.center) { try { happen("UpdateCenter", null, town1); } catch {} }
+                if (!town2.center) { try { happen("UpdateCenter", null, town2); } catch {} }
+
+                happen("AddRelation", town1, town2, { amount: -0.05 });
+                happen("Influence", null, town1, { happy: -0.05, temp: true });
+                happen("Influence", null, town2, { happy: -0.05, temp: true });
+
+                const strength1 = getEarlyWarStrength(town1);
+                const strength2 = getEarlyWarStrength(town2);
+                const power = strength1 / Math.max(1, strength1 + strength2);
+
+                const scarcity = getTownScarcityPressure(town1) + getTownScarcityPressure(town2);
+                const skirmishChance = 0.12 + Math.min(0.12, scarcity * 0.03);
+                if (Math.random() < skirmishChance) {
+                    const attacker = Math.random() < power ? town1 : town2;
+                    const defender = attacker.id === town1.id ? town2 : town1;
+                    const loss = Math.max(1, Math.floor((defender.pop || 1) * EARLY_WAR_CONFIG.casualtyRate));
+                    if (loss > 0) {
+                        happen("Death", null, defender, { count: loss, cause: "war" });
+                    }
+                    attemptEarlyRaid(attacker, defender, power);
+                }
+
+                if (getPairRelation(town1, town2) > -1 && age > 3) {
+                    endNow = true;
+                }
+            }
+        }
+
+        if (!endNow) {
+            const diplomacy = towns.reduce((sum, t) => sum + getTownDiplomacyBias(t), 0) / towns.length;
+            const endChance = 0.015 * diplomacy + Math.min(0.12, age / Math.max(1, duration) * 0.08);
+            if (Math.random() < endChance) endNow = true;
+        }
+
+        if (endNow) {
+            logMessage(`Skirmishes between ${commaList(towns.map(t => `{{regname:town|${t.id}}}`))} fade into an uneasy peace.`);
+            happen("Finish", null, process);
+            return true;
+        }
+
+        return false;
+    }
+
+    if (typeof metaEvents !== "undefined" && metaEvents.processWar && typeof metaEvents.processWar.func === "function" &&
+        !metaEvents.processWar.func._paultendoEarlyWar) {
+        const baseProcessWar = metaEvents.processWar.func;
+        metaEvents.processWar.func = function(subject, target, args) {
+            if (isEarlyWarProcess(subject)) {
+                processEarlyWar(subject);
+                return;
+            }
+            return baseProcessWar(subject, target, args);
+        };
+        metaEvents.processWar.func._paultendoEarlyWar = true;
+    }
 
     // -------------------------------------------------------------------------
     // Player Sway - Government Manipulation
