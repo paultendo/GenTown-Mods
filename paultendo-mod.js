@@ -15,11 +15,140 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.3.3";
+    const MOD_VERSION = "1.5.0";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
     console.log(`[paultendo-mod] Loaded v${MOD_VERSION}`);
+
+    // =========================================================================
+    // SAFE REGNAME FALLBACKS (avoid "Invalid Thing" when entities are removed)
+    // =========================================================================
+
+    const TOMBSTONE_LIMIT = 500;
+
+    function getTombstoneStore() {
+        const fallback = (typeof window !== "undefined") ? (window._paultendoTombstones || (window._paultendoTombstones = { items: {}, order: [] })) : { items: {}, order: [] };
+        if (!planet) return fallback;
+        if (!planet._paultendoTombstones) {
+            planet._paultendoTombstones = { items: {}, order: [] };
+        }
+        if (typeof window !== "undefined" && window._paultendoTombstones && window._paultendoTombstones !== planet._paultendoTombstones) {
+            const hasFallback = Object.keys(window._paultendoTombstones.items || {}).length > 0;
+            const hasPlanet = Object.keys(planet._paultendoTombstones.items || {}).length > 0;
+            if (hasFallback && !hasPlanet) {
+                planet._paultendoTombstones = window._paultendoTombstones;
+            }
+        }
+        return planet._paultendoTombstones;
+    }
+
+    function rememberEntityTombstone(entity, regNameOverride) {
+        if (!entity) return;
+        const regName = regNameOverride || entity._reg;
+        const id = entity.id;
+        if (!regName || id === undefined || id === null) return;
+        const store = getTombstoneStore();
+        const key = `${regName}:${id}`;
+        if (!store.items[key]) {
+            store.order.push(key);
+        }
+        store.items[key] = {
+            _reg: regName,
+            id: id,
+            name: entity.name || null,
+            subtype: entity.subtype || null,
+            type: entity.type || null,
+            color: entity.color || null,
+            symbol: entity.symbol || null,
+            flag: entity.flag || null,
+            prefix: entity.prefix || null,
+            suffix: entity.suffix || null,
+            day: planet ? planet.day : 0,
+            _paultendoTombstone: true
+        };
+        if (store.order.length > TOMBSTONE_LIMIT) {
+            const evict = store.order.splice(0, store.order.length - TOMBSTONE_LIMIT);
+            evict.forEach((k) => delete store.items[k]);
+        }
+    }
+
+    function getEntityTombstone(regName, id) {
+        if (!regName || id === undefined || id === null) return null;
+        const store = getTombstoneStore();
+        return store.items[`${regName}:${id}`] || null;
+    }
+
+    function wrapRegRemove() {
+        if (typeof regRemove !== "function" || regRemove._paultendoWrapped) return;
+        const baseRegRemove = regRemove;
+        regRemove = function(subregistryName, id) {
+            try {
+                if (typeof reg !== "undefined" && reg && reg[subregistryName] && reg[subregistryName][id]) {
+                    rememberEntityTombstone(reg[subregistryName][id], subregistryName);
+                }
+            } catch {}
+            return baseRegRemove(subregistryName, id);
+        };
+        regRemove._paultendoWrapped = true;
+    }
+
+    function renderRegnameSpan(regName, data, overrideName) {
+        if (!data) return "";
+        let name = data.name || null;
+        if (overrideName && overrideName !== "-") name = overrideName;
+        let color = data.color || null;
+        if (!data._paultendoTombstone && typeof regBrowserExtra !== "undefined" && regBrowserExtra[regName]) {
+            try {
+                if (!name && regBrowserExtra[regName].name) {
+                    name = regBrowserExtra[regName].name(data);
+                }
+                if (!color && regBrowserExtra[regName].color) {
+                    color = regBrowserExtra[regName].color(data);
+                }
+            } catch {}
+        }
+        color = color || [127, 127, 127];
+        if (typeof RGBtoHSL === "function" && typeof HSLtoRGB === "function") {
+            try {
+                let hsl = RGBtoHSL(color);
+                hsl[2] = Math.max(0.65, hsl[2]);
+                color = HSLtoRGB(hsl);
+            } catch {}
+        }
+        if (!name) name = data.subtype || data.type || "Thing";
+        const prefix = (!overrideName && data.prefix) ? "<span class='affix'>" + data.prefix + " </span>" : "";
+        const suffix = (!overrideName && data.suffix) ? "<span class='affix'> " + data.suffix + "</span>" : "";
+        const symbolPart = (!overrideName && (data.flag || data.symbol))
+            ? (typeof parseText === "function" ? parseText(data.flag || "{{symbol:" + data.symbol + "}}") : (data.flag || data.symbol)) + " "
+            : "";
+        const title = typeof titleCase === "function" ? titleCase(regName) : regName;
+        const style = color ? `style="color:rgb(${Math.floor(color[0])},${Math.floor(color[1])},${Math.floor(color[2])})"` : "";
+        return prefix + `<span class='entityName${data.usurp ? " usurp" : ""}' title='${title}' data-reg='${regName}' data-id='${data.id}' ${style} onclick="handleEntityClick(this); event.stopPropagation();" onmouseenter='handleEntityHover(this)' onmouseleave='handleEntityHoverOut(this)' role="link">${overrideName !== "-" ? symbolPart : ""}${name}</span>` + suffix;
+    }
+
+    function overrideRegnameParser() {
+        if (typeof addParserCommand !== "function") return;
+        addParserCommand("regname", function(args) {
+            if (!args || args.length < 2) { return ""; }
+            const regName = args[0];
+            const rawId = args[1];
+            const parsedId = parseInt(rawId);
+            let data = (typeof regGet === "function" && !isNaN(parsedId)) ? regGet(regName, parsedId) : null;
+            if (!data) {
+                const tombstone = getEntityTombstone(regName, isNaN(parsedId) ? rawId : parsedId);
+                if (tombstone) data = tombstone;
+            }
+            if (!data) {
+                const title = typeof titleCase === "function" ? titleCase(regName) : regName;
+                return `<span class='entityName' title='${rawId}' data-reg='${regName}' data-id='${rawId}'>Unknown ${title}</span>`;
+            }
+            return renderRegnameSpan(regName, data, args[2]);
+        });
+    }
+
+    try { wrapRegRemove(); } catch {}
+    try { overrideRegnameParser(); } catch {}
 
     // =========================================================================
     // EVENT WRAPPER (daily + subject/target all safe per-entity value/check)
@@ -424,6 +553,10 @@
         town2.issues.war = process.id;
         try { assignWarCasus(process, town1, town2); } catch {}
         try { applyVassalWarJoin(process); } catch {}
+        try { noteProphecyTrigger("war", { town: town2, townId: town2.id }); } catch {}
+        try { noteProphecyTrigger("war", { town: town1, townId: town1.id }); } catch {}
+        try { recordTownMemory(town1, { type: "war", text: `War breaks out with ${townRef(town2.id)}.` }); } catch {}
+        try { recordTownMemory(town2, { type: "war", text: `War breaks out with ${townRef(town1.id)}.` }); } catch {}
         return process;
     }
 
@@ -437,6 +570,12 @@
                 const defender = defenderId ? regGet("town", defenderId) : null;
                 try { assignWarCasus(result, instigator, defender); } catch {}
                 try { applyVassalWarJoin(result); } catch {}
+                try { noteProphecyTrigger("war", { town: defender, townId: defender?.id }); } catch {}
+                try { noteProphecyTrigger("war", { town: instigator, townId: instigator?.id }); } catch {}
+            }
+            try { handleAutoplayEventForHappen(action, subject, target, result); } catch {}
+            if (planet && planet._paultendoDailyCache && (action === "Create" || action === "End" || action === "Finish")) {
+                planet._paultendoDailyCache.day = -1;
             }
             return result;
         };
@@ -452,6 +591,18 @@
         if (!planet.unlocks || typeof planet.unlocks !== "object") {
             planet.unlocks = {};
         }
+    }
+
+    function getDailyCache(key, builder) {
+        if (!planet) return builder ? builder() : undefined;
+        if (!planet._paultendoDailyCache || planet._paultendoDailyCache.day !== planet.day) {
+            planet._paultendoDailyCache = { day: planet.day, data: {} };
+        }
+        const data = planet._paultendoDailyCache.data;
+        if (key in data) return data[key];
+        const value = builder ? builder() : undefined;
+        data[key] = value;
+        return value;
     }
 
     function ensureTownState(town) {
@@ -581,6 +732,16 @@
 
     const VALUE_SHIFT = VALUES_CONFIG.shift;
 
+    const TRADITIONS_CONFIG = {
+        min: 0,
+        max: 100,
+        base: 50,
+        driftRate: 0.05,
+        orderWeight: 4,
+        changeWeight: -3,
+        stabilityWeight: 2.5
+    };
+
     const GOVERNMENT_VALUE_BIASES = {
         tribal: { order: -1, change: -2, openness: -1 },
         council: { order: 1, change: -1, justice: 1 },
@@ -646,20 +807,71 @@
         }
     }
 
-    function shiftTownValue(town, axis, amount, reason) {
+    function shiftTownValue(town, axis, amount, reason, options = {}) {
         initTownValues(town);
         if (!VALUES_CONFIG.axes.includes(axis)) return false;
         const oldValue = town.values[axis] || 0;
-        const newValue = clampValue(oldValue + amount, VALUES_CONFIG.range.min, VALUES_CONFIG.range.max);
+        const resistance = options.ignoreTraditions ? 0 : getTraditionResistance(town);
+        const scale = Math.abs(amount) <= 2 ? (1 - resistance) : (1 - resistance * 0.5);
+        const adjusted = amount * clampValue(scale, 0.35, 1);
+        if (Math.abs(adjusted) < 0.001) return false;
+        const newValue = clampValue(oldValue + adjusted, VALUES_CONFIG.range.min, VALUES_CONFIG.range.max);
         town.values[axis] = newValue;
         recordValueHistory(town, {
             day: planet.day,
             axis,
-            change: amount,
+            change: adjusted,
             reason: reason || "value shift",
             newValue: newValue
         });
         return true;
+    }
+
+    function initTownTraditions(town) {
+        if (!town) return;
+        if (town.traditions === undefined || town.traditions === null) {
+            initTownValues(town);
+            const order = town.values?.order || 0;
+            const change = town.values?.change || 0;
+            const stability = (town.influences?.law || 0) + (town.influences?.happy || 0);
+            const target = TRADITIONS_CONFIG.base +
+                order * TRADITIONS_CONFIG.orderWeight +
+                change * TRADITIONS_CONFIG.changeWeight +
+                stability * TRADITIONS_CONFIG.stabilityWeight;
+            town.traditions = clampValue(target, TRADITIONS_CONFIG.min, TRADITIONS_CONFIG.max);
+        }
+    }
+
+    function computeTraditionsTarget(town) {
+        initTownValues(town);
+        const order = town.values?.order || 0;
+        const change = town.values?.change || 0;
+        const stability = (town.influences?.law || 0) + (town.influences?.happy || 0);
+        const target = TRADITIONS_CONFIG.base +
+            order * TRADITIONS_CONFIG.orderWeight +
+            change * TRADITIONS_CONFIG.changeWeight +
+            stability * TRADITIONS_CONFIG.stabilityWeight;
+        return clampValue(target, TRADITIONS_CONFIG.min, TRADITIONS_CONFIG.max);
+    }
+
+    function updateTownTraditions(town) {
+        if (!town || town.end) return false;
+        initTownTraditions(town);
+        const target = computeTraditionsTarget(town);
+        const rate = TRADITIONS_CONFIG.driftRate;
+        town.traditions = clampValue(
+            (town.traditions || TRADITIONS_CONFIG.base) * (1 - rate) + target * rate,
+            TRADITIONS_CONFIG.min,
+            TRADITIONS_CONFIG.max
+        );
+        return true;
+    }
+
+    function getTraditionResistance(town) {
+        if (!town) return 0;
+        initTownTraditions(town);
+        const level = town.traditions || TRADITIONS_CONFIG.base;
+        return clampValue(level / 140, 0.05, 0.6);
     }
 
     function getRevolutionType(town, newGovId, oldGovId) {
@@ -1163,6 +1375,15 @@
         }
     });
 
+    modEvent("traditionsUpdate", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: () => planet.day % 2 === 0,
+        func: (subject) => {
+            updateTownTraditions(subject);
+        }
+    });
+
     // =========================================================================
     // PRESTIGE + INFRASTRUCTURE (Decay & Soft Power)
     // =========================================================================
@@ -1383,6 +1604,9 @@
         trade: { perDay: 2, perTownCooldown: 10 },
         roads: { perDay: 2, perTownCooldown: 10 },
         lore: { perDay: 1 },
+        memory: { perDay: 2, perTownCooldown: 12 },
+        prophecy: { perDay: 1, perTownCooldown: 20 },
+        knowledge: { perDay: 1, perTownCooldown: 20 },
         governance: { perDay: 2, perTownCooldown: 15 },
         religion: { perDay: 2, perTownCooldown: 15 },
         season: { perDay: 2, perTownCooldown: 10 },
@@ -1439,11 +1663,115 @@
         }
     }
 
+    const CHRONICLE_CONFIG = {
+        maxDays: 30,
+        maxEntriesPerDay: 80
+    };
+
+    function getChronicleStore() {
+        if (!planet) return null;
+        if (!planet._paultendoChronicle) {
+            planet._paultendoChronicle = { days: [], index: {} };
+        }
+        return planet._paultendoChronicle;
+    }
+
+    function getChronicleDay(day) {
+        const store = getChronicleStore();
+        if (!store) return null;
+        const key = String(day);
+        if (store.index[key]) return store.index[key];
+        const entry = { day, entries: [], counts: {} };
+        store.days.push(entry);
+        store.index[key] = entry;
+        if (store.days.length > CHRONICLE_CONFIG.maxDays) {
+            const removed = store.days.splice(0, store.days.length - CHRONICLE_CONFIG.maxDays);
+            removed.forEach(r => delete store.index[String(r.day)]);
+        }
+        return entry;
+    }
+
+    function recordChronicleEntry(system, message, type) {
+        if (!planet || !message) return;
+        const entry = getChronicleDay(planet.day);
+        if (!entry) return;
+        if (entry.entries.length >= CHRONICLE_CONFIG.maxEntriesPerDay) return;
+        entry.entries.push({ system: system || "misc", message, type: type || null });
+        entry.counts[system || "misc"] = (entry.counts[system || "misc"] || 0) + 1;
+    }
+
+    function formatChronicleSummary(day) {
+        const entry = getChronicleDay(day);
+        if (!entry || !entry.entries.length) return "Chronicle · quiet";
+        const parts = Object.entries(entry.counts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([system, count]) => `${titleCase(system)} ${count}`);
+        return `Chronicle · ${parts.join(", ")}`;
+    }
+
+    function openChronicleIndex() {
+        if (!planet || typeof populateExecutive !== "function") return;
+        const store = getChronicleStore();
+        const items = [];
+        if (!store || !store.days.length) {
+            items.push({ text: "No chronicle entries yet." });
+            populateExecutive(items, "Chronicle");
+            return;
+        }
+        const days = [...store.days].sort((a, b) => b.day - a.day);
+        days.forEach(entry => {
+            const summary = Object.entries(entry.counts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 3)
+                .map(([system, count]) => `${titleCase(system)} ${count}`)
+                .join(", ");
+            items.push({
+                text: `Day ${entry.day} · ${summary || "quiet"}`,
+                func: () => openChroniclePanel(entry.day)
+            });
+        });
+        populateExecutive(items, "Chronicle");
+    }
+
+    function openChroniclePanel(day) {
+        if (!planet || typeof populateExecutive !== "function") return;
+        const entry = getChronicleDay(day);
+        const items = [];
+        items.push({ text: "Back to Chronicle", func: () => openChronicleIndex() });
+        items.push({ spacer: true, text: `Day ${day}` });
+        if (!entry || !entry.entries.length) {
+            items.push({ text: "No entries." });
+            populateExecutive(items, "Chronicle Day");
+            return;
+        }
+        entry.entries.forEach((evt) => {
+            const tag = evt.system ? `{{b:${titleCase(evt.system)}}} · ` : "";
+            items.push({ text: `${tag}${evt.message}` });
+        });
+        populateExecutive(items, "Chronicle Day");
+    }
+
+    function addChronicleButton() {
+        const list = document.getElementById("actionMainList");
+        if (!list || document.getElementById("actionItem-chronicle")) return;
+        const button = document.createElement("span");
+        button.className = "actionItem clickable";
+        button.id = "actionItem-chronicle";
+        button.innerHTML = "Chronicle";
+        button.addEventListener("click", () => {
+            openChronicleIndex();
+        });
+        list.appendChild(button);
+    }
+
     function modLog(system, message, type, options = {}) {
         if (!message) return false;
         if (!shouldLogSystem(system, { ...options, type })) return false;
         const result = logMessage(message, type);
+        try { recordChronicleEntry(system, message, type); } catch {}
         noteLogSystem(system, options.town);
+        try { noteMemoryFromLog(system, message, options); } catch {}
         return result;
     }
 
@@ -1506,7 +1834,7 @@
         if (!indicator) {
             indicator = document.createElement("span");
             indicator.id = "paultendoSeasonIndicator";
-            indicator.className = "panelSubtitle";
+            indicator.className = "panelSubtitle paultendoIndicator";
             const statsDiv = document.getElementById("statsDiv");
             if (statsDiv) statsMain.insertBefore(indicator, statsDiv);
             else statsMain.appendChild(indicator);
@@ -1517,6 +1845,7 @@
     function updateSeasonIndicator() {
         const info = getSeasonInfo();
         if (!info) return;
+        ensureSystemStyles();
         const indicator = ensureSeasonIndicator();
         if (!indicator) return;
         indicator.textContent = `${info.icon} ${info.name} ${info.seasonDay}/${SEASON_LENGTH_DAYS} · Year ${info.year}`;
@@ -1528,9 +1857,8 @@
         const prev = planet._paultendoSeason;
         planet._paultendoSeason = info;
         updateSeasonIndicator();
-        try { updateDiscoveryIndicator(); } catch {}
-        try { updateSystemIndicator(); } catch {}
-        try { updateGreatWorkIndicator(); } catch {}
+        removeInlineWorldIndicators();
+        try { refreshWorldStatusPanel(); } catch {}
 
         if (!prev || prev.year !== info.year) {
             try {
@@ -1553,6 +1881,421 @@
         }
     }
 
+    function removeInlineWorldIndicators() {
+        if (typeof document === "undefined") return;
+        ["paultendoDiscoveryIndicator", "paultendoSystemsIndicator", "paultendoGreatWorkIndicator"]
+            .forEach(id => {
+                const node = document.getElementById(id);
+                if (node && node.parentNode) node.parentNode.removeChild(node);
+            });
+    }
+
+    // -------------------------------------------------------------------------
+    // AUTOPLAY (time controls + optional auto-decisions)
+    // -------------------------------------------------------------------------
+
+    const AUTOPLAY_CONFIG = {
+        speeds: [
+            { label: "1x", delay: 1000 },
+            { label: "2x", delay: 600 },
+            { label: "4x", delay: 300 },
+            { label: "8x", delay: 160 },
+            { label: "Max", delay: 80 }
+        ],
+        autoDecisionOptions: [0, 8, 12, 20],
+        autoDecisionLabel: (seconds) => seconds > 0 ? `${seconds}s` : "off",
+        autoPauseMajorDefault: true,
+        decisionBiasDefault: "balanced"
+    };
+
+    function initAutoplaySettings() {
+        if (typeof userSettings === "undefined") return;
+        if (userSettings.paultendoAutoplaySpeed === undefined) userSettings.paultendoAutoplaySpeed = 0;
+        if (userSettings.paultendoAutoplayAutoDecide === undefined) userSettings.paultendoAutoplayAutoDecide = 0;
+        if (userSettings.paultendoAutoplayPauseMajor === undefined) userSettings.paultendoAutoplayPauseMajor = AUTOPLAY_CONFIG.autoPauseMajorDefault;
+        if (!userSettings.paultendoAutoplayBias) userSettings.paultendoAutoplayBias = AUTOPLAY_CONFIG.decisionBiasDefault;
+    }
+
+    function getAutoplayState() {
+        if (typeof window === "undefined") return { active: false };
+        if (!window._paultendoAutoplay) {
+            window._paultendoAutoplay = {
+                active: false,
+                timer: null,
+                promptTimer: null,
+                lastStopReason: null
+            };
+        }
+        return window._paultendoAutoplay;
+    }
+
+    function getAutoplaySpeedIndex() {
+        initAutoplaySettings();
+        const idx = typeof userSettings !== "undefined" ? userSettings.paultendoAutoplaySpeed : 0;
+        if (idx === undefined || idx === null) return 0;
+        return clampValue(idx, 0, AUTOPLAY_CONFIG.speeds.length - 1);
+    }
+
+    function getAutoplaySpeed() {
+        return AUTOPLAY_CONFIG.speeds[getAutoplaySpeedIndex()] || AUTOPLAY_CONFIG.speeds[0];
+    }
+
+    function setAutoplaySpeedIndex(index) {
+        initAutoplaySettings();
+        if (typeof userSettings !== "undefined") {
+            userSettings.paultendoAutoplaySpeed = clampValue(index, 0, AUTOPLAY_CONFIG.speeds.length - 1);
+            if (typeof saveSettings === "function") saveSettings();
+        }
+        updateAutoplayUI();
+    }
+
+    function cycleAutoplaySpeed() {
+        const next = (getAutoplaySpeedIndex() + 1) % AUTOPLAY_CONFIG.speeds.length;
+        setAutoplaySpeedIndex(next);
+    }
+
+    function getAutoDecisionSeconds() {
+        initAutoplaySettings();
+        return typeof userSettings !== "undefined" ? (userSettings.paultendoAutoplayAutoDecide || 0) : 0;
+    }
+
+    function setAutoDecisionSeconds(seconds) {
+        initAutoplaySettings();
+        if (typeof userSettings !== "undefined") {
+            userSettings.paultendoAutoplayAutoDecide = seconds;
+            if (typeof saveSettings === "function") saveSettings();
+        }
+        updateAutoplayUI();
+    }
+
+    function cycleAutoDecisionSeconds() {
+        const current = getAutoDecisionSeconds();
+        const options = AUTOPLAY_CONFIG.autoDecisionOptions;
+        const idx = options.indexOf(current);
+        const next = options[(idx + 1) % options.length];
+        setAutoDecisionSeconds(next);
+    }
+
+    function getAutoDecisionBias() {
+        initAutoplaySettings();
+        return typeof userSettings !== "undefined" ? userSettings.paultendoAutoplayBias : AUTOPLAY_CONFIG.decisionBiasDefault;
+    }
+
+    function cycleAutoDecisionBias() {
+        initAutoplaySettings();
+        if (typeof userSettings === "undefined") return;
+        const order = ["conservative", "balanced", "bold"];
+        const current = getAutoDecisionBias();
+        const idx = Math.max(0, order.indexOf(current));
+        const next = order[(idx + 1) % order.length];
+        userSettings.paultendoAutoplayBias = next;
+        if (typeof saveSettings === "function") saveSettings();
+        updateAutoplayUI();
+    }
+
+    function ensureAutoplayStyles() {
+        if (typeof document === "undefined") return;
+        if (document.getElementById("paultendoAutoplayStyles")) return;
+        const style = document.createElement("style");
+        style.id = "paultendoAutoplayStyles";
+        style.textContent = `
+            #paultendoAutoplayControls, #paultendoAutoplayControlsMobile {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                margin-left: 6px;
+            }
+            .paultendoAutoplayButton {
+                font-size: 0.85em;
+                padding: 0 6px;
+                line-height: 1.7em;
+                min-width: 48px;
+                text-align: center;
+            }
+            #paultendoAutoplayAuto {
+                min-width: 64px;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function buildAutoplayButton(id, label, title) {
+        const button = document.createElement("span");
+        button.id = id;
+        button.className = "nextDay paultendoAutoplayButton";
+        button.setAttribute("role", "button");
+        if (title) button.setAttribute("title", title);
+        button.textContent = label;
+        return button;
+    }
+
+    function ensureAutoplayControls() {
+        if (typeof document === "undefined") return;
+        updateAutoplayUI();
+    }
+
+    function updateAutoplayUI() {
+        if (typeof document === "undefined") return;
+        const state = getAutoplayState();
+        const speed = getAutoplaySpeed();
+        const autoSeconds = getAutoDecisionSeconds();
+        const autoLabel = AUTOPLAY_CONFIG.autoDecisionLabel(autoSeconds);
+        const bias = getAutoDecisionBias();
+
+        const toggle = document.getElementById("paultendoAutoplayToggle");
+        if (toggle) {
+            toggle.textContent = state.active ? "Pause" : "Play";
+            toggle.setAttribute("title", state.active ? "Pause autoplay" : "Start autoplay");
+        }
+        const toggleMobile = document.getElementById("paultendoAutoplayToggleMobile");
+        if (toggleMobile) toggleMobile.textContent = state.active ? "Pause" : "Play";
+
+        const speedBtn = document.getElementById("paultendoAutoplaySpeed");
+        if (speedBtn) {
+            speedBtn.textContent = speed.label;
+            speedBtn.setAttribute("title", `Autoplay speed: ${speed.label}`);
+        }
+        const speedMobile = document.getElementById("paultendoAutoplaySpeedMobile");
+        if (speedMobile) speedMobile.textContent = speed.label;
+
+        const autoBtn = document.getElementById("paultendoAutoplayAuto");
+        if (autoBtn) {
+        autoBtn.textContent = `Auto: ${autoLabel}`;
+            autoBtn.setAttribute("title", `Auto-decide after delay (${autoLabel}) · Bias: ${bias}`);
+        }
+    }
+
+    function isPromptOpen() {
+        return typeof promptState !== "undefined" && !!promptState;
+    }
+
+    function isNextDayDisabled() {
+        if (typeof document === "undefined") return false;
+        const button = document.getElementById("nextDay");
+        if (!button) return false;
+        return button.getAttribute("disabled") !== null;
+    }
+
+    function canAutoplayAdvance() {
+        if (!planet || planet.dead) return false;
+        if (planet.locked) return false;
+        if (isNextDayDisabled()) return false;
+        return true;
+    }
+
+    function toggleAutoplay() {
+        const state = getAutoplayState();
+        if (state.active) stopAutoplay("manual");
+        else startAutoplay();
+    }
+
+    function startAutoplay() {
+        const state = getAutoplayState();
+        if (state.active) return;
+        state.active = true;
+        state.lastStopReason = null;
+        scheduleAutoplayTick();
+        updateAutoplayUI();
+    }
+
+    function stopAutoplay(reason) {
+        const state = getAutoplayState();
+        if (!state.active) return;
+        state.active = false;
+        state.lastStopReason = reason || null;
+        if (state.timer) {
+            clearTimeout(state.timer);
+            state.timer = null;
+        }
+        clearAutoplayPromptTimer();
+        updateAutoplayUI();
+    }
+
+    function scheduleAutoplayTick(delayOverride = null) {
+        const state = getAutoplayState();
+        if (!state.active) return;
+        if (state.timer) {
+            clearTimeout(state.timer);
+            state.timer = null;
+        }
+        const delay = delayOverride !== null ? delayOverride : getAutoplaySpeed().delay;
+        state.timer = setTimeout(() => autoplayTick(), delay);
+    }
+
+    function autoplayTick() {
+        const state = getAutoplayState();
+        if (!state.active) return;
+
+        if (isPromptOpen()) {
+            const autoSeconds = getAutoDecisionSeconds();
+            if (autoSeconds <= 0) {
+                stopAutoplay("prompt");
+                return;
+            }
+            scheduleAutoplayTick(200);
+            return;
+        }
+
+        if (!canAutoplayAdvance()) {
+            scheduleAutoplayTick(200);
+            return;
+        }
+
+        try {
+            nextDay();
+        } catch (err) {
+            console.error("Autoplay nextDay failed:", err);
+            stopAutoplay("error");
+            return;
+        }
+
+        scheduleAutoplayTick();
+    }
+
+    function clearAutoplayPromptTimer() {
+        const state = getAutoplayState();
+        if (state.promptTimer) {
+            clearTimeout(state.promptTimer);
+            state.promptTimer = null;
+        }
+    }
+
+    function scheduleAutoplayPromptDecision(prompt) {
+        const state = getAutoplayState();
+        if (!state.active) return;
+        const delaySeconds = getAutoDecisionSeconds();
+        if (!delaySeconds) return;
+        clearAutoplayPromptTimer();
+        state.promptTimer = setTimeout(() => {
+            state.promptTimer = null;
+            try { autoResolvePrompt(prompt || promptState); } catch {}
+        }, Math.max(2000, delaySeconds * 1000));
+    }
+
+    function pickYesNoByBias() {
+        const bias = getAutoDecisionBias();
+        const roll = Math.random();
+        if (bias === "conservative") return roll < 0.35;
+        if (bias === "bold") return roll < 0.7;
+        return roll < 0.55;
+    }
+
+    function autoResolvePrompt(prompt) {
+        const state = getAutoplayState();
+        if (!state.active || !prompt || typeof handlePrompt !== "function") return false;
+        if (prompt.subtype === "share") {
+            handlePrompt(null);
+            scheduleAutoplayTick(200);
+            return true;
+        }
+
+        if (prompt.type === "confirm") {
+            handlePrompt(pickYesNoByBias());
+            scheduleAutoplayTick(200);
+            return true;
+        }
+
+        if (prompt.type === "choose" || Array.isArray(prompt.choices)) {
+            const choices = prompt.choices || [];
+            if (choices.length === 0) {
+                handlePrompt(null);
+                scheduleAutoplayTick(200);
+                return true;
+            }
+            let idx = prompt.selected !== undefined && prompt.selected >= 0 ? prompt.selected : Math.floor(Math.random() * choices.length);
+            if (prompt.type === "choose" && prompt.selected !== undefined && getAutoDecisionBias() === "conservative") {
+                idx = prompt.selected;
+            }
+            handlePrompt(choices[idx]);
+            scheduleAutoplayTick(200);
+            return true;
+        }
+
+        const popupText = typeof document !== "undefined" ? document.getElementById("popupText") : null;
+        if (popupText) {
+            if (typeof shufflePrompt === "function") {
+                shufflePrompt();
+            }
+            const value = popupText.value || "";
+            handlePrompt(value);
+            scheduleAutoplayTick(200);
+            return true;
+        }
+
+        handlePrompt(pickYesNoByBias());
+        scheduleAutoplayTick(200);
+        return true;
+    }
+
+    function shouldAutopauseOnMajor() {
+        initAutoplaySettings();
+        return typeof userSettings !== "undefined"
+            ? userSettings.paultendoAutoplayPauseMajor !== false
+            : AUTOPLAY_CONFIG.autoPauseMajorDefault;
+    }
+
+    function maybeAutopause(reason) {
+        const state = getAutoplayState();
+        if (!state.active) return;
+        if (!shouldAutopauseOnMajor()) return;
+        stopAutoplay(reason || "event");
+        if (typeof logMessage === "function" && reason) {
+            logMessage(`Autoplay paused: ${reason}.`, "tip");
+        }
+    }
+
+    function handleAutoplayEventForHappen(action, subject, target, result) {
+        if (!shouldAutopauseOnMajor()) return;
+        if (action === "Create" && result) {
+            if (result._reg === "town") {
+                maybeAutopause("new town founded");
+                return;
+            }
+            if (result.type === "war") {
+                maybeAutopause("war declared");
+                return;
+            }
+            if (result.type === "disaster") {
+                maybeAutopause("disaster strikes");
+                return;
+            }
+            if (result.type === "revolution") {
+                maybeAutopause("revolution erupts");
+                return;
+            }
+        }
+        if (action === "End" && target && target._reg === "town") {
+            maybeAutopause("a town has fallen");
+        }
+    }
+
+    function wrapPromptHandlersForAutoplay() {
+        if (typeof doPrompt === "function" && !doPrompt._paultendoAutoplay) {
+            const baseDoPrompt = doPrompt;
+            doPrompt = function(obj) {
+                const result = baseDoPrompt.apply(this, arguments);
+                try {
+                    const state = getAutoplayState();
+                    if (state.active) {
+                        if (!getAutoDecisionSeconds()) stopAutoplay("prompt");
+                        else scheduleAutoplayPromptDecision(obj || promptState);
+                    }
+                } catch {}
+                return result;
+            };
+            doPrompt._paultendoAutoplay = true;
+        }
+        if (typeof handlePrompt === "function" && !handlePrompt._paultendoAutoplay) {
+            const baseHandlePrompt = handlePrompt;
+            handlePrompt = function(...args) {
+                const result = baseHandlePrompt.apply(this, args);
+                try { clearAutoplayPromptTimer(); } catch {}
+                return result;
+            };
+            handlePrompt._paultendoAutoplay = true;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // UI INDICATORS (Discovery + Active Systems)
     // -------------------------------------------------------------------------
@@ -1565,7 +2308,7 @@
         if (!indicator) {
             indicator = document.createElement("span");
             indicator.id = id;
-            indicator.className = "panelSubtitle";
+            indicator.className = "panelSubtitle paultendoIndicator";
         }
         const statsDiv = document.getElementById("statsDiv");
         if (statsDiv && indicator.parentNode !== statsMain) {
@@ -1597,7 +2340,7 @@
             const req = DISCOVERY_TIER_REQUIREMENTS[tier + 1];
             nextText = req ? formatDiscoveryRequirement(req) : "Unknown";
         }
-        indicator.textContent = `Discovery: ${getDiscoveryTierName(tier)}${tier < maxTier ? ` → ${nextText}` : ""}`;
+        indicator.textContent = `Discovery · ${getDiscoveryTierName(tier)}${tier < maxTier ? ` → ${nextText}` : ""}`;
     }
 
     function ensureSystemStyles() {
@@ -1606,10 +2349,15 @@
         const style = document.createElement("style");
         style.id = "paultendoSystemStyles";
         style.textContent = `
+            .paultendoIndicator {
+                display: block;
+                margin-top: 2px;
+                line-height: 1.2;
+            }
             #paultendoSystemsIndicator { font-size: 0.95em; opacity: 0.9; }
             .paultendoSystemTag {
                 display: inline-block;
-                margin-right: 6px;
+                margin-right: 4px;
                 padding: 0 4px;
                 border-radius: 4px;
                 font-size: 0.9em;
@@ -1622,7 +2370,7 @@
 
     function getActiveSystemTags() {
         const tags = [];
-        const wars = regFilter("process", p => p.type === "war" && !p.done);
+        const wars = getActiveWars();
         if (wars.length) tags.push({ key: "WAR", count: wars.length, color: "rgba(255,120,120,0.9)" });
         const epidemics = planet.epidemics && planet.epidemics.length ? planet.epidemics.length : 0;
         if (epidemics) tags.push({ key: "PLAGUE", count: epidemics, color: "rgba(255,210,120,0.9)" });
@@ -1650,10 +2398,10 @@
         if (!indicator) return;
         const tags = getActiveSystemTags();
         if (!tags.length) {
-            indicator.textContent = "Systems: calm";
+            indicator.textContent = "Systems · calm";
             return;
         }
-        indicator.innerHTML = "Systems: " + tags.map(tag => {
+        indicator.innerHTML = "Systems · " + tags.map(tag => {
             const label = `${tag.key}${tag.count ? ` ${tag.count}` : ""}`;
             return `<span class="paultendoSystemTag" style="color:${tag.color}" title="${tag.key}">${label}</span>`;
         }).join("");
@@ -1665,14 +2413,14 @@
     }
 
     function formatGreatWorkStatus(work) {
-        if (!work) return "Great Work: unavailable";
-        if (work.status === "completed") return `Great Work: ${work.title} (completed)`;
+        if (!work) return "Great Work · unavailable";
+        if (work.status === "completed") return `Great Work · ${work.title} · completed`;
         if (work.status === "started") {
             const town = work.townId ? regGet("town", work.townId) : null;
-            const townName = town ? ` in ${town.name}` : "";
-            return `Great Work: ${work.title} (building${townName})`;
+            const townName = town ? ` · building in ${town.name}` : " · building";
+            return `Great Work · ${work.title}${townName}`;
         }
-        return `Great Work: ${work.title} (pending)`;
+        return `Great Work · ${work.title} · pending`;
     }
 
     function updateGreatWorkIndicator() {
@@ -1680,10 +2428,132 @@
         if (!indicator) return;
         const work = getCurrentGreatWork();
         if (!work) {
-            indicator.textContent = "Great Work: none";
+            indicator.textContent = "Great Work · none";
             return;
         }
         indicator.textContent = formatGreatWorkStatus(work);
+    }
+
+    function formatSystemStatusLine(tags = null) {
+        const active = tags || getActiveSystemTags();
+        if (!active.length) return "Systems · calm";
+        const summary = active.map(tag => `${tag.key}${tag.count ? ` ${tag.count}` : ""}`).join(", ");
+        return `Systems · ${summary}`;
+    }
+
+    function openWorldStatusPanel() {
+        if (!planet || typeof populateExecutive !== "function") return;
+        const items = [];
+        const season = getSeasonInfo();
+        if (season) {
+            items.push({
+                text: `${season.icon} ${season.name} ${season.seasonDay}/${SEASON_LENGTH_DAYS} · Year ${season.year}`
+            });
+        }
+
+        if (initDiscoveryState()) {
+            const tier = getDiscoveryTier();
+            const maxTier = getDiscoveryMaxTier();
+            items.push({ text: `Discovery · ${getDiscoveryTierName(tier)}` });
+            if (tier < maxTier) {
+                const req = DISCOVERY_TIER_REQUIREMENTS[tier + 1];
+                const nextText = req ? formatDiscoveryRequirement(req) : "Unknown";
+                items.push({ text: `Next · ${nextText}`, indent: 1, opacity: 0.75 });
+            }
+        }
+
+        items.push({ text: formatSystemStatusLine() });
+        items.push({ text: formatChronicleSummary(planet.day), opacity: 0.85 });
+
+        const work = getCurrentGreatWork();
+        if (!work) items.push({ text: "Great Work · none" });
+        else items.push({ text: formatGreatWorkStatus(work) });
+
+        populateExecutive(items, "World");
+    }
+
+    function addWorldStatusButton() {
+        const list = document.getElementById("actionMainList");
+        if (!list || document.getElementById("actionItem-world")) return;
+        const button = document.createElement("span");
+        button.className = "actionItem clickable";
+        button.id = "actionItem-world";
+        button.innerHTML = "World";
+        button.addEventListener("click", () => {
+            openWorldStatusPanel();
+        });
+        list.appendChild(button);
+    }
+
+    function openAutoplayPanel() {
+        initAutoplaySettings();
+        const speed = getAutoplaySpeed();
+        const autoSeconds = getAutoDecisionSeconds();
+        const bias = getAutoDecisionBias();
+        const pauseMajor = shouldAutopauseOnMajor();
+        const state = getAutoplayState();
+
+        const items = [];
+        items.push({ text: `Status · ${state.active ? "Playing" : "Paused"}` });
+        items.push({
+            text: `Speed · ${speed.label}`,
+            func: () => {
+                cycleAutoplaySpeed();
+                openAutoplayPanel();
+            }
+        });
+        items.push({
+            text: `Auto-decide · ${AUTOPLAY_CONFIG.autoDecisionLabel(autoSeconds)}`,
+            func: () => {
+                cycleAutoDecisionSeconds();
+                openAutoplayPanel();
+            }
+        });
+        items.push({
+            text: `Bias · ${titleCase(bias)}`,
+            func: () => {
+                cycleAutoDecisionBias();
+                openAutoplayPanel();
+            }
+        });
+        items.push({
+            text: `Pause on major events · ${pauseMajor ? "On" : "Off"}`,
+            func: () => {
+                if (typeof userSettings !== "undefined") {
+                    userSettings.paultendoAutoplayPauseMajor = !pauseMajor;
+                    if (typeof saveSettings === "function") saveSettings();
+                }
+                openAutoplayPanel();
+            }
+        });
+        items.push({ spacer: true });
+        items.push({
+            text: state.active ? "Pause Autoplay" : "Start Autoplay",
+            func: () => {
+                toggleAutoplay();
+                openAutoplayPanel();
+            }
+        });
+        populateExecutive(items, "Autoplay");
+    }
+
+    function addAutoplayButton() {
+        const list = document.getElementById("actionMainList");
+        if (!list || document.getElementById("actionItem-autoplay")) return;
+        const button = document.createElement("span");
+        button.className = "actionItem clickable";
+        button.id = "actionItem-autoplay";
+        button.innerHTML = "Autoplay";
+        button.addEventListener("click", () => {
+            openAutoplayPanel();
+        });
+        list.appendChild(button);
+    }
+
+    function refreshWorldStatusPanel() {
+        if (typeof currentExecutive === "undefined") return;
+        if (currentExecutive !== "world") return;
+        openWorldStatusPanel();
     }
 
     function getSeasonalInfluences(town) {
@@ -1746,21 +2616,77 @@
 
     const FOG_CONFIG = {
         enabled: true,
-        opaqueAlpha: 0.98,
-        shroudAlpha: 0.55,
-        baseSight: 3,
-        sizeSight: 0.35,
-        travelSight: 0.15,
-        elevationSight: 4,
-        maxSight: 12,
-        falloffPower: 1.6,
-        exploreThreshold: 0.15,
+        opaqueAlpha: 0.93,
+        shroudAlpha: 0.4,
+        baseSight: 4,
+        sizeSight: 0.45,
+        travelSight: 0.2,
+        elevationSight: 5,
+        maxSight: 16,
+        falloffPower: 1.25,
+        exploreThreshold: 0.08,
         hideMarkersOutsideSight: false,
-        hideBiomeOutsideSight: true,
-        townRevealRadius: 1,
-        expeditionRevealRadius: 2,
+        hideBiomeOutsideSight: false,
+        townRevealRadius: 2,
+        expeditionRevealRadius: 3,
         expeditionRevealCount: 3
     };
+
+    const RUMOR_MAP_CONFIG = {
+        enabled: true,
+        decay: 0.003,
+        minConfidence: 0.05,
+        spreadRadius: 1,
+        spreadFalloff: 0.45,
+        maxSpreadPerCall: 160,
+        revealBoost: 0.35
+    };
+
+    const FOG_CLEAR_CONFIG = {
+        spaceTech: 20, // matches SPACE_TECH_THRESHOLDS.orbit
+        requireAllDiscovered: true
+    };
+
+    function isFogClearedByProgress() {
+        if (!planet || !initFogOfWarState()) return false;
+        const fog = planet._paultendoFog;
+        if (fog.clearedDay === planet.day && fog.cleared !== undefined) return fog.cleared;
+
+        let cleared = false;
+        const spaceTech = (planet.unlocks?.space || (typeof universe !== "undefined" ? universe.spaceTech : 0) || 0);
+        if (spaceTech >= FOG_CLEAR_CONFIG.spaceTech) {
+            cleared = true;
+        } else if (initDiscoveryState()) {
+            const maxTier = getDiscoveryMaxTier();
+            const tier = getDiscoveryTier();
+            const req = DISCOVERY_TIER_REQUIREMENTS[maxTier] || DISCOVERY_TIER_REQUIREMENTS[DISCOVERY_CONFIG.maxTier];
+            const travel = planet.unlocks?.travel || 0;
+            const trade = planet.unlocks?.trade || 0;
+            const education = planet.unlocks?.education || 0;
+            const towns = typeof regCount === "function" ? regCount("town") : 0;
+            const meetsReq = !req || (
+                travel >= req.travel &&
+                trade >= req.trade &&
+                education >= req.education &&
+                towns >= req.towns
+            );
+            const undiscovered = typeof regFilter === "function"
+                ? regFilter("landmass", l => l && !isLandmassDiscovered(l.id))
+                : [];
+            const allDiscovered = !undiscovered || undiscovered.length === 0;
+            const discoveryClear = maxTier > 0 && tier >= maxTier && meetsReq;
+            cleared = FOG_CLEAR_CONFIG.requireAllDiscovered ? (discoveryClear && allDiscovered) : discoveryClear;
+        }
+
+        const prev = fog.cleared;
+        fog.cleared = cleared;
+        fog.clearedDay = planet.day;
+        if (cleared && !prev) {
+            markFogDirty();
+            scheduleFogRefresh();
+        }
+        return cleared;
+    }
 
     const DISCOVERY_TIER_NAMES = {
         0: "Homelands",
@@ -1822,13 +2748,76 @@
         if (!planet._paultendoFog) {
             planet._paultendoFog = {
                 explored: {},
-                lastUpdate: planet.day
+                lastUpdate: planet.day,
+                dirty: true,
+                lastRenderDay: -1
             };
         }
         if (!planet._paultendoFog.explored || typeof planet._paultendoFog.explored !== "object") {
             planet._paultendoFog.explored = {};
         }
+        initRumorMap();
         return true;
+    }
+
+    function initRumorMap() {
+        if (!planet) return false;
+        if (!planet._paultendoRumorMap) {
+            planet._paultendoRumorMap = { belief: {}, lastDecayDay: planet.day };
+        }
+        if (!planet._paultendoRumorMap.belief || typeof planet._paultendoRumorMap.belief !== "object") {
+            planet._paultendoRumorMap.belief = {};
+        }
+        return true;
+    }
+
+    function getRumorConfidence(x, y) {
+        if (!RUMOR_MAP_CONFIG.enabled || !initRumorMap()) return 0;
+        return planet._paultendoRumorMap.belief[getChunkKey(x, y)] || 0;
+    }
+
+    function setRumorConfidence(x, y, value) {
+        if (!RUMOR_MAP_CONFIG.enabled || !initRumorMap()) return;
+        const key = getChunkKey(x, y);
+        const current = planet._paultendoRumorMap.belief[key] || 0;
+        if (value > current) {
+            planet._paultendoRumorMap.belief[key] = clampValue(value, 0, 1);
+        }
+    }
+
+    function markRumorChunks(chunks, strength = 0.3) {
+        if (!RUMOR_MAP_CONFIG.enabled || !initRumorMap() || !Array.isArray(chunks)) return;
+        const limit = RUMOR_MAP_CONFIG.maxSpreadPerCall;
+        const list = chunks.length > limit ? chunks.filter(() => Math.random() < (limit / chunks.length)) : chunks;
+        const radius = RUMOR_MAP_CONFIG.spreadRadius || 0;
+        list.forEach(chunk => {
+            if (!chunk || typeof chunk.x !== "number" || typeof chunk.y !== "number") return;
+            setRumorConfidence(chunk.x, chunk.y, strength);
+            if (radius > 0 && typeof circleCoords === "function") {
+                const coords = circleCoords(chunk.x, chunk.y, radius);
+                coords.forEach(coord => {
+                    const falloff = Math.max(0.05, strength * (1 - RUMOR_MAP_CONFIG.spreadFalloff));
+                    setRumorConfidence(coord.x, coord.y, falloff);
+                });
+            }
+        });
+    }
+
+    function decayRumorMap() {
+        if (!RUMOR_MAP_CONFIG.enabled || !initRumorMap()) return;
+        const map = planet._paultendoRumorMap.belief;
+        const decay = RUMOR_MAP_CONFIG.decay;
+        const min = RUMOR_MAP_CONFIG.minConfidence;
+        for (const key in map) {
+            const next = map[key] - decay;
+            if (next <= min) delete map[key];
+            else map[key] = next;
+        }
+    }
+
+    function markFogDirty() {
+        if (!initFogOfWarState()) return;
+        planet._paultendoFog.dirty = true;
     }
 
     function getChunkKey(x, y) {
@@ -1839,6 +2828,7 @@
         if (!FOG_CONFIG.enabled) return false;
         if (!planet || typeof regCount !== "function") return false;
         if (regCount("town") <= 0) return false;
+        if (isFogClearedByProgress()) return false;
         return true;
     }
 
@@ -1846,6 +2836,7 @@
         if (!FOG_CONFIG.enabled) return true;
         if (!planet || typeof regCount !== "function") return true;
         if (regCount("town") <= 0) return true;
+        if (!isFogActive()) return true;
         if (!initFogOfWarState()) return true;
         return !!planet._paultendoFog.explored[getChunkKey(x, y)];
     }
@@ -1863,7 +2854,12 @@
             fog.explored[key] = 1;
             added += 1;
         }
+        if (added > 0) {
+            const rumorStrength = opts.force ? 0.8 : 0.45;
+            try { markRumorChunks(chunks, rumorStrength); } catch {}
+        }
         if (added > 0 && !opts.deferRefresh) scheduleFogRefresh();
+        if (added > 0) markFogDirty();
         return added;
     }
 
@@ -1875,7 +2871,19 @@
 
     function getTownClaimedChunks(town) {
         if (!town) return [];
-        if (!town.center && typeof happen === "function") {
+        const cache = town._paultendoClaimedCache;
+        const centerKey = town.center ? `${town.center[0]},${town.center[1]}` : "";
+        if (cache && cache.day === planet.day && cache.size === town.size && cache.centerKey === centerKey && Array.isArray(cache.chunks)) {
+            return cache.chunks;
+        }
+        if (typeof chunkAt === "function" && town.center) {
+            const centerChunk = chunkAt(town.center[0], town.center[1]);
+            if (!centerChunk || !centerChunk.v || centerChunk.v.s !== town.id) {
+                if (typeof happen === "function") {
+                    try { happen("UpdateCenter", null, town); } catch {}
+                }
+            }
+        } else if (!town.center && typeof happen === "function") {
             try { happen("UpdateCenter", null, town); } catch {}
         }
         if (town.center && typeof floodFill === "function") {
@@ -1886,10 +2894,24 @@
                 (c) => c && c.v && c.v.s === town.id,
                 limit
             );
-            if (Array.isArray(chunks) && chunks.length) return chunks;
+            if (Array.isArray(chunks) && chunks.length) {
+                if (town.size && chunks.length < Math.max(1, Math.floor((town.size || 1) * 0.6)) && typeof filterChunks === "function") {
+                    const full = filterChunks((c) => c && c.v && c.v.s === town.id);
+                    if (Array.isArray(full) && full.length) {
+                        town._paultendoClaimedCache = { day: planet.day, size: town.size, centerKey, chunks: full };
+                        return full;
+                    }
+                }
+                town._paultendoClaimedCache = { day: planet.day, size: town.size, centerKey, chunks };
+                return chunks;
+            }
         }
         if (typeof filterChunks === "function") {
-            return filterChunks((c) => c && c.v && c.v.s === town.id);
+            const chunks = filterChunks((c) => c && c.v && c.v.s === town.id);
+            if (Array.isArray(chunks)) {
+                town._paultendoClaimedCache = { day: planet.day, size: town.size, centerKey, chunks };
+            }
+            return chunks;
         }
         return [];
     }
@@ -1905,6 +2927,7 @@
         if (force || planet._paultendoFog.visibilityDay !== planet.day) {
             planet._paultendoFog.visibilityDay = planet.day;
             planet._paultendoFog.visible = {};
+            markFogDirty();
         }
         return true;
     }
@@ -1918,7 +2941,10 @@
         if (!initFogOfWarState()) return;
         const key = getChunkKey(x, y);
         const existing = planet._paultendoFog.visible[key] || 0;
-        if (value > existing) planet._paultendoFog.visible[key] = value;
+        if (value > existing) {
+            planet._paultendoFog.visible[key] = value;
+            markFogDirty();
+        }
     }
 
     function getChunkElevation(chunk) {
@@ -1982,7 +3008,6 @@
 
     function updateFogVisibilityForTown(town, opts = {}) {
         if (!town || town.end) return false;
-        if (!resetFogVisibilityForDay(!!opts.forceReset)) return false;
         if (!town.center && typeof happen === "function") {
             try { happen("UpdateCenter", null, town); } catch {}
         }
@@ -1991,6 +3016,19 @@
         const { width, height } = getChunkDimensions();
         if (!width || !height) return false;
         const radius = computeTownSightRadius(town);
+        const centerKey = `${town.center[0]},${town.center[1]}`;
+        if (!opts.forceReset) {
+            const lastDay = town._paultendoFogDay || -999;
+            const lastRadius = town._paultendoFogRadius || 0;
+            const lastCenter = town._paultendoFogCenterKey || "";
+            if ((planet.day - lastDay) < 2 &&
+                town._paultendoFogSize === (town.size || 0) &&
+                lastCenter === centerKey &&
+                Math.abs(radius - lastRadius) < 0.25) {
+                return false;
+            }
+        }
+        if (!resetFogVisibilityForDay(!!opts.forceReset)) return false;
 
         const claimed = getTownClaimedChunks(town);
         const explored = [];
@@ -2029,6 +3067,27 @@
         }
 
         const sources = edgeChunks.length ? edgeChunks : claimed;
+        const revealRadius = Math.max(0, FOG_CONFIG.townRevealRadius || 0);
+        const revealChunks = [];
+        if (revealRadius > 0) {
+            const revealOffsets = getSightOffsets(revealRadius);
+            const revealSources = sources.length ? sources : claimed;
+            for (let i = 0; i < revealSources.length; i++) {
+                const source = revealSources[i];
+                if (!source) continue;
+                for (let j = 0; j < revealOffsets.length; j++) {
+                    const offset = revealOffsets[j];
+                    const x = source.x + offset.dx;
+                    const y = source.y + offset.dy;
+                    if (x < 0 || y < 0 || x >= width || y >= height) continue;
+                    if (claimedSet.has(getChunkKey(x, y))) continue;
+                    const chunk = chunkAt(x, y);
+                    if (!chunk) continue;
+                    setChunkVisibility(x, y, 1);
+                    revealChunks.push(chunk);
+                }
+            }
+        }
         const offsets = getSightOffsets(radius);
         for (let i = 0; i < sources.length; i++) {
             const source = sources[i];
@@ -2058,12 +3117,18 @@
         if (explored.length) {
             markChunksExplored(explored, { deferRefresh: true });
         }
+        if (revealChunks.length) {
+            markChunksExplored(revealChunks, { deferRefresh: true, force: true });
+        }
         if (claimed.length) {
             markChunksExplored(claimed, { deferRefresh: true, force: true });
         }
 
         town._paultendoFogInit = true;
         town._paultendoFogSize = town.size || 0;
+        town._paultendoFogDay = planet.day;
+        town._paultendoFogRadius = radius;
+        town._paultendoFogCenterKey = centerKey;
         if (!opts.deferRefresh) scheduleFogRefresh();
         return true;
     }
@@ -2071,7 +3136,7 @@
     function rebuildFogVisibility() {
         if (!initFogOfWarState()) return false;
         resetFogVisibilityForDay(true);
-        const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+        const towns = getActiveTowns();
         for (let i = 0; i < towns.length; i++) {
             updateFogVisibilityForTown(towns[i], { deferRefresh: true, forceReset: false });
         }
@@ -2080,6 +3145,7 @@
     }
 
     function isChunkVisible(x, y) {
+        if (!isFogActive()) return true;
         return getChunkVisibility(x, y) > 0;
     }
 
@@ -2170,6 +3236,7 @@
         const fogState = planet._paultendoFog || {};
         const explored = fogState.explored || {};
         const visible = fogState.visible || {};
+        const rumors = planet._paultendoRumorMap?.belief || {};
 
         for (const chunkKey in planet.chunks) {
             const chunk = planet.chunks[chunkKey];
@@ -2182,7 +3249,13 @@
 
             const key = getChunkKey(chunk.x, chunk.y);
             if (!explored[key]) {
-                ctx.fillStyle = `rgba(8, 10, 14, ${opaqueAlpha})`;
+                const rumor = RUMOR_MAP_CONFIG.enabled ? (rumors[key] || 0) : 0;
+                const rumorAlpha = clampValue(
+                    opaqueAlpha * (1 - (RUMOR_MAP_CONFIG.revealBoost * rumor)),
+                    0.25,
+                    opaqueAlpha
+                );
+                ctx.fillStyle = `rgba(8, 10, 14, ${rumorAlpha})`;
                 ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
                 continue;
             }
@@ -2194,11 +3267,18 @@
                 ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
             }
         }
+        if (planet && planet._paultendoFog) {
+            planet._paultendoFog.dirty = false;
+            planet._paultendoFog.lastRenderDay = planet.day;
+        }
     }
 
     function scheduleFogRefresh() {
         if (!planet) return;
         if (planet._paultendoFogRefreshPending) return;
+        if (planet._paultendoFog && !planet._paultendoFog.dirty && planet._paultendoFog.lastRenderDay === planet.day) {
+            return;
+        }
         planet._paultendoFogRefreshPending = true;
 
         const refresh = () => {
@@ -2212,6 +3292,348 @@
         } else {
             refresh();
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // EXPLORATION MISSIONS (resource surveys, pilgrimages, frontier scouting)
+    // -------------------------------------------------------------------------
+
+    const EXPLORATION_CONFIG = {
+        minDay: 8,
+        minPop: 24,
+        cooldown: 28,
+        declineCooldown: 14,
+        baseRange: 8,
+        travelRange: 1.2,
+        educationRange: 0.5,
+        tradeRange: 0.4,
+        sizeRange: 0.25,
+        maxRange: 30,
+        revealRadius: 2.6,
+        surveyRadius: 3.0,
+        pilgrimageRadius: 2.4,
+        maxAttempts: 160
+    };
+
+    const EXPLORATION_MARKER_DEF = {
+        name: "Expedition",
+        subtype: "expedition",
+        symbol: "*",
+        color: [120, 190, 255]
+    };
+
+    function getExplorationMarkerMeta(town, mission) {
+        if (!town || !mission) return null;
+        const origin = `from {{regname:town|${town.id}}}`;
+        if (mission.type === "resource") {
+            return {
+                name: "Survey",
+                desc: `Surveyors ${origin} conduct a ${mission.label}.`
+            };
+        }
+        if (mission.type === "pilgrimage") {
+            return {
+                name: "Pilgrimage",
+                desc: `Pilgrims ${origin} undertake a ${mission.label}.`
+            };
+        }
+        return {
+            name: "Expedition",
+            desc: `Explorers ${origin} set out on a ${mission.label}.`
+        };
+    }
+
+    function getExplorationRange(town) {
+        const travel = town.influences?.travel || 0;
+        const education = town.influences?.education || 0;
+        const trade = town.influences?.trade || 0;
+        const size = town.size || 1;
+        let range = EXPLORATION_CONFIG.baseRange;
+        range += travel * EXPLORATION_CONFIG.travelRange;
+        range += education * EXPLORATION_CONFIG.educationRange;
+        range += trade * EXPLORATION_CONFIG.tradeRange;
+        range += Math.sqrt(Math.max(1, size)) * EXPLORATION_CONFIG.sizeRange;
+        const season = getSeasonInfo();
+        if (season && season.id === "winter") range *= 0.8;
+        return Math.min(EXPLORATION_CONFIG.maxRange, range);
+    }
+
+    function canTownExplore(town, prompt = false) {
+        if (!town || town.end) return false;
+        if (planet.day < EXPLORATION_CONFIG.minDay) return false;
+        if ((town.pop || 0) < EXPLORATION_CONFIG.minPop) return false;
+        if (hasIssue(town, "war") || hasIssue(town, "revolution")) return false;
+        if ((town.influences?.travel || 0) < 1 && (planet.unlocks?.travel || 0) < 15) return false;
+        if (prompt) {
+            if (town._paultendoExplorationDeclinedDay !== undefined &&
+                planet.day - town._paultendoExplorationDeclinedDay < EXPLORATION_CONFIG.declineCooldown) {
+                return false;
+            }
+        }
+        if (town._paultendoExplorationDay !== undefined &&
+            planet.day - town._paultendoExplorationDay < EXPLORATION_CONFIG.cooldown) {
+            return false;
+        }
+        return true;
+    }
+
+    function sampleChunkByAttempts(check, attempts = 120) {
+        const { width, height } = getChunkDimensions();
+        if (!width || !height || !planet || !planet.chunks) return null;
+        for (let i = 0; i < attempts; i++) {
+            const x = Math.floor(Math.random() * width);
+            const y = Math.floor(Math.random() * height);
+            const chunk = planet.chunks[`${x},${y}`];
+            if (!chunk) continue;
+            if (check(chunk)) return chunk;
+        }
+        return null;
+    }
+
+    function isChunkSuitableForTag(chunk, tag) {
+        if (!chunk || !tag) return false;
+        const biome = chunk.b;
+        const def = biomes[biome] || {};
+        switch (tag) {
+            case "mineral":
+                return biome === "mountain" || biome === "badlands";
+            case "lumber":
+                return !!def.hasLumber;
+            case "fertile":
+                return !def.infertile && biome !== "mountain" && biome !== "water";
+            case "coastal":
+                return biome !== "water" && chunkIsNearby(chunk.x, chunk.y, c => c.b === "water", 2);
+            case "arid":
+                return biome === "desert" || biome === "badlands";
+            default:
+                return false;
+        }
+    }
+
+    function getResourceTagStats() {
+        return getDailyCache("resourceTagStats", () => {
+            const counts = {};
+            const towns = getActiveTowns();
+            towns.forEach(town => {
+                getTownResourceTags(town).forEach(tag => {
+                    counts[tag] = (counts[tag] || 0) + 1;
+                });
+            });
+            return { counts, total: towns.length || 1 };
+        }) || { counts: {}, total: 1 };
+    }
+
+    function pickExplorationTag(town) {
+        const townTags = new Set(getTownResourceTags(town));
+        const stats = getResourceTagStats();
+        const tags = Object.keys(stats.counts).filter(tag => !townTags.has(tag));
+        if (!tags.length) return null;
+        return weightedChoice(tags, (tag) => {
+            const freq = (stats.counts[tag] || 0) / Math.max(1, stats.total);
+            const rarity = 1 - Math.min(1, freq);
+            return 0.3 + Math.pow(rarity, 1.5) * 1.6;
+        });
+    }
+
+    function isExplorationCandidate(chunk, town, opts = {}) {
+        if (!chunk || !town) return false;
+        if (chunk.b === "water") return false;
+        if (opts.requireUnclaimed !== false && chunk.v?.s) return false;
+        if (chunk.v?.s === town.id) return false;
+        if (opts.tag && !isChunkSuitableForTag(chunk, opts.tag)) return false;
+        const landmassId = chunk.v?.g;
+        if (landmassId && !isLandmassReachable(landmassId)) return false;
+        if (landmassId && opts.sameLandmass) {
+            const townLandmass = getTownLandmassId(town);
+            if (townLandmass && landmassId !== townLandmass) return false;
+        }
+        if (typeof isChunkExplored === "function") {
+            if (isChunkExplored(chunk.x, chunk.y) && Math.random() < 0.7) return false;
+        }
+        const center = getTownCenter(town);
+        if (!center) return false;
+        const dist = typeof distanceCoords === "function"
+            ? distanceCoords(center[0], center[1], chunk.x, chunk.y)
+            : Math.hypot(center[0] - chunk.x, center[1] - chunk.y);
+        if (dist > (opts.range || EXPLORATION_CONFIG.baseRange)) return false;
+        return true;
+    }
+
+    function pickExplorationTargetChunk(town, opts = {}) {
+        const range = opts.range || getExplorationRange(town);
+        const sameLandmass = opts.sameLandmass !== false;
+        const requireUnclaimed = opts.requireUnclaimed !== false;
+        const tag = opts.tag || null;
+        const attempts = opts.attempts || EXPLORATION_CONFIG.maxAttempts;
+
+        const chunk = sampleChunkByAttempts(
+            (c) => isExplorationCandidate(c, town, { range, tag, sameLandmass, requireUnclaimed }),
+            attempts
+        );
+        return chunk;
+    }
+
+    function revealPathFog(path, radius = 2.4, visibility = 0.9, opts = {}) {
+        if (!path || !path.length) return 0;
+        const offsets = getSightOffsets(radius);
+        const reveal = [];
+        const seen = new Set();
+        const stride = Math.max(1, Math.floor(path.length / 120));
+        for (let i = 0; i < path.length; i += stride) {
+            const step = path[i];
+            if (!step) continue;
+            for (let j = 0; j < offsets.length; j++) {
+                const offset = offsets[j];
+                const x = step.x + offset.dx;
+                const y = step.y + offset.dy;
+                const chunk = chunkAt(x, y);
+                if (!chunk) continue;
+                const key = getChunkKey(chunk.x, chunk.y);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                setChunkVisibility(chunk.x, chunk.y, visibility);
+                reveal.push(chunk);
+            }
+        }
+        if (reveal.length) {
+            markChunksExplored(reveal, { deferRefresh: true, force: !!opts.force });
+            scheduleFogRefresh();
+        }
+        if (RUMOR_MAP_CONFIG.enabled) {
+            const rumorStride = Math.max(1, Math.floor(path.length / 80));
+            const rumorChunks = [];
+            for (let i = 0; i < path.length; i += rumorStride) {
+                if (path[i]) rumorChunks.push(path[i]);
+            }
+            if (rumorChunks.length) markRumorChunks(rumorChunks, 0.25);
+        }
+        return reveal.length;
+    }
+
+    function buildResourceSurveyMission(town) {
+        const tag = pickExplorationTag(town);
+        if (!tag) return null;
+        const range = getExplorationRange(town);
+        const target = pickExplorationTargetChunk(town, { tag, range, sameLandmass: true });
+        if (!target) return null;
+        return {
+            type: "resource",
+            tag,
+            target,
+            range,
+            radius: EXPLORATION_CONFIG.surveyRadius,
+            label: `survey for scarce ${tag} resources`
+        };
+    }
+
+    function buildFrontierMission(town) {
+        const range = getExplorationRange(town);
+        const target = pickExplorationTargetChunk(town, { range, sameLandmass: true });
+        if (!target) return null;
+        return {
+            type: "frontier",
+            target,
+            range,
+            radius: EXPLORATION_CONFIG.revealRadius,
+            label: "frontier scouting expedition"
+        };
+    }
+
+    function buildPilgrimageMission(town) {
+        const religion = getTownReligion(town);
+        if (!religion) return null;
+        const destination = getHolySite(religion);
+        if (!destination || destination.id === town.id) return null;
+        return {
+            type: "pilgrimage",
+            destination,
+            radius: EXPLORATION_CONFIG.pilgrimageRadius,
+            label: "pilgrimage journey"
+        };
+    }
+
+    function planExplorationMission(town) {
+        const weights = [];
+        const travel = town.influences?.travel || 0;
+        const faith = town.influences?.faith || 0;
+        const trade = town.influences?.trade || 0;
+        const education = town.influences?.education || 0;
+
+        weights.push({ id: "resource", weight: 1 + trade * 0.15 + education * 0.12 });
+        weights.push({ id: "frontier", weight: 1 + travel * 0.2 });
+        if (faith > 2 && getTownReligion(town)) {
+            weights.push({ id: "pilgrimage", weight: 0.6 + faith * 0.2 });
+        }
+
+        const firstPick = weightedChoice(weights, w => w.weight);
+        const ordered = [firstPick, ...weights.filter(w => w.id !== firstPick.id).sort((a, b) => b.weight - a.weight)];
+        for (let i = 0; i < ordered.length; i++) {
+            const pick = ordered[i];
+            let mission = null;
+            if (pick.id === "resource") mission = buildResourceSurveyMission(town);
+            if (pick.id === "frontier") mission = buildFrontierMission(town);
+            if (pick.id === "pilgrimage") mission = buildPilgrimageMission(town);
+            if (mission) return mission;
+        }
+        return buildFrontierMission(town);
+    }
+
+    function executeExplorationMission(town, mission, opts = {}) {
+        if (!town || !mission) return false;
+        let path = mission.path || null;
+        if (!path) {
+            if (mission.destination) {
+                path = getCachedPath(town, mission.destination, 40);
+            } else if (mission.target) {
+                path = getCachedPath(town, mission.target, 40);
+            }
+        }
+        if (!path || !path.length) return false;
+
+        const traffic = mission.type === "pilgrimage" ? 0.7 : 0.5;
+        recordTraffic(path, traffic);
+
+        if (mission.target && mission.target.v?.g && !isLandmassDiscovered(mission.target.v.g) && isLandmassReachable(mission.target.v.g)) {
+            discoverLandmass(mission.target.v.g, town, "reach");
+        }
+
+        revealPathFog(path, mission.radius || EXPLORATION_CONFIG.revealRadius, 0.9);
+        town._paultendoExplorationDay = planet.day;
+
+        const markerMeta = getExplorationMarkerMeta(town, mission);
+        if (mission.destination) {
+            try { createTempMarker(mission.destination, EXPLORATION_MARKER_DEF, 12, markerMeta); } catch {}
+        } else if (mission.target) {
+            try { createTempMarkerAt(mission.target.x, mission.target.y, EXPLORATION_MARKER_DEF, 12, markerMeta); } catch {}
+        }
+
+        if (!opts.silent) {
+            const townName = `{{regname:town|${town.id}}}`;
+            if (mission.type === "resource") {
+                modLog(
+                    "resource",
+                    `${townName} sponsors a survey ${mission.label}, mapping new territory.`,
+                    null,
+                    { town }
+                );
+            } else if (mission.type === "pilgrimage") {
+                modLog(
+                    "faith",
+                    `${townName} undertakes a ${mission.label}, charting the route.`,
+                    null,
+                    { town }
+                );
+            } else {
+                modLog(
+                    "travel",
+                    `${townName} dispatches a ${mission.label}, revealing the nearby wilds.`,
+                    null,
+                    { town }
+                );
+            }
+        }
+
+        return true;
     }
 
     function computeLandmassCenters() {
@@ -2340,6 +3762,10 @@
         } else {
             logMessage(`The ${name} are ${reason}.`, "milestone");
         }
+        try { noteProphecyTrigger("discovery", { town, landmassId }); } catch {}
+        if (town) {
+            try { recordTownMemory(town, { type: "discovery", text: `Explorers reach ${landmassRef(landmassId)}.` }); } catch {}
+        }
 
         try {
             const stage = getAnnalsStage();
@@ -2380,7 +3806,7 @@
     }
 
     function getOriginTown() {
-        const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+        const towns = getActiveTowns();
         if (!towns.length) return null;
         return towns.reduce((oldest, town) => {
             if (!oldest) return town;
@@ -2392,7 +3818,7 @@
 
     function refreshDiscoveryForExistingTowns() {
         if (!initDiscoveryState()) return;
-        const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+        const towns = getActiveTowns();
         for (const town of towns) {
             const landmassId = getTownLandmassId(town);
             if (landmassId && !isLandmassDiscovered(landmassId)) {
@@ -2486,7 +3912,7 @@
         );
         if (undiscovered.length === 0) return false;
 
-        const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+        const towns = getActiveTowns();
         if (towns.length === 0) return false;
 
         const explorer = weightedChoice(towns, (t) => {
@@ -3013,6 +4439,7 @@
         subject: { reg: "town", all: true },
         value: (subject) => {
             if (!FOG_CONFIG.enabled) return false;
+            if (!isFogActive()) return false;
             if (!subject || subject.end) return false;
             if (!initFogOfWarState()) return false;
             if ((subject.size || 0) <= 0) return false;
@@ -3020,6 +4447,15 @@
         },
         func: (subject) => {
             updateFogVisibilityForTown(subject);
+        }
+    });
+
+    modEvent("rumorMapDecay", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        value: () => RUMOR_MAP_CONFIG.enabled && planet.day % 2 === 0,
+        func: () => {
+            decayRumorMap();
         }
     });
 
@@ -3064,6 +4500,86 @@
         },
         func: () => {
             discoverReachableLandmass();
+        }
+    });
+
+    // -------------------------------------------------------------------------
+    // Exploration missions beyond town borders (resource surveys, scouting, pilgrimage)
+    // -------------------------------------------------------------------------
+
+    modEvent("explorationExpeditionPrompt", {
+        random: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!canTownExplore(subject, true)) return false;
+            const mission = planExplorationMission(subject);
+            if (!mission) return false;
+            args.mission = mission;
+            return true;
+        },
+        message: (subject, target, args) => {
+            const mission = args.mission;
+            const townName = `{{regname:town|${subject.id}}}`;
+            const biome = mission.target?.b ? titleCase(mission.target.b) : "wild";
+            const detail = mission.type === "resource"
+                ? `a ${mission.label}`
+                : mission.type === "pilgrimage"
+                    ? `a ${mission.label}`
+                    : `a ${mission.label} into the ${biome} outskirts`;
+            return `Scouts from ${townName} propose ${detail}. Approve the expedition? {{should}}`;
+        },
+        func: (subject, target, args) => {
+            const mission = args.mission;
+            executeExplorationMission(subject, mission);
+        },
+        funcNo: (subject) => {
+            subject._paultendoExplorationDeclinedDay = planet.day;
+        },
+        messageDone: "The expedition departs under your blessing.",
+        messageNo: "You hold them back; the borders remain quiet."
+    });
+
+    modEvent("explorationExpeditionAuto", {
+        random: true,
+        auto: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!canTownExplore(subject, false)) return false;
+            const mission = planExplorationMission(subject);
+            if (!mission) return false;
+            args.mission = mission;
+            args.choice = decideTownChoice(subject, {
+                baseYes: 0.6,
+                minYes: 0.2,
+                maxYes: 0.9,
+                influences: { travel: 0.08, education: 0.04, faith: 0.04 },
+                values: { change: 0.05, order: -0.02 },
+                randomness: 0.08
+            });
+            return true;
+        },
+        message: (subject, target, args) => {
+            const mission = args.mission;
+            const townName = `{{regname:town|${subject.id}}}`;
+            if (args.choice === "yes") {
+                if (mission.type === "resource") {
+                    return `${townName} launches ${mission.label}, scouting beyond their borders.`;
+                }
+                if (mission.type === "pilgrimage") {
+                    return `${townName} sets out on a ${mission.label}, mapping the roads ahead.`;
+                }
+                return `${townName} dispatches a ${mission.label}, revealing the nearby wilds.`;
+            }
+            return `${townName} decides to keep their explorers close for now.`;
+        },
+        func: (subject, target, args) => {
+            if (args.choice !== "yes") {
+                subject._paultendoExplorationDeclinedDay = planet.day;
+                return;
+            }
+            executeExplorationMission(subject, args.mission);
         }
     });
 
@@ -3129,9 +4645,7 @@
         subject: { reg: "town", all: true },
         value: (subject) => {
             if (!subject || subject.end) return false;
-            const atWar = regFilter("process", p =>
-                p.type === "war" && !p.done && p.towns?.includes(subject.id)
-            );
+            const atWar = getActiveWars().filter(p => p && p.towns?.includes(subject.id));
             if (atWar.length === 0) return false;
             return true;
         },
@@ -4440,7 +5954,7 @@
                 planet.day = (planet.day || 1) + 1;
 
                 // lightweight background growth
-                const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+                const towns = getActiveTowns();
                 towns.forEach(town => {
                     const growth = Math.max(0, Math.round((town.pop || 0) * 0.001));
                     if (growth > 0) {
@@ -4453,7 +5967,7 @@
                 });
 
                 // keep local wars moving
-                const processes = regFilter("process", p => p && !p.done && p.type === "war");
+                const processes = getActiveWars();
                 processes.forEach(proc => {
                     if (typeof metaEvents !== "undefined" && metaEvents.processWar && typeof metaEvents.processWar.func === "function") {
                         metaEvents.processWar.func(proc);
@@ -4906,6 +6420,7 @@
         if (!id || typeof regGet !== "function") return false;
         const marker = regGet("marker", id);
         if (!marker) return false;
+        try { rememberEntityTombstone(marker, "marker"); } catch {}
         detachMarkerFromChunk(marker);
         if (typeof regRemove === "function") {
             regRemove("marker", id);
@@ -4915,13 +6430,13 @@
         return true;
     }
 
-    function createTempMarker(town, def, durationDays = 12) {
+    function createTempMarker(town, def, durationDays = 12, meta = null) {
         if (!town || !def) return null;
         const spot = findTownMarkerSpot(town);
         const x = spot ? spot.x : town.x;
         const y = spot ? spot.y : town.y;
         if (typeof x !== "number" || typeof y !== "number") return null;
-        const marker = happen("Create", null, null, {
+        const markerData = {
             type: "landmark",
             name: def.name || "Notice",
             subtype: def.subtype || "notice",
@@ -4929,12 +6444,40 @@
             color: def.color || [200, 200, 200],
             x: x,
             y: y
-        }, "marker");
+        };
+        if (meta && meta.name) markerData.name = meta.name;
+        const marker = happen("Create", null, null, markerData, "marker");
         if (marker) {
             marker._paultendoTemp = true;
             marker.expires = planet.day + durationDays;
+            if (meta && meta.desc) marker.desc = meta.desc;
             if (spot) attachMarkerToChunk(marker, spot);
             else attachMarkerToTownChunk(marker, town);
+            return marker;
+        }
+        return null;
+    }
+
+    function createTempMarkerAt(x, y, def, durationDays = 12, meta = null) {
+        if (!def) return null;
+        if (typeof x !== "number" || typeof y !== "number") return null;
+        const markerData = {
+            type: "landmark",
+            name: def.name || "Notice",
+            subtype: def.subtype || "notice",
+            symbol: def.symbol || "?",
+            color: def.color || [200, 200, 200],
+            x: x,
+            y: y
+        };
+        if (meta && meta.name) markerData.name = meta.name;
+        const marker = happen("Create", null, null, markerData, "marker");
+        if (marker) {
+            marker._paultendoTemp = true;
+            marker.expires = planet.day + durationDays;
+            if (meta && meta.desc) marker.desc = meta.desc;
+            const chunk = typeof chunkAt === "function" ? chunkAt(x, y) : null;
+            if (chunk) attachMarkerToChunk(marker, chunk);
             return marker;
         }
         return null;
@@ -6050,7 +7593,7 @@
 
     function allianceSharesWar(alliance) {
         if (!alliance || !Array.isArray(alliance.members) || alliance.members.length < 2) return false;
-        const wars = regFilter("process", p => p && p.type === "war" && !p.done);
+        const wars = getActiveWars();
         for (let i = 0; i < wars.length; i++) {
             const war = wars[i];
             if (!war || !Array.isArray(war.towns)) continue;
@@ -6966,28 +8509,30 @@
     // Towns request loans from wealthier towns
     modEvent("townRequestLoan", {
         random: true,
-        weight: $c.UNCOMMON,
+        weight: $c.COMMON,
         target: {
             reg: "town", random: true
         },
         value: (subject, target, args) => {
-            const towns = regFilter("town", t => t.id !== target.id && (t.resources?.cash || 0) > 100);
+            initEconomics();
+            if (getLoansFor(target).length >= 2) return false;
+            const towns = regFilter("town", t => t.id !== target.id && (t.resources?.cash || 0) > 60);
             if (towns.length === 0) return false;
             const lender = choose(towns);
             const targetCash = target.resources?.cash || 0;
             const lenderCash = lender.resources?.cash || 0;
 
             // Only borrow if struggling and lender has means
-            if (targetCash > 30) return false;
-            if (lenderCash < 80) return false;
+            if (targetCash > 60) return false;
+            if (lenderCash < 60) return false;
 
             const relation = target.relations[lender.id] || 0;
             if (relation < -2) return false; // Won't lend to enemies
 
             args.lender = lender;
-            args.amount = Math.min(50, Math.floor(lenderCash * 0.3));
-            args.repayment = Math.floor(args.amount * 1.2); // 20% fee, not interest
-            args.turns = 10;
+            args.amount = Math.min(70, Math.floor(lenderCash * 0.28));
+            args.repayment = Math.floor(args.amount * 1.18); // modest fee
+            args.turns = 10 + Math.floor(Math.random() * 5);
             return true;
         },
         message: (subject, target, args) => {
@@ -7048,8 +8593,8 @@
 
     // Debt diplomacy escalation (autonomous)
     const DEBT_DIPLOMACY_CONFIG = {
-        escalationCooldown: 40,
-        minMissedPayments: 3,
+        escalationCooldown: 30,
+        minMissedPayments: 2,
         maxPressure: 10
     };
 
@@ -7071,8 +8616,8 @@
         let weights = [
             { id: "restructure", weight: 1 + Math.max(0, values.justice || 0) + Math.max(0, values.openness || 0) },
             { id: "concession", weight: 1 + Math.max(0, values.order || 0) * 0.5 + Math.max(0, values.wealth || 0) * 0.3 },
-            { id: "vassal", weight: 0.5 + pressure * 0.4 + Math.max(0, (values.order || 0)) * 0.2 },
-            { id: "war", weight: 0.2 + pressure * 0.5 + Math.max(0, values.order || 0) * 0.3 }
+            { id: "vassal", weight: 0.7 + pressure * 0.45 + Math.max(0, (values.order || 0)) * 0.25 },
+            { id: "war", weight: 0.15 + pressure * 0.45 + Math.max(0, values.order || 0) * 0.25 }
         ];
 
         if (debtRatio < 1.5) {
@@ -10273,6 +11818,13 @@
         allySlackMax: 3
     };
 
+    const WAR_SUBJUGATION_CONFIG = {
+        minDays: 4,
+        powerRatio: 1.5,
+        popThreshold: 30,
+        sizeThreshold: 3
+    };
+
     const GOVERNMENT_WAR_PROFILE = {
         tribal: { aggression: 1.05, diplomacy: 0.95 },
         council: { aggression: 0.9, diplomacy: 1.1 },
@@ -10509,6 +12061,67 @@
             }
         }
         return strength;
+    }
+
+    function getWeakestTown(towns) {
+        if (!Array.isArray(towns) || towns.length === 0) return null;
+        let weakest = null;
+        let score = Infinity;
+        for (let i = 0; i < towns.length; i++) {
+            const t = towns[i];
+            if (!t || t.end) continue;
+            const value = (t.pop || 0) + (t.size || 0) * 5;
+            if (value < score) {
+                score = value;
+                weakest = t;
+            }
+        }
+        return weakest;
+    }
+
+    function maybeForceSubjugation(process, sideA, sideB, early = false) {
+        if (!process || !sideA.length || !sideB.length) return false;
+        const age = planet.day - (process.start || planet.day);
+        if (age < WAR_SUBJUGATION_CONFIG.minDays) return false;
+        const strengthA = getWarSideStrength(sideA, early);
+        const strengthB = getWarSideStrength(sideB, early);
+        if (!strengthA || !strengthB) return false;
+
+        let winningSide = null;
+        let losingTowns = null;
+        let ratio = 1;
+        if (strengthA >= strengthB) {
+            ratio = strengthA / Math.max(1, strengthB);
+            winningSide = 0;
+            losingTowns = sideB;
+        } else {
+            ratio = strengthB / Math.max(1, strengthA);
+            winningSide = 1;
+            losingTowns = sideA;
+        }
+        if (ratio < WAR_SUBJUGATION_CONFIG.powerRatio) return false;
+
+        const weakest = getWeakestTown(losingTowns);
+        if (!weakest) return false;
+        if ((weakest.pop || 0) > WAR_SUBJUGATION_CONFIG.popThreshold &&
+            (weakest.size || 0) > WAR_SUBJUGATION_CONFIG.sizeThreshold) {
+            return false;
+        }
+
+        if (process.objective && ["seize_wonder", "destroy_wonder", "pillage_wonder"].includes(process.objective.id)) {
+            return false;
+        }
+
+        process.objective = { id: "vassalize", label: "subjugation" };
+        process._paultendoForcedSubjugation = true;
+        logMessage(`Overmatched, ${commaList(losingTowns.map(t => `{{regname:town|${t.id}}}`))} sue for subjugation to end the war.`, "warning");
+        endCoalitionWar(process, winningSide, "victory");
+        return true;
+    }
+
+    function pickSurrenderObjective(ratio) {
+        if (ratio >= 2.2) return { id: "vassalize", label: "subjugation" };
+        return { id: "tribute", label: "tribute concessions" };
     }
 
     function computeWarParticipation(town, enemies, process) {
@@ -10791,6 +12404,9 @@
         const powerB = getTownPowerScore(defender);
         const powerRatio = powerB > 0 ? powerA / powerB : 2;
 
+        const defenderPop = defender?.pop || 0;
+        const defenderSize = defender?.size || 0;
+
         if (cause.id === "seize_wonder") {
             return { id: "seize_wonder", label: "seize wonder", asset: cause.asset };
         }
@@ -10806,6 +12422,12 @@
         }
         if (cause.id === "revenge") {
             return { id: "humiliate", label: "humiliation" };
+        }
+        if (powerRatio >= 1.6 && (defenderPop <= 60 || defenderSize <= 4)) {
+            return { id: "vassalize", label: "subjugation" };
+        }
+        if (powerRatio >= 1.3 && (defenderPop <= 80 || defenderSize <= 5)) {
+            return { id: "tribute", label: "tribute concessions" };
         }
         return { id: "territory", label: "border gains" };
     }
@@ -11064,7 +12686,7 @@
     }
 
     function syncWarfrontMarkers() {
-        const activeWars = regFilter("process", p => p.type === "war" && !p.done);
+        const activeWars = getActiveWars();
         const activeMarkers = new Set();
         activeWars.forEach(process => {
             if (ensureWarfrontMarker(process) && process._paultendoWarMarker) {
@@ -11426,6 +13048,10 @@
             return true;
         }
 
+        if (maybeForceSubjugation(process, sideA, sideB, true)) {
+            return true;
+        }
+
         const age = planet.day - (process.start || planet.day);
         const duration = getEarlyWarDuration(process);
         let endNow = age >= duration;
@@ -11562,6 +13188,10 @@
             return true;
         }
 
+        if (maybeForceSubjugation(process, sideA, sideB, false)) {
+            return true;
+        }
+
         const age = planet.day - (process.start || planet.day);
         const relationStats = getSideRelationStats(sideA, sideB);
         if (age >= COALITION_WAR_CONFIG.peaceMinDays &&
@@ -11612,10 +13242,16 @@
             const strengthB = getWarSideStrength(sideB, false);
             if (strengthA > 0 && strengthB > 0) {
                 if (strengthA < strengthB * COALITION_WAR_CONFIG.surrenderThreshold && Math.random() < COALITION_WAR_CONFIG.surrenderChance) {
+                    if (!process.objective || !["seize_wonder", "destroy_wonder", "pillage_wonder"].includes(process.objective.id)) {
+                        process.objective = pickSurrenderObjective(strengthB / Math.max(1, strengthA));
+                    }
                     endCoalitionWar(process, 1, "victory");
                     return true;
                 }
                 if (strengthB < strengthA * COALITION_WAR_CONFIG.surrenderThreshold && Math.random() < COALITION_WAR_CONFIG.surrenderChance) {
+                    if (!process.objective || !["seize_wonder", "destroy_wonder", "pillage_wonder"].includes(process.objective.id)) {
+                        process.objective = pickSurrenderObjective(strengthA / Math.max(1, strengthB));
+                    }
                     endCoalitionWar(process, 0, "victory");
                     return true;
                 }
@@ -11786,7 +13422,7 @@
             const amount = 0.5;
 
             // Apply to all towns
-            const towns = regFilter("town", t => !t.end && t.pop > 0);
+            const towns = getActiveTowns();
             for (const town of towns) {
                 town.influences[influence] = (town.influences[influence] || 0) + amount * 0.2;
             }
@@ -13340,28 +14976,46 @@
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
             const attractiveness = getCulturalAttractiveness(subject);
-            if (attractiveness < 5) return false;
-
-            // Small chance based on attractiveness
-            if (Math.random() > 0.01 * attractiveness) return false;
+            if (attractiveness < 4) return false;
 
             // Find a less culturally developed town
             const sources = regFilter("town", t => {
                 if (t.id === subject.id || t.end || t.pop < 15) return false;
-                return getCulturalAttractiveness(t) < attractiveness - 3;
+                return true;
             });
 
             if (sources.length === 0) return false;
 
-            args.source = choose(sources);
+            const candidates = sources.map(t => {
+                const attr = getCulturalAttractiveness(t);
+                return { town: t, attr };
+            }).filter(s => s.attr <= attractiveness - 2);
+
+            if (candidates.length === 0) return false;
+
+            const pick = weightedChoice(candidates, c => Math.max(1, attractiveness - c.attr));
+            if (!pick) return false;
+
+            const diff = Math.max(0, attractiveness - pick.attr);
+            const chance = clampValue(0.004 * attractiveness + 0.003 * diff, 0.01, 0.12);
+            if (Math.random() > chance) return false;
+
+            args.source = pick.town;
+            args.attractiveness = attractiveness;
+            args.sourceAttr = pick.attr;
+            args.diff = diff;
+            args.chance = chance;
             return true;
         },
         func: (subject, target, args) => {
-            const migrants = Math.min(3, Math.floor(args.source.pop * 0.02));
+            const diff = typeof args.diff === "number" ? args.diff : Math.max(0, (args.attractiveness || 0) - (args.sourceAttr || 0));
+            const fraction = clampValue(0.008 + diff * 0.002, 0.006, 0.02);
+            const migrants = Math.min(4, Math.max(1, Math.floor(args.source.pop * fraction)));
             if (migrants > 0) {
                 args.source.pop -= migrants;
                 subject.pop += migrants;
-                try { markMigration(subject); } catch {}
+                const reason = `drawn by the cultural traditions of {{regname:town|${subject.id}}}`;
+                try { markMigration(subject, false, { source: args.source, reason }); } catch {}
 
                 if (Math.random() < 0.1) {
                     const traditions = getTownTraditions(subject);
@@ -14522,8 +16176,8 @@
             if (getDisasterSeverity(disaster) < 2) return false;
 
             // Don't already have too many loans
-            initEconomy();
-            const existingLoans = planet.loans.filter(l => l.borrower === subject.id && !l.repaid);
+            initEconomics();
+            const existingLoans = (planet.loans || []).filter(l => l.borrowerId === subject.id);
             if (existingLoans.length >= 2) return false;
 
             // Find a wealthy neighbor to borrow from
@@ -14537,15 +16191,23 @@
 
             // Pick richest neighbor
             const lender = neighbors.sort((a, b) => (b.influences?.trade || 0) - (a.influences?.trade || 0))[0];
+            const lenderCash = lender.resources?.cash || 0;
+            if (lenderCash < 60) return false;
             args.lender = lender;
             args.disaster = disaster;
             return true;
         },
         func: (subject, target, args) => {
-            const amount = 100 + Math.floor(Math.random() * 150);
+            const lenderCash = args.lender?.resources?.cash || 0;
+            const baseAmount = 100 + Math.floor(Math.random() * 150);
+            const amount = Math.max(60, Math.min(baseAmount, Math.floor(lenderCash * 0.45)));
             const interest = 0.15 + Math.random() * 0.1; // 15-25% interest for emergency
+            const repayment = Math.max(amount + 10, Math.floor(amount * (1 + interest)));
+            const turns = 12 + Math.floor(Math.random() * 6);
 
-            createLoan(args.lender, subject, amount, interest);
+            happen("Resource", null, args.lender, { cash: -amount });
+            happen("Resource", null, subject, { cash: amount });
+            createLoan(args.lender, subject, amount, repayment, turns);
 
             // Loan helps recovery
             if (subject.disasterRecovery > 5) {
@@ -14582,6 +16244,14 @@
             const disaster = getTownDisaster(subject);
             if (!disaster) return false;
             if (getDisasterSeverity(disaster) < 1) return false;
+            if (subject._paultendoDisasterRefugeeDay && planet.day - subject._paultendoDisasterRefugeeDay < 10) {
+                return false;
+            }
+            if (subject._paultendoDisasterRefugeeDisaster === disaster.id &&
+                subject._paultendoDisasterRefugeeDay &&
+                planet.day - subject._paultendoDisasterRefugeeDay < 14) {
+                return false;
+            }
 
             // Find a safe neighbor to flee to
             const safeNeighbors = regFilter("town", t =>
@@ -14617,17 +16287,15 @@
         },
         func: (subject, target, args) => {
             const severity = getDisasterSeverity(args.disaster);
-            const refugees = severity * 5 + Math.floor(Math.random() * 10);
+            const severityFactor = clampValue(severity, 1, 5);
+            const fraction = clampValue(0.015 + severityFactor * 0.015, 0.02, 0.1);
+            const refugees = calcRefugeeCount(subject.pop || 0, fraction, 2, 10, 0.12);
 
-            // Population loss from source
-            if (subject.pop > refugees + 10) {
-                subject.pop -= refugees;
-            }
+            if (refugees <= 0) return;
 
-            // Population gain at destination
-            args.destination.pop = (args.destination.pop || 0) + refugees;
+            happen("Migrate", subject, args.destination, { count: refugees });
 
-            const prestigeGain = PRESTIGE_CONFIG.gain.refugees * Math.min(3, refugees / 20);
+            const prestigeGain = PRESTIGE_CONFIG.gain.refugees * Math.min(4, refugees / 25);
             adjustPrestige(args.destination, prestigeGain, "refugees");
             recordMigrationTraffic(subject, args.destination, refugees);
 
@@ -14648,9 +16316,10 @@
                     { town: subject }
                 );
             }
-            if (refugees > 0) {
-                try { markMigration(args.destination, true); } catch {}
-            }
+            const reason = `fleeing the ${args.disaster.subtype}`;
+            try { markMigration(args.destination, true, { source: subject, reason }); } catch {}
+            subject._paultendoDisasterRefugeeDay = planet.day;
+            subject._paultendoDisasterRefugeeDisaster = args.disaster.id;
         }
     });
 
@@ -14706,7 +16375,8 @@
                 null,
                 { town: subject }
             );
-            try { markMigration(args.destination); } catch {}
+            const reason = `seeking stability after the ${args.disaster.subtype}`;
+            try { markMigration(args.destination, false, { source: subject, reason }); } catch {}
         }
     });
 
@@ -15293,7 +16963,7 @@
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
         target: { reg: "town", random: true },
-        value: (subject, target) => {
+        value: (subject, target, args) => {
             if (subject.id === target.id) return false;
 
             // Subject has famine
@@ -15326,6 +16996,152 @@
     // MIGRATION SYSTEM
     // Expands on base game's massMigrate with targeted reasons
     // ============================================================
+
+    const REPUTATION_CONFIG = {
+        min: 0,
+        max: 100,
+        updateInterval: 3
+    };
+
+    const KNOWLEDGE_CONFIG = {
+        min: 0,
+        max: 100,
+        base: 30,
+        driftRate: 0.06,
+        decayRate: 0.04,
+        tabooChance: 0.03
+    };
+
+    function initTownReputation(town) {
+        if (!town) return;
+        if (!town.reputation || typeof town.reputation !== "object") {
+            town.reputation = {
+                prosperity: 50,
+                danger: 20,
+                sanctity: 40,
+                day: -1
+            };
+        }
+    }
+
+    function computeTownReputation(town) {
+        initTownReputation(town);
+        initPrestige(town);
+        const trade = town.influences?.trade || 0;
+        const happy = town.influences?.happy || 0;
+        const cash = town.resources?.cash || 0;
+        const prestige = town.prestige || 0;
+
+        const prosperity = clampValue(
+            40 + trade * 3 + happy * 2 + prestige * 0.3 + Math.min(20, cash / 50),
+            REPUTATION_CONFIG.min,
+            REPUTATION_CONFIG.max
+        );
+
+        const crime = town.influences?.crime || 0;
+        const war = hasIssue(town, "war") ? 1 : 0;
+        const disaster = getTownDisaster(town) ? 1 : 0;
+        const danger = clampValue(
+            10 + crime * 6 + war * 18 + disaster * 20,
+            REPUTATION_CONFIG.min,
+            REPUTATION_CONFIG.max
+        );
+
+        const faith = town.influences?.faith || 0;
+        const holyOrder = hasTownSpecialization(town, "holyOrder") ? 1 : 0;
+        const sanctity = clampValue(
+            20 + faith * 5 + holyOrder * 10 + (town.religion ? 5 : 0),
+            REPUTATION_CONFIG.min,
+            REPUTATION_CONFIG.max
+        );
+
+        town.reputation.prosperity = prosperity;
+        town.reputation.danger = danger;
+        town.reputation.sanctity = sanctity;
+        town.reputation.day = planet.day;
+    }
+
+    function getTownReputation(town) {
+        if (!town) return null;
+        initTownReputation(town);
+        const age = planet.day - (town.reputation.day || -999);
+        if (age >= REPUTATION_CONFIG.updateInterval) {
+            computeTownReputation(town);
+        }
+        return town.reputation;
+    }
+
+    function initTownKnowledge(town) {
+        if (!town) return;
+        if (!town.knowledge || typeof town.knowledge !== "object") {
+            town.knowledge = {
+                core: clampValue(KNOWLEDGE_CONFIG.base, KNOWLEDGE_CONFIG.min, KNOWLEDGE_CONFIG.max),
+                tags: [],
+                taboo: [],
+                day: -1
+            };
+        }
+    }
+
+    function computeKnowledgeTarget(town) {
+        const education = town.influences?.education || 0;
+        let bonus = 0;
+        if (hasTownSpecialization(town, "academy")) bonus += 12;
+        if (hasTownSpecialization(town, "library")) bonus += 8;
+        if (hasTownSpecialization(town, "healers")) bonus += 4;
+        if (hasTownSpecialization(town, "merchants")) bonus += 3;
+        if (hasTownSpecialization(town, "holyOrder")) bonus += 2;
+        return clampValue(KNOWLEDGE_CONFIG.base + education * 4 + bonus, KNOWLEDGE_CONFIG.min, KNOWLEDGE_CONFIG.max);
+    }
+
+    function updateKnowledgeTags(town) {
+        if (!town) return;
+        initTownKnowledge(town);
+        const tags = new Set();
+        if (hasTownSpecialization(town, "academy")) tags.add("scholarship");
+        if (hasTownSpecialization(town, "library")) tags.add("archives");
+        if (hasTownSpecialization(town, "healers")) tags.add("medicine");
+        if (hasTownSpecialization(town, "merchants")) tags.add("commerce");
+        if (hasTownSpecialization(town, "holyOrder")) tags.add("theology");
+        if (hasTownSpecialization(town, "fort") || hasTownSpecialization(town, "garrison")) tags.add("strategy");
+        town.knowledge.tags = Array.from(tags);
+    }
+
+    function updateTownKnowledge(town) {
+        if (!town || town.end) return false;
+        initTownKnowledge(town);
+        const target = computeKnowledgeTarget(town);
+        const lowEduPenalty = (town.influences?.education || 0) < 2 ? 0.03 : 0;
+        const decay = KNOWLEDGE_CONFIG.decayRate * (hasIssue(town, "war") ? 2 : 1) +
+            (getTownDisaster(town) ? 0.08 : 0) +
+            lowEduPenalty;
+        const rate = KNOWLEDGE_CONFIG.driftRate;
+        const prev = town.knowledge.core || target;
+        town.knowledge.core = clampValue(
+            (town.knowledge.core || target) * (1 - rate) + target * rate - decay,
+            KNOWLEDGE_CONFIG.min,
+            KNOWLEDGE_CONFIG.max
+        );
+
+        if (planet.day % 12 === 0) updateKnowledgeTags(town);
+
+        if ((town.values?.openness || 0) < -3 && Math.random() < KNOWLEDGE_CONFIG.tabooChance) {
+            const tabooPool = ["foreign texts", "alchemy", "heretical lore", "forbidden maps"];
+            const pick = choose(tabooPool);
+            if (!town.knowledge.taboo.includes(pick)) town.knowledge.taboo.push(pick);
+        }
+        if (town.knowledge.core < 18 && prev >= 18 && Math.random() < 0.25) {
+            modLog("knowledge", `Old arts fade in {{regname:town|${town.id}}}.`, null, { town });
+            recordAnnalsEntry({
+                theme: "learning",
+                title: `Lost Arts in ${townRef(town.id)}`,
+                body: `Scribes lament knowledge slipping away in ${townRef(town.id)}.`,
+                townId: town.id
+            });
+        }
+        town.knowledge.day = planet.day;
+        return true;
+    }
 
     // Helper to calculate town attractiveness for migration
     function getTownAttractiveness(town) {
@@ -15365,6 +17181,20 @@
 
         // Prestige attracts migrants
         score += getPrestigeAttractivenessBonus(town);
+
+        const reputation = getTownReputation(town);
+        if (reputation) {
+            score += (reputation.prosperity - 50) / 12;
+            score -= reputation.danger / 14;
+            const faith = town.influences?.faith || 0;
+            score += (reputation.sanctity - 50) / (faith > 4 ? 14 : 28);
+        }
+
+        initTownKnowledge(town);
+        const knowledge = town.knowledge || null;
+        if (knowledge && typeof knowledge.core === "number") {
+            score += (knowledge.core - 50) / 18;
+        }
 
         // Disasters are bad
         if (getTownDisaster(town)) score -= 10;
@@ -15455,9 +17285,83 @@
         color: [255, 190, 120]
     };
 
-    function markMigration(target, isRefugee = false) {
+    function formatReasonSentence(text) {
+        if (!text) return null;
+        const trimmed = String(text).trim();
+        if (!trimmed) return null;
+        return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+    }
+
+    function getMigrationMarkerDesc(source, target, isRefugee, reason) {
+        const prefix = isRefugee ? "Refugees" : "Migrants";
+        const origin = source ? `from {{regname:town|${source.id}}}` : "from distant lands";
+        const sentence = formatReasonSentence(reason);
+        if (sentence) return `${prefix} ${origin} ${sentence}`;
+        if (target) return `${prefix} ${origin} arrive in {{regname:town|${target.id}}}.`;
+        return `${prefix} ${origin} arrive.`;
+    }
+
+    function markMigration(target, isRefugee = false, meta = null) {
         const def = isRefugee ? REFUGEE_MARKER_DEF : MIGRATION_MARKER_DEF;
-        return createTempMarker(target, def, isRefugee ? 16 : 10);
+        const source = meta && meta.source ? meta.source : null;
+        const reason = meta && meta.reason ? meta.reason : null;
+        const desc = meta && meta.desc ? meta.desc : getMigrationMarkerDesc(source, target, isRefugee, reason);
+        const name = meta && meta.name ? meta.name : null;
+        return createTempMarker(target, def, isRefugee ? 16 : 10, { desc, name });
+    }
+
+    const CULTURAL_TIDE_CONFIG = {
+        perDayRoutes: 2,
+        perDayFlows: 2,
+        maxAge: 40,
+        baseStrength: 0.12
+    };
+
+    function initMigrationFlows() {
+        if (!planet) return;
+        if (!planet._paultendoMigrationFlows) planet._paultendoMigrationFlows = {};
+    }
+
+    function recordMigrationFlow(source, destination, count = 1) {
+        if (!source || !destination) return;
+        initMigrationFlows();
+        const key = `${source.id}->${destination.id}`;
+        const flow = planet._paultendoMigrationFlows[key] || {
+            sourceId: source.id,
+            destId: destination.id,
+            count: 0,
+            day: planet.day
+        };
+        flow.count += Math.max(1, count);
+        flow.day = planet.day;
+        planet._paultendoMigrationFlows[key] = flow;
+    }
+
+    function getRecentMigrationFlows(maxAge = CULTURAL_TIDE_CONFIG.maxAge) {
+        initMigrationFlows();
+        return Object.values(planet._paultendoMigrationFlows)
+            .filter(flow => flow && (planet.day - flow.day) <= maxAge);
+    }
+
+    function applyValueDiffusion(source, target, strength, reason) {
+        if (!source || !target || source.end || target.end) return false;
+        initTownValues(source);
+        initTownValues(target);
+        const axes = VALUES_CONFIG.axes;
+        const diffs = axes.map(axis => ({
+            axis,
+            diff: (source.values?.[axis] || 0) - (target.values?.[axis] || 0)
+        })).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+        const openness = target.values?.openness || 0;
+        const opennessFactor = clampValue(0.6 + openness / 20, 0.3, 1.2);
+        const weight = strength * opennessFactor;
+        const count = Math.min(2, diffs.length);
+        for (let i = 0; i < count; i++) {
+            const diff = diffs[i];
+            if (!diff || diff.diff === 0) continue;
+            shiftTownValue(target, diff.axis, diff.diff * 0.02 * weight, reason || "cultural tide");
+        }
+        return true;
     }
 
     function recordMigrationTraffic(source, destination, count = 1) {
@@ -15466,6 +17370,7 @@
         if (!path || !path.length) return;
         const traffic = Math.min(3, Math.max(0.4, count / 20));
         recordTraffic(path, traffic);
+        recordMigrationFlow(source, destination, count);
     }
 
     function getMigrationReason(subject, target) {
@@ -15482,6 +17387,15 @@
         const happyGap = (target.influences?.happy || 0) - (subject.influences?.happy || 0);
         if (happyGap >= 3) return `hoping for better lives in {{regname:town|${target.id}}}`;
         return null;
+    }
+
+    function calcRefugeeCount(pop, fraction, minCount = 1, minRemaining = 10, maxFraction = 0.12) {
+        if (!pop || pop <= minRemaining) return 0;
+        const capped = clampValue(fraction, 0, maxFraction);
+        let count = Math.floor(pop * capped);
+        count = Math.max(minCount, count);
+        count = Math.min(count, Math.max(0, pop - minRemaining));
+        return Math.max(0, count);
     }
 
     // Economic migration - people move toward prosperity
@@ -15518,10 +17432,10 @@
 
             happen("Migrate", subject, target, { count: migrants });
             recordMigrationTraffic(subject, target, migrants);
-            try { markMigration(target); } catch {}
+            const reason = getMigrationReason(subject, target);
+            try { markMigration(target, false, { source: subject, reason }); } catch {}
 
             if (Math.random() < 0.15) {
-                const reason = getMigrationReason(subject, target);
                 const line = reason
                     ? `${migrants} people leave {{regname:town|${subject.id}}} ${reason}.`
                     : `${migrants} people leave {{regname:town|${subject.id}}} seeking opportunity in {{regname:town|${target.id}}}.`;
@@ -15536,7 +17450,7 @@
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
         target: { reg: "town", random: true },
-        value: (subject, target) => {
+        value: (subject, target, args) => {
             if (subject.id === target.id) return false;
 
             // Subject has scholars but no academy
@@ -15564,7 +17478,8 @@
                 null,
                 { town: subject }
             );
-            try { markMigration(target); } catch {}
+            const reason = `seeking study at the academy in {{regname:town|${target.id}}}`;
+            try { markMigration(target, false, { source: subject, reason }); } catch {}
         }
     });
 
@@ -15598,7 +17513,8 @@
                 { town: subject }
             );
             recordMigrationTraffic(subject, target, 1);
-            try { markMigration(target); } catch {}
+            const reason = `seeking healing work in {{regname:town|${target.id}}}`;
+            try { markMigration(target, false, { source: subject, reason }); } catch {}
         }
     });
 
@@ -15644,7 +17560,8 @@
                 { town: subject }
             );
             recordMigrationTraffic(subject, target, 1);
-            try { markMigration(target); } catch {}
+            const reason = `seeking patronage in {{regname:town|${target.id}}}`;
+            try { markMigration(target, false, { source: subject, reason }); } catch {}
         }
     });
 
@@ -15677,7 +17594,8 @@
 
             happen("Migrate", subject, target, { count: actualMigrants });
             recordMigrationTraffic(subject, target, actualMigrants);
-            try { markMigration(target); } catch {}
+            const reason = `seeking holy sites in {{regname:town|${target.id}}}`;
+            try { markMigration(target, false, { source: subject, reason }); } catch {}
 
             // Priests may accompany
             if (subject.jobs && subject.jobs.priest > 0 && Math.random() < 0.2) {
@@ -15706,6 +17624,7 @@
         value: (subject, target) => {
             if (subject.id === target.id) return false;
             if (subject.pop < 30) return false;
+            if (subject._paultendoReligiousRefugeeDay && planet.day - subject._paultendoReligiousRefugeeDay < 25) return false;
 
             // Subject has low faith but neighboring high faith town
             // (Suggests religious tension/persecution)
@@ -15718,15 +17637,21 @@
             // Unhappy people flee
             if ((subject.influences?.happy || 0) > -2) return false;
 
+            args.gap = Math.abs(subjectFaith - targetFaith);
+            args.unhappy = Math.max(0, -(subject.influences?.happy || 0));
             return true;
         },
-        func: (subject, target) => {
-            const refugees = Math.floor(Math.random() * 10) + 5;
-            const actualRefugees = Math.min(refugees, Math.floor(subject.pop * 0.1));
+        func: (subject, target, args) => {
+            const gap = args.gap || 0;
+            const unhappy = args.unhappy || 0;
+            const fraction = clampValue(0.01 + gap * 0.003 + unhappy * 0.003, 0.01, 0.06);
+            const actualRefugees = calcRefugeeCount(subject.pop || 0, fraction, 1, 12, 0.08);
+            if (actualRefugees <= 0) return;
 
             happen("Migrate", subject, target, { count: actualRefugees });
             recordMigrationTraffic(subject, target, actualRefugees);
-            try { markMigration(target, true); } catch {}
+            const reason = "fleeing religious strife";
+            try { markMigration(target, true, { source: subject, reason }); } catch {}
 
             modLog(
                 "migration",
@@ -15737,6 +17662,7 @@
 
             // This worsens relations
             worsenRelations(subject, target, 3);
+            subject._paultendoReligiousRefugeeDay = planet.day;
         }
     });
 
@@ -15749,6 +17675,7 @@
         value: (subject, target) => {
             if (subject.id === target.id) return false;
             if (subject.pop < 20) return false;
+            if (subject._paultendoWarRefugeeDay && planet.day - subject._paultendoWarRefugeeDay < 18) return false;
 
             // Subject is at war
             const atWar = regFilter("process", p =>
@@ -15770,15 +17697,21 @@
             const war = atWar[0];
             if (war.towns.includes(target.id)) return false;
 
+            args.war = war;
             return true;
         },
-        func: (subject, target) => {
-            const refugees = Math.floor(Math.random() * 15) + 5;
-            const actualRefugees = Math.min(refugees, Math.floor(subject.pop * 0.1));
+        func: (subject, target, args) => {
+            const war = args.war;
+            const warAge = war ? (planet.day - (war.start || planet.day)) : 0;
+            const durationFactor = clampValue(warAge / 120, 0, 1);
+            const fraction = clampValue(0.01 + durationFactor * 0.03, 0.01, 0.05);
+            const actualRefugees = calcRefugeeCount(subject.pop || 0, fraction, 1, 12, 0.08);
+            if (actualRefugees <= 0) return;
 
             happen("Migrate", subject, target, { count: actualRefugees });
             recordMigrationTraffic(subject, target, actualRefugees);
-            try { markMigration(target, true); } catch {}
+            const reason = "fleeing war";
+            try { markMigration(target, true, { source: subject, reason }); } catch {}
 
             if (Math.random() < 0.2) {
                 modLog(
@@ -15788,6 +17721,7 @@
                     { town: subject }
                 );
             }
+            subject._paultendoWarRefugeeDay = planet.day;
         }
     });
 
@@ -15819,19 +17753,27 @@
             if (recoveredNeighbors.length === 0) return false;
             if (subject.pop < 20) return false;
 
-            args.destination = choose(recoveredNeighbors);
+            const destination = choose(recoveredNeighbors);
+            const recent = destination.disasterHistory
+                ? destination.disasterHistory.filter(d => d.severity >= 2).sort((a, b) => b.day - a.day)[0]
+                : null;
+            args.destination = destination;
+            args.daysSince = recent ? (planet.day - recent.day) : 120;
             ensureTownState(args.destination);
             return true;
         },
         func: (subject, target, args) => {
-            const returnees = Math.floor(Math.random() * 5) + 1;
-            const actualReturnees = Math.min(returnees, Math.floor(subject.pop * 0.03));
+            const since = args.daysSince || 120;
+            const factor = clampValue(since / 200, 0.3, 1.2);
+            const fraction = clampValue(0.01 + factor * 0.02, 0.01, 0.05);
+            const actualReturnees = calcRefugeeCount(subject.pop || 0, fraction, 1, 10, 0.06);
 
             if (actualReturnees < 1) return;
 
             happen("Migrate", subject, args.destination, { count: actualReturnees });
             recordMigrationTraffic(subject, args.destination, actualReturnees);
-            try { markMigration(args.destination); } catch {}
+            const reason = `returning home to {{regname:town|${args.destination.id}}}`;
+            try { markMigration(args.destination, false, { source: subject, reason }); } catch {}
 
             if (Math.random() < 0.15) {
                 modLog(
@@ -15840,6 +17782,80 @@
                     null,
                     { town: subject }
                 );
+            }
+        }
+    });
+
+    // ----------------------------------------
+    // CULTURAL TIDE (values contagion)
+    // ----------------------------------------
+
+    modEvent("culturalTideTrade", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        value: () => planet.day % 2 === 0,
+        func: () => {
+            if (!planet.tradeRoutes || !planet.tradeRoutes.length) return;
+            const active = planet.tradeRoutes.filter(r => r && r.active !== false);
+            if (!active.length) return;
+            const picks = [];
+            const count = Math.min(CULTURAL_TIDE_CONFIG.perDayRoutes, active.length);
+            for (let i = 0; i < count; i++) {
+                picks.push(active[Math.floor(Math.random() * active.length)]);
+            }
+            picks.forEach(route => {
+                const town1 = regGet("town", route.town1);
+                const town2 = regGet("town", route.town2);
+                if (!town1 || !town2 || town1.end || town2.end) return;
+                const goods = route.totalGoods || 0;
+                const caravans = route.caravans || 0;
+                const tradeStrength = clampValue(0.6 + goods / 120 + caravans / 6, 0.4, 2.4);
+                const strength = CULTURAL_TIDE_CONFIG.baseStrength * tradeStrength;
+                applyValueDiffusion(town1, town2, strength, "trade contact");
+                applyValueDiffusion(town2, town1, strength * 0.8, "trade contact");
+            });
+        }
+    });
+
+    modEvent("culturalTideMigration", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        value: () => planet.day % 3 === 0,
+        func: () => {
+            const flows = getRecentMigrationFlows();
+            if (!flows.length) return;
+            const count = Math.min(CULTURAL_TIDE_CONFIG.perDayFlows, flows.length);
+            for (let i = 0; i < count; i++) {
+                const flow = flows[Math.floor(Math.random() * flows.length)];
+                const source = regGet("town", flow.sourceId);
+                const target = regGet("town", flow.destId);
+                if (!source || !target || source.end || target.end) continue;
+                const strength = CULTURAL_TIDE_CONFIG.baseStrength + Math.min(0.4, flow.count / 80);
+                applyValueDiffusion(source, target, strength, "migration");
+            }
+        }
+    });
+
+    modEvent("reputationUpdate", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: () => planet.day % REPUTATION_CONFIG.updateInterval === 0,
+        func: (subject) => {
+            computeTownReputation(subject);
+        }
+    });
+
+    modEvent("knowledgeUpdate", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: () => planet.day % 3 === 0,
+        func: (subject) => {
+            updateTownKnowledge(subject);
+            const core = subject.knowledge?.core || 0;
+            if (core > 70) {
+                happen("Influence", null, subject, { education: 0.2, temp: true });
+            } else if (core < 20) {
+                happen("Influence", null, subject, { education: -0.2, temp: true });
             }
         }
     });
@@ -16704,7 +18720,7 @@
             if (targetReligion && targetFaith > 6) chance -= 0.1;
 
             // Dominance penalty: large faiths spread more slowly
-            const totalTowns = regFilter("town", t => !t.end && t.pop > 0).length || 1;
+            const totalTowns = getActiveTowns().length || 1;
             const share = args.religion.followers.length / totalTowns;
             if (share > 0.4) chance -= 0.05;
             if (share > 0.6) chance -= 0.1;
@@ -16771,7 +18787,7 @@
             let chance = 0.25;
             if (args.religion.tenets.includes("proselytizing")) chance += 0.1;
             if (targetReligion) chance -= 0.05;
-            const totalTowns = regFilter("town", t => !t.end && t.pop > 0).length || 1;
+            const totalTowns = getActiveTowns().length || 1;
             const share = args.religion.followers.length / totalTowns;
             if (share > 0.5) chance -= 0.1;
             if (share > 0.7) chance -= 0.15;
@@ -17110,6 +19126,44 @@
             if (religion.tenets.includes("hierarchical") && subject.unrest > 10) {
                 subject.unrest -= 0.05;
             }
+        }
+    });
+
+    const FAITH_RESILIENCE_CONFIG = {
+        minFaith: 2,
+        base: 0.05,
+        religionBonus: 0.04,
+        templeBonus: 0.04,
+        holyOrderBonus: 0.05,
+        hardshipBonus: 0.03,
+        maxDaily: 0.18
+    };
+
+    modEvent("faithResilience", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!subject || subject.end) return false;
+            const faith = subject.influences?.faith || 0;
+            if (faith >= FAITH_RESILIENCE_CONFIG.minFaith) return false;
+            const religion = getTownReligion(subject);
+            const hasSacred = hasTownSpecialization(subject, "holyOrder") || hasTemple(subject);
+            if (!religion && !hasSacred) return false;
+            return true;
+        },
+        func: (subject) => {
+            const religion = getTownReligion(subject);
+            const faith = subject.influences?.faith || 0;
+            let gain = FAITH_RESILIENCE_CONFIG.base;
+            if (religion) gain += FAITH_RESILIENCE_CONFIG.religionBonus;
+            if (hasTemple(subject)) gain += FAITH_RESILIENCE_CONFIG.templeBonus;
+            if (hasTownSpecialization(subject, "holyOrder")) gain += FAITH_RESILIENCE_CONFIG.holyOrderBonus;
+            if (subject.famine && !subject.famine.ended) gain += FAITH_RESILIENCE_CONFIG.hardshipBonus;
+            if (subject.drought && !subject.drought.ended) gain += FAITH_RESILIENCE_CONFIG.hardshipBonus;
+            if (subject.activeEpidemic) gain += FAITH_RESILIENCE_CONFIG.hardshipBonus;
+            if (faith < -2) gain *= 1.4;
+            gain = clampValue(gain, 0.02, FAITH_RESILIENCE_CONFIG.maxDaily);
+            happen("Influence", null, subject, { faith: gain, temp: true });
         }
     });
 
@@ -17929,6 +19983,7 @@
 
         ensureHistoryName(entry);
         planet.history.push(entry);
+        try { noteMemoryFromHistory(entry); } catch {}
         return entry;
     }
 
@@ -18143,11 +20198,427 @@
         return stripHtmlTags(result);
     }
 
+    // ----------------------------------------
+    // PROC-GEN UTILITIES (Lore + systems)
+    // ----------------------------------------
+
+    const PROC_GEN_WORDS = {
+        memoryPrefixes: [
+            "Some say", "It is whispered that", "Elders insist", "Songs claim",
+            "In taverns they say", "The old ones recall"
+        ],
+        memorySuffixes: [
+            "as if it were fate", "though records differ", "and none can agree",
+            "so the elders swear", "and the tale grows"
+        ],
+        memoryIntensifiers: ["great", "fateful", "terrible", "glorious", "grim", "burning"],
+        prophecyFrames: [
+            "A seer warns of", "A dream speaks of", "The oracle foretells",
+            "A prophet declares", "Voices in the night speak of"
+        ],
+        prophecyWar: ["iron banners", "blood on the wind", "marching shadows", "spears in the dawn"],
+        prophecyDisaster: ["fire in the hills", "a blackened sky", "sickened air", "the earth drying"],
+        prophecyDiscovery: ["a hidden coast", "a far horizon", "new shores", "a sea without end"],
+        reputationProsperity: ["prosperous", "bustling", "well-fed", "flourishing"],
+        reputationDanger: ["dangerous", "restless", "troubled", "risky"],
+        reputationSanctity: ["sacred", "devout", "blessed", "pilgrim-favored"]
+    };
+
+    function pickWord(list, fallback = "") {
+        if (!list || !list.length) return fallback;
+        if (typeof choose === "function") return choose(list);
+        return list[Math.floor(Math.random() * list.length)];
+    }
+
+    function getDirectionFromTo(a, b) {
+        if (!a || !b) return null;
+        const ax = a.x !== undefined ? a.x : a.center?.[0];
+        const ay = a.y !== undefined ? a.y : a.center?.[1];
+        const bx = b.x !== undefined ? b.x : b.center?.[0];
+        const by = b.y !== undefined ? b.y : b.center?.[1];
+        if (ax === undefined || ay === undefined || bx === undefined || by === undefined) return null;
+        const dx = bx - ax;
+        const dy = by - ay;
+        if (Math.abs(dx) > Math.abs(dy)) return dx >= 0 ? "east" : "west";
+        if (Math.abs(dy) > 0) return dy >= 0 ? "south" : "north";
+        return null;
+    }
+
+    function formatDirectionPhrase(direction) {
+        if (!direction) return "afar";
+        return `the ${direction}`;
+    }
+
+    function distortMemoryText(text, distortion = 0.2) {
+        if (!text) return text;
+        let result = stripHtmlTags(text);
+        if (Math.random() < distortion) {
+            const prefix = pickWord(PROC_GEN_WORDS.memoryPrefixes);
+            result = `${prefix} ${result.charAt(0).toLowerCase()}${result.slice(1)}`;
+        }
+        if (Math.random() < distortion * 0.7) {
+            const suffix = pickWord(PROC_GEN_WORDS.memorySuffixes);
+            const end = /[.!?]$/.test(result) ? "" : ".";
+            result = `${result} ${suffix}${end}`;
+        }
+        if (Math.random() < distortion * 0.4) {
+            const intensifier = pickWord(PROC_GEN_WORDS.memoryIntensifiers);
+            result = result.replace(/\b(the|a)\b/i, `$1 ${intensifier}`);
+        }
+        if (Math.random() < distortion * 0.3) {
+            result = result.replace(/\b(\d+)\b/, (match, num) => {
+                const val = Math.round(parseInt(num, 10) * (1.2 + Math.random() * 0.8));
+                return `${val}`;
+            });
+        }
+        return result;
+    }
+
+    function buildProphecyText(type, direction, targetName) {
+        const frame = pickWord(PROC_GEN_WORDS.prophecyFrames);
+        let core = "";
+        if (type === "war") core = pickWord(PROC_GEN_WORDS.prophecyWar);
+        else if (type === "disaster") core = pickWord(PROC_GEN_WORDS.prophecyDisaster);
+        else core = pickWord(PROC_GEN_WORDS.prophecyDiscovery);
+        const dir = formatDirectionPhrase(direction);
+        const target = targetName ? ` of ${targetName}` : "";
+        return `${frame} ${core} from ${dir}${target}.`;
+    }
+
     function formatLoreTitle(entry) {
         const rawTitle = entry && entry.title ? normalizeLoreEntities(entry.title) : "a tale";
         if (rawTitle.includes("{{")) return rawTitle;
         return `{{b:${rawTitle}}}`;
     }
+
+    // ----------------------------------------
+    // LIVING MEMORY + PROPHECY
+    // ----------------------------------------
+
+    const MEMORY_CONFIG = {
+        maxEntries: 40,
+        driftInterval: 30,
+        driftChance: 0.15,
+        retellChance: 0.08
+    };
+
+    function initTownMemory(town) {
+        if (!town) return;
+        if (!town.memory || typeof town.memory !== "object") {
+            town.memory = {
+                events: [],
+                lastDriftDay: -999,
+                lastRetellDay: -999
+            };
+        }
+        if (!Array.isArray(town.memory.events)) town.memory.events = [];
+    }
+
+    function getMemoryDistortion(town) {
+        initTownValues(town);
+        const openness = town.values?.openness || 0;
+        const change = town.values?.change || 0;
+        const faith = town.influences?.faith || 0;
+        let distortion = 0.1;
+        distortion += Math.max(0, -openness) * 0.03;
+        distortion += Math.max(0, -change) * 0.02;
+        distortion += Math.max(0, faith) * 0.005;
+        return clampValue(distortion, 0.05, 0.6);
+    }
+
+    function recordTownMemory(town, data) {
+        if (!town || !data || !data.text) return false;
+        initTownMemory(town);
+        const cleaned = normalizeLoreEntities(data.text);
+        const entry = {
+            id: `${town.id}-${planet.day}-${Math.floor(Math.random() * 1000)}`,
+            day: data.day !== undefined ? data.day : planet.day,
+            type: data.type || "event",
+            truth: cleaned,
+            version: cleaned,
+            weight: data.weight || 1
+        };
+        town.memory.events.push(entry);
+        if (town.memory.events.length > MEMORY_CONFIG.maxEntries) {
+            town.memory.events.splice(0, town.memory.events.length - MEMORY_CONFIG.maxEntries);
+        }
+        return entry;
+    }
+
+    function driftTownMemory(town) {
+        if (!town || town.end) return false;
+        initTownMemory(town);
+        if ((planet.day - (town.memory.lastDriftDay || -999)) < MEMORY_CONFIG.driftInterval) return false;
+        if (Math.random() > MEMORY_CONFIG.driftChance) return false;
+        const candidates = town.memory.events.filter(e => (planet.day - e.day) > 20);
+        if (!candidates.length) return false;
+        const entry = pickWord(candidates);
+        const distortion = getMemoryDistortion(town);
+        const retold = distortMemoryText(entry.truth, distortion);
+        if (retold && retold !== entry.version) {
+            entry.version = retold;
+            town.memory.lastDriftDay = planet.day;
+            if (Math.random() < 0.2) {
+                recordAnnalsEntry({
+                    theme: "myth",
+                    title: `Memory of ${townRef(town.id)}`,
+                    body: retold,
+                    townId: town.id
+                });
+            }
+            return true;
+        }
+        return false;
+    }
+
+    function retellTownMemory(town) {
+        if (!town || town.end) return false;
+        initTownMemory(town);
+        if (!town.memory.events.length) return false;
+        if ((planet.day - (town.memory.lastRetellDay || -999)) < 12) return false;
+        const entry = pickWord(town.memory.events);
+        town.memory.lastRetellDay = planet.day;
+        modLog("memory", entry.version, null, { town });
+        if (Math.random() < 0.25) {
+            recordAnnalsEntry({
+                theme: "myth",
+                title: `A remembered tale of ${townRef(town.id)}`,
+                body: entry.version,
+                townId: town.id
+            });
+        }
+        return true;
+    }
+
+    function noteMemoryFromLog(system, message, options = {}) {
+        const town = options.town;
+        if (!town || town.end) return;
+        if (system === "memory") return;
+        recordTownMemory(town, { type: system || "event", text: message });
+    }
+
+    function noteMemoryFromHistory(entry) {
+        if (!entry) return;
+        const townIds = [entry.town, entry.victor, entry.loser].filter(id => id !== undefined && id !== null);
+        if (!townIds.length) return;
+        townIds.forEach(id => {
+            const town = regGet("town", id);
+            if (!town || town.end) return;
+            const name = getHistoryDisplayName(entry);
+            recordTownMemory(town, { type: entry.type || "history", text: name });
+        });
+    }
+
+    const PROPHECY_CONFIG = {
+        minDay: 80,
+        cooldown: 45,
+        maxActive: 3,
+        minWindow: 80,
+        maxWindow: 220
+    };
+
+    function initProphecies() {
+        if (!planet._paultendoProphecies) planet._paultendoProphecies = [];
+        if (!planet._paultendoProphecyMeta) {
+            planet._paultendoProphecyMeta = { lastDay: -999, lastId: 0 };
+        }
+    }
+
+    function getActiveProphecies() {
+        initProphecies();
+        return planet._paultendoProphecies.filter(p => p && !p.fulfilled && !p.discredited);
+    }
+
+    function createProphecy(town, type, target) {
+        if (!town || town.end) return null;
+        initProphecies();
+        if (planet.day < PROPHECY_CONFIG.minDay) return null;
+        if ((planet.day - planet._paultendoProphecyMeta.lastDay) < PROPHECY_CONFIG.cooldown) return null;
+        if (getActiveProphecies().length >= PROPHECY_CONFIG.maxActive) return null;
+
+        const direction = target ? getDirectionFromTo(town, target) : pickWord(["north", "south", "east", "west"]);
+        const deadline = planet.day + Math.floor(PROPHECY_CONFIG.minWindow + Math.random() * (PROPHECY_CONFIG.maxWindow - PROPHECY_CONFIG.minWindow));
+        const targetName = target && target.name ? target.name : null;
+        const text = buildProphecyText(type, direction, targetName);
+
+        const prophecy = {
+            id: planet._paultendoProphecyMeta.lastId + 1,
+            day: planet.day,
+            townId: town.id,
+            type,
+            direction,
+            targetTownId: type === "war" && target && target.id ? target.id : null,
+            targetLandmassId: type === "discovery" && target && target.id ? target.id : null,
+            text,
+            deadline
+        };
+        planet._paultendoProphecyMeta.lastId = prophecy.id;
+        planet._paultendoProphecyMeta.lastDay = planet.day;
+        planet._paultendoProphecies.push(prophecy);
+
+        modLog("prophecy", text, "warning", { town });
+        recordAnnalsEntry({
+            theme: "myth",
+            title: `Prophecy in ${townRef(town.id)}`,
+            body: text,
+            townId: town.id
+        });
+        return prophecy;
+    }
+
+    function fulfillProphecy(prophecy, town) {
+        if (!prophecy || prophecy.fulfilled || prophecy.discredited) return false;
+        prophecy.fulfilled = true;
+        prophecy.fulfilledDay = planet.day;
+        if (town) {
+            happen("Influence", null, town, { faith: 0.8, happy: 0.2, temp: true });
+            recordTownMemory(town, { type: "prophecy", text: `The prophecy of day ${prophecy.day} is fulfilled.` });
+        }
+        recordAnnalsEntry({
+            theme: "faith",
+            title: `Prophecy Fulfilled`,
+            body: prophecy.text,
+            townId: prophecy.townId
+        });
+        return true;
+    }
+
+    function discreditProphecy(prophecy, town) {
+        if (!prophecy || prophecy.fulfilled || prophecy.discredited) return false;
+        prophecy.discredited = true;
+        prophecy.discreditedDay = planet.day;
+        if (town) {
+            happen("Influence", null, town, { faith: -0.4, happy: -0.1, temp: true });
+        }
+        recordAnnalsEntry({
+            theme: "myth",
+            title: `A Fading Prophecy`,
+            body: `The words once spoken in ${townRef(prophecy.townId)} lose their power.`,
+            townId: prophecy.townId
+        });
+        return true;
+    }
+
+    function noteProphecyTrigger(type, data = {}) {
+        initProphecies();
+        const active = getActiveProphecies();
+        if (!active.length) return false;
+        active.forEach(prophecy => {
+            if (prophecy.type !== type) return;
+            const town = regGet("town", prophecy.townId);
+            if (!town || town.end) return;
+            if (prophecy.targetTownId && data.townId && prophecy.targetTownId !== data.townId) return;
+            if (prophecy.targetLandmassId && data.landmassId && prophecy.targetLandmassId !== data.landmassId) return;
+            if (data.town && prophecy.direction) {
+                const dir = getDirectionFromTo(town, data.town);
+                if (dir && dir !== prophecy.direction) return;
+            }
+            fulfillProphecy(prophecy, town);
+        });
+        return true;
+    }
+
+    function checkProphecyExpiry() {
+        initProphecies();
+        const active = getActiveProphecies();
+        active.forEach(prophecy => {
+            if (prophecy.deadline && planet.day >= prophecy.deadline) {
+                const town = regGet("town", prophecy.townId);
+                discreditProphecy(prophecy, town);
+            }
+        });
+    }
+
+    modEvent("livingMemoryDrift", {
+        random: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject) => {
+            initTownMemory(subject);
+            return subject.memory.events.length > 0;
+        },
+        func: (subject) => {
+            driftTownMemory(subject);
+            if (Math.random() < MEMORY_CONFIG.retellChance) {
+                retellTownMemory(subject);
+            }
+        }
+    });
+
+    modEvent("prophecyEmergence", {
+        random: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || subject.end) return false;
+            if (planet.day < PROPHECY_CONFIG.minDay) return false;
+            if (getActiveProphecies().length >= PROPHECY_CONFIG.maxActive) return false;
+            const faith = subject.influences?.faith || 0;
+            const unrest = subject.unrest || 0;
+            if (faith < 4 && unrest < 6 && Math.random() < 0.6) return false;
+
+            const rivals = regFilter("town", t =>
+                t && !t.end && t.id !== subject.id && getRelations(subject, t) < -6
+            );
+            const undiscovered = regFilter("landmass", l => l && !isLandmassDiscovered(l.id));
+            let type = "disaster";
+            let targetTown = null;
+            let targetLandmass = null;
+            if (rivals.length && (subject.influences?.military || 0) > 2) {
+                type = "war";
+                targetTown = choose(rivals);
+            } else if (undiscovered.length && (subject.influences?.travel || 0) > 4) {
+                type = "discovery";
+                targetLandmass = choose(undiscovered);
+            } else if (getTownDisaster(subject)) {
+                type = "disaster";
+            }
+            args.type = type;
+            args.targetTown = targetTown;
+            args.targetLandmass = targetLandmass;
+            return true;
+        },
+        func: (subject, target, args) => {
+            if (args.type === "discovery" && args.targetLandmass) {
+                createProphecy(subject, "discovery", args.targetLandmass);
+            } else if (args.type === "war" && args.targetTown) {
+                createProphecy(subject, "war", args.targetTown);
+            } else {
+                createProphecy(subject, "disaster", null);
+            }
+        }
+    });
+
+    modEvent("prophecyExpiry", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        func: () => {
+            checkProphecyExpiry();
+        }
+    });
+
+    modEvent("prophecyDisasterTrigger", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject, target, args) => {
+            const disaster = getTownDisaster(subject);
+            if (!disaster) return false;
+            if (subject._paultendoProphecyDisasterId === disaster.id &&
+                planet.day - (subject._paultendoProphecyDisasterDay || 0) < 10) {
+                return false;
+            }
+            args.disaster = disaster;
+            return true;
+        },
+        func: (subject, target, args) => {
+            noteProphecyTrigger("disaster", { town: subject, townId: subject.id, disaster: args.disaster });
+            subject._paultendoProphecyDisasterId = args.disaster?.id;
+            subject._paultendoProphecyDisasterDay = planet.day;
+            if (args.disaster?.subtype) {
+                recordTownMemory(subject, { type: "disaster", text: `The ${args.disaster.subtype} strikes ${townRef(subject.id)}.` });
+            }
+        }
+    });
 
     const LORE_NUDGE_THEMES = ["war", "discovery", "faith", "revolution", "hardship", "myth", "diplomacy", "expansion", "culture"];
     const LORE_ENDORSE_COOLDOWN = 12;
@@ -18210,11 +20681,11 @@
         }
 
         if (entry.sourceType && entry.sourceType.startsWith("discovery")) {
-            const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+            const towns = getActiveTowns();
             return towns.length ? weightedChoice(towns, t => 1 + (t.influences?.travel || 0)) : null;
         }
 
-        const fallback = regFilter("town", t => t && !t.end && t.pop > 0);
+        const fallback = getActiveTowns();
         return fallback.length ? choose(fallback) : null;
     }
 
@@ -19182,9 +21653,45 @@
         initExecutive._paultendoAnnals = true;
     }
 
+    if (typeof initExecutive === "function" && !initExecutive._paultendoWorldStatus) {
+        const baseInitExecutive = initExecutive;
+        initExecutive = function(...args) {
+            const result = baseInitExecutive.apply(this, args);
+            try { addWorldStatusButton(); } catch {}
+            return result;
+        };
+        initExecutive._paultendoWorldStatus = true;
+    }
+
+    if (typeof initExecutive === "function" && !initExecutive._paultendoChronicle) {
+        const baseInitExecutive = initExecutive;
+        initExecutive = function(...args) {
+            const result = baseInitExecutive.apply(this, args);
+            try { addChronicleButton(); } catch {}
+            return result;
+        };
+        initExecutive._paultendoChronicle = true;
+    }
+
+    if (typeof initExecutive === "function" && !initExecutive._paultendoAutoplay) {
+        const baseInitExecutive = initExecutive;
+        initExecutive = function(...args) {
+            const result = baseInitExecutive.apply(this, args);
+            try { addAutoplayButton(); } catch {}
+            return result;
+        };
+        initExecutive._paultendoAutoplay = true;
+    }
+
     if (typeof window !== "undefined") {
         window.addEventListener("load", () => {
             try { addAnnalsButton(); } catch {}
+            try { addWorldStatusButton(); } catch {}
+            try { addChronicleButton(); } catch {}
+            try { addAutoplayButton(); } catch {}
+            try { initAutoplaySettings(); } catch {}
+            try { ensureAutoplayControls(); } catch {}
+            try { wrapPromptHandlersForAutoplay(); } catch {}
             try { updateSeasonState(); } catch {}
             try { ensureGreatWorkForEra(planet.currentEra); } catch {}
         });
@@ -20420,9 +22927,7 @@
             initHistory();
 
             // Current situation matches historical event
-            const atWar = regFilter("process", p =>
-                p.type === "war" && !p.done && p.towns?.includes(subject.id)
-            );
+            const atWar = getActiveWars().filter(p => p && p.towns?.includes(subject.id));
 
             if (atWar.length === 0) return false;
 
@@ -20797,7 +23302,7 @@
             }
 
             // Pressure-driven nudges
-            const wars = regFilter("process", p => p.type === "war" && !p.done);
+            const wars = getActiveWars();
             const epidemics = planet.epidemics && planet.epidemics.length ? planet.epidemics.length : 0;
             const alliances = planet.alliances && planet.alliances.length ? planet.alliances.length : 0;
             const routes = planet.tradeRoutes && planet.tradeRoutes.length ? planet.tradeRoutes.length : 0;
@@ -20813,7 +23318,7 @@
 
     function getGreatWorkContextTags(eraType) {
         const tagSet = new Set(GREAT_WORK_ERA_TAGS[eraType] || []);
-        const wars = regFilter("process", p => p.type === "war" && !p.done);
+        const wars = getActiveWars();
         if (wars.length) {
             tagSet.add("war");
             tagSet.add("military");
@@ -21344,9 +23849,7 @@
             const work = getGreatWorkBySubtype(subject.subtype);
             if (!work) return;
 
-            const atWar = regFilter("process", p =>
-                p.type === "war" && !p.done && p.towns?.includes(town.id)
-            ).length > 0;
+            const atWar = getActiveWars().some(p => p && p.towns?.includes(town.id));
 
             if (atWar && Math.random() < 0.06) {
                 const base = subject.total || subject.cost || 200;
@@ -21537,7 +24040,12 @@
             if (pilgrims > 0) {
                 happen("Migrate", source, destination, { count: pilgrims });
                 recordMigrationTraffic(source, destination, pilgrims);
-                try { markMigration(destination); } catch {}
+                const reason = `on pilgrimage to honor {{b:${myth.title}}} in {{regname:town|${destination.id}}}`;
+                try { markMigration(destination, false, { source, reason, name: "Pilgrims" }); } catch {}
+                try {
+                    const path = getCachedPath(source, destination, 40);
+                    revealPathFog(path, EXPLORATION_CONFIG.pilgrimageRadius, 0.85);
+                } catch {}
             }
 
             happen("Influence", null, source, { travel: 0.4, faith: 0.3, temp: true });
@@ -21610,9 +24118,7 @@
         subject: { reg: "town", random: true },
         value: (subject) => {
             // Town at war
-            const atWar = regFilter("process", p =>
-                p.type === "war" && !p.done && p.towns?.includes(subject.id)
-            );
+            const atWar = getActiveWars().filter(p => p && p.towns?.includes(subject.id));
             if (atWar.length === 0) return false;
 
             // Has living hero or general
@@ -21794,7 +24300,7 @@
 
     function getGreatWorkContextPrefix(work, town) {
         if (!work) return "";
-        const wars = regFilter("process", p => p.type === "war" && !p.done);
+        const wars = getActiveWars();
         const epidemics = planet.epidemics && planet.epidemics.length ? planet.epidemics.length : 0;
         const alliances = planet.alliances && planet.alliances.length ? planet.alliances.length : 0;
         const routes = planet.tradeRoutes && planet.tradeRoutes.length ? planet.tradeRoutes.length : 0;
@@ -22150,6 +24656,43 @@
     }
 
     try { initPrestigeBrowserExtra(); } catch {}
+
+    function initSocietyBrowserExtra() {
+        if (typeof regBrowserExtra === "undefined") return;
+        if (window._paultendoSocietyExtra) return;
+        window._paultendoSocietyExtra = true;
+
+        if (typeof regBrowserKeys === "undefined") regBrowserKeys = {};
+        if (typeof regBrowserValues === "undefined") regBrowserValues = {};
+        if (!regBrowserKeys.society_) regBrowserKeys.society_ = "Society";
+        if (!regBrowserValues.traditions) regBrowserValues.traditions = "Traditions";
+        if (!regBrowserValues.reputation_prosperity) regBrowserValues.reputation_prosperity = "Reputation (Prosperity)";
+        if (!regBrowserValues.reputation_danger) regBrowserValues.reputation_danger = "Reputation (Danger)";
+        if (!regBrowserValues.reputation_sanctity) regBrowserValues.reputation_sanctity = "Reputation (Sanctity)";
+        if (!regBrowserValues.knowledge_core) regBrowserValues.knowledge_core = "Knowledge";
+        if (!regBrowserValues.knowledge_tags) regBrowserValues.knowledge_tags = "Knowledge Tags";
+
+        if (!regBrowserExtra.town) regBrowserExtra.town = {};
+        if (regBrowserExtra.town._paultendoSocietyExtra) return;
+        regBrowserExtra.town._paultendoSocietyExtra = true;
+
+        regBrowserExtra.town.society_ = (town) => {
+            if (!town || town.end) return;
+            initTownTraditions(town);
+            const rep = getTownReputation(town) || {};
+            initTownKnowledge(town);
+            return {
+                traditions: Math.round(town.traditions || 0),
+                reputation_prosperity: Math.round(rep.prosperity || 0),
+                reputation_danger: Math.round(rep.danger || 0),
+                reputation_sanctity: Math.round(rep.sanctity || 0),
+                knowledge_core: Math.round(town.knowledge?.core || 0),
+                knowledge_tags: (town.knowledge?.tags || []).join(", ")
+            };
+        };
+    }
+
+    try { initSocietyBrowserExtra(); } catch {}
 
     function initInfrastructureBrowserExtra() {
         if (typeof regBrowserExtra === "undefined") return;
@@ -23291,9 +25834,9 @@
         degradeThreshold: 0.25,
         crossroads: { minRoadLevel: 2, minConnections: 3, minDistance: 5 },
         colors: {
-            1: [139, 119, 101],
-            2: [128, 128, 128],
-            3: [220, 220, 220]
+            1: [112, 96, 82],
+            2: [98, 98, 98],
+            3: [154, 154, 154]
         },
         widths: { 1: 1, 2: 2, 3: 3 }
     };
@@ -23314,6 +25857,34 @@
         if (!planet._paultendoRoadChunks) planet._paultendoRoadChunks = {};
         if (planet._paultendoRoadVersion === undefined) planet._paultendoRoadVersion = 0;
         if (!planet._paultendoPathCache) planet._paultendoPathCache = {};
+        if (planet._paultendoRoadDirty === undefined) planet._paultendoRoadDirty = true;
+        if (planet._paultendoRoadRegistryBuilt === undefined) planet._paultendoRoadRegistryBuilt = false;
+    }
+
+    function markRoadDirty() {
+        if (!planet) return;
+        planet._paultendoRoadDirty = true;
+    }
+
+    function rebuildRoadRegistryFromChunks() {
+        if (!planet || !planet.chunks) return false;
+        initRoadRegistry();
+        if (planet._paultendoRoadRegistryBuilt) return false;
+        const chunkList = Object.values(planet.chunks);
+        if (!chunkList.length) return false;
+        let added = false;
+        for (let i = 0; i < chunkList.length; i++) {
+            const chunk = chunkList[i];
+            if (!chunk || !chunk.v?.road) continue;
+            const key = getChunkKey(chunk.x, chunk.y);
+            if (!planet._paultendoRoadChunks[key]) {
+                planet._paultendoRoadChunks[key] = true;
+                added = true;
+            }
+        }
+        planet._paultendoRoadRegistryBuilt = true;
+        if (added) markRoadDirty();
+        return added;
     }
 
     function getChunkFromKey(key) {
@@ -23325,7 +25896,10 @@
         if (!chunk || typeof chunk.x !== "number" || typeof chunk.y !== "number") return;
         initRoadRegistry();
         const key = getChunkKey(chunk.x, chunk.y);
-        planet._paultendoRoadChunks[key] = true;
+        if (!planet._paultendoRoadChunks[key]) {
+            planet._paultendoRoadChunks[key] = true;
+            markRoadDirty();
+        }
     }
 
     function initRoadState(chunk) {
@@ -23464,7 +26038,9 @@
     function findPath(startChunk, endChunk, opts = {}) {
         if (!startChunk || !endChunk) return null;
         if (startChunk.x === endChunk.x && startChunk.y === endChunk.y) return [startChunk];
-        const maxIterations = opts.maxIterations || 20000;
+        const roughDist = Math.abs(startChunk.x - endChunk.x) + Math.abs(startChunk.y - endChunk.y);
+        const adaptiveMax = Math.min(200000, Math.max(20000, roughDist * 200));
+        const maxIterations = opts.maxIterations || adaptiveMax;
         const openSet = new RoadPriorityQueue();
         const cameFrom = {};
         const gScore = {};
@@ -23584,21 +26160,28 @@
                 changed = true;
             }
         });
-        if (changed) planet._paultendoRoadVersion += 1;
+        if (changed) {
+            planet._paultendoRoadVersion += 1;
+            markRoadDirty();
+        }
     }
 
     function decayRoads() {
         let changed = false;
+        let conditionChanged = false;
         forEachRoadChunk(chunk => {
             const r = chunk.v.road;
             if (!r) return;
             r.traffic *= (1 - ROAD_CONFIG.trafficDecay);
             if (r.level === 0) return;
 
+            const prevCondition = r.condition;
             let decay = ROAD_CONFIG.conditionDecay.base;
             decay += r.traffic * ROAD_CONFIG.conditionDecay.perTraffic;
             decay *= (1 + r.level * 0.2);
             r.condition = Math.max(0, r.condition - decay);
+
+            if (Math.abs(r.condition - prevCondition) >= 0.05) conditionChanged = true;
 
             if (r.condition < ROAD_CONFIG.degradeThreshold) {
                 const prevLevel = r.level;
@@ -23608,7 +26191,12 @@
                 if (r.level !== prevLevel) changed = true;
             }
         });
-        if (changed) planet._paultendoRoadVersion += 1;
+        if (changed) {
+            planet._paultendoRoadVersion += 1;
+            markRoadDirty();
+        } else if (conditionChanged) {
+            markRoadDirty();
+        }
     }
 
     function computePathTravelCost(path) {
@@ -23962,7 +26550,7 @@
 
                 const level = Math.min(road.level, nRoad.level);
                 const color = ROAD_CONFIG.colors[level] || [150, 150, 150];
-                const alpha = 0.35 + 0.65 * Math.min(road.condition, nRoad.condition);
+                const alpha = 0.25 + 0.55 * Math.min(road.condition, nRoad.condition);
                 ctx.strokeStyle = `rgba(${color[0]},${color[1]},${color[2]},${alpha.toFixed(2)})`;
                 ctx.lineWidth = ROAD_CONFIG.widths[level] || 1;
                 ctx.lineCap = "round";
@@ -23985,11 +26573,19 @@
                     ctx.fill();
                 });
         }
+        if (planet) {
+            planet._paultendoRoadDirty = false;
+            planet._paultendoRoadRenderVersion = planet._paultendoRoadVersion;
+            planet._paultendoRoadRenderDay = planet.day;
+        }
     }
 
-    function scheduleRoadRefresh() {
+    function scheduleRoadRefresh(force = false) {
         if (!planet) return;
         if (planet._paultendoRoadRefreshPending) return;
+        if (!force && planet._paultendoRoadDirty === false && planet._paultendoRoadRenderDay === planet.day) {
+            return;
+        }
         planet._paultendoRoadRefreshPending = true;
         const refresh = () => {
             planet._paultendoRoadRefreshPending = false;
@@ -24014,13 +26610,17 @@
         if (cash < cost) return false;
 
         happen("Resource", null, town, { cash: -cost });
+        let changed = false;
         roadChunks.forEach(chunk => {
             const repair = 0.1 * investmentLevel;
             const road = initRoadState(chunk);
             if (!road) return;
+            const prev = road.condition;
             road.condition = Math.min(1.0, road.condition + repair);
             road.lastMaintenance = planet.day;
+            if (Math.abs(road.condition - prev) >= 0.05) changed = true;
         });
+        if (changed) markRoadDirty();
         return true;
     }
 
@@ -24029,12 +26629,14 @@
         if (!path || path.length === 0) return false;
         let notable = false;
         let changed = false;
+        let conditionChanged = false;
         for (let i = 0; i < path.length; i += 2) {
             const chunk = path[i];
             if (!chunk || !chunk.v?.road) continue;
             const road = chunk.v.road;
             if (!road || road.level === 0) continue;
             const prevLevel = road.level;
+            const prevCondition = road.condition;
             road.condition = Math.max(0, road.condition - severity);
             if (road.condition < ROAD_CONFIG.degradeThreshold) {
                 road.level = Math.max(0, road.level - 1);
@@ -24042,8 +26644,14 @@
             }
             if (prevLevel >= 2 && road.level < prevLevel) notable = true;
             if (road.level !== prevLevel) changed = true;
+            if (Math.abs(road.condition - prevCondition) >= 0.05) conditionChanged = true;
         }
-        if (changed) planet._paultendoRoadVersion += 1;
+        if (changed) {
+            planet._paultendoRoadVersion += 1;
+            markRoadDirty();
+        } else if (conditionChanged) {
+            markRoadDirty();
+        }
         if (notable) {
             modLog(
                 "roads",
@@ -24087,6 +26695,7 @@
         subject: { reg: "player", id: 1 },
         func: () => {
             initRoadRegistry();
+            rebuildRoadRegistryFromChunks();
             if (planet.day % 3 === 0) {
                 decayRoads();
                 updateRoadLevels();
@@ -24163,7 +26772,20 @@
     // =========================================================================
 
     function getActiveTowns() {
-        return regFilter("town", t => t && !t.end && (t.pop || 0) > 0);
+        return getDailyCache("activeTowns", () =>
+            regFilter("town", t => t && !t.end && (t.pop || 0) > 0)
+        ) || [];
+    }
+
+    function getActiveProcesses(type) {
+        const key = `process:${type}`;
+        return getDailyCache(key, () =>
+            regFilter("process", p => p && p.type === type && !p.done)
+        ) || [];
+    }
+
+    function getActiveWars() {
+        return getActiveProcesses("war");
     }
 
     // -------------------------------------------------------------------------
@@ -24220,7 +26842,7 @@
                 if (famines > 0) weight += Math.min(1.2, famines * 0.3);
             }
             if (type.focus === "defense") {
-                const wars = regFilter("process", p => p && p.type === "war" && !p.done).length;
+                const wars = getActiveWars().length;
                 if (wars > 0) weight += Math.min(1.0, wars * 0.2);
             }
             weightMap[key] = weight;
