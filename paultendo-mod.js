@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.5.0";
+    const MOD_VERSION = "1.5.1";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -2828,6 +2828,17 @@
         if (!FOG_CONFIG.enabled) return false;
         if (!planet || typeof regCount !== "function") return false;
         if (regCount("town") <= 0) return false;
+        const hasAnchorTown = getDailyCache("fogAnchorTown", () => {
+            const towns = regFilter("town", t => t && !t.end);
+            for (let i = 0; i < towns.length; i++) {
+                const t = towns[i];
+                if ((t.size || 0) <= 0) continue;
+                if (t.center && t.center.length >= 2) return true;
+                if (typeof t.x === "number" && typeof t.y === "number") return true;
+            }
+            return false;
+        });
+        if (!hasAnchorTown) return false;
         if (isFogClearedByProgress()) return false;
         return true;
     }
