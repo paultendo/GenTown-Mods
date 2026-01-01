@@ -15,11 +15,33 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.5.2";
+    const MOD_VERSION = "1.5.9";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
     console.log(`[paultendo-mod] Loaded v${MOD_VERSION}`);
+
+    const PAULTENDO_GLOBAL = (typeof window !== "undefined")
+        ? window
+        : (typeof globalThis !== "undefined" ? globalThis : {});
+    if (!PAULTENDO_GLOBAL._paultendoEventStack) {
+        PAULTENDO_GLOBAL._paultendoEventStack = [];
+    }
+
+    function withModEventContext(id, fn) {
+        const stack = PAULTENDO_GLOBAL._paultendoEventStack;
+        stack.push(id);
+        try {
+            return fn();
+        } finally {
+            stack.pop();
+        }
+    }
+
+    function getActiveModEventId() {
+        const stack = PAULTENDO_GLOBAL._paultendoEventStack || [];
+        return stack.length ? stack[stack.length - 1] : null;
+    }
 
     // =========================================================================
     // SAFE REGNAME FALLBACKS (avoid "Invalid Thing" when entities are removed)
@@ -442,6 +464,17 @@
             }
         }
 
+        if (typeof data.func === "function" && !data.func._paultendoContext) {
+            const baseFunc = data.func;
+            data.func = (subject, target, args) => withModEventContext(id, () => baseFunc(subject, target, args));
+            data.func._paultendoContext = true;
+        }
+        if (typeof data.funcNo === "function" && !data.funcNo._paultendoContext) {
+            const baseFuncNo = data.funcNo;
+            data.funcNo = (subject, target, args) => withModEventContext(id, () => baseFuncNo(subject, target, args));
+            data.funcNo._paultendoContext = true;
+        }
+
         return _paultendoEvent(id, data);
     }
 
@@ -563,6 +596,9 @@
     if (typeof happen === "function" && !happen._paultendoWarCasus) {
         const baseHappen = happen;
         happen = function(action, subject, target, args, targetClass) {
+            if (action === "Influence" && args && typeof args === "object") {
+                try { softenFaithLoss(args, target); } catch {}
+            }
             const result = baseHappen(action, subject, target, args, targetClass);
             if (action === "Create" && result && result.type === "war" && !result._paultendoCasusSet) {
                 const instigator = subject && subject._reg === "town" ? subject : regGet("town", result.initiator || result.towns?.[0]);
@@ -572,6 +608,11 @@
                 try { applyVassalWarJoin(result); } catch {}
                 try { noteProphecyTrigger("war", { town: defender, townId: defender?.id }); } catch {}
                 try { noteProphecyTrigger("war", { town: instigator, townId: instigator?.id }); } catch {}
+            }
+            if (action === "Create" && result && result._reg === "town") {
+                try { markTownExplored(result); } catch {}
+                try { markFogDirty(); } catch {}
+                try { scheduleFogRefresh(true); } catch {}
             }
             try { handleAutoplayEventForHappen(action, subject, target, result); } catch {}
             if (planet && planet._paultendoDailyCache && (action === "Create" || action === "End" || action === "Finish")) {
@@ -639,6 +680,14 @@
     const SWAY_BASE_CHANCE = 0.4;
     const DEFAULT_CHANCE_MIN = 0.05;
     const DEFAULT_CHANCE_MAX = 0.95;
+    const FAITH_SOFTEN_CONFIG = {
+        enabled: true,
+        baseScale: 0.7,
+        lowFaithScale: 0.5,
+        severeFaithScale: 0.35,
+        lowFaithThreshold: -4.5,
+        severeFaithThreshold: -7.5
+    };
 
     const SWAY_PROMPT_GLOBAL_COOLDOWN_DAYS = 5;
     const SWAY_PROMPT_TOWN_COOLDOWN_DAYS = 20;
@@ -651,6 +700,55 @@
 
     function clampChance(value, min = DEFAULT_CHANCE_MIN, max = DEFAULT_CHANCE_MAX) {
         return clampValue(value, min, max);
+    }
+
+    function applyInfluenceSafe(subject, town, delta, opts = {}) {
+        if (!town || !delta || typeof delta !== "object") return;
+        if (typeof happen === "function") {
+            const payload = { ...delta };
+            if (opts.temp) payload.temp = true;
+            happen("Influence", subject || null, town, payload);
+            return;
+        }
+        ensureTownState(town);
+        const min = (typeof $c !== "undefined" && $c.minInfluence !== undefined) ? $c.minInfluence : -10;
+        const max = (typeof $c !== "undefined" && $c.maxInfluence !== undefined) ? $c.maxInfluence : 10;
+        if (opts.temp && !town.influencesTemp) town.influencesTemp = {};
+        for (const key in delta) {
+            if (key === "temp") continue;
+            const amount = delta[key];
+            if (typeof amount !== "number") continue;
+            const before = town.influences[key] || 0;
+            const next = clampValue(before + amount, min, max);
+            town.influences[key] = next;
+            if (opts.temp) {
+                const diff = next - before;
+                const tempValue = (town.influencesTemp[key] || 0) + diff;
+                town.influencesTemp[key] = clampValue(tempValue, min, max);
+            }
+        }
+    }
+
+    function shouldSoftenFaithLoss(args, target) {
+        if (!FAITH_SOFTEN_CONFIG.enabled) return false;
+        if (!args || typeof args.faith !== "number" || args.faith >= 0) return false;
+        if (args._paultendoFaithHard) return false;
+        if (!target || target._reg !== "town") return false;
+        if (!getActiveModEventId()) return false;
+        return true;
+    }
+
+    function softenFaithLoss(args, target) {
+        if (!shouldSoftenFaithLoss(args, target)) return args;
+        const faith = target.influences?.faith || 0;
+        let scale = FAITH_SOFTEN_CONFIG.baseScale;
+        if (faith <= FAITH_SOFTEN_CONFIG.severeFaithThreshold) {
+            scale = FAITH_SOFTEN_CONFIG.severeFaithScale;
+        } else if (faith <= FAITH_SOFTEN_CONFIG.lowFaithThreshold) {
+            scale = FAITH_SOFTEN_CONFIG.lowFaithScale;
+        }
+        args.faith *= scale;
+        return args;
     }
 
     function weightedChoice(items, weightFn) {
@@ -1056,6 +1154,149 @@
         "unlockMonasteries"
     ];
 
+    const TECH_FORKS = {
+        agriculture: {
+            id: "techAgrarianStrategy",
+            label: "Agrarian Strategy",
+            prereq: () => (planet.unlocks?.farm || 0) >= 20 && (planet.unlocks?.farm || 0) < 40,
+            choices: {
+                irrigation: {
+                    label: "Irrigation & Settlement",
+                    effects: { farm: 1.5, order: 0.5, travel: -0.2 },
+                    values: { order: VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor },
+                    progress: { farm: 0.06, government: 0.02 },
+                    catchup: { key: "pastoral", days: 180, effects: { travel: 0.7, military: 0.3 } }
+                },
+                pastoral: {
+                    label: "Pastoral Mobility",
+                    effects: { travel: 1.2, military: 0.4, farm: -0.3 },
+                    values: { change: VALUE_SHIFT.minor, openness: VALUE_SHIFT.minor },
+                    progress: { travel: 0.06, military: 0.02 },
+                    catchup: { key: "irrigation", days: 180, effects: { farm: 0.8, order: 0.2 } }
+                }
+            }
+        },
+        trade: {
+            id: "techTradeRoutes",
+            label: "Trade Route Focus",
+            prereq: () => (planet.unlocks?.trade || 0) >= 20 && (planet.unlocks?.travel || 0) >= 30,
+            choices: {
+                maritime: {
+                    label: "Maritime Routes",
+                    effects: { travel: 1.2, trade: 0.8, happy: 0.2 },
+                    values: { openness: VALUE_SHIFT.minor, change: VALUE_SHIFT.minor },
+                    progress: { travel: 0.05, trade: 0.04 },
+                    catchup: { key: "overland", days: 160, effects: { trade: 0.7, order: 0.2 } }
+                },
+                overland: {
+                    label: "Overland Caravans",
+                    effects: { trade: 1.2, order: 0.3, travel: 0.4 },
+                    values: { order: VALUE_SHIFT.minor, wealth: VALUE_SHIFT.minor },
+                    progress: { trade: 0.05, government: 0.03 },
+                    catchup: { key: "maritime", days: 160, effects: { travel: 0.6, trade: 0.4 } }
+                }
+            }
+        },
+        knowledge: {
+            id: "techKnowledgeDiffusion",
+            label: "Knowledge Diffusion",
+            prereq: () => (planet.unlocks?.education || 0) >= 40 && (planet.unlocks?.smith || 0) >= 40,
+            choices: {
+                open: {
+                    label: "Open Press",
+                    effects: { education: 2, happy: 0.3, crime: 0.2 },
+                    values: { openness: VALUE_SHIFT.standard, change: VALUE_SHIFT.minor },
+                    progress: { education: 0.07 },
+                    catchup: { key: "scriptoria", days: 200, effects: { order: 0.4, faith: 0.4 } }
+                },
+                scriptoria: {
+                    label: "Scriptoria & Control",
+                    effects: { order: 0.7, faith: 0.5, education: -0.2 },
+                    values: { order: VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor },
+                    progress: { government: 0.04, faith: 0.02 },
+                    catchup: { key: "open", days: 200, effects: { education: 0.8, openness: 0.3 } }
+                }
+            }
+        }
+    };
+
+    function initTechPaths() {
+        if (!planet) return false;
+        if (!planet._paultendoTechPaths) planet._paultendoTechPaths = {};
+        if (!planet._paultendoTechCatchup) planet._paultendoTechCatchup = {};
+        return true;
+    }
+
+    function getTechPath(key) {
+        if (!initTechPaths()) return null;
+        return planet._paultendoTechPaths[key] || null;
+    }
+
+    function setTechPath(key, value) {
+        if (!initTechPaths()) return false;
+        planet._paultendoTechPaths[key] = value;
+        planet._paultendoTechPaths[`${key}Day`] = planet.day;
+        return true;
+    }
+
+    function scheduleTechCatchup(key, target, days) {
+        if (!initTechPaths()) return false;
+        if (!key || !target || !days) return false;
+        planet._paultendoTechCatchup[key] = {
+            target,
+            day: planet.day + Math.max(40, days)
+        };
+        return true;
+    }
+
+    function applyTechChoiceEffects(choice) {
+        if (!choice) return;
+        if (choice.effects) {
+            happen("Influence", null, null, choice.effects);
+        }
+        if (choice.values) {
+            const towns = regFilter("town", t => t && !t.end);
+            towns.forEach(town => {
+                for (const [axis, amount] of Object.entries(choice.values)) {
+                    shiftTownValue(town, axis, amount, "tech fork");
+                }
+            });
+        }
+    }
+
+    function applyTechProgressDelta(delta) {
+        if (!delta || typeof delta !== "object") return;
+        ensurePlanetState();
+        for (const [key, value] of Object.entries(delta)) {
+            if (!value) continue;
+            if (planet.unlocks[key] === undefined) planet.unlocks[key] = 0;
+            planet.unlocks[key] = clampValue((planet.unlocks[key] || 0) + value, 0, 100);
+        }
+    }
+
+    function resolveTechForkChoice(forkKey, label) {
+        const fork = TECH_FORKS[forkKey];
+        if (!fork) return null;
+        const choices = fork.choices || {};
+        for (const [key, data] of Object.entries(choices)) {
+            if (data.label === label) return key;
+        }
+        return null;
+    }
+
+    function applyTechForkChoice(forkKey, choiceKey) {
+        const fork = TECH_FORKS[forkKey];
+        if (!fork) return false;
+        const choice = fork.choices[choiceKey];
+        if (!choice) return false;
+        setTechPath(forkKey, choiceKey);
+        applyTechChoiceEffects(choice);
+        if (choice.catchup) scheduleTechCatchup(forkKey, choice.catchup.key, choice.catchup.days);
+        const title = fork.label || "A new path";
+        modLog("technology", `${title}: ${choice.label}.`, "milestone");
+        return true;
+    }
+
     TECH_CHANGE_EVENTS.forEach(id => addDecisionValues(id, {
         town: "all",
         yes: { change: VALUE_SHIFT.standard },
@@ -1097,6 +1338,58 @@
         yes: { order: VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor, openness: -VALUE_SHIFT.minor },
         no: { order: -VALUE_SHIFT.minor, change: VALUE_SHIFT.minor, openness: VALUE_SHIFT.minor }
     }));
+
+    // Tech forks (strategic direction choices)
+    modEvent("techAgrarianStrategy", {
+        random: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "player", id: 1 },
+        check: () => {
+            if (!initTechPaths()) return false;
+            if (getTechPath("agriculture")) return false;
+            return TECH_FORKS.agriculture.prereq();
+        },
+        message: () => "As fields expand, do the settlements pursue irrigation and fixed granaries or favor mobile herding?",
+        value: { choose: [TECH_FORKS.agriculture.choices.irrigation.label, TECH_FORKS.agriculture.choices.pastoral.label] },
+        func: (subject, target, args) => {
+            const choiceKey = resolveTechForkChoice("agriculture", args.value) || "irrigation";
+            applyTechForkChoice("agriculture", choiceKey);
+        }
+    });
+
+    modEvent("techTradeRoutes", {
+        random: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "player", id: 1 },
+        check: () => {
+            if (!initTechPaths()) return false;
+            if (getTechPath("trade")) return false;
+            return TECH_FORKS.trade.prereq();
+        },
+        message: () => "Merchants debate: invest in maritime routes or strengthen overland caravans?",
+        value: { choose: [TECH_FORKS.trade.choices.maritime.label, TECH_FORKS.trade.choices.overland.label] },
+        func: (subject, target, args) => {
+            const choiceKey = resolveTechForkChoice("trade", args.value) || "maritime";
+            applyTechForkChoice("trade", choiceKey);
+        }
+    });
+
+    modEvent("techKnowledgeDiffusion", {
+        random: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "player", id: 1 },
+        check: () => {
+            if (!initTechPaths()) return false;
+            if (getTechPath("knowledge")) return false;
+            return TECH_FORKS.knowledge.prereq();
+        },
+        message: () => "Scholars argue over how knowledge should spread. Do they open the press or keep learning within guarded scriptoria?",
+        value: { choose: [TECH_FORKS.knowledge.choices.open.label, TECH_FORKS.knowledge.choices.scriptoria.label] },
+        func: (subject, target, args) => {
+            const choiceKey = resolveTechForkChoice("knowledge", args.value) || "open";
+            applyTechForkChoice("knowledge", choiceKey);
+        }
+    });
 
     addDecisionValues("unlockTaxation", {
         town: "all",
@@ -1384,6 +1677,43 @@
         }
     });
 
+    modEvent("techPathMomentum", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        value: () => planet.day % 2 === 0,
+        func: () => {
+            if (!initTechPaths()) return;
+            const paths = planet._paultendoTechPaths || {};
+            Object.entries(TECH_FORKS).forEach(([key, fork]) => {
+                const choiceKey = paths[key];
+                if (!choiceKey) return;
+                const choice = fork.choices[choiceKey];
+                if (!choice || !choice.progress) return;
+                applyTechProgressDelta(choice.progress);
+            });
+        }
+    });
+
+    modEvent("techPathCatchup", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        func: () => {
+            if (!initTechPaths()) return;
+            const catchups = planet._paultendoTechCatchup || {};
+            Object.entries(catchups).forEach(([key, info]) => {
+                if (!info || info.done) return;
+                if (planet.day < info.day) return;
+                const fork = TECH_FORKS[key];
+                if (!fork) return;
+                const choice = fork.choices[info.target];
+                if (!choice) return;
+                applyTechChoiceEffects(choice);
+                info.done = true;
+                logMessage(`The alternative path of ${fork.label} eventually takes hold.`, "tip");
+            });
+        }
+    });
+
     // =========================================================================
     // PRESTIGE + INFRASTRUCTURE (Decay & Soft Power)
     // =========================================================================
@@ -1607,6 +1937,7 @@
         memory: { perDay: 2, perTownCooldown: 12 },
         prophecy: { perDay: 1, perTownCooldown: 20 },
         knowledge: { perDay: 1, perTownCooldown: 20 },
+        technology: { perDay: 1, perTownCooldown: 20 },
         governance: { perDay: 2, perTownCooldown: 15 },
         religion: { perDay: 2, perTownCooldown: 15 },
         season: { perDay: 2, perTownCooldown: 10 },
@@ -1923,6 +2254,8 @@
                 active: false,
                 timer: null,
                 promptTimer: null,
+                logTimer: null,
+                pendingLogId: null,
                 lastStopReason: null
             };
         }
@@ -2108,6 +2441,7 @@
             state.timer = null;
         }
         clearAutoplayPromptTimer();
+        clearAutoplayLogTimer();
         updateAutoplayUI();
     }
 
@@ -2125,6 +2459,18 @@
     function autoplayTick() {
         const state = getAutoplayState();
         if (!state.active) return;
+
+        const pendingLog = findPendingLogDecision();
+        if (pendingLog) {
+            const autoSeconds = getAutoDecisionSeconds();
+            if (autoSeconds <= 0) {
+                stopAutoplay("prompt");
+                return;
+            }
+            scheduleAutoplayLogDecision(pendingLog);
+            scheduleAutoplayTick(200);
+            return;
+        }
 
         if (isPromptOpen()) {
             const autoSeconds = getAutoDecisionSeconds();
@@ -2160,6 +2506,15 @@
         }
     }
 
+    function clearAutoplayLogTimer() {
+        const state = getAutoplayState();
+        if (state.logTimer) {
+            clearTimeout(state.logTimer);
+            state.logTimer = null;
+        }
+        state.pendingLogId = null;
+    }
+
     function scheduleAutoplayPromptDecision(prompt) {
         const state = getAutoplayState();
         if (!state.active) return;
@@ -2170,6 +2525,80 @@
             state.promptTimer = null;
             try { autoResolvePrompt(prompt || promptState); } catch {}
         }, Math.max(2000, delaySeconds * 1000));
+    }
+
+    function findPendingLogDecision() {
+        if (typeof document === "undefined") return null;
+        const logMessages = document.getElementById("logMessages");
+        if (!logMessages) return null;
+        const logAct = logMessages.querySelector(".logMessage:not([done]) .logAct");
+        if (!logAct) return null;
+        const messageEl = logAct.closest(".logMessage");
+        const buttons = logAct.querySelectorAll("span[role='button']");
+        if (!buttons || buttons.length === 0) return null;
+        return { messageEl, logAct, buttons };
+    }
+
+    function getLogMessageText(messageEl) {
+        if (!messageEl) return "";
+        const text = messageEl.querySelector(".logText");
+        return text ? text.textContent || "" : "";
+    }
+
+    function shouldPreferYesForTech(text) {
+        if (!text) return false;
+        const lower = text.toLowerCase();
+        const keywords = [
+            "library", "university", "academy", "school", "scholar", "research",
+            "science", "printing", "writing", "knowledge", "education",
+            "forge", "workshop", "engine", "machinery", "rail", "navigation",
+            "roads", "road", "observatory", "laboratory", "medicine", "hospital"
+        ];
+        return keywords.some(k => lower.includes(k));
+    }
+
+    function pickLogDecision(buttons, messageEl) {
+        if (!buttons || buttons.length === 0) return null;
+        const typeMap = { yes: null, no: null };
+        buttons.forEach(btn => {
+            const type = btn.getAttribute("type");
+            if (type === "yes") typeMap.yes = btn;
+            if (type === "no") typeMap.no = btn;
+        });
+        if (typeMap.yes || typeMap.no) {
+            let yesChance = getAutoDecisionBias() === "conservative" ? 0.35
+                : getAutoDecisionBias() === "bold" ? 0.7
+                : 0.55;
+            const text = getLogMessageText(messageEl);
+            if (shouldPreferYesForTech(text)) {
+                yesChance = Math.max(yesChance, 0.7);
+            }
+            const pickYes = Math.random() < yesChance;
+            return pickYes ? (typeMap.yes || typeMap.no) : (typeMap.no || typeMap.yes);
+        }
+        return buttons[Math.floor(Math.random() * buttons.length)];
+    }
+
+    function scheduleAutoplayLogDecision(decision) {
+        const state = getAutoplayState();
+        if (!state.active || !decision) return;
+        const delaySeconds = getAutoDecisionSeconds();
+        if (!delaySeconds) return;
+        const logId = decision.messageEl && decision.messageEl.id ? decision.messageEl.id : null;
+        if (state.pendingLogId && logId && state.pendingLogId === logId && state.logTimer) return;
+        clearAutoplayLogTimer();
+        state.pendingLogId = logId;
+        state.logTimer = setTimeout(() => {
+            state.logTimer = null;
+            state.pendingLogId = null;
+            try {
+                const btn = pickLogDecision(decision.buttons, decision.messageEl);
+                if (btn && typeof btn.click === "function") {
+                    btn.click();
+                }
+            } catch {}
+            scheduleAutoplayTick(200);
+        }, Math.max(1500, delaySeconds * 1000));
     }
 
     function pickYesNoByBias() {
@@ -2828,7 +3257,9 @@
     function isFogActive() {
         if (!FOG_CONFIG.enabled) return false;
         if (!planet || typeof regCount !== "function") return false;
+        if (typeof planet.settled !== "number" || planet.settled <= 0) return false;
         if (regCount("town") <= 0) return false;
+        if (typeof planet.settled === "number" && planet.day < planet.settled) return false;
         const hasAnchorTown = getDailyCache("fogAnchorTown", () => {
             const towns = regFilter("town", t => t && !t.end);
             for (let i = 0; i < towns.length; i++) {
@@ -3204,6 +3635,26 @@
         return true;
     }
 
+    function moveCanvasLayerBefore(name, beforeName) {
+        if (typeof canvasLayersOrder === "undefined") return;
+        const idx = canvasLayersOrder.indexOf(name);
+        const beforeIdx = canvasLayersOrder.indexOf(beforeName);
+        if (idx === -1 || beforeIdx === -1) return;
+        if (idx < beforeIdx) return;
+        canvasLayersOrder.splice(idx, 1);
+        canvasLayersOrder.splice(beforeIdx, 0, name);
+    }
+
+    function moveCanvasLayerAfter(name, afterName) {
+        if (typeof canvasLayersOrder === "undefined") return;
+        const idx = canvasLayersOrder.indexOf(name);
+        const afterIdx = canvasLayersOrder.indexOf(afterName);
+        if (idx === -1 || afterIdx === -1) return;
+        if (idx > afterIdx) return;
+        canvasLayersOrder.splice(idx, 1);
+        canvasLayersOrder.splice(afterIdx + 1, 0, name);
+    }
+
     function ensureFogLayer() {
         if (typeof addCanvasLayer !== "function") return false;
         if (typeof canvasLayers === "undefined" || typeof canvasLayersOrder === "undefined") return false;
@@ -3214,6 +3665,9 @@
             if (cursorIndex >= 0 && fogIndex > cursorIndex) {
                 canvasLayersOrder.splice(fogIndex, 1);
                 canvasLayersOrder.splice(cursorIndex, 0, "fog");
+            }
+            if (canvasLayers.fog && canvasLayers.fog.style) {
+                canvasLayers.fog.style.pointerEvents = "none";
             }
             if (typeof resizeCanvases === "function") {
                 resizeCanvases();
@@ -3257,7 +3711,11 @@
         if (!fogCanvas) return;
 
         ctx.clearRect(0, 0, fogCanvas.width, fogCanvas.height);
-        if (!isFogActive()) return;
+        const active = isFogActive();
+        if (fogCanvas.style) {
+            fogCanvas.style.display = active ? "block" : "none";
+        }
+        if (!active) return;
         if (!planet || !planet.chunks) return;
         if (typeof chunkSize === "undefined") return;
         if (!planet._paultendoDiscoveryReady) {
@@ -3309,10 +3767,13 @@
         }
     }
 
-    function scheduleFogRefresh() {
+    function scheduleFogRefresh(force = false) {
         if (!planet) return;
+        if (force && planet._paultendoFog) {
+            planet._paultendoFog.dirty = true;
+        }
         if (planet._paultendoFogRefreshPending) return;
-        if (planet._paultendoFog && !planet._paultendoFog.dirty && planet._paultendoFog.lastRenderDay === planet.day) {
+        if (!force && planet._paultendoFog && !planet._paultendoFog.dirty && planet._paultendoFog.lastRenderDay === planet.day) {
             return;
         }
         planet._paultendoFogRefreshPending = true;
@@ -4381,7 +4842,32 @@
         try { applyScaleAwareZoom(); } catch {}
         try { ensureMapControls(); } catch {}
         try { ensureFogLayer(); } catch {}
+        try { ensureEpidemicLayer(); } catch {}
         return true;
+    }
+
+    function wrapSetViewForFog() {
+        if (typeof setView !== "function" || setView._paultendoFogSync) return;
+        const baseSetView = setView;
+        setView = function(...args) {
+            const result = baseSetView.apply(this, args);
+            try { ensureFogLayer(); } catch {}
+            try { markFogDirty(); } catch {}
+            try { scheduleFogRefresh(true); } catch {}
+            return result;
+        };
+        setView._paultendoFogSync = true;
+    }
+
+    function wrapUpdateCanvasForFog() {
+        if (typeof updateCanvas !== "function" || updateCanvas._paultendoFogSync) return;
+        const baseUpdateCanvas = updateCanvas;
+        updateCanvas = function(...args) {
+            const result = baseUpdateCanvas.apply(this, args);
+            try { scheduleFogRefresh(); } catch {}
+            return result;
+        };
+        updateCanvas._paultendoFogSync = true;
     }
 
     if (!initDiscoveryHooks() && typeof window !== "undefined") {
@@ -4393,8 +4879,14 @@
             try { ensureMapControls(); } catch {}
             try { applyScaleAwareZoom(); } catch {}
             try { ensureFogLayer(); } catch {}
+            try { ensureEpidemicLayer(); } catch {}
+            try { wrapSetViewForFog(); } catch {}
+            try { wrapUpdateCanvasForFog(); } catch {}
         });
     }
+    try { wrapSetViewForFog(); } catch {}
+    try { wrapUpdateCanvasForFog(); } catch {}
+    try { ensureEpidemicLayer(); } catch {}
 
     function initDiscoveryRenderHooks() {
         let hooked = false;
@@ -4483,6 +4975,23 @@
         },
         func: (subject) => {
             updateFogVisibilityForTown(subject);
+        }
+    });
+
+    modEvent("fogStartupRefresh", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        value: () => {
+            if (!FOG_CONFIG.enabled) return false;
+            const settled = typeof planet.settled === "number" ? planet.settled : 0;
+            const window = Math.max(2, (FOG_CONFIG.fadeInDays || 0) + 2);
+            if (planet.day < settled) return true;
+            if (planet.day > settled + window) return false;
+            return true;
+        },
+        func: () => {
+            markFogDirty();
+            scheduleFogRefresh(true);
         }
     });
 
@@ -13530,10 +14039,7 @@
             // Each doctor reduces disease slightly
             // Diminishing returns - first doctors help most
             const reduction = Math.min(2, args.doctors * 0.1);
-            subject.influences.disease = (subject.influences.disease || 0) - reduction;
-
-            // Clamp to min influence
-            subject.influences.disease = Math.max($c.minInfluence, subject.influences.disease);
+            applyInfluenceSafe(null, subject, { disease: -reduction }, { temp: true });
         }
     });
 
@@ -13696,6 +14202,8 @@
         };
 
         planet.epidemics.push(epidemic);
+        markEpidemicDirty();
+        scheduleEpidemicRefresh(true);
         return epidemic;
     }
 
@@ -13708,9 +14216,11 @@
         for (const townId of epidemic.affectedTowns) {
             const town = regGet("town", townId);
             if (town && !town.end) {
-                town.influences.disease = (town.influences.disease || 0) - epidemic.diseaseInfluence;
+                applyInfluenceSafe(null, town, { disease: -epidemic.diseaseInfluence });
             }
         }
+        markEpidemicDirty();
+        scheduleEpidemicRefresh(true);
     }
 
     // Spread epidemic to a new town
@@ -13724,11 +14234,13 @@
         if (Math.random() > spreadChance) return false;
 
         epidemic.affectedTowns.push(town.id);
-        town.influences.disease = (town.influences.disease || 0) + epidemic.diseaseInfluence;
+        applyInfluenceSafe(null, town, { disease: epidemic.diseaseInfluence });
         if (sourceTown) {
             epidemic.spreadLog = epidemic.spreadLog || [];
             epidemic.spreadLog.push({ from: sourceTown.id, to: town.id, day: planet.day });
         }
+        markEpidemicDirty();
+        scheduleEpidemicRefresh(true);
 
         return true;
     }
@@ -13773,7 +14285,7 @@
             args.epidemic = epidemic;
 
             // Apply initial disease influence
-            target.influences.disease = (target.influences.disease || 0) + epidemic.diseaseInfluence;
+            applyInfluenceSafe(null, target, { disease: epidemic.diseaseInfluence });
 
             logMessage(`{{b:${epidemic.name}}} breaks out in {{regname:town|${target.id}}}!`, "warning");
         },
@@ -13786,7 +14298,7 @@
             epidemic.severity += 0.5;
             epidemic.spreadRate += 0.05;
 
-            target.influences.disease = (target.influences.disease || 0) + epidemic.diseaseInfluence;
+            applyInfluenceSafe(null, target, { disease: epidemic.diseaseInfluence });
 
             logMessage(`{{b:${epidemic.name}}} spreads unchecked in {{regname:town|${target.id}}}!`, "warning");
             return `Without containment, the {{b:${epidemic.name}}} worsens.`;
@@ -13882,14 +14394,58 @@
     // Epidemic Map Visualization (overlay + spread lines)
     // -------------------------------------------------------------------------
 
-    function renderEpidemicOverlay() {
-        if (!planet || !planet.epidemics || planet.epidemics.length === 0) return;
-        if (!canvasLayersCtx || !canvasLayersCtx.terrain) return;
-        if (typeof chunkSize === "undefined") return;
-        if (typeof filterChunks !== "function") return;
+    function ensureEpidemicLayer() {
+        if (typeof addCanvasLayer !== "function") return false;
+        if (typeof canvasLayers === "undefined" || typeof canvasLayersOrder === "undefined") return false;
+        if (!canvasLayers.epidemic) {
+            addCanvasLayer("epidemic");
+            if (canvasLayersOrder.includes("highlight")) {
+                moveCanvasLayerBefore("epidemic", "highlight");
+            } else if (canvasLayersOrder.includes("markers")) {
+                moveCanvasLayerBefore("epidemic", "markers");
+            } else if (canvasLayersOrder.includes("terrain")) {
+                moveCanvasLayerAfter("epidemic", "terrain");
+            }
+            if (canvasLayers.epidemic && canvasLayers.epidemic.style) {
+                canvasLayers.epidemic.style.pointerEvents = "none";
+            }
+            if (typeof resizeCanvases === "function") {
+                resizeCanvases();
+            }
+        }
+        return !!canvasLayers.epidemic;
+    }
 
-        const ctx = canvasLayersCtx.terrain;
+    function shouldRenderEpidemicChunk(chunk) {
+        if (!chunk) return false;
+        if (typeof isChunkExplored === "function" && !isChunkExplored(chunk.x, chunk.y)) return false;
+        if (typeof FOG_CONFIG !== "undefined" && FOG_CONFIG.hideMarkersOutsideSight && typeof isChunkVisible === "function") {
+            if (!isChunkVisible(chunk.x, chunk.y)) return false;
+        }
+        return true;
+    }
+
+    function markEpidemicDirty() {
+        if (!planet) return;
+        planet._paultendoEpidemicDirty = true;
+    }
+
+    function renderEpidemicOverlay() {
+        if (!ensureEpidemicLayer()) return;
+        if (!canvasLayersCtx || !canvasLayersCtx.epidemic) return;
+        if (typeof chunkSize === "undefined") return;
+        const ctx = canvasLayersCtx.epidemic;
         const size = chunkSize;
+        const canvas = canvasLayers.epidemic;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (!planet || !planet.epidemics || planet.epidemics.length === 0) {
+            if (planet) {
+                planet._paultendoEpidemicDirty = false;
+                planet._paultendoEpidemicRenderDay = planet.day;
+            }
+            return;
+        }
 
         planet.epidemics.forEach((epidemic) => {
             if (!epidemic || !Array.isArray(epidemic.affectedTowns) || epidemic.affectedTowns.length === 0) return;
@@ -13901,9 +14457,12 @@
             epidemic.affectedTowns.forEach((townId) => {
                 const town = regGet("town", townId);
                 if (!town || town.end) return;
-                const chunks = filterChunks(c => c.v.s === town.id);
+                const chunks = typeof getTownClaimedChunks === "function"
+                    ? getTownClaimedChunks(town)
+                    : (typeof filterChunks === "function" ? filterChunks(c => c.v.s === town.id) : []);
                 for (let i = 0; i < chunks.length; i++) {
                     const c = chunks[i];
+                    if (!shouldRenderEpidemicChunk(c)) continue;
                     ctx.fillRect(c.x * size, c.y * size, size, size);
                 }
             });
@@ -13928,6 +14487,30 @@
                 }
             }
         });
+        if (planet) {
+            planet._paultendoEpidemicDirty = false;
+            planet._paultendoEpidemicRenderDay = planet.day;
+        }
+    }
+
+    function scheduleEpidemicRefresh(force = false) {
+        if (!planet) return;
+        if (force) markEpidemicDirty();
+        if (planet._paultendoEpidemicRefreshPending) return;
+        if (!force && planet._paultendoEpidemicDirty === false && planet._paultendoEpidemicRenderDay === planet.day) {
+            return;
+        }
+        planet._paultendoEpidemicRefreshPending = true;
+        const refresh = () => {
+            planet._paultendoEpidemicRefreshPending = false;
+            try { renderEpidemicOverlay(); } catch {}
+            try { if (typeof updateCanvas === "function") updateCanvas(); } catch {}
+        };
+        if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+            window.setTimeout(refresh, 30);
+        } else {
+            refresh();
+        }
     }
 
     if (typeof renderMap === "function" && !renderMap._paultendoEpidemicOverlay) {
@@ -14123,7 +14706,7 @@
             // Doctors save some lives during disasters
             // This works by giving a small happy/disease boost during disaster
             const bonus = Math.min(1, args.doctors * 0.1);
-            subject.influences.disease = (subject.influences.disease || 0) - bonus;
+            applyInfluenceSafe(null, subject, { disease: -bonus }, { temp: true });
         }
     });
 
@@ -14194,10 +14777,7 @@
         func: (subject, target, args) => {
             // Small ongoing disease reduction
             if (Math.random() < 0.1) {
-                subject.influences.disease = Math.max(
-                    $c.minInfluence,
-                    (subject.influences.disease || 0) - 0.1
-                );
+                applyInfluenceSafe(null, subject, { disease: -0.1 }, { temp: true });
             }
 
             // Attract doctors
@@ -14485,19 +15065,19 @@
         // Apply bonuses when first gained
         if (oldStrength === 0 && amount > 0) {
             if (tradition.happyBonus) {
-                town.influences.happy = (town.influences.happy || 0) + tradition.happyBonus;
+                applyInfluenceSafe(null, town, { happy: tradition.happyBonus });
             }
             if (tradition.educationBonus) {
-                town.influences.education = (town.influences.education || 0) + tradition.educationBonus;
+                applyInfluenceSafe(null, town, { education: tradition.educationBonus });
             }
             if (tradition.tradeBonus) {
-                town.influences.trade = (town.influences.trade || 0) + tradition.tradeBonus;
+                applyInfluenceSafe(null, town, { trade: tradition.tradeBonus });
             }
             if (tradition.militaryBonus) {
-                town.influences.military = (town.influences.military || 0) + tradition.militaryBonus;
+                applyInfluenceSafe(null, town, { military: tradition.militaryBonus });
             }
             if (tradition.faithBonus) {
-                town.influences.faith = (town.influences.faith || 0) + tradition.faithBonus;
+                applyInfluenceSafe(null, town, { faith: tradition.faithBonus });
             }
         }
         return true;
@@ -14517,19 +15097,19 @@
         // Remove bonuses when lost completely
         if (oldStrength > 0 && town.culture.traditions[traditionId] === 0) {
             if (tradition.happyBonus) {
-                town.influences.happy = (town.influences.happy || 0) - tradition.happyBonus;
+                applyInfluenceSafe(null, town, { happy: -tradition.happyBonus });
             }
             if (tradition.educationBonus) {
-                town.influences.education = (town.influences.education || 0) - tradition.educationBonus;
+                applyInfluenceSafe(null, town, { education: -tradition.educationBonus });
             }
             if (tradition.tradeBonus) {
-                town.influences.trade = (town.influences.trade || 0) - tradition.tradeBonus;
+                applyInfluenceSafe(null, town, { trade: -tradition.tradeBonus });
             }
             if (tradition.militaryBonus) {
-                town.influences.military = (town.influences.military || 0) - tradition.militaryBonus;
+                applyInfluenceSafe(null, town, { military: -tradition.militaryBonus });
             }
             if (tradition.faithBonus) {
-                town.influences.faith = (town.influences.faith || 0) - tradition.faithBonus;
+                applyInfluenceSafe(null, town, { faith: -tradition.faithBonus });
             }
         }
         return true;
@@ -14736,7 +15316,7 @@
         func: (subject, target, args) => {
             // Small happiness boost
             const bonus = Math.min(1, args.musicians * 0.1);
-            subject.influences.happy = (subject.influences.happy || 0) + bonus * 0.1;
+            applyInfluenceSafe(null, subject, { happy: bonus * 0.1 }, { temp: true });
 
             // May develop music tradition
             if (Math.random() < 0.01 * args.musicians) {
@@ -14760,7 +15340,7 @@
         func: (subject, target, args) => {
             // Happiness boost
             const bonus = Math.min(1.5, args.performers * 0.15);
-            subject.influences.happy = (subject.influences.happy || 0) + bonus * 0.1;
+            applyInfluenceSafe(null, subject, { happy: bonus * 0.1 }, { temp: true });
 
             // May develop theatrical tradition
             if (Math.random() < 0.01 * args.performers) {
@@ -15426,15 +16006,14 @@
 
         // Apply one-time bonuses
         if (type === "theater") {
-            town.influences.happy = (town.influences.happy || 0) + 2;
+            applyInfluenceSafe(null, town, { happy: 2 });
             addTradition(town, "theatrical");
         } else if (type === "museum") {
-            town.influences.education = (town.influences.education || 0) + 1;
-            town.influences.happy = (town.influences.happy || 0) + 1;
+            applyInfluenceSafe(null, town, { education: 1, happy: 1 });
             initTownCulture(town);
             town.culture.prestige += 3;
         } else if (type === "gallery") {
-            town.influences.happy = (town.influences.happy || 0) + 1.5;
+            applyInfluenceSafe(null, town, { happy: 1.5 });
             addTradition(town, "art");
         }
         return true;
@@ -19174,6 +19753,13 @@
         hardshipBonus: 0.03,
         maxDaily: 0.18
     };
+    const FAITH_TRUST_CONFIG = {
+        floor: -6.5,
+        severeFloor: -8.5,
+        recoverSoft: 0.1,
+        recoverStrong: 0.22,
+        minDay: 6
+    };
 
     modEvent("faithResilience", {
         daily: true,
@@ -19199,6 +19785,26 @@
             if (subject.activeEpidemic) gain += FAITH_RESILIENCE_CONFIG.hardshipBonus;
             if (faith < -2) gain *= 1.4;
             gain = clampValue(gain, 0.02, FAITH_RESILIENCE_CONFIG.maxDaily);
+            happen("Influence", null, subject, { faith: gain, temp: true });
+        }
+    });
+
+    modEvent("faithTrustRecovery", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!subject || subject.end) return false;
+            if (planet && planet.usurp) return false;
+            if (subject.usurp) return false;
+            if (planet.day < FAITH_TRUST_CONFIG.minDay) return false;
+            const faith = subject.influences?.faith || 0;
+            return faith < FAITH_TRUST_CONFIG.floor;
+        },
+        func: (subject) => {
+            const faith = subject.influences?.faith || 0;
+            const gain = faith <= FAITH_TRUST_CONFIG.severeFloor
+                ? FAITH_TRUST_CONFIG.recoverStrong
+                : FAITH_TRUST_CONFIG.recoverSoft;
             happen("Influence", null, subject, { faith: gain, temp: true });
         }
     });
@@ -26534,11 +27140,15 @@
         if (typeof canvasLayers === "undefined" || typeof canvasLayersOrder === "undefined") return false;
         if (!canvasLayers.roads) {
             addCanvasLayer("roads");
-            const roadsIndex = canvasLayersOrder.indexOf("roads");
-            const townsIndex = canvasLayersOrder.indexOf("towns");
-            if (townsIndex >= 0 && roadsIndex > townsIndex) {
-                canvasLayersOrder.splice(roadsIndex, 1);
-                canvasLayersOrder.splice(townsIndex, 0, "roads");
+            if (canvasLayersOrder.includes("highlight")) {
+                moveCanvasLayerBefore("roads", "highlight");
+            } else if (canvasLayersOrder.includes("markers")) {
+                moveCanvasLayerBefore("roads", "markers");
+            } else if (canvasLayersOrder.includes("terrain")) {
+                moveCanvasLayerAfter("roads", "terrain");
+            }
+            if (canvasLayers.roads && canvasLayers.roads.style) {
+                canvasLayers.roads.style.pointerEvents = "none";
             }
             if (typeof resizeCanvases === "function") {
                 resizeCanvases();
@@ -27311,8 +27921,7 @@
         newTown.level = 0;
         newTown.color = [150, 150, 150];
         newTown.influences = newTown.influences || {};
-        newTown.influences.crime = (newTown.influences.crime || 0) + 2;
-        newTown.influences.happy = (newTown.influences.happy || 0) - 1;
+        applyInfluenceSafe(null, newTown, { crime: 2, happy: -1 });
         removeRaiderCamp(camp);
         logMessage(`A ${camp.type} camp settles into the new town of {{regname:town|${newTown.id}}}.`, "warning");
         try {
