@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.5.9";
+    const MOD_VERSION = "1.6.0";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -41,6 +41,255 @@
     function getActiveModEventId() {
         const stack = PAULTENDO_GLOBAL._paultendoEventStack || [];
         return stack.length ? stack[stack.length - 1] : null;
+    }
+
+    // =========================================================================
+    // CHRONICLE ENHANCEMENTS (day headers, headlines, follow-live)
+    // =========================================================================
+
+    const CHRONICLE_UI_CONFIG = {
+        enabled: true,
+        headlineLimit: 3,
+        followLiveDefault: true,
+        maxStoredDays: 6
+    };
+
+    function initChronicleState() {
+        if (!planet) return null;
+        if (!planet._paultendoChronicle) {
+            planet._paultendoChronicle = {
+                entriesByDay: {},
+                entriesById: {},
+                lastHeadlineDay: null
+            };
+        }
+        return planet._paultendoChronicle;
+    }
+
+    function getChronicleFollowLive() {
+        if (typeof userSettings !== "undefined") {
+            if (typeof userSettings.paultendoChronicleFollow === "boolean") {
+                return userSettings.paultendoChronicleFollow;
+            }
+        }
+        if (typeof localStorage !== "undefined") {
+            const stored = localStorage.getItem("paultendoChronicleFollow");
+            if (stored === "true") return true;
+            if (stored === "false") return false;
+        }
+        return CHRONICLE_UI_CONFIG.followLiveDefault;
+    }
+
+    function setChronicleFollowLive(value) {
+        const follow = !!value;
+        if (typeof userSettings !== "undefined") {
+            userSettings.paultendoChronicleFollow = follow;
+        }
+        if (typeof localStorage !== "undefined") {
+            localStorage.setItem("paultendoChronicleFollow", follow ? "true" : "false");
+        }
+        updateChronicleHeader();
+    }
+
+    function ensureChronicleStyles() {
+        if (typeof document === "undefined") return;
+        if (document.getElementById("paultendoChronicleStyles")) return;
+        const style = document.createElement("style");
+        style.id = "paultendoChronicleStyles";
+        style.textContent = `
+            #paultendoChronicleHeader {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                margin: 0.25em 0 0.5em 0;
+                font-size: 0.9em;
+                color: rgba(240,240,240,0.85);
+            }
+            #paultendoChronicleHeader .chronicleRow {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+            #paultendoChronicleHeader .chronicleTitle {
+                font-weight: 600;
+                text-transform: uppercase;
+                font-size: 0.75em;
+                letter-spacing: 0.08em;
+                opacity: 0.85;
+            }
+            #paultendoChronicleHeadlines {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .paultendoChronicleHeadline {
+                font-size: 0.9em;
+                color: rgba(235,235,235,0.9);
+            }
+            .paultendoChronicleHeadline span {
+                opacity: 0.85;
+            }
+            .paultendoChronicleToggle {
+                cursor: pointer;
+                border: 1px solid rgba(200,200,200,0.4);
+                border-radius: 10px;
+                padding: 2px 8px;
+                font-size: 0.75em;
+                opacity: 0.9;
+            }
+            .paultendoChronicleToggle.off {
+                opacity: 0.6;
+            }
+            .logMessage.chronicleDayStart::before {
+                content: attr(data-chronicle-day-label);
+                display: block;
+                margin: 0.45em 0 0.2em 0;
+                font-size: 0.8em;
+                color: rgba(220,220,220,0.7);
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function ensureChronicleHeader() {
+        if (typeof document === "undefined") return null;
+        const logPanel = document.getElementById("logPanel");
+        const logMessages = document.getElementById("logMessages");
+        if (!logPanel || !logMessages) return null;
+        let header = document.getElementById("paultendoChronicleHeader");
+        if (!header) {
+            header = document.createElement("div");
+            header.id = "paultendoChronicleHeader";
+            header.innerHTML = `
+                <div class="chronicleRow">
+                    <span class="chronicleTitle">Chronicle Highlights</span>
+                    <span class="paultendoChronicleToggle" id="paultendoChronicleFollow"></span>
+                </div>
+                <div id="paultendoChronicleHeadlines"></div>
+            `;
+            logPanel.insertBefore(header, logMessages);
+        }
+        ensureChronicleStyles();
+        updateChronicleHeader();
+        return header;
+    }
+
+    function updateChronicleHeader() {
+        if (typeof document === "undefined") return;
+        const toggle = document.getElementById("paultendoChronicleFollow");
+        if (!toggle) return;
+        const follow = getChronicleFollowLive();
+        toggle.textContent = follow ? "Follow live: On" : "Follow live: Off";
+        toggle.classList.toggle("off", !follow);
+        if (!toggle._paultendoBound) {
+            toggle.addEventListener("click", () => {
+                setChronicleFollowLive(!getChronicleFollowLive());
+            });
+            toggle._paultendoBound = true;
+        }
+    }
+
+    function buildChronicleDayLabel(dayValue) {
+        const dayNum = parseInt(dayValue);
+        if (!dayNum || isNaN(dayNum)) return "";
+        return `Day ${dayNum}`;
+    }
+
+    function updateChronicleDayMarkers() {
+        if (typeof document === "undefined") return;
+        const container = document.getElementById("logMessages");
+        if (!container) return;
+        const entries = Array.from(container.children).filter(el => el.classList && el.classList.contains("logMessage"));
+        const seen = new Set();
+        entries.forEach(entry => {
+            entry.classList.remove("chronicleDayStart");
+            entry.removeAttribute("data-chronicle-day-label");
+            const dayElem = entry.querySelector(".logDay");
+            const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
+            if (!dayValue) return;
+            if (!seen.has(dayValue)) {
+                seen.add(dayValue);
+                entry.classList.add("chronicleDayStart");
+                entry.setAttribute("data-chronicle-day-label", buildChronicleDayLabel(dayValue));
+            }
+        });
+    }
+
+    function getChroniclePriority(type, text) {
+        if (!text) return 0;
+        const safeType = (type || "").toLowerCase();
+        if (safeType === "tip" || safeType === "sunset") return 0;
+        let priority = 0;
+        if (safeType === "milestone") priority = 3;
+        if (safeType === "warning") priority = Math.max(priority, 3);
+        const lower = text.toLowerCase();
+        if (/(war|revolution|coup|uprising|siege)/.test(lower)) priority = Math.max(priority, 3);
+        if (/(famine|plague|epidemic|disaster|earthquake|cyclone|volcano|drought)/.test(lower)) priority = Math.max(priority, 2);
+        if (/(founded|new town|discovered|discovery|great work|wonders?|space|launch|moon|colony)/.test(lower)) priority = Math.max(priority, 2);
+        if (/(treaty|alliance|vassal|tribute|peace)/.test(lower)) priority = Math.max(priority, 1);
+        return priority;
+    }
+
+    function addChronicleEntry(dayValue, uuid, type, text) {
+        const state = initChronicleState();
+        if (!state) return;
+        const day = parseInt(dayValue);
+        if (!day || isNaN(day)) return;
+        const priority = getChroniclePriority(type, text);
+        const entry = { id: uuid, day, type, text, priority };
+        state.entriesById[uuid] = entry;
+        if (!state.entriesByDay[day]) state.entriesByDay[day] = [];
+        state.entriesByDay[day].unshift(entry);
+
+        const days = Object.keys(state.entriesByDay)
+            .map(d => parseInt(d))
+            .filter(d => !isNaN(d))
+            .sort((a, b) => b - a);
+        while (days.length > CHRONICLE_UI_CONFIG.maxStoredDays) {
+            const removeDay = days.pop();
+            const list = state.entriesByDay[removeDay] || [];
+            list.forEach(e => { delete state.entriesById[e.id]; });
+            delete state.entriesByDay[removeDay];
+        }
+    }
+
+    function updateChronicleHeadlines(dayValue) {
+        if (typeof document === "undefined") return;
+        const state = initChronicleState();
+        if (!state) return;
+        const day = parseInt(dayValue || planet.day);
+        if (!day || isNaN(day)) return;
+        ensureChronicleHeader();
+        const container = document.getElementById("paultendoChronicleHeadlines");
+        if (!container) return;
+        container.innerHTML = "";
+        const entries = (state.entriesByDay[day] || []).filter(e => e.priority > 0);
+        if (!entries.length) {
+            const empty = document.createElement("div");
+            empty.className = "paultendoChronicleHeadline";
+            empty.textContent = "No major events yet today.";
+            container.appendChild(empty);
+            return;
+        }
+        const seen = new Set();
+        const sorted = entries
+            .slice()
+            .sort((a, b) => b.priority - a.priority);
+        for (let i = 0; i < sorted.length; i++) {
+            if (container.childElementCount >= CHRONICLE_UI_CONFIG.headlineLimit) break;
+            const entry = sorted[i];
+            if (!entry.text) continue;
+            const key = entry.text.trim();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const item = document.createElement("div");
+            item.className = "paultendoChronicleHeadline";
+            item.textContent = entry.text;
+            container.appendChild(item);
+        }
     }
 
     // =========================================================================
@@ -172,6 +421,67 @@
     try { wrapRegRemove(); } catch {}
     try { overrideRegnameParser(); } catch {}
 
+    if (typeof logMessage === "function" && !logMessage._paultendoChronicle) {
+        const baseLogMessage = logMessage;
+        logMessage = function(text, type, args) {
+            let logPanel = null;
+            let prevScrollTop = 0;
+            let prevScrollHeight = 0;
+            const follow = CHRONICLE_UI_CONFIG.enabled ? getChronicleFollowLive() : true;
+            if (!follow && typeof document !== "undefined") {
+                logPanel = document.getElementById("logPanel");
+                if (logPanel) {
+                    prevScrollTop = logPanel.scrollTop;
+                    prevScrollHeight = logPanel.scrollHeight;
+                }
+            }
+            const uuid = baseLogMessage(text, type, args);
+            if (!uuid) return uuid;
+            if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
+                ensureChronicleHeader();
+                const elem = document.getElementById("logMessage-" + uuid);
+                const dayElem = elem ? elem.querySelector(".logDay") : null;
+                const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
+                const plainText = elem ? (elem.querySelector(".logText")?.innerText || "") : "";
+                if (dayValue) {
+                    addChronicleEntry(dayValue, uuid, type, plainText);
+                    updateChronicleHeadlines(dayValue);
+                    updateChronicleDayMarkers();
+                }
+            }
+            if (!follow && logPanel) {
+                const newHeight = logPanel.scrollHeight;
+                const delta = newHeight - prevScrollHeight;
+                logPanel.scrollTop = prevScrollTop + delta;
+            }
+            return uuid;
+        };
+        logMessage._paultendoChronicle = true;
+    }
+
+    if (typeof logChange === "function" && !logChange._paultendoChronicle) {
+        const baseLogChange = logChange;
+        logChange = function(uuid, text) {
+            const result = baseLogChange(uuid, text);
+            if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
+                const elem = document.getElementById("logMessage-" + uuid);
+                if (elem) {
+                    const dayElem = elem.querySelector(".logDay");
+                    const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
+                    const plainText = elem.querySelector(".logText")?.innerText || "";
+                    const state = initChronicleState();
+                    if (state && state.entriesById[uuid]) {
+                        state.entriesById[uuid].text = plainText;
+                        const day = parseInt(dayValue);
+                        if (!isNaN(day)) updateChronicleHeadlines(day);
+                    }
+                }
+            }
+            return result;
+        };
+        logChange._paultendoChronicle = true;
+    }
+
     // =========================================================================
     // EVENT WRAPPER (daily + subject/target all safe per-entity value/check)
     // =========================================================================
@@ -220,6 +530,10 @@
             data.random === true &&
             data.auto !== true &&
             !!(data.subject && data.subject.reg === "player");
+        const isPlayerPrompt = data && data.auto !== true && (
+            (data.subject && data.subject.reg === "player") ||
+            (data.target && data.target.reg === "player")
+        );
 
         const hasAllSubject = !!(data.subject && data.subject.all);
         const hasAllTarget = !!(data.target && data.target.all);
@@ -249,6 +563,16 @@
             ensurePlanetState();
             if (subjectIsTown) ensureTownState(subject);
             if (targetIsTown) ensureTownState(target);
+        };
+
+        const getGuidanceTown = (subject, target) => {
+            if (data && data.guidanceTown) {
+                if (data.guidanceTown === "subject") return subjectIsTown ? subject : null;
+                if (data.guidanceTown === "target") return targetIsTown ? target : null;
+            }
+            if (targetIsTown) return target;
+            if (subjectIsTown) return subject;
+            return null;
         };
 
         if (isSwayPrompt) {
@@ -431,7 +755,12 @@
                     if (args && typeof args === "object" && args.choice === undefined) {
                         args.choice = "yes";
                     }
-                    return funcFn(subject, target, args);
+                    const result = funcFn(subject, target, args);
+                    if (isPlayerPrompt) {
+                        const town = getGuidanceTown(subject, target);
+                        if (town) applyGuidanceOutcome(town, args.choice || "yes", args, id, data);
+                    }
+                    return result;
                 };
             }
             if (funcNoFn) {
@@ -440,7 +769,12 @@
                     if (args && typeof args === "object" && args.choice === undefined) {
                         args.choice = "no";
                     }
-                    return funcNoFn(subject, target, args);
+                    const result = funcNoFn(subject, target, args);
+                    if (isPlayerPrompt) {
+                        const town = getGuidanceTown(subject, target);
+                        if (town) applyGuidanceOutcome(town, args.choice || "no", args, id, data);
+                    }
+                    return result;
                 };
             }
         }
@@ -665,6 +999,7 @@
         initTownCulture(town);
         initTownSpecializations(town);
         initTownValues(town);
+        initGuidanceTrust(town);
         initPrestige(town);
         initInfrastructure(town);
     }
@@ -2979,6 +3314,60 @@
         list.appendChild(button);
     }
 
+    function openDivineStancePanel() {
+        if (!planet || typeof populateExecutive !== "function") return;
+        const state = getDivineStanceState();
+        const stance = getDivineStance(state?.id || "neutral");
+        const remaining = getDivineStanceRemaining();
+        const cooldown = getDivineStanceCooldown();
+        const items = [];
+        items.push({
+            text: `Current: ${stance.name}${remaining ? ` (${remaining} days)` : ""}`
+        });
+        if (cooldown > 0) {
+            items.push({
+                text: `Cooldown: ${cooldown} days remaining`
+            });
+        } else if (planet.day < DIVINE_STANCE_CONFIG.minDay) {
+            items.push({
+                text: `Available from day ${DIVINE_STANCE_CONFIG.minDay}`
+            });
+        }
+        items.push({ spacer: true });
+
+        const canChange = canChangeDivineStance();
+        Object.values(DIVINE_STANCES).forEach(def => {
+            if (!def || def.id === stance.id) return;
+            const label = `Adopt ${def.name} — ${def.desc}`;
+            if (!canChange) {
+                items.push({ text: label });
+                return;
+            }
+            items.push({
+                text: label,
+                func: () => {
+                    setDivineStance(def.id, "panel");
+                    openDivineStancePanel();
+                }
+            });
+        });
+
+        populateExecutive(items, "Divine Stance");
+    }
+
+    function addDivineStanceButton() {
+        const list = document.getElementById("actionMainList");
+        if (!list || document.getElementById("actionItem-stance")) return;
+        const button = document.createElement("span");
+        button.className = "actionItem clickable";
+        button.id = "actionItem-stance";
+        button.innerHTML = "Divine Stance";
+        button.addEventListener("click", () => {
+            openDivineStancePanel();
+        });
+        list.appendChild(button);
+    }
+
     function refreshWorldStatusPanel() {
         if (typeof currentExecutive === "undefined") return;
         if (currentExecutive !== "world") return;
@@ -4882,11 +5271,15 @@
             try { ensureEpidemicLayer(); } catch {}
             try { wrapSetViewForFog(); } catch {}
             try { wrapUpdateCanvasForFog(); } catch {}
+            try { ensureChronicleHeader(); } catch {}
+            try { updateChronicleDayMarkers(); } catch {}
         });
     }
     try { wrapSetViewForFog(); } catch {}
     try { wrapUpdateCanvasForFog(); } catch {}
     try { ensureEpidemicLayer(); } catch {}
+    try { ensureChronicleHeader(); } catch {}
+    try { updateChronicleDayMarkers(); } catch {}
 
     function initDiscoveryRenderHooks() {
         let hooked = false;
@@ -6900,6 +7293,70 @@
         return town._paultendoGuidance;
     }
 
+    const GUIDANCE_TRUST_CONFIG = {
+        min: 0,
+        max: 100,
+        baseline: 50,
+        faithWeight: 4,
+        sanctityWeight: 0.3,
+        prosperityWeight: 0.15,
+        dangerWeight: 0.15,
+        driftRate: 0.08
+    };
+
+    function initGuidanceTrust(town) {
+        if (!town) return null;
+        if (typeof town.guidanceTrust !== "number") {
+            town.guidanceTrust = getGuidanceTrustBaseline(town);
+        }
+        return town.guidanceTrust;
+    }
+
+    function getGuidanceTrustBaseline(town) {
+        const faith = town?.influences?.faith || 0;
+        const rep = getTownReputation(town) || {};
+        let base = GUIDANCE_TRUST_CONFIG.baseline;
+        base += faith * GUIDANCE_TRUST_CONFIG.faithWeight;
+        base += (rep.sanctity || 0) * GUIDANCE_TRUST_CONFIG.sanctityWeight;
+        base += (rep.prosperity || 0) * GUIDANCE_TRUST_CONFIG.prosperityWeight;
+        base -= (rep.danger || 0) * GUIDANCE_TRUST_CONFIG.dangerWeight;
+        return clampValue(base, GUIDANCE_TRUST_CONFIG.min, GUIDANCE_TRUST_CONFIG.max);
+    }
+
+    function getGuidanceTrust(town) {
+        if (!town) return 0;
+        return initGuidanceTrust(town) || 0;
+    }
+
+    function adjustGuidanceTrust(town, amount, reason) {
+        if (!town || typeof amount !== "number") return;
+        initGuidanceTrust(town);
+        town.guidanceTrust = clampValue(
+            (town.guidanceTrust || 0) + amount,
+            GUIDANCE_TRUST_CONFIG.min,
+            GUIDANCE_TRUST_CONFIG.max
+        );
+        if (reason) {
+            town._paultendoGuidanceReason = reason;
+        }
+    }
+
+    function applyGuidanceOutcome(town, choice, args, eventId, data) {
+        if (!town || !choice) return;
+        if (data && data.guidanceImpact === 0) return;
+        const impact = (data && typeof data.guidanceImpact === "number") ? data.guidanceImpact : 1;
+        const success = args && typeof args.success === "boolean" ? args.success : null;
+        let delta = 0;
+        if (choice === "yes") {
+            delta = success === false ? -0.6 * impact : 0.9 * impact;
+        } else if (choice === "no") {
+            delta = -0.8 * impact;
+        } else {
+            return;
+        }
+        adjustGuidanceTrust(town, delta, `guidance:${eventId}:${choice}`);
+    }
+
     function canReceiveGuidance(town, key, cooldownDays) {
         const state = initGuidanceState(town);
         if (!state) return false;
@@ -6924,6 +7381,196 @@
             state.fatigue[key] = Math.min(3, (state.fatigue[key] || 0) + 1);
         }
     }
+
+    modEvent("guidanceTrustDrift", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => !!subject && !subject.end,
+        func: (subject) => {
+            initGuidanceTrust(subject);
+            const baseline = getGuidanceTrustBaseline(subject);
+            const current = subject.guidanceTrust || baseline;
+            const delta = (baseline - current) * GUIDANCE_TRUST_CONFIG.driftRate;
+            if (Math.abs(delta) < 0.01) return;
+            adjustGuidanceTrust(subject, delta, "guidance:drift");
+        }
+    });
+
+    // =========================================================================
+    // DIVINE STANCES (macro guidance for responsibility + clarity)
+    // =========================================================================
+
+    const DIVINE_STANCE_CONFIG = {
+        durationDays: 45,
+        cooldownDays: 25,
+        minDay: 4
+    };
+
+    const DIVINE_STANCES = {
+        neutral: {
+            id: "neutral",
+            name: "Balanced",
+            desc: "Subtle guidance with no strong emphasis.",
+            effects: null
+        },
+        stewardship: {
+            id: "stewardship",
+            name: "Stewardship",
+            desc: "Nurture stability, food, and steady growth.",
+            effects: { farm: 0.25, happy: 0.15, military: -0.1, trade: -0.05 }
+        },
+        ambition: {
+            id: "ambition",
+            name: "Ambition",
+            desc: "Push trade and prosperity at a social cost.",
+            effects: { trade: 0.3, happy: -0.05, faith: -0.05, military: -0.05 }
+        },
+        faith: {
+            id: "faith",
+            name: "Faith",
+            desc: "Strengthen belief and spiritual cohesion.",
+            effects: { faith: 0.3, happy: 0.05, education: -0.1, trade: -0.05 }
+        },
+        knowledge: {
+            id: "knowledge",
+            name: "Knowledge",
+            desc: "Drive learning and innovation.",
+            effects: { education: 0.3, trade: 0.05, faith: -0.1, military: -0.05 }
+        },
+        war: {
+            id: "war",
+            name: "War",
+            desc: "Harden resolve; conflict becomes more likely.",
+            effects: { military: 0.35, happy: -0.2, trade: -0.1, crime: 0.05 }
+        },
+        mercy: {
+            id: "mercy",
+            name: "Mercy",
+            desc: "Ease suffering; reduce sickness and strife.",
+            effects: { happy: 0.25, disease: -0.2, crime: -0.05, military: -0.15 }
+        }
+    };
+
+    function getDivineStanceState() {
+        if (!planet) return null;
+        if (!planet._paultendoDivineStance) {
+            planet._paultendoDivineStance = {
+                id: "neutral",
+                startDay: null,
+                untilDay: null,
+                cooldownUntil: 0
+            };
+        }
+        return planet._paultendoDivineStance;
+    }
+
+    function getDivineStance(id) {
+        return DIVINE_STANCES[id] || DIVINE_STANCES.neutral;
+    }
+
+    function isDivineStanceActive() {
+        const state = getDivineStanceState();
+        if (!state) return false;
+        if (state.id === "neutral") return false;
+        if (!state.untilDay) return false;
+        return planet.day <= state.untilDay;
+    }
+
+    function getDivineStanceRemaining() {
+        const state = getDivineStanceState();
+        if (!state || !state.untilDay) return 0;
+        return Math.max(0, state.untilDay - planet.day + 1);
+    }
+
+    function getDivineStanceCooldown() {
+        const state = getDivineStanceState();
+        if (!state) return 0;
+        return Math.max(0, (state.cooldownUntil || 0) - planet.day);
+    }
+
+    function canChangeDivineStance() {
+        const state = getDivineStanceState();
+        if (!state) return false;
+        if (planet.day < DIVINE_STANCE_CONFIG.minDay) return false;
+        return planet.day >= (state.cooldownUntil || 0);
+    }
+
+    const DIVINE_STANCE_MARKER_DEF = {
+        name: "Divine Focus",
+        subtype: "divineFocus",
+        symbol: "D",
+        color: [230, 210, 120]
+    };
+
+    function getPrimaryTown() {
+        const towns = regFilter("town", t => t && !t.end && t.pop > 0);
+        if (!towns.length) return null;
+        return towns.sort((a, b) => (b.pop || 0) - (a.pop || 0))[0];
+    }
+
+    function setDivineStance(id, source = "choice") {
+        const state = getDivineStanceState();
+        if (!state) return false;
+        const stance = getDivineStance(id);
+        if (!stance) return false;
+        state.id = stance.id;
+        state.startDay = planet.day;
+        if (stance.id === "neutral") {
+            state.untilDay = null;
+        } else {
+            state.untilDay = planet.day + DIVINE_STANCE_CONFIG.durationDays;
+        }
+        state.cooldownUntil = planet.day + DIVINE_STANCE_CONFIG.durationDays + DIVINE_STANCE_CONFIG.cooldownDays;
+        if (stance.id === "neutral") {
+            logMessage("The divine focus softens back to balance.", "milestone");
+        } else {
+            logMessage(`Divine stance shifts to {{b:${stance.name}}} — ${stance.desc}`, "milestone");
+            const town = getPrimaryTown();
+            if (town) {
+                createTempMarker(town, DIVINE_STANCE_MARKER_DEF, 10, {
+                    name: "Divine Focus",
+                    desc: `The divine stance embraces ${stance.name}.`
+                });
+            }
+        }
+        try { recordChronicleEntry("stance", `Divine stance: ${stance.name}`, "milestone"); } catch {}
+        return true;
+    }
+
+    function getDivineStanceEffects() {
+        const state = getDivineStanceState();
+        if (!state) return null;
+        if (!isDivineStanceActive()) return null;
+        const stance = getDivineStance(state.id);
+        return stance.effects || null;
+    }
+
+    modEvent("divineStanceEffects", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!subject || subject.end) return false;
+            return !!getDivineStanceEffects();
+        },
+        func: (subject) => {
+            const effects = getDivineStanceEffects();
+            if (!effects) return;
+            applyInfluenceSafe(null, subject, effects, { temp: true });
+        }
+    });
+
+    modEvent("divineStanceExpire", {
+        daily: true,
+        subject: { reg: "player", id: 1 },
+        value: () => {
+            const state = getDivineStanceState();
+            if (!state || state.id === "neutral") return false;
+            return state.untilDay && planet.day > state.untilDay;
+        },
+        func: () => {
+            setDivineStance("neutral", "expire");
+        }
+    });
 
     // =========================================================================
     // HOSPITAL HELPERS (marker-backed when possible)
@@ -22325,12 +22972,23 @@
         initExecutive._paultendoAutoplay = true;
     }
 
+    if (typeof initExecutive === "function" && !initExecutive._paultendoDivineStance) {
+        const baseInitExecutive = initExecutive;
+        initExecutive = function(...args) {
+            const result = baseInitExecutive.apply(this, args);
+            try { addDivineStanceButton(); } catch {}
+            return result;
+        };
+        initExecutive._paultendoDivineStance = true;
+    }
+
     if (typeof window !== "undefined") {
         window.addEventListener("load", () => {
             try { addAnnalsButton(); } catch {}
             try { addWorldStatusButton(); } catch {}
             try { addChronicleButton(); } catch {}
             try { addAutoplayButton(); } catch {}
+            try { addDivineStanceButton(); } catch {}
             try { initAutoplaySettings(); } catch {}
             try { ensureAutoplayControls(); } catch {}
             try { wrapPromptHandlersForAutoplay(); } catch {}
@@ -25313,6 +25971,7 @@
         if (!regBrowserValues.reputation_sanctity) regBrowserValues.reputation_sanctity = "Reputation (Sanctity)";
         if (!regBrowserValues.knowledge_core) regBrowserValues.knowledge_core = "Knowledge";
         if (!regBrowserValues.knowledge_tags) regBrowserValues.knowledge_tags = "Knowledge Tags";
+        if (!regBrowserValues.guidance_trust) regBrowserValues.guidance_trust = "Guidance Trust";
 
         if (!regBrowserExtra.town) regBrowserExtra.town = {};
         if (regBrowserExtra.town._paultendoSocietyExtra) return;
@@ -25328,6 +25987,7 @@
                 reputation_prosperity: Math.round(rep.prosperity || 0),
                 reputation_danger: Math.round(rep.danger || 0),
                 reputation_sanctity: Math.round(rep.sanctity || 0),
+                guidance_trust: Math.round(getGuidanceTrust(town)),
                 knowledge_core: Math.round(town.knowledge?.core || 0),
                 knowledge_tags: (town.knowledge?.tags || []).join(", ")
             };
