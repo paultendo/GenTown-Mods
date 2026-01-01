@@ -24,6 +24,18 @@ Crossroads attract settlement
 
 No explicit road-building required. Infrastructure follows behavior, then behavior follows infrastructure.
 
+**Decisions locked in:**
+- Roads are **visible by default** on the map.
+- Roads are **world‑persistent** (they don’t disappear), but they **decay** and can downgrade.
+- Religious pilgrimages **use the shared path cache**.
+- Road damage is **explicit only for notable events** (major raids/war impacts/high‑level roads).
+
+**Performance guardrails (required):**
+- Avoid full‑map scans each day; update **only road chunks** or **batched regions**.
+- Throttle heavy updates (roads/segments/crossroads) to multi‑day intervals.
+- Use shared path caching for **all** traffic types.
+- Landmark traffic generation should be **spatially filtered** or **round‑robin** processed.
+
 ---
 
 ## Data Structure
@@ -45,6 +57,7 @@ chunk.v.road = {
 The network connects **significant places**, not just towns:
 
 ```javascript
+// Optional, if needed for UI/analytics. Keep in sync on a slower cadence (e.g., every 30 days).
 planet.roadNetwork = {
     nodes: [
         // Towns
@@ -212,6 +225,8 @@ function recordTraffic(path, amount = 1) {
 // recordTraffic(resourcePath, 3);        // extraction hauling
 ```
 
+**Performance note:** Traffic should only be recorded for paths pulled from the shared cache; avoid recomputing paths per‑movement.
+
 ### Movement Cost Calculation
 
 ```javascript
@@ -265,6 +280,8 @@ function updateRoadLevels() {
 
 ### Traffic and Condition Decay
 
+Roads are world‑persistent: once a chunk has road data, it stays, even if the town collapses. Decay should downgrade level/condition rather than delete the road object.
+
 ```javascript
 function decayRoads() {
     forEachChunk(chunk => {
@@ -301,6 +318,8 @@ function decayRoads() {
     });
 }
 ```
+
+**Performance note:** `decayRoads` should iterate only over chunks that already have `chunk.v.road` (or maintain a list of road chunks) rather than scanning the whole world.
 
 ### Road Maintenance
 
@@ -511,7 +530,7 @@ function getLandmarkTrafficModifier(marker, source) {
 
 ### Pilgrimage Routes
 
-Holy sites create persistent pilgrimage routes that maintain roads even without trade:
+Holy sites create persistent pilgrimage routes that maintain roads even without trade. Pilgrimages should use the **same cached paths** as other traffic.
 
 ```javascript
 function generatePilgrimageRoutes() {
@@ -592,12 +611,15 @@ modEvent("landmarkTrafficUpdate", {
     subject: { reg: "player", id: 1 },
     value: () => planet.day % 3 === 0, // every 3 days
     func: () => {
+        // Process a subset each tick (round-robin or spatially filtered)
         generateLandmarkTraffic();
         generatePilgrimageRoutes();
         generateResourceRoutes();
     }
 });
 ```
+
+**Performance note:** Landmark traffic generation should be batched (e.g., 1/3 of landmarks per day or per‑region), not full‑scan each tick on large worlds.
 
 ---
 
@@ -708,6 +730,8 @@ function invalidatePathCache() {
 }
 ```
 
+**Policy:** All movement types (trade, migration, pilgrimage, military, resource hauling) must use `getCachedPath` rather than fresh pathfinding. Only invalidate the cache on major road‑level changes or periodic long‑interval refresh.
+
 ---
 
 ## Crossroads Detection
@@ -795,6 +819,7 @@ function checkCrossroadsSettlement() {
         if (Math.random() > chance) return;
 
         // Found a new town at the crossroads
+        // Respect base settlement pacing (e.g., daysPerColony, planet.lastColony)
         const newTown = happen("Create", null, null, {
             type: "town",
             x: node.chunkX * chunkSize,
@@ -822,7 +847,7 @@ function generateCrossroadsName() {
 
 ## Rendering
 
-Canvas layer for road visualization:
+Roads are rendered **by default** (no toggle required). Canvas layer for road visualization:
 
 ```javascript
 function initRoadLayer() {
@@ -896,6 +921,7 @@ function buildRoadSegments() {
     const visited = new Set();
     const segments = [];
 
+    // Prefer iterating only road chunks rather than every chunk in the world.
     forEachChunk(chunk => {
         const key = chunkKey(chunk);
         if (visited.has(key)) return;
@@ -970,6 +996,13 @@ function updateTradeRoute(route) {
 }
 ```
 
+### Infrastructure
+
+Road condition should **feed into town infrastructure** (or vice‑versa) rather than running as a totally separate decay loop. Keep a single source of truth for road quality penalties:
+
+- If chunk roads are the source, aggregate an average road condition per town and map it to `town.infrastructure.roads`.
+- If town infrastructure is the source, use it to bias road condition decay/repair.
+
 ### Governance
 
 Roads project authority:
@@ -994,6 +1027,7 @@ function getRoadGovernanceBonus(chunk) {
 ### Raiders
 
 Roads are targets and enablers:
+Road damage should only be explicitly logged when notable (e.g., a level‑2/3 road is damaged, or a major raid/war causes a visible downgrade).
 
 ```javascript
 function getRaiderTargetValue(chunk) {
@@ -1077,11 +1111,15 @@ modEvent("roadNetworkUpdate", {
     daily: true,
     subject: { reg: "player", id: 1 },
     func: () => {
-        // Decay traffic and condition
-        decayRoads();
+        // Decay traffic and condition (throttled to reduce per-day cost)
+        if (planet.day % 3 === 0) {
+            decayRoads();
+        }
 
-        // Update road levels based on current traffic
-        updateRoadLevels();
+        // Update road levels based on current traffic (throttled)
+        if (planet.day % 3 === 0) {
+            updateRoadLevels();
+        }
 
         // Detect new crossroads (less frequent)
         if (planet.day % 10 === 0) {
