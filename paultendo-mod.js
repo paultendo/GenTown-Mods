@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.5.1";
+    const MOD_VERSION = "1.5.2";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -2618,6 +2618,7 @@
         enabled: true,
         opaqueAlpha: 0.93,
         shroudAlpha: 0.4,
+        fadeInDays: 4,
         baseSight: 4,
         sizeSight: 0.45,
         travelSight: 0.2,
@@ -2840,6 +2841,7 @@
         });
         if (!hasAnchorTown) return false;
         if (isFogClearedByProgress()) return false;
+        if (getFogIntroFactor() <= 0) return false;
         return true;
     }
 
@@ -3226,6 +3228,27 @@
         return clampValue(base, 0.85, 1);
     }
 
+    function getFogIntroDay() {
+        if (!planet) return 0;
+        if (planet._paultendoFogIntroDay === undefined || planet._paultendoFogIntroDay === null) {
+            const settled = planet.settled;
+            if (typeof settled === "number" && settled >= 0) {
+                planet._paultendoFogIntroDay = settled;
+            } else {
+                planet._paultendoFogIntroDay = planet.day;
+            }
+        }
+        return planet._paultendoFogIntroDay;
+    }
+
+    function getFogIntroFactor() {
+        if (!FOG_CONFIG.fadeInDays || FOG_CONFIG.fadeInDays <= 0) return 1;
+        if (!planet) return 1;
+        const startDay = getFogIntroDay();
+        const elapsed = planet.day - startDay;
+        return clampValue(elapsed / FOG_CONFIG.fadeInDays, 0, 1);
+    }
+
     function renderFogOfWar() {
         if (!ensureFogLayer()) return;
         const ctx = canvasLayersCtx ? canvasLayersCtx.fog : null;
@@ -3241,8 +3264,9 @@
             try { ensureDiscoveryReadyForFog(); } catch {}
         }
 
-        const opaqueAlpha = getFogOpacity();
-        const shroudAlpha = clampValue(FOG_CONFIG.shroudAlpha, 0, 0.9);
+        const introFactor = getFogIntroFactor();
+        const opaqueAlpha = getFogOpacity() * introFactor;
+        const shroudAlpha = clampValue(FOG_CONFIG.shroudAlpha * introFactor, 0, 0.9);
 
         const fogState = planet._paultendoFog || {};
         const explored = fogState.explored || {};
@@ -3261,9 +3285,10 @@
             const key = getChunkKey(chunk.x, chunk.y);
             if (!explored[key]) {
                 const rumor = RUMOR_MAP_CONFIG.enabled ? (rumors[key] || 0) : 0;
+                const minAlpha = Math.min(0.25, opaqueAlpha);
                 const rumorAlpha = clampValue(
                     opaqueAlpha * (1 - (RUMOR_MAP_CONFIG.revealBoost * rumor)),
-                    0.25,
+                    minAlpha,
                     opaqueAlpha
                 );
                 ctx.fillStyle = `rgba(8, 10, 14, ${rumorAlpha})`;
