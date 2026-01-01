@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.0";
+    const MOD_VERSION = "1.6.1";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -54,16 +54,23 @@
         maxStoredDays: 6
     };
 
+    const CHRONICLE_UI_KEY = "_paultendoChronicleUI";
+    const CHRONICLE_STORE_KEY = "_paultendoChronicleStore";
+
     function initChronicleState() {
         if (!planet) return null;
-        if (!planet._paultendoChronicle) {
-            planet._paultendoChronicle = {
-                entriesByDay: {},
-                entriesById: {},
-                lastHeadlineDay: null
-            };
+        if (planet[CHRONICLE_UI_KEY]) return planet[CHRONICLE_UI_KEY];
+        const legacy = planet._paultendoChronicle;
+        if (legacy && legacy.entriesByDay && legacy.entriesById) {
+            planet[CHRONICLE_UI_KEY] = legacy;
+            return planet[CHRONICLE_UI_KEY];
         }
-        return planet._paultendoChronicle;
+        planet[CHRONICLE_UI_KEY] = {
+            entriesByDay: {},
+            entriesById: {},
+            lastHeadlineDay: null
+        };
+        return planet[CHRONICLE_UI_KEY];
     }
 
     function getChronicleFollowLive() {
@@ -236,10 +243,14 @@
     function addChronicleEntry(dayValue, uuid, type, text) {
         const state = initChronicleState();
         if (!state) return;
+        if (!state.entriesByDay) state.entriesByDay = {};
+        if (!state.entriesById) state.entriesById = {};
         const day = parseInt(dayValue);
         if (!day || isNaN(day)) return;
-        const priority = getChroniclePriority(type, text);
-        const entry = { id: uuid, day, type, text, priority };
+        const safeText = sanitizeChronicleMessage(text);
+        if (!safeText) return;
+        const priority = getChroniclePriority(type, safeText);
+        const entry = { id: uuid, day, type, text: safeText, priority };
         state.entriesById[uuid] = entry;
         if (!state.entriesByDay[day]) state.entriesByDay[day] = [];
         state.entriesByDay[day].unshift(entry);
@@ -266,7 +277,8 @@
         const container = document.getElementById("paultendoChronicleHeadlines");
         if (!container) return;
         container.innerHTML = "";
-        const entries = (state.entriesByDay[day] || []).filter(e => e.priority > 0);
+        const dayEntries = Array.isArray(state.entriesByDay?.[day]) ? state.entriesByDay[day] : [];
+        const entries = dayEntries.filter(e => e && e.priority > 0);
         if (!entries.length) {
             const empty = document.createElement("div");
             empty.className = "paultendoChronicleHeadline";
@@ -281,13 +293,14 @@
         for (let i = 0; i < sorted.length; i++) {
             if (container.childElementCount >= CHRONICLE_UI_CONFIG.headlineLimit) break;
             const entry = sorted[i];
-            if (!entry.text) continue;
-            const key = entry.text.trim();
+            const safeText = sanitizeChronicleMessage(entry.text);
+            if (!safeText) continue;
+            const key = safeText.trim();
             if (seen.has(key)) continue;
             seen.add(key);
             const item = document.createElement("div");
             item.className = "paultendoChronicleHeadline";
-            item.textContent = entry.text;
+            item.textContent = safeText;
             container.appendChild(item);
         }
     }
@@ -438,16 +451,18 @@
             const uuid = baseLogMessage(text, type, args);
             if (!uuid) return uuid;
             if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
-                ensureChronicleHeader();
-                const elem = document.getElementById("logMessage-" + uuid);
-                const dayElem = elem ? elem.querySelector(".logDay") : null;
-                const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
-                const plainText = elem ? (elem.querySelector(".logText")?.innerText || "") : "";
-                if (dayValue) {
-                    addChronicleEntry(dayValue, uuid, type, plainText);
-                    updateChronicleHeadlines(dayValue);
-                    updateChronicleDayMarkers();
-                }
+                try {
+                    ensureChronicleHeader();
+                    const elem = document.getElementById("logMessage-" + uuid);
+                    const dayElem = elem ? elem.querySelector(".logDay") : null;
+                    const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
+                    const plainText = elem ? (elem.querySelector(".logText")?.innerText || "") : "";
+                    if (dayValue) {
+                        addChronicleEntry(dayValue, uuid, type, plainText);
+                        updateChronicleHeadlines(dayValue);
+                        updateChronicleDayMarkers();
+                    }
+                } catch {}
             }
             if (!follow && logPanel) {
                 const newHeight = logPanel.scrollHeight;
@@ -464,18 +479,20 @@
         logChange = function(uuid, text) {
             const result = baseLogChange(uuid, text);
             if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
-                const elem = document.getElementById("logMessage-" + uuid);
-                if (elem) {
-                    const dayElem = elem.querySelector(".logDay");
-                    const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
-                    const plainText = elem.querySelector(".logText")?.innerText || "";
-                    const state = initChronicleState();
-                    if (state && state.entriesById[uuid]) {
-                        state.entriesById[uuid].text = plainText;
-                        const day = parseInt(dayValue);
-                        if (!isNaN(day)) updateChronicleHeadlines(day);
+                try {
+                    const elem = document.getElementById("logMessage-" + uuid);
+                    if (elem) {
+                        const dayElem = elem.querySelector(".logDay");
+                        const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
+                        const plainText = elem.querySelector(".logText")?.innerText || "";
+                        const state = initChronicleState();
+                        if (state && state.entriesById[uuid]) {
+                            state.entriesById[uuid].text = plainText;
+                            const day = parseInt(dayValue);
+                            if (!isNaN(day)) updateChronicleHeadlines(day);
+                        }
                     }
-                }
+                } catch {}
             }
             return result;
         };
@@ -2336,10 +2353,14 @@
 
     function getChronicleStore() {
         if (!planet) return null;
-        if (!planet._paultendoChronicle) {
-            planet._paultendoChronicle = { days: [], index: {} };
+        if (planet[CHRONICLE_STORE_KEY]) return planet[CHRONICLE_STORE_KEY];
+        const legacy = planet._paultendoChronicle;
+        if (legacy && legacy.days && legacy.index) {
+            planet[CHRONICLE_STORE_KEY] = legacy;
+            return planet[CHRONICLE_STORE_KEY];
         }
-        return planet._paultendoChronicle;
+        planet[CHRONICLE_STORE_KEY] = { days: [], index: {} };
+        return planet[CHRONICLE_STORE_KEY];
     }
 
     function getChronicleDay(day) {
@@ -2357,12 +2378,26 @@
         return entry;
     }
 
+    function sanitizeChronicleMessage(message) {
+        if (!message) return "";
+        let text = typeof message === "string" ? message : String(message);
+        if (typeof document !== "undefined") {
+            const temp = document.createElement("div");
+            temp.innerHTML = text;
+            text = temp.textContent || "";
+        }
+        text = text.replace(/<[^>]*>/g, "");
+        return text.trim();
+    }
+
     function recordChronicleEntry(system, message, type) {
         if (!planet || !message) return;
         const entry = getChronicleDay(planet.day);
         if (!entry) return;
         if (entry.entries.length >= CHRONICLE_CONFIG.maxEntriesPerDay) return;
-        entry.entries.push({ system: system || "misc", message, type: type || null });
+        const safeMessage = sanitizeChronicleMessage(message);
+        if (!safeMessage) return;
+        entry.entries.push({ system: system || "misc", message: safeMessage, type: type || null });
         entry.counts[system || "misc"] = (entry.counts[system || "misc"] || 0) + 1;
     }
 
@@ -2413,7 +2448,9 @@
         }
         entry.entries.forEach((evt) => {
             const tag = evt.system ? `{{b:${titleCase(evt.system)}}} · ` : "";
-            items.push({ text: `${tag}${evt.message}` });
+            const safeMessage = sanitizeChronicleMessage(evt.message);
+            if (!safeMessage) return;
+            items.push({ text: `${tag}${safeMessage}` });
         });
         populateExecutive(items, "Chronicle Day");
     }
@@ -3971,7 +4008,7 @@
         resetFogVisibilityForDay(true);
         const towns = getActiveTowns();
         for (let i = 0; i < towns.length; i++) {
-            updateFogVisibilityForTown(towns[i], { deferRefresh: true, forceReset: false });
+            updateFogVisibilityForTown(towns[i], { deferRefresh: true, forceReset: true });
         }
         scheduleFogRefresh();
         return true;
@@ -4104,7 +4141,13 @@
         if (fogCanvas.style) {
             fogCanvas.style.display = active ? "block" : "none";
         }
-        if (!active) return;
+        if (!active) {
+            if (planet && planet._paultendoFog) {
+                planet._paultendoFog.dirty = false;
+                planet._paultendoFog.lastRenderDay = planet.day;
+            }
+            return;
+        }
         if (!planet || !planet.chunks) return;
         if (typeof chunkSize === "undefined") return;
         if (!planet._paultendoDiscoveryReady) {
@@ -4158,17 +4201,19 @@
 
     function scheduleFogRefresh(force = false) {
         if (!planet) return;
-        if (force && planet._paultendoFog) {
-            planet._paultendoFog.dirty = true;
+        const planetRef = planet;
+        if (force && planetRef._paultendoFog) {
+            planetRef._paultendoFog.dirty = true;
         }
-        if (planet._paultendoFogRefreshPending) return;
-        if (!force && planet._paultendoFog && !planet._paultendoFog.dirty && planet._paultendoFog.lastRenderDay === planet.day) {
+        if (planetRef._paultendoFogRefreshPending) return;
+        if (!force && planetRef._paultendoFog && !planetRef._paultendoFog.dirty && planetRef._paultendoFog.lastRenderDay === planetRef.day) {
             return;
         }
-        planet._paultendoFogRefreshPending = true;
+        planetRef._paultendoFogRefreshPending = true;
 
         const refresh = () => {
-            planet._paultendoFogRefreshPending = false;
+            planetRef._paultendoFogRefreshPending = false;
+            if (planetRef !== planet) return;
             try { renderFogOfWar(); } catch {}
             try { if (typeof updateCanvas === "function") updateCanvas(); } catch {}
         };
