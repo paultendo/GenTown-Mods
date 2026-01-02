@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.9";
+    const MOD_VERSION = "1.6.15";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -28,9 +28,15 @@
         PAULTENDO_GLOBAL._paultendoEventStack = [];
     }
 
-    function withModEventContext(id, fn) {
+    function withModEventContext(id, context, fn) {
         const stack = PAULTENDO_GLOBAL._paultendoEventStack;
-        stack.push(id);
+        let entry = { id };
+        if (typeof context === "function") {
+            fn = context;
+        } else if (context && typeof context === "object") {
+            entry = { id, ...context };
+        }
+        stack.push(entry);
         try {
             return fn();
         } finally {
@@ -40,7 +46,39 @@
 
     function getActiveModEventId() {
         const stack = PAULTENDO_GLOBAL._paultendoEventStack || [];
-        return stack.length ? stack[stack.length - 1] : null;
+        if (!stack.length) return null;
+        const entry = stack[stack.length - 1];
+        if (typeof entry === "string") return entry;
+        return entry && entry.id ? entry.id : null;
+    }
+
+    function getActiveModEventContext() {
+        const stack = PAULTENDO_GLOBAL._paultendoEventStack || [];
+        if (!stack.length) return null;
+        const entry = stack[stack.length - 1];
+        if (entry && typeof entry === "object") return entry;
+        return null;
+    }
+
+    function notePendingLogContext(context) {
+        if (!context) return;
+        const now = Date.now();
+        PAULTENDO_GLOBAL._paultendoPendingContext = {
+            context,
+            expires: now + 700
+        };
+    }
+
+    function consumePendingLogContext() {
+        const pending = PAULTENDO_GLOBAL._paultendoPendingContext;
+        if (!pending) return null;
+        const now = Date.now();
+        if (pending.expires && pending.expires < now) {
+            PAULTENDO_GLOBAL._paultendoPendingContext = null;
+            return null;
+        }
+        PAULTENDO_GLOBAL._paultendoPendingContext = null;
+        return pending.context || null;
     }
 
     // =========================================================================
@@ -56,6 +94,1141 @@
 
     const CHRONICLE_UI_KEY = "_paultendoChronicleUI";
     const CHRONICLE_STORE_KEY = "_paultendoChronicleStore";
+
+    // =========================================================================
+    // NARRATIVE CAUSALITY (conversational, varied sentence structures)
+    // =========================================================================
+
+    const NARRATIVE_CONFIG = {
+        enabled: true,
+        chance: 0.22,
+        cooldownDays: 2,
+        memoryDays: 60,
+        maxSignalsPerTown: 80,
+        minSignals: 1
+    };
+
+    const NARRATIVE_TAGS = {
+        famine: [
+            "the failed harvest",
+            "empty granaries",
+            "the hunger in the fields",
+            "a lean season",
+            "the crops giving way"
+        ],
+        disease: [
+            "the sickness in the streets",
+            "fevers that wouldn't break",
+            "the plague's shadow",
+            "too many empty beds",
+            "the healers overwhelmed"
+        ],
+        debt: [
+            "missed payments",
+            "the mounting debt",
+            "coins running thin",
+            "the treasury straining",
+            "loans coming due"
+        ],
+        trade: [
+            "trade thinning out",
+            "caravans drying up",
+            "merchants pulling back",
+            "markets quieting",
+            "routes losing their pull"
+        ],
+        roads: [
+            "crumbling roads",
+            "neglected causeways",
+            "bridges left to rot",
+            "the long way around",
+            "roads no longer trusted"
+        ],
+        raids: [
+            "raiders testing the borders",
+            "bandits growing bold",
+            "pirates on the rise",
+            "the roads turning dangerous",
+            "skirmishes in the wilds"
+        ],
+        war: [
+            "war pressure building",
+            "a simmering border feud",
+            "talk of blades and banners",
+            "the drums on the horizon",
+            "old grudges sharpening"
+        ],
+        unrest: [
+            "crowds losing patience",
+            "unrest in the streets",
+            "whispers turning to shouts",
+            "protests gaining heat",
+            "order fraying at the edges"
+        ],
+        legitimacy: [
+            "a shaky claim to rule",
+            "doubts about the crown",
+            "a contested succession",
+            "rivals circling the throne",
+            "the court divided"
+        ],
+        faith: [
+            "faith slipping from the temples",
+            "the old rites weakening",
+            "a fracturing devotion",
+            "priests losing their hold",
+            "beliefs pulled in two directions"
+        ],
+        climate: [
+            "a cruel season",
+            "the weather turning hard",
+            "strange skies and worse winds",
+            "a stubborn drought",
+            "a cold that wouldn't lift"
+        ],
+        migration: [
+            "families leaving in quiet waves",
+            "the slow drift outward",
+            "refugees on the move",
+            "roads filled with leaving",
+            "a city thinning at the edges"
+        ],
+        morale: [
+            "spirits sinking",
+            "celebrations falling flat",
+            "a weary populace",
+            "joy in short supply",
+            "a mood turning sour"
+        ],
+        prosperity: [
+            "a season of plenty",
+            "full markets",
+            "wealth circulating",
+            "a surge of prosperity",
+            "granaries well stocked"
+        ],
+        stability: [
+            "steady hands at the helm",
+            "a calm season",
+            "order holding firm",
+            "quiet streets",
+            "patience among the people"
+        ],
+        unity: [
+            "towns pulling together",
+            "shared purpose",
+            "a rare unity",
+            "voices in chorus",
+            "old grudges softening"
+        ],
+        innovation: [
+            "new learning",
+            "fresh ideas taking root",
+            "clever hands at work",
+            "breakthroughs in craft",
+            "scholars opening doors"
+        ],
+        diplomacy: [
+            "a thaw between rivals",
+            "treaties holding",
+            "alliances bearing fruit",
+            "trusted partners",
+            "peaceful borders"
+        ],
+        faith_renewal: [
+            "faith renewed",
+            "rites rekindled",
+            "temples filled again",
+            "devotion returning",
+            "beliefs finding new strength"
+        ],
+        harvest: [
+            "good rains",
+            "a strong harvest",
+            "fields heavy with grain",
+            "the barns filling",
+            "the land answering well"
+        ],
+        celebration: [
+            "a season of festivals",
+            "songs in the streets",
+            "shared feasts",
+            "joy on display",
+            "bells and banners"
+        ],
+        recovery: [
+            "steady recovery",
+            "wounds closing",
+            "the city catching its breath",
+            "repairs taking hold",
+            "a return to strength"
+        ],
+        infrastructure: [
+            "roads reinforced",
+            "new bridges raised",
+            "fresh foundations",
+            "public works rising",
+            "the old routes restored"
+        ]
+    };
+
+    const NARRATIVE_EVENT_CATEGORIES = [
+        {
+            id: "succession",
+            patterns: [/succession|heir|crown|throne|ruler|leader/i],
+            phrases: ["the succession crisis", "the contested crown", "the uneasy handover"]
+        },
+        {
+            id: "revolution",
+            patterns: [/revolution|coup|uprising|riot|strike|protest/i],
+            phrases: ["the uprising", "the revolt", "the break with old rule"]
+        },
+        {
+            id: "secession",
+            patterns: [/secession|breakaway|split/i],
+            phrases: ["the split", "the secession", "the border break"]
+        },
+        {
+            id: "war",
+            patterns: [/war|battle|siege|invasion|raid/i],
+            phrases: ["the war", "the fighting", "the clash"]
+        },
+        {
+            id: "famine",
+            patterns: [/famine|drought|hunger|harvest|crop/i],
+            phrases: ["the hunger", "the famine", "the lean season"]
+        },
+        {
+            id: "disease",
+            patterns: [/plague|disease|epidemic|fever|illness/i],
+            phrases: ["the sickness", "the plague", "the fevered months"]
+        },
+        {
+            id: "trade",
+            patterns: [/trade|embargo|loan|debt|market|caravan|route|cash/i],
+            phrases: ["the trade squeeze", "the credit crunch", "the shift in power"]
+        },
+        {
+            id: "alliance",
+            patterns: [/alliance|treaty|peace|truce|pact|reconcile/i],
+            phrases: ["the peace", "the alliance", "the thaw between rivals"]
+        },
+        {
+            id: "festival",
+            patterns: [/festival|celebration|feast|joy|parade/i],
+            phrases: ["the season of festivals", "the celebrations", "the public joy"]
+        },
+        {
+            id: "discovery",
+            patterns: [/discovery|breakthrough|new age|renaissance|invention/i],
+            phrases: ["the breakthrough", "the new learning", "the dawn of a new age"]
+        },
+        {
+            id: "greatwork",
+            patterns: [/great work|monument|theater|museum|gallery|works? complete/i],
+            phrases: ["the great work", "the monument", "the public works"]
+        },
+        {
+            id: "expansion",
+            patterns: [/founding|founded|charter|colony|expedition|settlement/i],
+            phrases: ["the push outward", "the new settlement", "the expansion"]
+        }
+    ];
+
+    const NARRATIVE_STRUCTURES = [
+        {
+            id: "uplift",
+            weight: 1.1,
+            render: (ctx) => `${ctx.event} did not come alone. It was carried by ${ctx.causeA} and ${ctx.causeB}.`
+        },
+        {
+            id: "credit",
+            weight: 1.0,
+            render: (ctx) => `Give the credit to ${ctx.causeA}. Without it, ${ctx.event} would have faltered.`
+        },
+        {
+            id: "renewal",
+            weight: 0.9,
+            render: (ctx) => `${ctx.causeA} opened the way, and ${ctx.event} made it real.`
+        },
+        {
+            id: "namedTown",
+            weight: 0.9,
+            requires: ["town"],
+            render: (ctx) => {
+                const town = ctx.names?.town || "the town";
+                return `${town} felt ${ctx.causeA}. ${ctx.event} followed in its wake.`;
+            }
+        },
+        {
+            id: "namedPair",
+            weight: 0.8,
+            requires: ["town", "otherTown"],
+            render: (ctx) => {
+                const town = ctx.names?.town || "the town";
+                const other = ctx.names?.otherTown || "its neighbors";
+                return `${town} carried ${ctx.causeA}; ${other} carried ${ctx.causeB}. ${ctx.event} came soon after.`;
+            }
+        },
+        {
+            id: "namedLeader",
+            weight: 0.7,
+            requires: ["leader"],
+            render: (ctx) => {
+                const leader = ctx.names?.leader || "the court";
+                const town = ctx.names?.town || "the town";
+                return `${leader} could not ignore ${ctx.causeA}. ${ctx.event} stirred in ${town}.`;
+            }
+        },
+        {
+            id: "namedReligion",
+            weight: 0.6,
+            requires: ["religion"],
+            render: (ctx) => {
+                const religion = ctx.names?.religion || "the faith";
+                return `${religion} wavered after ${ctx.causeA}, and ${ctx.event} took shape.`;
+            }
+        },
+        {
+            id: "namedAlliance",
+            weight: 0.6,
+            requires: ["alliance"],
+            render: (ctx) => {
+                const alliance = ctx.names?.alliance || "the pact";
+                return `With ${alliance} in place, ${ctx.event} rode on ${ctx.causeA}.`;
+            }
+        },
+        {
+            id: "namedFigure",
+            weight: 0.5,
+            requires: ["figure"],
+            render: (ctx) => {
+                const figure = ctx.names?.figure || "a notable figure";
+                return `${figure} became the face of ${ctx.event} after ${ctx.causeA}.`;
+            }
+        },
+        {
+            id: "namedWork",
+            weight: 0.5,
+            requires: ["work"],
+            render: (ctx) => {
+                const work = ctx.names?.work || "the great work";
+                return `When ${work} rose, ${ctx.event} drew strength from ${ctx.causeA}.`;
+            }
+        },
+        {
+            id: "namedWar",
+            weight: 0.5,
+            requires: ["war"],
+            render: (ctx) => {
+                const war = ctx.names?.war || "the war";
+                return `${war} grew from ${ctx.causeA} and ${ctx.causeB}.`;
+            }
+        },
+        {
+            id: "namedDisaster",
+            weight: 0.45,
+            requires: ["disaster"],
+            render: (ctx) => {
+                const disaster = ctx.names?.disaster || "the disaster";
+                const town = ctx.names?.town || "the town";
+                return `${disaster} struck ${town} after ${ctx.causeA}. ${ctx.event} followed.`;
+            }
+        },
+        {
+            id: "namedLandmark",
+            weight: 0.4,
+            requires: ["landmark"],
+            render: (ctx) => {
+                const landmark = ctx.names?.landmark || "the landmark";
+                return `${landmark} became the symbol, but ${ctx.causeA} did the work.`;
+            }
+        },
+        {
+            id: "namedWorld",
+            weight: 0.4,
+            requires: ["world"],
+            render: (ctx) => {
+                const world = ctx.names?.world || "the world";
+                return `On ${world}, ${ctx.causeA} opened the way for ${ctx.event}.`;
+            }
+        },
+        {
+            id: "chain",
+            weight: 1.2,
+            render: (ctx) => `First ${ctx.causeA}, then ${ctx.causeB}. By then, ${ctx.event} was only a matter of time.`
+        },
+        {
+            id: "contrast",
+            weight: 1.0,
+            render: (ctx) => `Everyone blames ${ctx.causeA}, but ${ctx.causeB} is what cracked it open.`
+        },
+        {
+            id: "reflection",
+            weight: 1.0,
+            render: (ctx) => `People still talk about ${ctx.causeA}. ${ctx.event} just put a name on it.`
+        },
+        {
+            id: "rumor",
+            weight: 1.1,
+            render: (ctx) => `They say ${ctx.causeA} lit the fuse, and ${ctx.causeB} did the rest.`
+        },
+        {
+            id: "council",
+            weight: 0.9,
+            render: (ctx) => `The council warned of ${ctx.causeA}; when ${ctx.causeB} followed, ${ctx.event} became inevitable.`
+        },
+        {
+            id: "merchant",
+            weight: 0.9,
+            render: (ctx) => `When ${ctx.causeA} tightened, ${ctx.causeB} followed. ${ctx.event} reshaped the ledger.`
+        },
+        {
+            id: "singleCause",
+            weight: 0.7,
+            render: (ctx) => `It didn't start with ${ctx.event}. It started with ${ctx.causeA}.`
+        },
+        {
+            id: "singleCauseRumor",
+            weight: 0.7,
+            render: (ctx) => `Word is, ${ctx.causeA} set all of this in motion.`
+        }
+    ];
+
+    function initNarrativeState() {
+        if (!planet) return null;
+        if (!planet._paultendoNarrative) {
+            planet._paultendoNarrative = { signals: {}, lastDayByTown: {} };
+        }
+        return planet._paultendoNarrative;
+    }
+
+    function trimNarrativeSignals(list) {
+        if (!Array.isArray(list)) return [];
+        const cutoff = planet.day - NARRATIVE_CONFIG.memoryDays;
+        const trimmed = list.filter(s => s && s.day >= cutoff);
+        if (trimmed.length > NARRATIVE_CONFIG.maxSignalsPerTown) {
+            trimmed.splice(0, trimmed.length - NARRATIVE_CONFIG.maxSignalsPerTown);
+        }
+        return trimmed;
+    }
+
+    function recordCausalSignal(town, tag, weight = 1, sourceId = null) {
+        if (!town || !tag) return;
+        initNarrativeState();
+        const state = planet._paultendoNarrative;
+        const list = state.signals[town.id] || [];
+        list.push({
+            tag,
+            weight: Math.max(0.2, weight),
+            day: planet.day,
+            sourceId
+        });
+        state.signals[town.id] = trimNarrativeSignals(list);
+    }
+
+    function getNarrativeSignalsForTown(town) {
+        if (!town) return [];
+        const state = initNarrativeState();
+        if (!state) return [];
+        const list = state.signals[town.id] || [];
+        state.signals[town.id] = trimNarrativeSignals(list);
+        return state.signals[town.id];
+    }
+
+    function getTopNarrativeTags(town) {
+        const signals = getNarrativeSignalsForTown(town);
+        if (!signals.length) return [];
+        const totals = {};
+        signals.forEach(signal => {
+            if (!signal || !signal.tag) return;
+            totals[signal.tag] = (totals[signal.tag] || 0) + (signal.weight || 0);
+        });
+        const tags = Object.keys(totals).map(tag => ({ tag, score: totals[tag] }));
+        tags.sort((a, b) => b.score - a.score);
+        return tags;
+    }
+
+    function pickPhrase(options) {
+        if (!options || !options.length) return "";
+        return options[Math.floor(Math.random() * options.length)];
+    }
+
+    function inferNarrativeTags(eventId, subject, target, args, logText) {
+        const text = `${eventId || ""} ${logText || ""}`.toLowerCase();
+        const tags = [];
+        if (/(famine|drought|hunger|harvest|crop)/.test(text)) tags.push({ tag: "famine", weight: 1.2 });
+        if (/(plague|disease|epidemic|fever|illness)/.test(text)) tags.push({ tag: "disease", weight: 1.1 });
+        if (/(loan|debt|cash|treasury|default|bank)/.test(text)) tags.push({ tag: "debt", weight: 1.1 });
+        if (/(trade|embargo|caravan|market|route|merchant)/.test(text)) tags.push({ tag: "trade", weight: 1.0 });
+        if (/(road|bridge|infrastructure)/.test(text)) tags.push({ tag: "roads", weight: 0.9 });
+        if (/(raid|pirate|bandit)/.test(text)) tags.push({ tag: "raids", weight: 1.0 });
+        if (/(war|battle|siege|invasion)/.test(text)) tags.push({ tag: "war", weight: 1.2 });
+        if (/(succession|heir|crown|throne|ruler|leader)/.test(text)) tags.push({ tag: "legitimacy", weight: 1.1 });
+        if (/(revolution|coup|uprising|riot|strike|protest)/.test(text)) tags.push({ tag: "unrest", weight: 1.1 });
+        if (/(faith|religion|temple|sect|heresy|church)/.test(text)) tags.push({ tag: "faith", weight: 0.9 });
+        if (/(migration|refuge|flee|exodus)/.test(text)) tags.push({ tag: "migration", weight: 0.8 });
+        if (/(festival|celebration|feast|joy)/.test(text)) tags.push({ tag: "morale", weight: 0.7 });
+        if (/(storm|winter|cold|heat|climate|weather)/.test(text)) tags.push({ tag: "climate", weight: 0.8 });
+        if (/(prosper|wealth|boom|surge|thriv)/.test(text)) tags.push({ tag: "prosperity", weight: 1.0 });
+        if (/(stable|order holds|calm|quiet streets)/.test(text)) tags.push({ tag: "stability", weight: 0.9 });
+        if (/(unity|together|alliance|treaty|peace|truce|pact|reconcile)/.test(text)) tags.push({ tag: "diplomacy", weight: 0.9 });
+        if (/(innovation|breakthrough|discovery|new age|renaissance|invention)/.test(text)) tags.push({ tag: "innovation", weight: 1.0 });
+        if (/(harvest|good rains|bountiful|plenty)/.test(text)) tags.push({ tag: "harvest", weight: 0.9 });
+        if (/(festival|celebration|parade|song|feast)/.test(text)) tags.push({ tag: "celebration", weight: 0.8 });
+        if (/(recovery|rebuilt|repairs|restored|healed)/.test(text)) tags.push({ tag: "recovery", weight: 0.8 });
+        if (/(roads|bridges|monument|theater|museum|gallery|works? complete|public works)/.test(text)) tags.push({ tag: "infrastructure", weight: 0.8 });
+        if (/(faith renewed|temples filled|revival|reformation|reforms)/.test(text)) tags.push({ tag: "faith_renewal", weight: 0.8 });
+        if (args && args.loan) tags.push({ tag: "debt", weight: 1.2 });
+        if (args && args.disaster) tags.push({ tag: "climate", weight: 0.9 });
+        if (args && args.enemy) tags.push({ tag: "unrest", weight: 0.6 });
+        return tags;
+    }
+
+    function recordNarrativeSignals(eventId, subject, target, args, logText = "", weightScale = 1) {
+        if (!NARRATIVE_CONFIG.enabled) return;
+        const town = (subject && subject._reg === "town") ? subject
+            : (target && target._reg === "town") ? target
+                : null;
+        if (!town) return;
+        const tags = inferNarrativeTags(eventId, subject, target, args, logText);
+        if (!tags.length) return;
+        const scale = Math.max(0.2, weightScale || 1);
+        tags.forEach(tag => recordCausalSignal(town, tag.tag, tag.weight * scale, eventId));
+    }
+
+    function inferEventPhrase(eventId, logText) {
+        const haystack = `${eventId || ""} ${logText || ""}`;
+        for (const cat of NARRATIVE_EVENT_CATEGORIES) {
+            if (cat.patterns.some(rx => rx.test(haystack))) {
+                return pickPhrase(cat.phrases);
+            }
+        }
+        return "the turning point";
+    }
+
+    function shouldNarrate(logType, eventId, logText) {
+        if (!NARRATIVE_CONFIG.enabled) return false;
+        const type = logType || "";
+        if (type === "warning" || type === "milestone") return true;
+        if (/war|revolution|secession|succession|famine|plague|debt|loan|raid|embargo/i.test(eventId || "")) return true;
+        if (/war|revolution|secession|succession|famine|plague|debt|loan|raid|embargo/i.test(logText || "")) return true;
+        if (/alliance|treaty|peace|festival|discovery|breakthrough|great work|monument|museum|theater/i.test(eventId || "")) return true;
+        if (/alliance|treaty|peace|festival|discovery|breakthrough|great work|monument|museum|theater/i.test(logText || "")) return true;
+        return Math.random() < 0.08;
+    }
+
+    function isPositiveNarrativeEvent(eventId, logText, tags = []) {
+        if (/festival|celebration|peace|treaty|alliance|breakthrough|discovery|prosper|thriv|victory|completed|founded|opens|restores/i.test(`${eventId || ""} ${logText || ""}`)) {
+            return true;
+        }
+        const positiveTags = new Set(["prosperity", "stability", "unity", "innovation", "diplomacy", "faith_renewal", "harvest", "celebration", "recovery", "infrastructure"]);
+        return tags.some(tag => positiveTags.has(tag));
+    }
+
+    function buildNarrativeLine(town, eventId, logText, ctx = null) {
+        const tags = getTopNarrativeTags(town).map(t => t.tag);
+        if (tags.length < NARRATIVE_CONFIG.minSignals) return null;
+        const causeA = pickPhrase(NARRATIVE_TAGS[tags[0]] || []);
+        const hasSecond = tags.length >= 2 && tags[1] !== tags[0];
+        const causeB = pickPhrase(
+            hasSecond ? (NARRATIVE_TAGS[tags[1]] || []) : (NARRATIVE_TAGS[tags[0]] || [])
+        );
+        if (!causeA) return null;
+
+        const eventPhrase = inferEventPhrase(eventId, logText);
+        const positive = isPositiveNarrativeEvent(eventId, logText, tags);
+        const names = ctx ? buildNarrativeNameContext(ctx, logText) : {};
+        let structures = NARRATIVE_STRUCTURES
+            .filter(s => {
+                if (!hasSecond && !s.id.startsWith("singleCause")) return false;
+                if (hasSecond && s.id.startsWith("singleCause")) return false;
+                if (positive) return s.id === "uplift" || s.id === "credit" || s.id === "renewal" || !s.id.startsWith("singleCause");
+                return true;
+            })
+            .map(s => ({ ...s, weight: s.weight }));
+        const requireMatch = structures.filter(s => !s.requires || s.requires.every((key) => names && names[key]));
+        if (requireMatch.length) structures = requireMatch;
+        const pick = weightedChoice(structures, s => s.weight) || structures[0];
+        const ctxObj = {
+            town,
+            causeA,
+            causeB: causeB || causeA,
+            event: eventPhrase,
+            names
+        };
+        return pick.render(ctxObj);
+    }
+
+    function maybeEmitNarrativeAside(baseLogMessage, logText, logType) {
+        if (!NARRATIVE_CONFIG.enabled) return;
+        if (PAULTENDO_GLOBAL._paultendoNarrativeLock) return;
+        const ctx = getActiveModEventContext();
+        if (!ctx) return;
+        const town = (ctx.subject && ctx.subject._reg === "town") ? ctx.subject
+            : (ctx.target && ctx.target._reg === "town") ? ctx.target
+                : null;
+        if (!town) return;
+
+        const state = initNarrativeState();
+        if (!state) return;
+        const lastDay = state.lastDayByTown[town.id] || -999;
+        if ((planet.day - lastDay) < NARRATIVE_CONFIG.cooldownDays) return;
+        if (!shouldNarrate(logType, ctx.id, logText)) return;
+        if (Math.random() > NARRATIVE_CONFIG.chance) return;
+
+        const line = buildNarrativeLine(town, ctx.id, logText, ctx);
+        if (!line) return;
+
+        state.lastDayByTown[town.id] = planet.day;
+        PAULTENDO_GLOBAL._paultendoNarrativeLock = true;
+        try {
+            baseLogMessage(line, "tip");
+        } finally {
+            PAULTENDO_GLOBAL._paultendoNarrativeLock = false;
+        }
+    }
+
+    const CAUSE_LABELS = {
+        famine: "famine",
+        disease: "plague",
+        debt: "mounting debt",
+        trade: "trade squeeze",
+        roads: "crumbling roads",
+        raids: "raider pressure",
+        war: "war pressure",
+        unrest: "unrest",
+        legitimacy: "succession doubts",
+        faith: "wavering faith",
+        climate: "a harsh season",
+        migration: "people leaving",
+        morale: "low morale",
+        prosperity: "prosperity",
+        stability: "stability",
+        unity: "unity",
+        innovation: "innovation",
+        diplomacy: "diplomacy",
+        faith_renewal: "renewed faith",
+        harvest: "good harvests",
+        celebration: "public celebrations",
+        recovery: "recovery",
+        infrastructure: "public works"
+    };
+
+    const BECAUSE_TEMPLATES = [
+        (cause) => `because of ${cause}`,
+        (cause) => `after ${cause}`,
+        (cause) => `with ${cause} in the air`
+    ];
+
+    const BECAUSE_TEMPLATES_POSITIVE = [
+        (cause) => `thanks to ${cause}`,
+        (cause) => `buoyed by ${cause}`,
+        (cause) => `on the strength of ${cause}`
+    ];
+
+    function getContextTown(ctx) {
+        if (!ctx) return null;
+        if (ctx.subject && ctx.subject._reg === "town") return ctx.subject;
+        if (ctx.target && ctx.target._reg === "town") return ctx.target;
+        return null;
+    }
+
+    function formatCauseList(tags, compact = false) {
+        if (!tags || !tags.length) return "";
+        const labels = tags.map(tag => CAUSE_LABELS[tag] || tag);
+        if (compact) {
+            return labels.slice(0, 2).join(" + ");
+        }
+        if (labels.length === 1) return labels[0];
+        if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+        return `${labels[0]}, ${labels[1]}`;
+    }
+
+    function getCauseTagsFromContext(ctx, logText) {
+        const town = getContextTown(ctx);
+        const signalTags = town ? getTopNarrativeTags(town).map(t => t.tag) : [];
+        const inferred = inferNarrativeTags(ctx?.id, ctx?.subject, ctx?.target, ctx?.args, logText || "");
+        const inferredTags = inferred.map(t => t.tag);
+        const combined = [];
+        inferredTags.forEach(tag => { if (!combined.includes(tag)) combined.push(tag); });
+        signalTags.forEach(tag => { if (!combined.includes(tag)) combined.push(tag); });
+        return combined;
+    }
+
+    function formatTownLabel(town) {
+        if (!town) return null;
+        if (typeof townRef === "function" && town.id) return townRef(town.id);
+        return town.name || "a town";
+    }
+
+    function formatFigureLabel(figure) {
+        if (!figure) return null;
+        const name = typeof getFigureDisplayName === "function" ? getFigureDisplayName(figure) : (figure.fullTitle || figure.name);
+        return name ? `{{b:${name}}}` : null;
+    }
+
+    function formatAllianceLabel(alliance) {
+        if (!alliance) return null;
+        const name = alliance.name || alliance.allianceName || null;
+        return name ? `{{b:${name}}}` : null;
+    }
+
+    function formatReligionLabel(religion) {
+        if (!religion) return null;
+        const name = religion.name || religion.religionName || null;
+        return name ? `{{b:${name}}}` : null;
+    }
+
+    function formatWorkLabel(work) {
+        if (!work) return null;
+        const title = work.title || work.name || null;
+        return title ? `{{b:${title}}}` : null;
+    }
+
+    function formatWarLabel(war) {
+        if (!war) return null;
+        if (typeof getHistoryDisplayName === "function") {
+            return `{{b:${getHistoryDisplayName(war)}}}`;
+        }
+        if (war.name) return `{{b:${war.name}}}`;
+        return null;
+    }
+
+    function extractTownFromArg(value) {
+        if (!value) return null;
+        if (value._reg === "town") return value;
+        if (typeof value === "number" && typeof regGet === "function") {
+            const town = regGet("town", value);
+            return town || null;
+        }
+        if (value.id && typeof regGet === "function") {
+            const town = regGet("town", value.id);
+            return town || null;
+        }
+        return null;
+    }
+
+    function getTownByIdOrTombstone(id) {
+        if (id === undefined || id === null) return null;
+        if (typeof regGet === "function") {
+            const town = regGet("town", id);
+            if (town) return town;
+        }
+        if (typeof getEntityTombstone === "function") {
+            const tombstone = getEntityTombstone("town", id);
+            if (tombstone) return tombstone;
+        }
+        return null;
+    }
+
+    function formatGenericLabel(entity, fallback = null) {
+        if (!entity) return null;
+        const name = entity.name || entity.title || entity.label || entity.displayName || entity.subtype || entity.type || fallback;
+        return name ? `{{b:${name}}}` : null;
+    }
+
+    function getRegEntityForName(regName, id) {
+        if (!regName) return null;
+        const parsedId = typeof id === "number" ? id : parseInt(id, 10);
+        const resolvedId = isNaN(parsedId) ? id : parsedId;
+        let entity = (typeof regGet === "function") ? regGet(regName, resolvedId) : null;
+        if (!entity && typeof getEntityTombstone === "function") {
+            entity = getEntityTombstone(regName, resolvedId);
+        }
+        return entity || null;
+    }
+
+    function buildNarrativeNameContext(ctx, logText = "") {
+        if (!ctx) return {};
+        const names = {};
+        const town = getContextTown(ctx);
+        if (town) names.town = formatTownLabel(town);
+
+        const subject = ctx.subject || null;
+        const target = ctx.target || null;
+
+        const targetTown = ctx.target && ctx.target._reg === "town" && (!town || ctx.target.id !== town.id)
+            ? ctx.target
+            : null;
+        if (targetTown) names.otherTown = formatTownLabel(targetTown);
+
+        const args = ctx.args || {};
+        const townKeys = [
+            "otherTown", "enemy", "ally", "partner", "rivalTown", "lender", "recipient",
+            "source", "destination", "origin", "originTown", "destinationTown",
+            "targetTown", "foundingTown", "parentTown", "victor", "loser", "town", "newTown", "oldTown"
+        ];
+        for (const key of townKeys) {
+            if (names.otherTown) break;
+            const candidate = extractTownFromArg(args[key]);
+            if (candidate && (!town || candidate.id !== town.id)) {
+                names.otherTown = formatTownLabel(candidate);
+                break;
+            }
+        }
+
+        const leader = town ? getTownLeader(town) : null;
+        if (leader) names.leader = formatFigureLabel(leader);
+
+        if (!names.figure && subject && subject._reg === "figure") names.figure = formatFigureLabel(subject);
+        if (!names.figure && target && target._reg === "figure") names.figure = formatFigureLabel(target);
+
+        if (args.figure) names.figure = formatFigureLabel(args.figure);
+        if (!names.figure && args.figureId && typeof regGet === "function") {
+            const figure = regGet("figure", args.figureId);
+            if (figure) names.figure = formatFigureLabel(figure);
+        }
+        if (!names.figure && args.figureName) names.figure = `{{b:${args.figureName}}}`;
+
+        if (args.religion) names.religion = formatReligionLabel(args.religion);
+        if (!names.religion && args.religionName) names.religion = `{{b:${args.religionName}}}`;
+        if (!names.religion && args.parentReligion) names.religion = formatReligionLabel(args.parentReligion);
+        if (!names.religion && subject && subject._reg === "religion") names.religion = formatReligionLabel(subject);
+        if (!names.religion && target && target._reg === "religion") names.religion = formatReligionLabel(target);
+
+        if (args.alliance) names.alliance = formatAllianceLabel(args.alliance);
+        if (!names.alliance && args.allianceName) names.alliance = `{{b:${args.allianceName}}}`;
+        if (!names.alliance && subject && subject._reg === "alliance") names.alliance = formatAllianceLabel(subject);
+        if (!names.alliance && target && target._reg === "alliance") names.alliance = formatAllianceLabel(target);
+
+        if (args.work) names.work = formatWorkLabel(args.work);
+        if (!names.work && args.title) names.work = `{{b:${args.title}}}`;
+        if (!names.work && args.workTitle) names.work = `{{b:${args.workTitle}}}`;
+        if (!names.work && args.project && (args.project.title || args.project.name)) {
+            names.work = `{{b:${args.project.title || args.project.name}}}`;
+        }
+        if (!names.work && subject && subject._reg === "work") names.work = formatWorkLabel(subject);
+        if (!names.work && target && target._reg === "work") names.work = formatWorkLabel(target);
+
+        if (args.war) names.war = formatWarLabel(args.war);
+        if (!names.war && args.pastWar) names.war = formatWarLabel(args.pastWar);
+        if (!names.war && subject && subject._reg === "war") names.war = formatWarLabel(subject);
+        if (!names.war && target && target._reg === "war") names.war = formatWarLabel(target);
+
+        if (args.disaster && args.disaster.subtype) {
+            names.disaster = `{{b:${safeTitleCase(args.disaster.subtype)}}}`;
+        }
+
+        if (args.landmark) names.landmark = formatWorkLabel(args.landmark);
+        if (!names.landmark && args.landmarkName) names.landmark = `{{b:${args.landmarkName}}}`;
+        if (!names.landmark && args.marker) names.landmark = formatGenericLabel(args.marker);
+        if (!names.landmark && args.temple) names.landmark = formatGenericLabel(args.temple);
+        if (!names.landmark && subject && (subject._reg === "landmark" || subject._reg === "marker")) {
+            names.landmark = formatGenericLabel(subject);
+        }
+        if (!names.landmark && target && (target._reg === "landmark" || target._reg === "marker")) {
+            names.landmark = formatGenericLabel(target);
+        }
+
+        if (args.worldName) names.world = `{{b:${args.worldName}}}`;
+        if (!names.world && args.landmass) names.world = formatGenericLabel(args.landmass);
+        if (!names.world && (args.targetWorld || args.world)) {
+            const world = args.targetWorld || args.world;
+            const fallback = args.targetName || args.worldName || "Unknown World";
+            const worldName = (typeof formatWorldName === "function") ? formatWorldName(world, fallback)
+                : (world?.name || world?.label || fallback);
+            if (worldName) names.world = `{{b:${worldName}}}`;
+        }
+        if (args.targetName) names.target = `{{b:${args.targetName}}}`;
+
+        if (logText) {
+            const matches = Array.from(String(logText).matchAll(/\{\{regname:([a-z_]+)\|([^\}]+)\}\}/gi));
+            if (matches.length) {
+                let primaryTownId = town ? town.id : null;
+                for (const match of matches) {
+                    const regName = String(match[1] || "").toLowerCase();
+                    const rawId = match[2];
+                    const parsed = parseInt(rawId, 10);
+                    const resolvedId = isNaN(parsed) ? rawId : parsed;
+                    if (regName === "town") {
+                        const townEntity = getTownByIdOrTombstone(resolvedId);
+                        const label = townEntity ? formatTownLabel(townEntity) : `{{regname:town|${resolvedId}}}`;
+                        const townId = townEntity ? townEntity.id : resolvedId;
+                        if (!names.town && label) {
+                            names.town = label;
+                            primaryTownId = townId;
+                        } else if (!names.otherTown && townId !== primaryTownId) {
+                            names.otherTown = label;
+                        }
+                        continue;
+                    }
+                    if (regName === "figure" && !names.figure) {
+                        const figure = getRegEntityForName("figure", resolvedId);
+                        names.figure = figure ? formatFigureLabel(figure) : `{{regname:figure|${resolvedId}}}`;
+                        continue;
+                    }
+                    if ((regName === "landmark" || regName === "marker") && !names.landmark) {
+                        const landmark = getRegEntityForName(regName, resolvedId);
+                        names.landmark = landmark ? formatGenericLabel(landmark) : `{{regname:${regName}|${resolvedId}}}`;
+                        continue;
+                    }
+                    if (regName === "work" && !names.work) {
+                        const work = getRegEntityForName("work", resolvedId);
+                        names.work = work ? formatWorkLabel(work) : `{{regname:work|${resolvedId}}}`;
+                        continue;
+                    }
+                    if (regName === "landmass" && !names.world) {
+                        const landmass = getRegEntityForName("landmass", resolvedId);
+                        names.world = landmass ? formatGenericLabel(landmass) : `{{regname:landmass|${resolvedId}}}`;
+                        continue;
+                    }
+                }
+            }
+        }
+
+        return names;
+    }
+
+    function buildCauseSummary(ctx, logText) {
+        if (!ctx) return null;
+        const tags = getCauseTagsFromContext(ctx, logText).slice(0, 2);
+        if (!tags.length) return null;
+        return {
+            tags,
+            summary: formatCauseList(tags, false),
+            compact: formatCauseList(tags, true)
+        };
+    }
+
+    function maybeAppendBecauseClause(text, ctx, logType) {
+        if (!text || !ctx) return text;
+        if (logType === "tip") return text;
+        if (/\bbecause\b|\bafter\b|\(.*\)/i.test(text)) return text;
+        const cause = buildCauseSummary(ctx, text);
+        if (!cause || !cause.summary) return text;
+        if (Math.random() < 0.35 || logType === "warning" || logType === "milestone") {
+            const positive = isPositiveNarrativeEvent(ctx.id, text, cause.tags || []);
+            const pool = positive ? BECAUSE_TEMPLATES_POSITIVE : BECAUSE_TEMPLATES;
+            const template = pool[Math.floor(Math.random() * pool.length)];
+            return `${text} (${template(cause.summary)})`;
+        }
+        return text;
+    }
+
+    function buildSwayFailureClause(ctx) {
+        if (!ctx || !ctx.id || !ctx.id.startsWith("sway")) return null;
+        const town = getContextTown(ctx);
+        if (!town) return null;
+        const candidates = [];
+        const trade = town.influences?.trade || 0;
+        const faith = town.influences?.faith || 0;
+        const education = town.influences?.education || 0;
+        const order = town.values?.order || 0;
+        const openness = town.values?.openness || 0;
+        if (trade > 4) candidates.push({ score: trade, text: "their merchants feel secure" });
+        if (faith > 4) candidates.push({ score: faith, text: "their faith runs deep" });
+        if (education > 6) candidates.push({ score: education, text: "their scholars trust their own counsel" });
+        if (order > 3) candidates.push({ score: order, text: "they prize order and caution" });
+        if (openness < -2) candidates.push({ score: Math.abs(openness), text: "they distrust outside advice" });
+        if (ctx.args && ctx.args.otherTown && town.relations) {
+            const rel = town.relations[ctx.args.otherTown.id] || 0;
+            if (rel > 4) candidates.push({ score: rel, text: "they trust their existing partners" });
+            if (rel < -3) candidates.push({ score: Math.abs(rel), text: "they refuse to take their rival's side" });
+        }
+        if (!candidates.length) return null;
+        candidates.sort((a, b) => b.score - a.score);
+        return candidates[0].text;
+    }
+
+    function snapshotTownMetrics(town) {
+        if (!town || town.end) return null;
+        return {
+            unrest: town.unrest || 0,
+            pop: town.pop || 0,
+            size: town.size || 0,
+            cash: town.resources?.cash || 0,
+            influences: {
+                happy: town.influences?.happy || 0,
+                faith: town.influences?.faith || 0,
+                trade: town.influences?.trade || 0,
+                crime: town.influences?.crime || 0,
+                farm: town.influences?.farm || 0,
+                military: town.influences?.military || 0,
+                education: town.influences?.education || 0,
+                law: town.influences?.law || 0
+            }
+        };
+    }
+
+    function getEventReasonLabel(eventId, args, logText = "") {
+        if (eventId && eventId.startsWith("sway")) return "your guidance";
+        if (args && args.disaster && args.disaster.subtype) return `${args.disaster.subtype} disaster`;
+        const phrase = inferEventPhrase(eventId, logText);
+        return phrase.replace(/^the\s+/i, "");
+    }
+
+    function recordTownImpact(town, stat, delta, reason, sourceId) {
+        if (!town || town.end || !stat || !delta) return;
+        if (!town._paultendoImpactHistory) town._paultendoImpactHistory = [];
+        town._paultendoImpactHistory.push({
+            day: planet.day,
+            stat,
+            delta,
+            reason: reason || "recent events",
+            sourceId: sourceId || null
+        });
+        if (town._paultendoImpactHistory.length > 60) {
+            town._paultendoImpactHistory.splice(0, town._paultendoImpactHistory.length - 60);
+        }
+    }
+
+    function recordTownImpactChanges(town, before, eventId, args) {
+        if (!town || town.end || !before) return;
+        const after = snapshotTownMetrics(town);
+        if (!after) return;
+        const reason = getEventReasonLabel(eventId, args);
+        const deltas = [
+            { stat: "Unrest", delta: (after.unrest - before.unrest) },
+            { stat: "Population", delta: (after.pop - before.pop) },
+            { stat: "Territory", delta: (after.size - before.size) },
+            { stat: "Cash", delta: (after.cash - before.cash) }
+        ];
+        const influenceKeys = Object.keys(before.influences || {});
+        influenceKeys.forEach(key => {
+            deltas.push({
+                stat: titleCase(key),
+                delta: (after.influences[key] || 0) - (before.influences[key] || 0)
+            });
+        });
+        deltas.forEach(entry => {
+            const magnitude = Math.abs(entry.delta);
+            if (entry.stat === "Unrest" && magnitude >= 1) {
+                recordTownImpact(town, entry.stat, entry.delta, reason, eventId);
+            } else if (entry.stat === "Cash" && magnitude >= 5) {
+                recordTownImpact(town, entry.stat, entry.delta, reason, eventId);
+            } else if (entry.stat === "Population" && magnitude >= 1) {
+                recordTownImpact(town, entry.stat, entry.delta, reason, eventId);
+            } else if (entry.stat === "Territory" && magnitude >= 1) {
+                recordTownImpact(town, entry.stat, entry.delta, reason, eventId);
+            } else if (magnitude >= 0.6 && entry.stat !== "Cash") {
+                recordTownImpact(town, entry.stat, entry.delta, reason, eventId);
+            }
+        });
+    }
+
+    const FAST_ADVANCE_CONFIG = {
+        pressWindowMs: 550,
+        minStreak: 3,
+        activeMs: 1400,
+        animDurationMs: 140,
+        transitionDurationMs: 90,
+        logNewRemoveMs: 140,
+        nextDayReleaseMs: 140
+    };
+
+    function getFastAdvanceState() {
+        if (typeof window === "undefined") return null;
+        if (!window._paultendoFastAdvance) {
+            window._paultendoFastAdvance = {
+                lastPress: 0,
+                streak: 0,
+                activeUntil: 0,
+                timer: null
+            };
+        }
+        return window._paultendoFastAdvance;
+    }
+
+    function ensureFastAdvanceStyles() {
+        if (typeof document === "undefined") return;
+        if (document.getElementById("paultendoFastAdvanceStyles")) return;
+        const style = document.createElement("style");
+        style.id = "paultendoFastAdvanceStyles";
+        style.textContent = `
+            .paultendo-fast-anim {
+                --paultendo-fast-anim-duration: ${FAST_ADVANCE_CONFIG.animDurationMs}ms;
+                --paultendo-fast-transition-duration: ${FAST_ADVANCE_CONFIG.transitionDurationMs}ms;
+            }
+            .paultendo-fast-anim .logMessage,
+            .paultendo-fast-anim .logText,
+            .paultendo-fast-anim .logAct,
+            .paultendo-fast-anim #logPanel,
+            .paultendo-fast-anim #logMessages,
+            .paultendo-fast-anim .nextDay {
+                animation-duration: var(--paultendo-fast-anim-duration) !important;
+                animation-delay: 0s !important;
+                transition-duration: var(--paultendo-fast-transition-duration) !important;
+                transition-delay: 0s !important;
+            }
+            .paultendo-fast-anim .logMessage[new="true"] {
+                animation-duration: var(--paultendo-fast-anim-duration) !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function setFastAdvanceActive(durationMs) {
+        if (typeof document === "undefined") return;
+        const state = getFastAdvanceState();
+        if (!state) return;
+        ensureFastAdvanceStyles();
+        const now = Date.now();
+        state.activeUntil = Math.max(state.activeUntil || 0, now + durationMs);
+        document.documentElement.classList.add("paultendo-fast-anim");
+        if (state.timer) {
+            clearTimeout(state.timer);
+            state.timer = null;
+        }
+        state.timer = window.setTimeout(() => {
+            state.timer = null;
+            const current = Date.now();
+            if (state.activeUntil > current) {
+                setFastAdvanceActive(state.activeUntil - current);
+                return;
+            }
+            document.documentElement.classList.remove("paultendo-fast-anim");
+        }, Math.max(60, state.activeUntil - now + 20));
+    }
+
+    function noteFastAdvancePress() {
+        const state = getFastAdvanceState();
+        if (!state) return;
+        const now = Date.now();
+        if (now - (state.lastPress || 0) <= FAST_ADVANCE_CONFIG.pressWindowMs) {
+            state.streak = (state.streak || 0) + 1;
+        } else {
+            state.streak = 1;
+        }
+        state.lastPress = now;
+        if (state.streak >= FAST_ADVANCE_CONFIG.minStreak) {
+            setFastAdvanceActive(FAST_ADVANCE_CONFIG.activeMs);
+        }
+    }
+
+    function isFastAdvanceActive() {
+        const state = getFastAdvanceState();
+        if (!state) return false;
+        return (state.activeUntil || 0) > Date.now();
+    }
+
+    function maybeAccelerateLogEntry(uuid) {
+        if (!isFastAdvanceActive()) return;
+        if (typeof document === "undefined") return;
+        const elem = document.getElementById("logMessage-" + uuid);
+        if (!elem) return;
+        elem.style.animationDuration = `${FAST_ADVANCE_CONFIG.animDurationMs}ms`;
+        const text = elem.querySelector(".logText");
+        if (text) text.style.transitionDuration = `${FAST_ADVANCE_CONFIG.transitionDurationMs}ms`;
+        if (elem.getAttribute("new") !== null) {
+            window.setTimeout(() => {
+                try {
+                    if (elem.getAttribute("new") !== null) elem.removeAttribute("new");
+                } catch {}
+            }, FAST_ADVANCE_CONFIG.logNewRemoveMs);
+        }
+    }
+
+    function maybeReleaseNextDay() {
+        if (!isFastAdvanceActive()) return;
+        if (typeof document === "undefined") return;
+        const button = document.getElementById("nextDay");
+        if (!button || button.getAttribute("disabled") === null) return;
+        if (typeof isPromptOpen === "function" && isPromptOpen()) return;
+        if (typeof findPendingLogDecision === "function" && findPendingLogDecision()) return;
+        if (planet && planet.locked) return;
+        button.removeAttribute("disabled");
+    }
 
     function initChronicleState() {
         if (!planet) return null;
@@ -248,7 +1421,7 @@
         return priority;
     }
 
-    function addChronicleEntry(dayValue, uuid, type, text) {
+    function addChronicleEntry(dayValue, uuid, type, text, options = {}) {
         const state = initChronicleState();
         if (!state) return;
         if (!state.entriesByDay) state.entriesByDay = {};
@@ -259,6 +1432,7 @@
         if (!safeText) return;
         const priority = getChroniclePriority(type, safeText);
         const entry = { id: uuid, day, type, text: safeText, priority };
+        if (options && options.cause) entry.cause = options.cause;
         state.entriesById[uuid] = entry;
         if (!state.entriesByDay[day]) state.entriesByDay[day] = [];
         state.entriesByDay[day].unshift(entry);
@@ -373,7 +1547,8 @@
     // SAFE REGNAME FALLBACKS (avoid "Invalid Thing" when entities are removed)
     // =========================================================================
 
-    const TOMBSTONE_LIMIT = 500;
+    const TOMBSTONE_LIMIT = 1400;
+    const TOMBSTONE_PROTECTED = new Set(["town", "landmark", "marker", "work", "figure"]);
 
     function getTombstoneStore() {
         const fallback = (typeof window !== "undefined") ? (window._paultendoTombstones || (window._paultendoTombstones = { items: {}, order: [] })) : { items: {}, order: [] };
@@ -391,6 +1566,92 @@
         return planet._paultendoTombstones;
     }
 
+    function seededRandom(seed) {
+        const x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
+    }
+
+    function pickFromSeed(list, seed) {
+        if (!list || !list.length) return "";
+        const idx = Math.floor(seededRandom(seed) * list.length) % list.length;
+        return list[idx];
+    }
+
+    function getTombstoneDescriptor(tombstone) {
+        if (!tombstone) return "place";
+        const regName = tombstone._reg || "";
+        const name = (tombstone.name || "").toLowerCase();
+        const type = (tombstone.type || "").toLowerCase();
+        const subtype = (tombstone.subtype || "").toLowerCase();
+        const combined = `${name} ${type} ${subtype}`;
+        if (combined.includes("library")) return "library";
+        if (combined.includes("academy") || combined.includes("school")) return "academy";
+        if (combined.includes("temple") || combined.includes("shrine")) return "temple";
+        if (combined.includes("fort") || combined.includes("keep")) return "fort";
+        if (combined.includes("market")) return "market";
+        if (combined.includes("harbor") || combined.includes("port")) return "port";
+        if (combined.includes("mine") || combined.includes("forge")) return "forge";
+        if (regName === "town") return "town";
+        if (regName === "landmark") return "landmark";
+        if (regName === "marker") return "site";
+        if (regName === "work") return "work";
+        return "place";
+    }
+
+    function getTombstoneMemoryName(tombstone) {
+        if (!tombstone) return null;
+        if (!planet || typeof planet.day !== "number") return tombstone.name || tombstone.subtype || tombstone.type;
+        const age = planet.day - (tombstone.day || 0);
+        let tier = 0;
+        if (age > 120) tier = 1;
+        if (age > 360) tier = 2;
+        if (age > 900) tier = 3;
+
+        if (tombstone.memoryTier === tier && tombstone.memoryName) return tombstone.memoryName;
+        const name = tombstone.originalName || tombstone.name || tombstone.subtype || tombstone.type || "place";
+        const descriptor = getTombstoneDescriptor(tombstone);
+        const seed = tombstone.memorySeed || (tombstone.id || 1) * 13;
+        let memoryName = name;
+
+        if (tier === 0) {
+            memoryName = name;
+        } else if (tier === 1) {
+            const options = [
+                `Old ${name}`,
+                `Former ${name}`,
+                `${name} of old`,
+                `${name}, long gone`
+            ];
+            memoryName = pickFromSeed(options, seed + tier);
+        } else if (tier === 2) {
+            const options = [
+                `Ruins of ${name}`,
+                `Lost ${name}`,
+                `${name}'s ruins`,
+                `the ruined ${descriptor} of ${name}`,
+                `the old ${descriptor} of ${name}`
+            ];
+            memoryName = pickFromSeed(options, seed + tier);
+        } else {
+            const options = [
+                `the forgotten ${descriptor}`,
+                `the lost ${descriptor}`,
+                `the old ${descriptor}`,
+                `the vanished ${descriptor} once called ${name}`,
+                `${name}, barely remembered`
+            ];
+            memoryName = pickFromSeed(options, seed + tier);
+        }
+
+        tombstone.memoryTier = tier;
+        tombstone.memoryName = memoryName;
+        return memoryName;
+    }
+
+    function shouldProtectTombstone(regName) {
+        return TOMBSTONE_PROTECTED.has(regName);
+    }
+
     function rememberEntityTombstone(entity, regNameOverride) {
         if (!entity) return;
         const regName = regNameOverride || entity._reg;
@@ -405,19 +1666,40 @@
             _reg: regName,
             id: id,
             name: entity.name || null,
+            originalName: entity.name || null,
             subtype: entity.subtype || null,
             type: entity.type || null,
+            level: entity.level || null,
+            desc: entity.desc || entity.description || null,
+            former: entity.former || null,
             color: entity.color || null,
             symbol: entity.symbol || null,
             flag: entity.flag || null,
             prefix: entity.prefix || null,
             suffix: entity.suffix || null,
             day: planet ? planet.day : 0,
+            memorySeed: Math.floor(Math.random() * 1000000),
+            memoryTier: 0,
+            memoryName: null,
             _paultendoTombstone: true
         };
         if (store.order.length > TOMBSTONE_LIMIT) {
-            const evict = store.order.splice(0, store.order.length - TOMBSTONE_LIMIT);
-            evict.forEach((k) => delete store.items[k]);
+            const overflow = store.order.length - TOMBSTONE_LIMIT;
+            if (overflow > 0) {
+                const evict = [];
+                for (let i = 0; i < store.order.length && evict.length < overflow; i++) {
+                    const keyId = store.order[i];
+                    const item = store.items[keyId];
+                    if (item && shouldProtectTombstone(item._reg)) continue;
+                    evict.push(keyId);
+                }
+                if (evict.length < overflow) {
+                    const remaining = store.order.filter(k => !evict.includes(k));
+                    evict.push(...remaining.slice(0, overflow - evict.length));
+                }
+                evict.forEach((k) => delete store.items[k]);
+                store.order = store.order.filter(k => !evict.includes(k));
+            }
         }
     }
 
@@ -446,6 +1728,10 @@
         let name = data.name || null;
         if (overrideName && overrideName !== "-") name = overrideName;
         let color = data.color || null;
+        if (!overrideName && data._paultendoTombstone) {
+            const memoryName = getTombstoneMemoryName(data);
+            if (memoryName) name = memoryName;
+        }
         if (!data._paultendoTombstone && typeof regBrowserExtra !== "undefined" && regBrowserExtra[regName]) {
             try {
                 if (!name && regBrowserExtra[regName].name) {
@@ -470,7 +1756,10 @@
         const symbolPart = (!overrideName && (data.flag || data.symbol))
             ? (typeof parseText === "function" ? parseText(data.flag || "{{symbol:" + data.symbol + "}}") : (data.flag || data.symbol)) + " "
             : "";
-        const title = typeof titleCase === "function" ? titleCase(regName) : regName;
+        let title = typeof titleCase === "function" ? titleCase(regName) : regName;
+        if (data._paultendoTombstone && data.originalName && data.originalName !== name) {
+            title = `${title} (once ${data.originalName})`;
+        }
         const style = color ? `style="color:rgb(${Math.floor(color[0])},${Math.floor(color[1])},${Math.floor(color[2])})"` : "";
         return prefix + `<span class='entityName${data.usurp ? " usurp" : ""}' title='${title}' data-reg='${regName}' data-id='${data.id}' ${style} onclick="handleEntityClick(this); event.stopPropagation();" onmouseenter='handleEntityHover(this)' onmouseleave='handleEntityHoverOut(this)' role="link">${overrideName !== "-" ? symbolPart : ""}${name}</span>` + suffix;
     }
@@ -501,6 +1790,19 @@
     if (typeof logMessage === "function" && !logMessage._paultendoChronicle) {
         const baseLogMessage = logMessage;
         logMessage = function(text, type, args) {
+            let logText = text;
+            const ctx = getActiveModEventContext() || consumePendingLogContext();
+            if (!PAULTENDO_GLOBAL._paultendoNarrativeLock && ctx && typeof logText === "string") {
+                const isSwayFailure = ctx.id && ctx.id.startsWith("sway") &&
+                    (ctx.args?.success === false || ctx.args?.approved === false ||
+                     /(ignores|dismisses|declines|refuses|rejects|hesitate|unconvinced|prefer)/i.test(logText));
+                const swayClause = isSwayFailure ? buildSwayFailureClause(ctx) : null;
+                if (swayClause && !/\(.*\)/.test(logText)) {
+                    logText = `${logText} (${swayClause})`;
+                } else {
+                    logText = maybeAppendBecauseClause(logText, ctx, type);
+                }
+            }
             let logPanel = null;
             let prevScrollTop = 0;
             let prevScrollHeight = 0;
@@ -513,8 +1815,15 @@
                     prevScrollHeight = logPanel.scrollHeight;
                 }
             }
-            const uuid = baseLogMessage(text, type, args);
+            const uuid = baseLogMessage(logText, type, args);
             if (!uuid) return uuid;
+            try { maybeAccelerateLogEntry(uuid); } catch {}
+            try {
+                const context = ctx || getActiveModEventContext();
+                if (context) {
+                    recordNarrativeSignals(context.id, context.subject, context.target, context.args, logText, 0.6);
+                }
+            } catch {}
             if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
                 try {
                     ensureChronicleHeader();
@@ -523,9 +1832,20 @@
                     const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
                     const plainText = elem ? (elem.querySelector(".logText")?.innerText || "") : "";
                     if (dayValue) {
-                        addChronicleEntry(dayValue, uuid, type, plainText);
+                        const causeSummary = ctx ? buildCauseSummary(ctx, logText) : null;
+                        const cause = causeSummary ? causeSummary.compact : null;
+                        addChronicleEntry(dayValue, uuid, type, plainText, { cause });
                         updateChronicleHeadlines(dayValue);
                         scheduleChronicleDayMarkers();
+                    }
+                    if (elem) {
+                        const causeSummary = ctx ? buildCauseSummary(ctx, logText) : null;
+                        if (causeSummary && causeSummary.compact) {
+                            elem.setAttribute("data-cause", causeSummary.compact);
+                            if (!elem.getAttribute("title")) {
+                                elem.setAttribute("title", `Cause: ${causeSummary.summary}`);
+                            }
+                        }
                     }
                 } catch {}
             }
@@ -534,6 +1854,7 @@
                 const delta = newHeight - prevScrollHeight;
                 logPanel.scrollTop = prevScrollTop + delta;
             }
+            try { maybeEmitNarrativeAside(baseLogMessage, logText, type); } catch {}
             return uuid;
         };
         logMessage._paultendoChronicle = true;
@@ -897,14 +2218,53 @@
             }
         }
 
+        if (data.messageDone && !data.messageDone._paultendoContext) {
+            const baseDone = data.messageDone;
+            data.messageDone = (subject, target, args) => withModEventContext(id, { subject, target, args }, () => {
+                const result = (typeof baseDone === "function") ? baseDone(subject, target, args) : baseDone;
+                if (typeof result === "string") {
+                    notePendingLogContext({ id, subject, target, args });
+                }
+                return result;
+            });
+            data.messageDone._paultendoContext = true;
+        }
+        if (data.messageNo && !data.messageNo._paultendoContext) {
+            const baseNo = data.messageNo;
+            data.messageNo = (subject, target, args) => withModEventContext(id, { subject, target, args }, () => {
+                const result = (typeof baseNo === "function") ? baseNo(subject, target, args) : baseNo;
+                if (typeof result === "string") {
+                    notePendingLogContext({ id, subject, target, args });
+                }
+                return result;
+            });
+            data.messageNo._paultendoContext = true;
+        }
+
         if (typeof data.func === "function" && !data.func._paultendoContext) {
             const baseFunc = data.func;
-            data.func = (subject, target, args) => withModEventContext(id, () => baseFunc(subject, target, args));
+            data.func = (subject, target, args) => withModEventContext(id, { subject, target, args }, () => {
+                const preSubject = (subject && subject._reg === "town") ? snapshotTownMetrics(subject) : null;
+                const preTarget = (target && target._reg === "town") ? snapshotTownMetrics(target) : null;
+                const result = baseFunc(subject, target, args);
+                try { recordNarrativeSignals(id, subject, target, args); } catch {}
+                try { recordTownImpactChanges(subject, preSubject, id, args); } catch {}
+                try { recordTownImpactChanges(target, preTarget, id, args); } catch {}
+                return result;
+            });
             data.func._paultendoContext = true;
         }
         if (typeof data.funcNo === "function" && !data.funcNo._paultendoContext) {
             const baseFuncNo = data.funcNo;
-            data.funcNo = (subject, target, args) => withModEventContext(id, () => baseFuncNo(subject, target, args));
+            data.funcNo = (subject, target, args) => withModEventContext(id, { subject, target, args }, () => {
+                const preSubject = (subject && subject._reg === "town") ? snapshotTownMetrics(subject) : null;
+                const preTarget = (target && target._reg === "town") ? snapshotTownMetrics(target) : null;
+                const result = baseFuncNo(subject, target, args);
+                try { recordNarrativeSignals(id, subject, target, args); } catch {}
+                try { recordTownImpactChanges(subject, preSubject, id, args); } catch {}
+                try { recordTownImpactChanges(target, preTarget, id, args); } catch {}
+                return result;
+            });
             data.funcNo._paultendoContext = true;
         }
 
@@ -1352,6 +2712,35 @@
         }
     }
 
+    function describeValueShiftReason(reason, town, axis) {
+        if (!reason) return "slow changes";
+        if (typeof reason !== "string") return "slow changes";
+        if (reason.startsWith("decision:")) {
+            const parts = reason.split(":");
+            const eventId = parts[1] || "";
+            const phrase = inferEventPhrase(eventId, "");
+            return phrase.replace(/^the\s+/i, "");
+        }
+        if (reason === "tech fork") return "new learning";
+        if (reason === "cultural tide") return "cultural tides";
+        if (/war|battle|siege/i.test(reason)) return "war pressure";
+        if (/faith|religion|temple/i.test(reason)) return "spiritual shifts";
+        if (/trade|market|caravan/i.test(reason)) return "trade currents";
+        if (/migration|refuge/i.test(reason)) return "newcomers and departures";
+        return reason.replace(/_/g, " ");
+    }
+
+    function shouldAnnounceValueShift(town, axis, oldValue, newValue) {
+        if (!town) return false;
+        if (!town._paultendoValueShiftLog) town._paultendoValueShiftLog = {};
+        const record = town._paultendoValueShiftLog[axis] || { day: -999, value: oldValue };
+        const delta = Math.abs(newValue - record.value);
+        if (planet.day - record.day < 25) return false;
+        if (delta < 1.1 && Math.abs(newValue - oldValue) < 0.6) return false;
+        town._paultendoValueShiftLog[axis] = { day: planet.day, value: newValue };
+        return true;
+    }
+
     function shiftTownValue(town, axis, amount, reason, options = {}) {
         initTownValues(town);
         if (!VALUES_CONFIG.axes.includes(axis)) return false;
@@ -1369,6 +2758,11 @@
             reason: reason || "value shift",
             newValue: newValue
         });
+        if (shouldAnnounceValueShift(town, axis, oldValue, newValue)) {
+            const reasonText = describeValueShiftReason(reason, town, axis);
+            const dir = adjusted > 0 ? "drifts toward" : "drifts away from";
+            logMessage(`{{regname:town|${town.id}}} ${dir} {{b:${axis}}} (${reasonText}).`);
+        }
         return true;
     }
 
@@ -2510,10 +3904,15 @@
         if (!safeMessage) return;
         const logId = options.logId || null;
         const entryData = { system: system || "misc", message: safeMessage, type: type || null, logId };
+        if (options.cause) entryData.cause = options.cause;
         entry.entries.push(entryData);
         entry.counts[system || "misc"] = (entry.counts[system || "misc"] || 0) + 1;
         const store = getChronicleStore();
         if (store && store.byLogId && logId) {
+            const existing = store.byLogId[logId];
+            if (existing && existing.cause && !entryData.cause) {
+                entryData.cause = existing.cause;
+            }
             store.byLogId[logId] = entryData;
         }
     }
@@ -2570,6 +3969,9 @@
             const safeMessage = sanitizeChronicleMessage(evt.message);
             if (!safeMessage) return;
             items.push({ text: `${tag}${safeMessage}` });
+            if (evt.cause) {
+                items.push({ text: `because ${evt.cause}`, indent: 1, opacity: 0.7 });
+            }
         });
         populateExecutive(items, "Chronicle Day");
     }
@@ -8041,6 +9443,7 @@
         if (typeof nextDay !== "function" || nextDay._paultendoUniverse) return;
         const baseNextDay = nextDay;
         nextDay = function(...args) {
+            try { noteFastAdvancePress(); } catch {}
             if (planet && (typeof planet.day !== "number" || !isFinite(planet.day))) {
                 planet.day = 1;
             }
@@ -8064,6 +9467,11 @@
             try { processSpaceRoutes(); } catch {}
             try { processSpaceWars(); } catch {}
             try { processFrontierCharters(); } catch {}
+            if (isFastAdvanceActive() && typeof window !== "undefined") {
+                window.setTimeout(() => {
+                    try { maybeReleaseNextDay(); } catch {}
+                }, FAST_ADVANCE_CONFIG.nextDayReleaseMs);
+            }
             return result;
         };
         nextDay._paultendoUniverse = true;
@@ -28105,6 +29513,40 @@
     }
 
     try { initInfrastructureBrowserExtra(); } catch {}
+
+    function formatImpactEntry(entry) {
+        if (!entry) return "";
+        const delta = Math.round(entry.delta * 10) / 10;
+        const sign = delta > 0 ? "+" : "";
+        const reason = entry.reason ? entry.reason : "recent events";
+        return `${entry.stat} ${sign}${delta} (${reason}, day ${entry.day})`;
+    }
+
+    function initNarrativeBrowserExtra() {
+        if (typeof regBrowserExtra === "undefined") return;
+        if (window._paultendoNarrativeExtra) return;
+        window._paultendoNarrativeExtra = true;
+
+        if (typeof regBrowserKeys === "undefined") regBrowserKeys = {};
+        if (typeof regBrowserValues === "undefined") regBrowserValues = {};
+
+        if (!regBrowserKeys.causes_) regBrowserKeys.causes_ = "Recent Causes";
+        if (!regBrowserKeys.causes_recent) regBrowserKeys.causes_recent = "Recent";
+
+        if (!regBrowserExtra.town) regBrowserExtra.town = {};
+        if (regBrowserExtra.town._paultendoNarrativeExtra) return;
+        regBrowserExtra.town._paultendoNarrativeExtra = true;
+
+        regBrowserExtra.town.causes_ = (town) => {
+            if (!town || town.end) return;
+            const history = Array.isArray(town._paultendoImpactHistory) ? town._paultendoImpactHistory.slice(-3) : [];
+            if (!history.length) return;
+            const recent = history.map(formatImpactEntry).join("; ");
+            return { causes_recent: recent };
+        };
+    }
+
+    try { initNarrativeBrowserExtra(); } catch {}
 
     // ----------------------------------------
     // TRADE ROUTE EVENTS
