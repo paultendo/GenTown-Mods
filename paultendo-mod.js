@@ -48,7 +48,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.17";
+    const MOD_VERSION = "1.6.21";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -172,7 +172,13 @@
         cooldownDays: 2,
         memoryDays: 60,
         maxSignalsPerTown: 80,
-        minSignals: 1
+        minSignals: 1,
+        recencyHalfLifeDays: 30,
+        noveltyWindowDays: 10,
+        noveltyPenalty: 0.45,
+        chainWindowDays: 6,
+        chainChance: 0.28,
+        maxNarrativeHistory: 6
     };
 
     const NARRATIVE_TAGS = {
@@ -402,7 +408,77 @@
         }
     ];
 
-    const NARRATIVE_STRUCTURES = [
+    function renderNarrativeTemplate(template, ctx) {
+        if (!template) return "";
+        return String(template)
+            .replace(/\{prev\}/g, ctx.prevCause || ctx.causeB || ctx.causeA || "the warning")
+            .replace(/\{causeA\}/g, ctx.causeA || "the warning")
+            .replace(/\{causeB\}/g, ctx.causeB || ctx.causeA || "the warning")
+            .replace(/\{event\}/g, ctx.event || "the turning point");
+    }
+
+    const CHAIN_OPENERS = [
+        "After {prev}, {causeA} followed.",
+        "When {prev} hit, {causeA} answered.",
+        "First came {prev}; then {causeA}.",
+        "The spark was {prev}, the fuel {causeA}.",
+        "Out of {prev} came {causeA}.",
+        "With {prev} in place, {causeA} took hold.",
+        "{prev} cracked the door; {causeA} pushed it wider."
+    ];
+
+    const CHAIN_ENDERS = [
+        "{event} was inevitable.",
+        "{event} followed soon after.",
+        "{event} took form.",
+        "By then, {event} had a name.",
+        "That is how {event} arrived.",
+        "{event} slipped in behind them.",
+        "{event} became the story."
+    ];
+
+    const CHAIN_TEMPLATES = [];
+    for (let i = 0; i < CHAIN_OPENERS.length; i++) {
+        for (let j = 0; j < CHAIN_ENDERS.length; j++) {
+            CHAIN_TEMPLATES.push(`${CHAIN_OPENERS[i]} ${CHAIN_ENDERS[j]}`);
+        }
+    }
+
+    const EXTRA_DOUBLE_TEMPLATES = [
+        "They blamed {causeA}, but {causeB} did the real damage. {event} followed.",
+        "The warning signs were {causeA} and {causeB}. {event} was the answer.",
+        "Between {causeA} and {causeB}, the town chose {event}.",
+        "As {causeA} worsened and {causeB} spread, {event} took hold.",
+        "It was {causeA} on one side and {causeB} on the other. {event} filled the gap.",
+        "The mix of {causeA} and {causeB} set the stage. {event} took the spotlight.",
+        "The town felt {causeA}, then {causeB}. {event} arrived on their heels.",
+        "No single cause did it: {causeA} and {causeB} combined to bring {event}.",
+        "Even with {causeA}, it was {causeB} that pushed toward {event}.",
+        "With {causeA} rising and {causeB} tightening, {event} became the path.",
+        "A season of {causeA} met a season of {causeB}. {event} bridged them.",
+        "{event} was the compromise between {causeA} and {causeB}.",
+        "All signs pointed to {causeA}; {causeB} made the case for {event}.",
+        "The ground shifted: {causeA} below, {causeB} above. {event} followed.",
+        "First {causeA}, then {causeB}; the rest was {event}.",
+        "{causeA} lit the lantern; {causeB} showed the way to {event}."
+    ];
+
+    const EXTRA_SINGLE_TEMPLATES = [
+        "{event} grew out of {causeA}.",
+        "It was {causeA} that made {event} possible.",
+        "{causeA} set the tone; {event} set the course.",
+        "The town held onto {causeA} until {event} arrived.",
+        "In the end, {causeA} mattered more than anything else. {event} followed.",
+        "The path to {event} ran straight through {causeA}.",
+        "{causeA} left a mark. {event} gave it a name.",
+        "People remember {causeA}. {event} was the consequence.",
+        "{event} was the echo of {causeA}.",
+        "No one asked for {event}, but {causeA} demanded it.",
+        "{causeA} kept rising; {event} was the release.",
+        "{causeA} held the line until {event} broke it."
+    ];
+
+    const BASE_NARRATIVE_STRUCTURES = [
         {
             id: "uplift",
             weight: 1.1,
@@ -562,10 +638,45 @@
         }
     ];
 
+    const CHAIN_STRUCTURES = [
+        {
+            id: "chainMemory",
+            weight: 1.1,
+            requires: ["prevCause"],
+            allowSingle: true,
+            render: (ctx) => `It began with ${ctx.prevCause}, then ${ctx.causeA}. By then, ${ctx.event} was only a matter of time.`
+        },
+        ...CHAIN_TEMPLATES.map((template, idx) => ({
+            id: `chain${idx + 1}`,
+            weight: 0.9,
+            requires: ["prevCause"],
+            render: (ctx) => renderNarrativeTemplate(template, ctx)
+        }))
+    ];
+
+    const EXTRA_STRUCTURES = [
+        ...EXTRA_DOUBLE_TEMPLATES.map((template, idx) => ({
+            id: `causePair${idx + 1}`,
+            weight: 0.85,
+            render: (ctx) => renderNarrativeTemplate(template, ctx)
+        })),
+        ...EXTRA_SINGLE_TEMPLATES.map((template, idx) => ({
+            id: `singleCauseExtra${idx + 1}`,
+            weight: 0.75,
+            render: (ctx) => renderNarrativeTemplate(template, ctx)
+        }))
+    ];
+
+    const NARRATIVE_STRUCTURES = [
+        ...BASE_NARRATIVE_STRUCTURES,
+        ...CHAIN_STRUCTURES,
+        ...EXTRA_STRUCTURES
+    ];
+
     function initNarrativeState() {
         if (!planet) return null;
         if (!planet._paultendoNarrative) {
-            planet._paultendoNarrative = { signals: {}, lastDayByTown: {} };
+            planet._paultendoNarrative = { signals: {}, lastDayByTown: {}, historyByTown: {} };
         }
         return planet._paultendoNarrative;
     }
@@ -603,17 +714,71 @@
         return state.signals[town.id];
     }
 
-    function getTopNarrativeTags(town) {
+    function getNarrativeHistory(town) {
+        if (!town) return [];
+        const state = initNarrativeState();
+        if (!state) return [];
+        if (!state.historyByTown) state.historyByTown = {};
+        return state.historyByTown[town.id] || [];
+    }
+
+    function recordNarrativeHistory(town, entry) {
+        if (!town || !entry) return;
+        const state = initNarrativeState();
+        if (!state) return;
+        if (!state.historyByTown) state.historyByTown = {};
+        const list = state.historyByTown[town.id] || [];
+        list.push(entry);
+        const max = NARRATIVE_CONFIG.maxNarrativeHistory || 6;
+        if (list.length > max) list.splice(0, list.length - max);
+        state.historyByTown[town.id] = list;
+    }
+
+    function getNarrativeTagScores(town, opts = {}) {
         const signals = getNarrativeSignalsForTown(town);
         if (!signals.length) return [];
         const totals = {};
+        const halfLife = opts.useDecay ? (NARRATIVE_CONFIG.recencyHalfLifeDays || 0) : 0;
         signals.forEach(signal => {
             if (!signal || !signal.tag) return;
-            totals[signal.tag] = (totals[signal.tag] || 0) + (signal.weight || 0);
+            let score = signal.weight || 0;
+            if (halfLife > 0 && typeof planet?.day === "number") {
+                const age = planet.day - (signal.day || 0);
+                if (age > 0) {
+                    score *= Math.pow(0.5, age / halfLife);
+                }
+            }
+            totals[signal.tag] = (totals[signal.tag] || 0) + score;
         });
+
+        if (opts.novelty) {
+            const history = getNarrativeHistory(town);
+            const windowDays = NARRATIVE_CONFIG.noveltyWindowDays || 0;
+            const recentTags = new Set();
+            if (windowDays > 0 && history.length) {
+                const cutoff = planet.day - windowDays;
+                history.forEach(entry => {
+                    if (!entry || entry.day < cutoff || !Array.isArray(entry.tags)) return;
+                    entry.tags.forEach(tag => recentTags.add(tag));
+                });
+            }
+            if (recentTags.size) {
+                const penalty = Math.max(0, Math.min(1, NARRATIVE_CONFIG.noveltyPenalty || 0));
+                Object.keys(totals).forEach(tag => {
+                    if (recentTags.has(tag)) {
+                        totals[tag] = totals[tag] * (1 - penalty);
+                    }
+                });
+            }
+        }
+
         const tags = Object.keys(totals).map(tag => ({ tag, score: totals[tag] }));
         tags.sort((a, b) => b.score - a.score);
         return tags;
+    }
+
+    function getTopNarrativeTags(town, opts = {}) {
+        return getNarrativeTagScores(town, opts);
     }
 
     function pickPhrase(options) {
@@ -674,6 +839,68 @@
         return "the turning point";
     }
 
+    function inferSpecificEventPhrase(eventId, logText, ctx, names) {
+        const text = `${eventId || ""} ${logText || ""}`.toLowerCase();
+        const tech = names?.tech || names?.highlight || null;
+        const work = names?.work || null;
+        const landmark = names?.landmark || null;
+        const war = names?.war || null;
+        const alliance = names?.alliance || null;
+        const religion = names?.religion || null;
+        const festival = names?.festival || null;
+        const era = names?.era || null;
+        const spec = names?.specialization || null;
+        const world = names?.world || null;
+        const town = names?.town || null;
+        const target = names?.target || null;
+
+        if (tech && /(tech|breakthrough|discovery|innovation|research|invention|unlock)/.test(text)) {
+            if (/unlock/.test(text) || (ctx?.id && ctx.id.startsWith("unlock"))) {
+                return `the unlocking of ${tech}`;
+            }
+            return `the breakthrough of ${tech}`;
+        }
+        if (work && /(work|project|monument|theater|museum|gallery|construction|completed|build|raise)/.test(text)) {
+            if (/complete|completed|stands|finished/.test(text)) {
+                return `the completion of ${work}`;
+            }
+            return `${work}`;
+        }
+        if (landmark && /(landmark|memorial|statue|temple|shrine|marker)/.test(text)) {
+            return `the raising of ${landmark}`;
+        }
+        if (war && /(war|battle|siege|raid|conflict)/.test(text)) {
+            return `${war}`;
+        }
+        if (alliance && /(alliance|pact|treaty|accord|truce)/.test(text)) {
+            return `the ${alliance} pact`;
+        }
+        if (religion && /(religion|faith|sect|heresy|holy|temple|schism|reform)/.test(text)) {
+            if (/schism|split|heresy/.test(text)) return `the schism of ${religion}`;
+            if (/reform|renew|revival/.test(text)) return `the renewal of ${religion}`;
+            return `the rise of ${religion}`;
+        }
+        if (festival && /(festival|celebration|feast|parade)/.test(text)) {
+            return `the ${festival} festival`;
+        }
+        if (era && /(era|age|epoch|renaissance)/.test(text)) {
+            return `the ${era} era`;
+        }
+        if (spec && /(specialization|tradition|craft|guild|school|knowledge)/.test(text)) {
+            return `the ${spec} tradition`;
+        }
+        if (world && /(world|planet|moon|frontier|charter|colony|star|space)/.test(text)) {
+            return `the push toward ${world}`;
+        }
+        if (town && /(founding|founded|settlement|colony|charter)/.test(text)) {
+            return `the founding of ${town}`;
+        }
+        if (target && /(expedition|charter|journey|mission)/.test(text)) {
+            return `the charter toward ${target}`;
+        }
+        return null;
+    }
+
     function shouldNarrate(logType, eventId, logText) {
         if (!NARRATIVE_CONFIG.enabled) return false;
         const type = logType || "";
@@ -694,37 +921,71 @@
     }
 
     function buildNarrativeLine(town, eventId, logText, ctx = null) {
-        const tags = getTopNarrativeTags(town).map(t => t.tag);
+        const scored = getTopNarrativeTags(town, { useDecay: true, novelty: true });
+        const tags = scored.map(t => t.tag);
         if (tags.length < NARRATIVE_CONFIG.minSignals) return null;
         const causeA = pickPhrase(NARRATIVE_TAGS[tags[0]] || []);
-        const hasSecond = tags.length >= 2 && tags[1] !== tags[0];
-        const causeB = pickPhrase(
+        let hasSecond = tags.length >= 2 && tags[1] !== tags[0];
+        let causeB = pickPhrase(
             hasSecond ? (NARRATIVE_TAGS[tags[1]] || []) : (NARRATIVE_TAGS[tags[0]] || [])
         );
         if (!causeA) return null;
 
-        const eventPhrase = inferEventPhrase(eventId, logText);
+        let prevCause = null;
+        const history = getNarrativeHistory(town);
+        if (history.length) {
+            const last = history[history.length - 1];
+            if (last && (planet.day - last.day) <= (NARRATIVE_CONFIG.chainWindowDays || 0)) {
+                prevCause = last.causeA || last.causeB || null;
+                if (prevCause === causeA && last.causeB && last.causeB !== causeA) {
+                    prevCause = last.causeB;
+                }
+                if (prevCause === causeA) prevCause = null;
+            }
+        }
+        const useChain = !!(prevCause && Math.random() < (NARRATIVE_CONFIG.chainChance || 0));
+        if (useChain && !hasSecond) {
+            hasSecond = true;
+            causeB = prevCause;
+        }
+
+        const specificEvent = inferSpecificEventPhrase(eventId, logText, ctx, names);
+        const eventPhrase = specificEvent || inferEventPhrase(eventId, logText);
         const positive = isPositiveNarrativeEvent(eventId, logText, tags);
         const names = ctx ? buildNarrativeNameContext(ctx, logText) : {};
         let structures = NARRATIVE_STRUCTURES
             .filter(s => {
-                if (!hasSecond && !s.id.startsWith("singleCause")) return false;
+                if (!hasSecond && !s.id.startsWith("singleCause") && !s.allowSingle) return false;
                 if (hasSecond && s.id.startsWith("singleCause")) return false;
                 if (positive) return s.id === "uplift" || s.id === "credit" || s.id === "renewal" || !s.id.startsWith("singleCause");
                 return true;
             })
             .map(s => ({ ...s, weight: s.weight }));
-        const requireMatch = structures.filter(s => !s.requires || s.requires.every((key) => names && names[key]));
-        if (requireMatch.length) structures = requireMatch;
-        const pick = weightedChoice(structures, s => s.weight) || structures[0];
         const ctxObj = {
             town,
             causeA,
             causeB: causeB || causeA,
+            prevCause: useChain ? prevCause : null,
             event: eventPhrase,
             names
         };
-        return pick.render(ctxObj);
+        const requireMatch = structures.filter(s => {
+            if (!s.requires || !s.requires.length) return true;
+            return s.requires.every((key) => {
+                if (key === "prevCause") return !!ctxObj.prevCause;
+                return names && names[key];
+            });
+        });
+        if (requireMatch.length) structures = requireMatch;
+        const pick = weightedChoice(structures, s => s.weight) || structures[0];
+        return {
+            line: pick.render(ctxObj),
+            tags: tags.slice(0, 3),
+            causeA: ctxObj.causeA,
+            causeB: ctxObj.causeB,
+            prevCause: ctxObj.prevCause,
+            event: eventPhrase
+        };
     }
 
     function maybeEmitNarrativeAside(baseLogMessage, logText, logType) {
@@ -744,16 +1005,27 @@
         if (!shouldNarrate(logType, ctx.id, logText)) return;
         if (Math.random() > NARRATIVE_CONFIG.chance) return;
 
-        const line = buildNarrativeLine(town, ctx.id, logText, ctx);
-        if (!line) return;
+        const result = buildNarrativeLine(town, ctx.id, logText, ctx);
+        if (!result || !result.line) return;
 
         state.lastDayByTown[town.id] = planet.day;
         setNarrativeLock(true);
         try {
-            baseLogMessage(line, "tip");
+            baseLogMessage(result.line, "tip");
         } finally {
             setNarrativeLock(false);
         }
+        try {
+            recordNarrativeHistory(town, {
+                day: planet.day,
+                tags: result.tags || [],
+                causeA: result.causeA || null,
+                causeB: result.causeB || null,
+                prevCause: result.prevCause || null,
+                event: result.event || null,
+                eventId: ctx.id || null
+            });
+        } catch {}
     }
 
     const CAUSE_LABELS = {
@@ -814,7 +1086,7 @@
 
     function getCauseTagsFromContext(ctx, logText) {
         const town = getContextTown(ctx);
-        const signalTags = town ? getTopNarrativeTags(town).map(t => t.tag) : [];
+        const signalTags = town ? getTopNarrativeTags(town, { useDecay: true }).map(t => t.tag) : [];
         const inferred = inferNarrativeTags(ctx?.id, ctx?.subject, ctx?.target, ctx?.args, logText || "");
         const inferredTags = inferred.map(t => t.tag);
         const combined = [];
@@ -968,6 +1240,26 @@
         if (!names.work && subject && subject._reg === "work") names.work = formatWorkLabel(subject);
         if (!names.work && target && target._reg === "work") names.work = formatWorkLabel(target);
 
+        if (args.tech) names.tech = formatGenericLabel(args.tech);
+        if (!names.tech && args.techName) names.tech = `{{b:${args.techName}}}`;
+        if (!names.tech && args.unlock) names.tech = formatGenericLabel(args.unlock);
+        if (!names.tech && args.unlockName) names.tech = `{{b:${args.unlockName}}}`;
+        if (!names.tech && args.method) names.tech = `{{b:${args.method}}}`;
+        if (!names.tech && args.innovation) names.tech = formatGenericLabel(args.innovation);
+
+        if (args.spec && args.spec.name) names.specialization = `{{b:${args.spec.name}}}`;
+        if (!names.specialization && args.specialization && args.specialization.name) names.specialization = `{{b:${args.specialization.name}}}`;
+        if (!names.specialization && args.tradition && args.tradition.name) names.specialization = `{{b:${args.tradition.name}}}`;
+
+        if (args.festival && args.festival.name) names.festival = `{{b:${args.festival.name}}}`;
+        if (!names.festival && args.festivalName) names.festival = `{{b:${args.festivalName}}}`;
+
+        if (args.eraName) names.era = `{{b:${args.eraName}}}`;
+        if (!names.era && args.era && args.era.name) names.era = `{{b:${args.era.name}}}`;
+
+        if (args.currencyName) names.currency = `{{b:${args.currencyName}}}`;
+        if (!names.currency && args.currency) names.currency = formatGenericLabel(args.currency);
+
         if (args.war) names.war = formatWarLabel(args.war);
         if (!names.war && args.pastWar) names.war = formatWarLabel(args.pastWar);
         if (!names.war && subject && subject._reg === "war") names.war = formatWarLabel(subject);
@@ -1000,6 +1292,39 @@
         if (args.targetName) names.target = `{{b:${args.targetName}}}`;
 
         if (logText) {
+            const lowerText = String(logText).toLowerCase();
+            const boldMatches = Array.from(String(logText).matchAll(/\{\{b:([^}]+)\}\}/g));
+            const firstBold = boldMatches.length ? `{{b:${boldMatches[0][1]}}}` : null;
+            if (firstBold && !names.highlight) names.highlight = firstBold;
+            if (firstBold) {
+                if (!names.tech && /(tech|breakthrough|discovery|invention|research|unlock|innovation)/i.test(lowerText)) {
+                    names.tech = firstBold;
+                }
+                if (!names.work && /(work|monument|theater|museum|gallery|project|construction|completed)/i.test(lowerText)) {
+                    names.work = firstBold;
+                }
+                if (!names.festival && /(festival|celebration|feast|parade)/i.test(lowerText)) {
+                    names.festival = firstBold;
+                }
+                if (!names.religion && /(religion|faith|sect|heresy|temple|holy)/i.test(lowerText)) {
+                    names.religion = firstBold;
+                }
+                if (!names.alliance && /(alliance|pact|treaty|accord)/i.test(lowerText)) {
+                    names.alliance = firstBold;
+                }
+                if (!names.war && /(war|battle|siege|raid|conflict)/i.test(lowerText)) {
+                    names.war = firstBold;
+                }
+                if (!names.era && /(era|age|epoch)/i.test(lowerText)) {
+                    names.era = firstBold;
+                }
+                if (!names.specialization && /(specialization|tradition|craft|guild|school)/i.test(lowerText)) {
+                    names.specialization = firstBold;
+                }
+                if (!names.landmark && /(landmark|memorial|shrine|temple|statue)/i.test(lowerText)) {
+                    names.landmark = firstBold;
+                }
+            }
             const matches = Array.from(String(logText).matchAll(/\{\{regname:([a-z_]+)\|([^\}]+)\}\}/gi));
             if (matches.length) {
                 let primaryTownId = town ? town.id : null;
@@ -5090,6 +5415,98 @@
         return `Systems · ${summary}`;
     }
 
+    function formatWorldTypeLabel(world) {
+        if (!world) return "Unknown World";
+        if (world.key === "home") return "Homeworld";
+        if (world.label) return world.label;
+        if (world.type) return (typeof safeTitleCase === "function") ? safeTitleCase(world.type) : world.type;
+        if (world.key) return (typeof safeTitleCase === "function") ? safeTitleCase(world.key) : world.key;
+        return "World";
+    }
+
+    function formatWorldHabitability(world) {
+        if (!world) return "unknown";
+        if (world.habitable === false) return "uninhabitable";
+        if (world.harsh) return "harsh";
+        return "habitable";
+    }
+
+    function describeWorldBias(profile) {
+        if (!profile) return "balanced";
+        const temp = profile.tempBias || 0;
+        const moisture = profile.moistureBias || 0;
+        const tempDesc = temp >= 0.12 ? "much warmer"
+            : temp >= 0.05 ? "warmer"
+                : temp <= -0.12 ? "much cooler"
+                    : temp <= -0.05 ? "cooler"
+                        : "balanced";
+        const moistureDesc = moisture >= 0.12 ? "much wetter"
+            : moisture >= 0.05 ? "wetter"
+                : moisture <= -0.12 ? "much drier"
+                    : moisture <= -0.05 ? "drier"
+                        : "balanced";
+        if (tempDesc === "balanced" && moistureDesc === "balanced") return "balanced";
+        if (tempDesc === "balanced") return moistureDesc;
+        if (moistureDesc === "balanced") return tempDesc;
+        return `${tempDesc}, ${moistureDesc}`;
+    }
+
+    function formatBiomeLabel(biome) {
+        const label = String(biome || "unknown").replace(/_/g, " ");
+        if (typeof safeTitleCase === "function") return safeTitleCase(label);
+        if (typeof titleCase === "function") return titleCase(label);
+        return label;
+    }
+
+    function getWorldSummaryStats(sampleLimit = 200) {
+        if (!planet || !planet.chunks) return null;
+        if (planet._paultendoWorldSummaryDay === planet.day && planet._paultendoWorldSummary) {
+            return planet._paultendoWorldSummary;
+        }
+        const keys = Object.keys(planet.chunks);
+        if (!keys.length) return null;
+        const step = Math.max(1, Math.floor(keys.length / sampleLimit));
+        let count = 0;
+        let totalTemp = 0;
+        let totalMoisture = 0;
+        let water = 0;
+        let mountain = 0;
+        let fertile = 0;
+        const biomeCounts = {};
+        for (let i = 0; i < keys.length; i += step) {
+            const chunk = planet.chunks[keys[i]];
+            if (!chunk) continue;
+            count += 1;
+            totalTemp += typeof chunk.t === "number" ? chunk.t : 0.5;
+            totalMoisture += typeof chunk.m === "number" ? chunk.m : 0.5;
+            const biome = chunk.b || "unknown";
+            biomeCounts[biome] = (biomeCounts[biome] || 0) + 1;
+            if (biome === "water") water += 1;
+            if (biome === "mountain") mountain += 1;
+            const def = biomes && biomes[biome] ? biomes[biome] : null;
+            if (def && !def.infertile && biome !== "mountain" && biome !== "water") fertile += 1;
+        }
+        if (!count) return null;
+        const sortedBiomes = Object.entries(biomeCounts)
+            .filter(([biome]) => biome !== "water")
+            .sort((a, b) => b[1] - a[1]);
+        const topBiomes = sortedBiomes.slice(0, 3).map(([biome, value]) => {
+            const share = Math.round((value / count) * 100);
+            return `${formatBiomeLabel(biome)} ${share}%`;
+        });
+        const summary = {
+            avgTemp: totalTemp / count,
+            avgMoisture: totalMoisture / count,
+            waterShare: water / count,
+            mountainShare: mountain / count,
+            fertileShare: fertile / count,
+            topBiomes
+        };
+        planet._paultendoWorldSummary = summary;
+        planet._paultendoWorldSummaryDay = planet.day;
+        return summary;
+    }
+
     function openWorldStatusPanel() {
         if (!planet || typeof populateExecutive !== "function") return;
         const items = [];
@@ -5108,6 +5525,29 @@
                 const req = DISCOVERY_TIER_REQUIREMENTS[tier + 1];
                 const nextText = req ? formatDiscoveryRequirement(req) : "Unknown";
                 items.push({ text: `Next · ${nextText}`, indent: 1, opacity: 0.75 });
+            }
+        }
+
+        const currentWorld = getWorldById(getCurrentWorldId());
+        const worldName = formatWorldName(currentWorld, planet._paultendoWorldName || planet.name || "World");
+        const worldType = formatWorldTypeLabel(currentWorld);
+        const habitability = formatWorldHabitability(currentWorld);
+        const seaLevel = typeof waterLevel === "number" ? Math.round(waterLevel * 100) : null;
+        const profile = getWorldClimateProfile(currentWorld);
+        const summary = getWorldSummaryStats();
+        const climateDesc = summary ? getClimateDescription(summary.avgTemp, summary.avgMoisture) : null;
+
+        items.push({ spacer: true, text: "World Traits" });
+        items.push({ text: `${worldName} · ${worldType} · ${habitability}` });
+        if (seaLevel !== null) items.push({ text: `Sea level · ${seaLevel}%` });
+        if (profile) items.push({ text: `Bias · ${describeWorldBias(profile)}` });
+        if (climateDesc) items.push({ text: `Climate · ${climateDesc.full}` });
+        if (summary) {
+            const fertile = Math.round(summary.fertileShare * 100);
+            const water = Math.round(summary.waterShare * 100);
+            items.push({ text: `Fertility · ${fertile}% arable · Water ${water}%` });
+            if (summary.topBiomes.length) {
+                items.push({ text: `Biomes · ${summary.topBiomes.join(", ")}` });
             }
         }
 
