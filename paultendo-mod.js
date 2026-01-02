@@ -48,7 +48,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.16";
+    const MOD_VERSION = "1.6.17";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -65,6 +65,25 @@
     const PAULTENDO_EVENT_STACK = PAULTENDO_STATE.eventStack || PAULTENDO_GLOBAL._paultendoEventStack || [];
     PAULTENDO_STATE.eventStack = PAULTENDO_EVENT_STACK;
     PAULTENDO_GLOBAL._paultendoEventStack = PAULTENDO_EVENT_STACK;
+
+    function scheduleInitRetry(key, fn, delay = 80, max = 25) {
+        if (!key || typeof fn !== "function") return;
+        const state = PAULTENDO_STATE.initRetries || (PAULTENDO_STATE.initRetries = {});
+        const count = state[key] || 0;
+        if (count >= max) return;
+        if (state[`${key}Pending`]) return;
+        state[key] = count + 1;
+        state[`${key}Pending`] = true;
+        const tick = () => {
+            state[`${key}Pending`] = false;
+            try { fn(); } catch {}
+        };
+        if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+            window.setTimeout(tick, delay + count * 25);
+        } else {
+            tick();
+        }
+    }
 
     function isNarrativeLocked() {
         return !!PAULTENDO_STATE.narrativeLock || !!PAULTENDO_GLOBAL._paultendoNarrativeLock;
@@ -1842,6 +1861,10 @@
     // =========================================================================
 
     function initLogOverrides() {
+        if (typeof logMessage !== "function") {
+            scheduleInitRetry("logOverrides", initLogOverrides);
+            return;
+        }
         if (typeof logMessage === "function" && !logMessage._paultendoChronicle) {
             const baseLogMessage = logMessage;
             logMessage = function(text, type, args) {
@@ -7130,10 +7153,12 @@
     }
 
     function initMapHooks() {
+        let needsRetry = false;
         if (!initDiscoveryHooks() && typeof window !== "undefined") {
             window.addEventListener("load", () => { initDiscoveryHooks(); });
+            needsRetry = true;
         }
-        if (typeof window !== "undefined") {
+        if (typeof window !== "undefined" && !PAULTENDO_STATE.mapHooksBound) {
             window.addEventListener("load", () => {
                 try { ensureMapCanvasSync(); } catch {}
                 try { ensureMapControls(); } catch {}
@@ -7145,6 +7170,20 @@
                 try { ensureChronicleHeader(); } catch {}
                 try { rebuildChronicleUiStateFromLog(); } catch {}
             });
+            if (typeof window.addEventListener === "function") {
+                window.addEventListener("tools-initialized", () => {
+                    try { ensureMapCanvasSync(); } catch {}
+                    try { ensureMapControls(); } catch {}
+                    try { applyScaleAwareZoom(); } catch {}
+                    try { ensureFogLayer(); } catch {}
+                    try { ensureEpidemicLayer(); } catch {}
+                    try { wrapSetViewForFog(); } catch {}
+                    try { wrapUpdateCanvasForFog(); } catch {}
+                    try { ensureChronicleHeader(); } catch {}
+                    try { rebuildChronicleUiStateFromLog(); } catch {}
+                });
+            }
+            PAULTENDO_STATE.mapHooksBound = true;
         }
         try { wrapSetViewForFog(); } catch {}
         try { wrapUpdateCanvasForFog(); } catch {}
@@ -7154,6 +7193,7 @@
 
         if (!initDiscoveryRenderHooks() && typeof window !== "undefined") {
             window.addEventListener("load", () => { initDiscoveryRenderHooks(); });
+            needsRetry = true;
         }
 
         if (typeof renderCursor === "function" && !renderCursor._paultendoCrosshair) {
@@ -7165,6 +7205,8 @@
                 return result;
             };
             renderCursor._paultendoCrosshair = true;
+        } else if (typeof renderCursor !== "function") {
+            needsRetry = true;
         }
 
         if (typeof handleCursor === "function" && !handleCursor._paultendoHoverOverlay) {
@@ -7175,7 +7217,11 @@
                 return result;
             };
             handleCursor._paultendoHoverOverlay = true;
+        } else if (typeof handleCursor !== "function") {
+            needsRetry = true;
         }
+
+        if (needsRetry) scheduleInitRetry("mapHooks", initMapHooks, 120);
     }
 
     function initDiscoveryRenderHooks() {
@@ -9839,6 +9885,11 @@
             window.addEventListener("load", () => {
                 try { initMultiWorldSystem(); } catch {}
             });
+            if (typeof window.addEventListener === "function") {
+                window.addEventListener("tools-initialized", () => {
+                    try { initMultiWorldSystem(); } catch {}
+                });
+            }
         }
 
         if (typeof document !== "undefined") {
@@ -18661,6 +18712,10 @@
     }
 
     function initEpidemicRenderOverride() {
+        if (typeof renderMap !== "function") {
+            scheduleInitRetry("epidemicRender", initEpidemicRenderOverride, 140);
+            return;
+        }
         if (typeof renderMap === "function" && !renderMap._paultendoEpidemicOverlay) {
             const baseRenderMap = renderMap;
             const wrappedRenderMap = function() {
@@ -26218,6 +26273,10 @@
     }
 
     function initHistoryOverrides() {
+        if (typeof recordHistory !== "function") {
+            scheduleInitRetry("historyOverrides", initHistoryOverrides, 120);
+            return;
+        }
         if (typeof recordHistory === "function" && !recordHistory._paultendoAnnals) {
             const baseRecordHistory = recordHistory;
             recordHistory = function(type, data) {
@@ -26464,6 +26523,10 @@
     }
 
     function initExecutiveOverrides() {
+        if (typeof initExecutive !== "function") {
+            scheduleInitRetry("executiveOverrides", initExecutiveOverrides, 120);
+            return;
+        }
         if (typeof initExecutive === "function" && !initExecutive._paultendoAnnals) {
             const baseInitExecutive = initExecutive;
             initExecutive = function(...args) {
@@ -26549,6 +26612,22 @@
                 try { updateSeasonState(); } catch {}
                 try { ensureGreatWorkForEra(planet.currentEra); } catch {}
             });
+            if (typeof window.addEventListener === "function") {
+                window.addEventListener("tools-initialized", () => {
+                    try { addAnnalsButton(); } catch {}
+                    try { addWorldStatusButton(); } catch {}
+                    try { addChronicleButton(); } catch {}
+                    try { addFestivalsButton(); } catch {}
+                    try { addAutoplayButton(); } catch {}
+                    try { addDivineStanceButton(); } catch {}
+                    try { overrideUnlocksPanel(); } catch {}
+                    try { initAutoplaySettings(); } catch {}
+                    try { ensureAutoplayControls(); } catch {}
+                    try { wrapPromptHandlersForAutoplay(); } catch {}
+                    try { updateSeasonState(); } catch {}
+                    try { ensureGreatWorkForEra(planet.currentEra); } catch {}
+                });
+            }
         }
 
         if (typeof document !== "undefined") {
@@ -31670,9 +31749,10 @@
     // INIT FLOW (hooks + bootstraps)
     // =========================================================================
 
-    function initPaultendoHooks() {
-        if (PAULTENDO_STATE.initDone) return;
-        PAULTENDO_STATE.initDone = true;
+    function initPaultendoHooks(opts = {}) {
+        const force = !!opts.force;
+        if (!force && PAULTENDO_STATE.initVersion === MOD_VERSION) return;
+        PAULTENDO_STATE.initVersion = MOD_VERSION;
         try { initRegnameOverrides(); } catch {}
         try { initLogOverrides(); } catch {}
         try { initHistoryOverrides(); } catch {}
@@ -31683,6 +31763,15 @@
     }
 
     initPaultendoHooks();
+    if (typeof window !== "undefined") {
+        window.addEventListener("load", () => { initPaultendoHooks({ force: true }); });
+        window.addEventListener("tools-initialized", () => { initPaultendoHooks({ force: true }); });
+    }
+    if (typeof document !== "undefined") {
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            try { initPaultendoHooks({ force: true }); } catch {}
+        }
+    }
 
     // OPTIONAL MODULES - WORLD CRISES, RAIDERS, SECESSION
     // =========================================================================
