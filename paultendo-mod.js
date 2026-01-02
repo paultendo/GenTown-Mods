@@ -15,7 +15,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.1";
+    const MOD_VERSION = "1.6.9";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -71,6 +71,14 @@
             lastHeadlineDay: null
         };
         return planet[CHRONICLE_UI_KEY];
+    }
+
+    function resetChronicleUiState() {
+        const state = initChronicleState();
+        if (!state) return;
+        state.entriesByDay = {};
+        state.entriesById = {};
+        state.lastHeadlineDay = null;
     }
 
     function getChronicleFollowLive() {
@@ -305,6 +313,62 @@
         }
     }
 
+    function getChronicleTypeFromElement(entry) {
+        if (!entry || !entry.classList) return null;
+        for (const cls of entry.classList) {
+            if (!cls || cls === "logMessage") continue;
+            if (cls.startsWith("log")) {
+                const raw = cls.slice(3);
+                if (!raw || raw.toLowerCase() === "normal") return null;
+                return raw.toLowerCase();
+            }
+        }
+        return null;
+    }
+
+    let chronicleMarkersPending = false;
+    function scheduleChronicleDayMarkers() {
+        if (chronicleMarkersPending) return;
+        chronicleMarkersPending = true;
+        const run = () => {
+            chronicleMarkersPending = false;
+            try { updateChronicleDayMarkers(); } catch {}
+        };
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(run);
+        } else if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+            window.setTimeout(run, 0);
+        } else {
+            run();
+        }
+    }
+
+    function rebuildChronicleUiStateFromLog() {
+        if (typeof document === "undefined") return false;
+        const container = document.getElementById("logMessages");
+        if (!container) return false;
+        const state = initChronicleState();
+        if (!state) return false;
+        state.entriesByDay = {};
+        state.entriesById = {};
+        const entries = Array.from(container.querySelectorAll(".logMessage"));
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const entry = entries[i];
+            if (!entry) continue;
+            const id = entry.id && entry.id.startsWith("logMessage-") ? entry.id.slice("logMessage-".length) : null;
+            if (!id) continue;
+            const dayElem = entry.querySelector(".logDay");
+            const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
+            if (!dayValue) continue;
+            const text = entry.querySelector(".logText")?.innerText || "";
+            const type = getChronicleTypeFromElement(entry);
+            addChronicleEntry(dayValue, id, type, text);
+        }
+        try { updateChronicleDayMarkers(); } catch {}
+        try { updateChronicleHeadlines(planet?.day); } catch {}
+        return true;
+    }
+
     // =========================================================================
     // SAFE REGNAME FALLBACKS (avoid "Invalid Thing" when entities are removed)
     // =========================================================================
@@ -442,6 +506,7 @@
             let prevScrollHeight = 0;
             const follow = CHRONICLE_UI_CONFIG.enabled ? getChronicleFollowLive() : true;
             if (!follow && typeof document !== "undefined") {
+                try { ensureChronicleHeader(); } catch {}
                 logPanel = document.getElementById("logPanel");
                 if (logPanel) {
                     prevScrollTop = logPanel.scrollTop;
@@ -460,7 +525,7 @@
                     if (dayValue) {
                         addChronicleEntry(dayValue, uuid, type, plainText);
                         updateChronicleHeadlines(dayValue);
-                        updateChronicleDayMarkers();
+                        scheduleChronicleDayMarkers();
                     }
                 } catch {}
             }
@@ -485,11 +550,16 @@
                         const dayElem = elem.querySelector(".logDay");
                         const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
                         const plainText = elem.querySelector(".logText")?.innerText || "";
+                        const safeText = sanitizeChronicleMessage(plainText);
                         const state = initChronicleState();
                         if (state && state.entriesById[uuid]) {
-                            state.entriesById[uuid].text = plainText;
+                            state.entriesById[uuid].text = safeText;
                             const day = parseInt(dayValue);
                             if (!isNaN(day)) updateChronicleHeadlines(day);
+                        }
+                        const store = getChronicleStore();
+                        if (store && store.byLogId && store.byLogId[uuid]) {
+                            store.byLogId[uuid].message = safeText;
                         }
                     }
                 } catch {}
@@ -497,6 +567,18 @@
             return result;
         };
         logChange._paultendoChronicle = true;
+    }
+
+    if (typeof clearLog === "function" && !clearLog._paultendoChronicle) {
+        const baseClearLog = clearLog;
+        clearLog = function(...args) {
+            const result = baseClearLog.apply(this, args);
+            try { resetChronicleUiState(); } catch {}
+            try { scheduleChronicleDayMarkers(); } catch {}
+            try { updateChronicleHeadlines(planet?.day); } catch {}
+            return result;
+        };
+        clearLog._paultendoChronicle = true;
     }
 
     // =========================================================================
@@ -1012,6 +1094,12 @@
         if (!town.relations || typeof town.relations !== "object") {
             town.relations = {};
         }
+        if (!town.resources || typeof town.resources !== "object") {
+            town.resources = {};
+        }
+        if (typeof town.resources.cash !== "number" || Number.isNaN(town.resources.cash)) {
+            town.resources.cash = 0;
+        }
         ensureIssues(town);
         initTownCulture(town);
         initTownSpecializations(town);
@@ -1034,11 +1122,14 @@
     const DEFAULT_CHANCE_MAX = 0.95;
     const FAITH_SOFTEN_CONFIG = {
         enabled: true,
-        baseScale: 0.7,
-        lowFaithScale: 0.5,
-        severeFaithScale: 0.35,
+        applyToAll: true,
+        baseScale: 0.75,
+        lowFaithScale: 0.55,
+        severeFaithScale: 0.4,
         lowFaithThreshold: -4.5,
-        severeFaithThreshold: -7.5
+        severeFaithThreshold: -7.5,
+        activePromptFloor: -3,
+        activeScale: 0.6
     };
 
     const SWAY_PROMPT_GLOBAL_COOLDOWN_DAYS = 5;
@@ -1086,7 +1177,7 @@
         if (!args || typeof args.faith !== "number" || args.faith >= 0) return false;
         if (args._paultendoFaithHard) return false;
         if (!target || target._reg !== "town") return false;
-        if (!getActiveModEventId()) return false;
+        if (!FAITH_SOFTEN_CONFIG.applyToAll && !getActiveModEventId()) return false;
         return true;
     }
 
@@ -1098,6 +1189,10 @@
             scale = FAITH_SOFTEN_CONFIG.severeFaithScale;
         } else if (faith <= FAITH_SOFTEN_CONFIG.lowFaithThreshold) {
             scale = FAITH_SOFTEN_CONFIG.lowFaithScale;
+        }
+        const promptstreak = planet?.stats?.promptstreak ?? 0;
+        if (FAITH_SOFTEN_CONFIG.applyToAll && promptstreak > FAITH_SOFTEN_CONFIG.activePromptFloor) {
+            scale *= FAITH_SOFTEN_CONFIG.activeScale;
         }
         args.faith *= scale;
         return args;
@@ -2353,13 +2448,21 @@
 
     function getChronicleStore() {
         if (!planet) return null;
-        if (planet[CHRONICLE_STORE_KEY]) return planet[CHRONICLE_STORE_KEY];
+        if (planet[CHRONICLE_STORE_KEY]) {
+            if (!planet[CHRONICLE_STORE_KEY].byLogId) {
+                planet[CHRONICLE_STORE_KEY].byLogId = {};
+            }
+            return planet[CHRONICLE_STORE_KEY];
+        }
         const legacy = planet._paultendoChronicle;
         if (legacy && legacy.days && legacy.index) {
             planet[CHRONICLE_STORE_KEY] = legacy;
+            if (!planet[CHRONICLE_STORE_KEY].byLogId) {
+                planet[CHRONICLE_STORE_KEY].byLogId = {};
+            }
             return planet[CHRONICLE_STORE_KEY];
         }
-        planet[CHRONICLE_STORE_KEY] = { days: [], index: {} };
+        planet[CHRONICLE_STORE_KEY] = { days: [], index: {}, byLogId: {} };
         return planet[CHRONICLE_STORE_KEY];
     }
 
@@ -2373,7 +2476,14 @@
         store.index[key] = entry;
         if (store.days.length > CHRONICLE_CONFIG.maxDays) {
             const removed = store.days.splice(0, store.days.length - CHRONICLE_CONFIG.maxDays);
-            removed.forEach(r => delete store.index[String(r.day)]);
+            removed.forEach(r => {
+                delete store.index[String(r.day)];
+                if (store.byLogId && Array.isArray(r.entries)) {
+                    r.entries.forEach(entry => {
+                        if (entry && entry.logId) delete store.byLogId[entry.logId];
+                    });
+                }
+            });
         }
         return entry;
     }
@@ -2390,19 +2500,28 @@
         return text.trim();
     }
 
-    function recordChronicleEntry(system, message, type) {
+    function recordChronicleEntry(system, message, type, options = {}) {
         if (!planet || !message) return;
-        const entry = getChronicleDay(planet.day);
+        const day = options.day || planet.day;
+        const entry = getChronicleDay(day);
         if (!entry) return;
         if (entry.entries.length >= CHRONICLE_CONFIG.maxEntriesPerDay) return;
         const safeMessage = sanitizeChronicleMessage(message);
         if (!safeMessage) return;
-        entry.entries.push({ system: system || "misc", message: safeMessage, type: type || null });
+        const logId = options.logId || null;
+        const entryData = { system: system || "misc", message: safeMessage, type: type || null, logId };
+        entry.entries.push(entryData);
         entry.counts[system || "misc"] = (entry.counts[system || "misc"] || 0) + 1;
+        const store = getChronicleStore();
+        if (store && store.byLogId && logId) {
+            store.byLogId[logId] = entryData;
+        }
     }
 
     function formatChronicleSummary(day) {
-        const entry = getChronicleDay(day);
+        const store = getChronicleStore();
+        if (!store || !store.index) return "Chronicle · quiet";
+        const entry = store.index[String(day)];
         if (!entry || !entry.entries.length) return "Chronicle · quiet";
         const parts = Object.entries(entry.counts)
             .sort((a, b) => b[1] - a[1])
@@ -2455,6 +2574,112 @@
         populateExecutive(items, "Chronicle Day");
     }
 
+    function appendTechPathUnlocks(items) {
+        if (!items || !planet || !planet._paultendoTechPaths) return;
+        const paths = planet._paultendoTechPaths || {};
+        const summary = [];
+        Object.entries(TECH_FORKS).forEach(([key, fork]) => {
+            const choiceKey = paths[key];
+            if (!choiceKey) return;
+            const choice = fork.choices ? fork.choices[choiceKey] : null;
+            if (!choice) return;
+            summary.push({ label: fork.label || key, choice: choice.label || choiceKey });
+        });
+        if (!summary.length) return;
+        items.push({ heading: true, text: "Tech Paths" });
+        summary.forEach((entry) => {
+            items.push({
+                text: `${entry.label} · ${entry.choice}`,
+                indent: 1,
+                opacity: 0.85
+            });
+        });
+    }
+
+    function openUnlocksPanelEnhanced() {
+        if (!planet || typeof populateExecutive !== "function" || typeof unlockTree === "undefined") return;
+        let total = 0;
+        for (let type in unlockTree) {
+            total += unlockTree[type].levels.length;
+        }
+
+        let items = [];
+        let unlocked = 0;
+        for (let type in unlockTree) {
+            if (!planet.unlocks[type]) continue;
+            let levels = unlockTree[type].levels;
+            for (let i = 0; i < levels.length; i++) {
+                const levelData = levels[i];
+                if (planet.unlocks[type] >= levelData.level) {
+                    const meta = getTechUnlockMeta(type, levelData.level);
+                    const suffix = meta ? ` · ${formatTechUnlockMeta(meta)}` : "";
+                    items.push({
+                        text: `${levelData.name}${suffix}`,
+                        indent: i
+                    });
+                    unlocked++;
+                } else {
+                    items.push({
+                        text: levelData.name.replace(/\w/g, "?"),
+                        indent: i,
+                        opacity: 0.5
+                    });
+                    break;
+                }
+            }
+        }
+        appendTechPathUnlocks(items);
+        if (!items.length) items.push("No unlocks yet..");
+        populateExecutive(items, "Unlocks");
+        populateExecutive(items, "Unlocks (" + Math.round(unlocked / total * 100) + "%)");
+    }
+
+    function overrideUnlocksPanel() {
+        if (typeof document === "undefined") return;
+        const button = document.getElementById("actionItem-unlocks");
+        if (!button || button._paultendoUnlockOverride) return;
+        button.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            openUnlocksPanelEnhanced();
+        }, true);
+        button._paultendoUnlockOverride = true;
+    }
+
+    function openFestivalsPanel() {
+        if (!planet || typeof populateExecutive !== "function") return;
+        const items = [];
+        const list = initFestivals();
+        if (!list || list.length === 0) {
+            items.push({ text: "No festivals yet." });
+            populateExecutive(items, "Festivals");
+            return;
+        }
+        const recent = [...list].sort((a, b) => b.day - a.day).slice(0, 40);
+        recent.forEach((entry) => {
+            const townText = entry.townId ? `{{regname:town|${entry.townId}}}` : "A town";
+            const seasonText = entry.seasonIcon ? `${entry.seasonIcon} ${entry.seasonName}` : entry.seasonName || "Season";
+            items.push({
+                text: `Day ${entry.day} · ${seasonText} · ${townText} · {{b:${entry.name}}}`,
+                opacity: 0.9
+            });
+        });
+        populateExecutive(items, "Festivals");
+    }
+
+    function addFestivalsButton() {
+        const list = document.getElementById("actionMainList");
+        if (!list || document.getElementById("actionItem-festivals")) return;
+        const button = document.createElement("span");
+        button.className = "actionItem clickable";
+        button.id = "actionItem-festivals";
+        button.innerHTML = "Festivals";
+        button.addEventListener("click", () => {
+            openFestivalsPanel();
+        });
+        list.appendChild(button);
+    }
+
     function addChronicleButton() {
         const list = document.getElementById("actionMainList");
         if (!list || document.getElementById("actionItem-chronicle")) return;
@@ -2472,7 +2697,7 @@
         if (!message) return false;
         if (!shouldLogSystem(system, { ...options, type })) return false;
         const result = logMessage(message, type);
-        try { recordChronicleEntry(system, message, type); } catch {}
+        try { recordChronicleEntry(system, message, type, { logId: result, day: planet.day }); } catch {}
         noteLogSystem(system, options.town);
         try { noteMemoryFromLog(system, message, options); } catch {}
         return result;
@@ -2508,6 +2733,38 @@
         { id: "autumn", name: "Autumn", icon: "🍂" },
         { id: "winter", name: "Winter", icon: "❄" }
     ];
+
+    const FESTIVAL_CONFIG = {
+        enabled: true,
+        minDay: 8,
+        minPop: 24,
+        cooldownDays: 40,
+        baseChance: 0.08,
+        maxEntries: 80
+    };
+
+    const FESTIVAL_SEASONS = {
+        spring: {
+            theme: "nature",
+            names: ["Bloom Rite", "Seedlight Fair", "Greenwake", "Rainveil Festival"],
+            influences: { happy: 0.4, faith: 0.15, farm: 0.2 }
+        },
+        summer: {
+            theme: "culture",
+            names: ["Sunfire Carnival", "River Lanterns", "Market of Sails", "High Sun Jubilee"],
+            influences: { happy: 0.5, trade: 0.2, travel: 0.1 }
+        },
+        autumn: {
+            theme: "faith",
+            names: ["Harvest Feast", "Granary Blessing", "Cider Moot", "Amber Harvest"],
+            influences: { happy: 0.6, faith: 0.1, trade: 0.15, hunger: -0.2 }
+        },
+        winter: {
+            theme: "faith",
+            names: ["Lantern Vigil", "Frostbound Oath", "Long Night Choir", "Snowlight Vigil"],
+            influences: { happy: 0.3, faith: 0.3, order: 0.2 }
+        }
+    };
 
     function getSeasonInfo(day = null) {
         if (!planet) return null;
@@ -2582,6 +2839,116 @@
                 });
             } catch {}
         }
+    }
+
+    function initFestivals() {
+        if (!planet) return null;
+        if (!Array.isArray(planet._paultendoFestivals)) {
+            planet._paultendoFestivals = [];
+        }
+        if (!planet._paultendoFestivalId) {
+            const maxId = planet._paultendoFestivals.reduce((max, f) => Math.max(max, f.id || 0), 0);
+            planet._paultendoFestivalId = maxId + 1;
+        }
+        return planet._paultendoFestivals;
+    }
+
+    function recordFestival(entry) {
+        if (!entry || !planet) return null;
+        const list = initFestivals();
+        if (!list) return null;
+        const record = {
+            id: planet._paultendoFestivalId++,
+            day: entry.day || planet.day,
+            townId: entry.townId,
+            seasonId: entry.seasonId,
+            seasonName: entry.seasonName,
+            seasonIcon: entry.seasonIcon,
+            name: entry.name,
+            theme: entry.theme,
+            note: entry.note || null
+        };
+        list.push(record);
+        if (list.length > FESTIVAL_CONFIG.maxEntries) {
+            list.splice(0, list.length - FESTIVAL_CONFIG.maxEntries);
+        }
+        return record;
+    }
+
+    function getFestivalSeasonInfo() {
+        const season = getSeasonInfo();
+        if (!season) return null;
+        const data = FESTIVAL_SEASONS[season.id];
+        if (!data) return null;
+        return { season, data };
+    }
+
+    function shouldSkipFestival(town, season) {
+        if (!town || town.end) return true;
+        if (!FESTIVAL_CONFIG.enabled) return true;
+        if (planet.day < FESTIVAL_CONFIG.minDay) return true;
+        if ((town.pop || 0) < FESTIVAL_CONFIG.minPop) return true;
+        const lastDay = town._paultendoFestivalDay || -999;
+        if ((planet.day - lastDay) < FESTIVAL_CONFIG.cooldownDays) return true;
+        if (town._paultendoFestivalSeason === season.id && (planet.day - lastDay) < SEASON_LENGTH_DAYS) return true;
+        if (town.famine && !town.famine.ended) return true;
+        if (town.drought && !town.drought.ended) return true;
+        if (town.activeEpidemic) return true;
+        if (town.issues && town.issues.war) return true;
+        return false;
+    }
+
+    function getFestivalChance(town, seasonId) {
+        const happy = town.influences?.happy || 0;
+        const faith = town.influences?.faith || 0;
+        const trade = town.influences?.trade || 0;
+        let chance = FESTIVAL_CONFIG.baseChance;
+        chance += Math.max(0, happy) * 0.015;
+        chance += Math.max(0, faith) * 0.01;
+        if (seasonId === "summer" || seasonId === "autumn") {
+            chance += Math.max(0, trade) * 0.01;
+        }
+        if (town.unrest && town.unrest > 20) chance *= 0.7;
+        return clampValue(chance, 0.02, 0.35);
+    }
+
+    function planFestival(town) {
+        const pack = getFestivalSeasonInfo();
+        if (!pack) return null;
+        const { season, data } = pack;
+        if (shouldSkipFestival(town, season)) return null;
+        const chance = getFestivalChance(town, season.id);
+        if (Math.random() > chance) return null;
+        const name = choose(data.names) || `${season.name} Festival`;
+        return {
+            name,
+            theme: data.theme || "culture",
+            influences: data.influences || { happy: 0.2 },
+            season
+        };
+    }
+
+    function describeFestivalMessage(town, fest) {
+        const townName = `{{regname:town|${town.id}}}`;
+        const seasonLine = `${fest.season.icon} ${fest.season.name}`;
+        const lead = choose([
+            `${townName} erupts in celebration`,
+            `${townName} gathers in song and procession`,
+            `${townName} marks the turning of the season`,
+            `${townName} lights the plazas with festivity`
+        ]);
+        return `${lead} for the {{b:${fest.name}}} (${seasonLine}).`;
+    }
+
+    function applyFestivalEffects(town, fest) {
+        if (!town || !fest) return;
+        happen("Influence", null, town, { ...(fest.influences || {}), temp: true });
+        if (typeof initUnrest === "function") {
+            initUnrest(town);
+            if (town.unrest > 0) town.unrest = Math.max(0, town.unrest - 0.4);
+        }
+        town._paultendoFestivalDay = planet.day;
+        town._paultendoFestivalSeason = fest.season.id;
     }
 
     function removeInlineWorldIndicators() {
@@ -5317,14 +5684,14 @@
             try { wrapSetViewForFog(); } catch {}
             try { wrapUpdateCanvasForFog(); } catch {}
             try { ensureChronicleHeader(); } catch {}
-            try { updateChronicleDayMarkers(); } catch {}
+            try { rebuildChronicleUiStateFromLog(); } catch {}
         });
     }
     try { wrapSetViewForFog(); } catch {}
     try { wrapUpdateCanvasForFog(); } catch {}
     try { ensureEpidemicLayer(); } catch {}
     try { ensureChronicleHeader(); } catch {}
-    try { updateChronicleDayMarkers(); } catch {}
+    try { scheduleChronicleDayMarkers(); } catch {}
 
     function initDiscoveryRenderHooks() {
         let hooked = false;
@@ -5698,6 +6065,51 @@
         }
     });
 
+    // Seasonal festivals (joyful town celebrations)
+    modEvent("seasonalFestival", {
+        random: true,
+        auto: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            const fest = planFestival(subject);
+            if (!fest) return false;
+            args.festival = fest;
+            return true;
+        },
+        message: (subject, target, args) => {
+            if (!args || !args.festival) return null;
+            return describeFestivalMessage(subject, args.festival);
+        },
+        func: (subject, target, args) => {
+            const fest = args.festival;
+            if (!fest) return false;
+            applyFestivalEffects(subject, fest);
+            const season = fest.season;
+            recordFestival({
+                townId: subject.id,
+                seasonId: season.id,
+                seasonName: season.name,
+                seasonIcon: season.icon,
+                name: fest.name,
+                theme: fest.theme
+            });
+            try {
+                recordAnnalsEntry({
+                    theme: fest.theme || "culture",
+                    title: `${fest.name} in ${subject.name || "a town"}`,
+                    body: `${townRef(subject.id)} celebrates the ${fest.name}, marking ${season.name} with revelry and shared rites.`,
+                    sourceType: "festival",
+                    sourceId: `${subject.id}:${season.id}:${planet.day}`,
+                    townId: subject.id,
+                    day: planet.day
+                });
+            } catch {}
+            try { modLog("season", `{{regname:town|${subject.id}}} celebrates the {{b:${fest.name}}}.`, "milestone", { town: subject }); } catch {}
+            return true;
+        }
+    });
+
     // =========================================================================
     // SOLAR SYSTEM + MULTI-WORLD SUPPORT
     // =========================================================================
@@ -5730,14 +6142,40 @@
         peaceChance: 0.02,
         maxActive: 3
     };
+    const FRONTIER_CHARTER_CONFIG = {
+        minDay: 700,
+        minSpaceTech: 38,
+        minTownPop: 55,
+        maxActive: 3,
+        townCooldownDays: 120,
+        worldCooldownDays: 160,
+        prepDays: { min: 10, max: 22 },
+        travelBase: 6,
+        travelOrbit: 3,
+        launchPopShare: 0.06,
+        launchPopMin: 6,
+        launchPopMax: 28,
+        launchWealthCost: 3,
+        baseSuccess: 0.65,
+        harshPenalty: 0.22,
+        routeChance: 0.6
+    };
 
     const SOLAR_WORLD_TEMPLATES = [
         { id: 1, key: "home", type: "home", orbitIndex: 0, sizeScale: 1, waterLevel: null, habitable: true, harsh: false, label: "Homeworld", color: "#6eff6e" },
-        { id: 2, key: "moon", type: "moon", orbitIndex: 1, sizeScale: 0.45, waterLevel: 0.12, habitable: true, harsh: true, label: "Moon", color: "#cfcfcf", discovery: "moon" },
-        { id: 3, key: "mars", type: "mars", orbitIndex: 2, sizeScale: 0.7, waterLevel: 0.18, habitable: true, harsh: true, label: "Red Planet", color: "#ff8a65", discovery: "mars" },
-        { id: 4, key: "belt", type: "belt", orbitIndex: 3, sizeScale: 0.6, waterLevel: 0.08, habitable: false, harsh: true, label: "Asteroid Belt", color: "#b6b6b6", discovery: "belt" },
-        { id: 5, key: "outer", type: "outer", orbitIndex: 4, sizeScale: 1.2, waterLevel: 0.35, habitable: false, harsh: true, label: "Outer Planet", color: "#7aa7ff", discovery: "outer", rareHabitable: 0.15 }
+        { id: 2, key: "moon", type: "moon", orbitIndex: 1, sizeScale: 0.45, waterLevel: 0.06, habitable: true, harsh: true, label: "Moon", color: "#cfcfcf", discovery: "moon" },
+        { id: 3, key: "mars", type: "mars", orbitIndex: 2, sizeScale: 0.7, waterLevel: 0.12, habitable: true, harsh: true, label: "Red Planet", color: "#ff8a65", discovery: "mars" },
+        { id: 4, key: "belt", type: "belt", orbitIndex: 3, sizeScale: 0.6, waterLevel: 0.02, habitable: false, harsh: true, label: "Asteroid Belt", color: "#b6b6b6", discovery: "belt" },
+        { id: 5, key: "outer", type: "outer", orbitIndex: 4, sizeScale: 1.2, waterLevel: 0.4, habitable: false, harsh: true, label: "Outer Planet", color: "#7aa7ff", discovery: "outer", rareHabitable: 0.15 }
     ];
+
+    const WORLD_CLIMATE_PROFILES = {
+        home: { tempBias: 0, moistureBias: 0, tempVariance: 0.1, moistureVariance: 0.1 },
+        moon: { tempBias: -0.18, moistureBias: -0.28, tempVariance: 0.08, moistureVariance: 0.05, drynessCurve: 0.08 },
+        mars: { tempBias: -0.1, moistureBias: -0.25, tempVariance: 0.1, moistureVariance: 0.08, drynessCurve: 0.06 },
+        belt: { tempBias: -0.2, moistureBias: -0.34, tempVariance: 0.06, moistureVariance: 0.04, drynessCurve: 0.12 },
+        outer: { tempBias: -0.08, moistureBias: 0.15, tempVariance: 0.12, moistureVariance: 0.16 }
+    };
 
     function getUniverseDay() {
         return planet && planet.day ? planet.day : 1;
@@ -5788,6 +6226,40 @@
         }
 
         return world;
+    }
+
+    function getWorldClimateProfile(world) {
+        if (!world) return null;
+        return WORLD_CLIMATE_PROFILES[world.key] || WORLD_CLIMATE_PROFILES.home || null;
+    }
+
+    function worldNoise(x, y, seed) {
+        const val = Math.sin((x + seed) * 12.9898 + (y - seed) * 78.233) * 43758.5453;
+        return val - Math.floor(val);
+    }
+
+    function applyWorldClimateProfile(world) {
+        if (!world || !planet || !planet.chunks) return;
+        const profile = getWorldClimateProfile(world);
+        if (!profile) return;
+        const seed = (world.id || 1) * 97 + (world.orbitIndex || 0) * 31;
+
+        for (const key in planet.chunks) {
+            const chunk = planet.chunks[key];
+            if (!chunk) continue;
+            const noise = worldNoise(chunk.x || 0, chunk.y || 0, seed) - 0.5;
+            const baseTemp = chunk.t ?? 0.5;
+            const baseMoisture = chunk.m ?? 0.5;
+            let temp = baseTemp + (profile.tempBias || 0) + noise * (profile.tempVariance || 0);
+            let moisture = baseMoisture + (profile.moistureBias || 0) + noise * (profile.moistureVariance || 0);
+
+            if (profile.drynessCurve) {
+                moisture -= profile.drynessCurve * Math.abs(temp - 0.5);
+            }
+
+            chunk.t = clampValue(temp, 0, 1);
+            chunk.m = clampValue(moisture, 0, 1);
+        }
     }
 
     function captureWorldState() {
@@ -5909,6 +6381,7 @@
         }
 
         ensureUniverseBase(base);
+        initColonization(base);
         applyWorldMetaToPlanet(homeWorld);
         return base;
     }
@@ -5973,6 +6446,7 @@
         if (!universe || !world) return null;
         ensureUniverseBase(universe);
         const dims = resolveWorldDimensions(universe, world);
+        const universeDay = getUniverseDay();
 
         const snapshot = captureWorldState();
         const uiSnapshot = suppressGenerationUI();
@@ -5989,6 +6463,15 @@
             planet = newPlanet;
             reg = planet.reg;
 
+            if (typeof newPlanet.day !== "number" || !isFinite(newPlanet.day) || newPlanet.day < universeDay) {
+                newPlanet.day = universeDay;
+            }
+            if (newPlanet.settled === undefined || newPlanet.settled === null) {
+                newPlanet.settled = newPlanet.day;
+            }
+
+            applyWorldClimateProfile(world);
+            newPlanet._paultendoWorldProfiled = true;
             updateBiomes();
             calculateLandmasses();
 
@@ -6033,6 +6516,537 @@
         return (universe.worldOrder || []).map(id => universe.worlds[id]).filter(Boolean);
     }
 
+    // ---------------------------------------------------------------------
+    // Frontier Charters (late-game, multi-world colonization)
+    // ---------------------------------------------------------------------
+
+    function initColonization(universe) {
+        if (!universe) return null;
+        if (!universe._paultendoColonization) {
+            universe._paultendoColonization = {
+                nextId: 1,
+                charters: [],
+                history: [],
+                worldLastColony: {}
+            };
+        }
+        const state = universe._paultendoColonization;
+        if (!Array.isArray(state.charters)) state.charters = [];
+        if (!Array.isArray(state.history)) state.history = [];
+        if (!state.worldLastColony || typeof state.worldLastColony !== "object") state.worldLastColony = {};
+        if (!state.nextId) state.nextId = 1;
+        return state;
+    }
+
+    function getColonizationRegistry(universe = null) {
+        const uni = universe || getUniverse(false);
+        if (!uni) return null;
+        return initColonization(uni);
+    }
+
+    function getFrontierSpaceTech() {
+        const universe = getUniverse(false);
+        const uniTech = universe?.spaceTech || 0;
+        const local = planet?.unlocks?.space || 0;
+        return Math.max(uniTech, local);
+    }
+
+    function formatWorldName(world, fallback = "Unknown World") {
+        if (!world) return fallback;
+        if (world.name) return world.name;
+        if (world.label) return world.label;
+        return fallback;
+    }
+
+    function getFrontierMotives(town) {
+        const influences = town.influences || {};
+        const pop = town.pop || 0;
+        const size = Math.max(1, town.size || 1);
+        const density = pop / size;
+        const popPressure = Math.max(0, density - 14) / 6;
+        const unrest = town.unrest || 0;
+        const prestige = typeof getTownPrestige === "function" ? getTownPrestige(town) : 0;
+
+        return [
+            {
+                id: "frontier",
+                label: "seek new horizons",
+                weight: 1 + popPressure
+            },
+            {
+                id: "trade",
+                label: "open new trade horizons",
+                weight: 0.6 + (influences.trade || 0) * 0.12 + (town.wealth || 0) / 40
+            },
+            {
+                id: "faith",
+                label: "carry their faith to the stars",
+                weight: 0.5 + (influences.faith || 0) * 0.14
+            },
+            {
+                id: "refuge",
+                label: "escape mounting turmoil",
+                weight: 0.4 + unrest / 30 +
+                    (town._paultendoDisasterRefugeeDay ? 0.5 : 0) +
+                    (town._paultendoWarRefugeeDay ? 0.5 : 0)
+            },
+            {
+                id: "prestige",
+                label: "seek renown among the stars",
+                weight: 0.4 + prestige / 35
+            }
+        ];
+    }
+
+    function pickFrontierMotive(town) {
+        const motives = getFrontierMotives(town).filter(m => m.weight > 0);
+        if (motives.length === 0) return null;
+        return weightedChoice(motives, m => m.weight);
+    }
+
+    function getFrontierCandidateWorlds(originWorld, motive, registry) {
+        const day = getUniverseDay();
+        return getWorldOrder().filter(world => {
+            if (!world || !world.discovered) return false;
+            if (originWorld && world.id === originWorld.id) return false;
+            if (world.habitable === false) return false;
+            const lastColony = registry?.worldLastColony?.[world.id];
+            if (lastColony && (day - lastColony) < FRONTIER_CHARTER_CONFIG.worldCooldownDays) return false;
+            return true;
+        });
+    }
+
+    function scoreFrontierWorld(world, motive) {
+        if (!world) return 0;
+        const stats = getWorldTownStats(world);
+        let score = 1;
+        if (stats.towns === 0) score += 0.6;
+        else score += Math.max(-0.4, 0.2 - stats.towns * 0.12);
+        if (isWorldHarsh(world)) score -= 0.25;
+        if (motive?.id === "trade") score += stats.towns > 0 ? 0.25 : 0.1;
+        if (motive?.id === "refuge") score += isWorldHarsh(world) ? -0.3 : 0.25;
+        if (motive?.id === "faith") score += isWorldHarsh(world) ? 0.2 : 0;
+        return Math.max(0.1, score);
+    }
+
+    function planFrontierCharter(town) {
+        if (!town || town.end || town.pop <= 0) return null;
+        try { ensureTownState(town); } catch {}
+        try { initUnrest(town); } catch {}
+        const universe = getUniverse(false);
+        if (!universe) return null;
+        const registry = getColonizationRegistry(universe);
+        if (!registry) return null;
+        const day = getUniverseDay();
+        if (day < FRONTIER_CHARTER_CONFIG.minDay) return null;
+        if (getFrontierSpaceTech() < FRONTIER_CHARTER_CONFIG.minSpaceTech) return null;
+        if ((town.pop || 0) < FRONTIER_CHARTER_CONFIG.minTownPop) return null;
+        if (registry.charters.length >= FRONTIER_CHARTER_CONFIG.maxActive) return null;
+        if (town._paultendoCharterDay && (day - town._paultendoCharterDay) < FRONTIER_CHARTER_CONFIG.townCooldownDays) {
+            return null;
+        }
+
+        const motive = pickFrontierMotive(town);
+        if (!motive) return null;
+        const originWorld = getWorldById(getCurrentWorldId());
+        if (!originWorld) return null;
+        const candidates = getFrontierCandidateWorlds(originWorld, motive, registry);
+        if (candidates.length === 0) return null;
+        const targetWorld = weightedChoice(candidates, world => scoreFrontierWorld(world, motive));
+        if (!targetWorld) return null;
+
+        return {
+            originWorldId: originWorld.id,
+            originTownId: town.id,
+            originName: town.name,
+            targetWorldId: targetWorld.id,
+            targetName: formatWorldName(targetWorld),
+            motive: motive.id,
+            motiveLabel: motive.label
+        };
+    }
+
+    function scheduleFrontierBeats(charter, originLabel) {
+        if (!charter || !originLabel) return;
+        const beats = [];
+        const mid = charter.createdDay + Math.max(1, Math.floor((charter.launchDay - charter.createdDay) * 0.5));
+        const near = charter.launchDay - 1;
+        beats.push({
+            day: mid,
+            text: `${originLabel} looks to the stars; shipwrights test hulls and charts.`,
+            type: null
+        });
+        if (near > charter.createdDay) {
+            beats.push({
+                day: near,
+                text: `Supplies are sealed in ${originLabel}'s frontier vessels.`,
+                type: null
+            });
+        }
+        charter.beats = beats;
+    }
+
+    function logFrontierEvent(text, type = null) {
+        if (!text || typeof logMessage !== "function") return;
+        logMessage(text, type);
+    }
+
+    function startFrontierCharter(plan, options = {}) {
+        if (!plan) return null;
+        const universe = getUniverse(false);
+        if (!universe) return null;
+        const registry = getColonizationRegistry(universe);
+        if (!registry) return null;
+
+        const originWorld = getWorldById(plan.originWorldId);
+        const originTown = originWorld ? getTownByRef({ worldId: plan.originWorldId, townId: plan.originTownId }) : null;
+        if (!originTown) return null;
+
+        const edu = originTown.influences?.education || 0;
+        const trade = originTown.influences?.trade || 0;
+        const basePrep = randRange(FRONTIER_CHARTER_CONFIG.prepDays.min, FRONTIER_CHARTER_CONFIG.prepDays.max);
+        const prepReduction = Math.floor((edu + trade) / 5);
+        const prepDays = clampValue(basePrep - prepReduction, FRONTIER_CHARTER_CONFIG.prepDays.min, FRONTIER_CHARTER_CONFIG.prepDays.max + 6);
+
+        const day = getUniverseDay();
+        const charter = {
+            id: registry.nextId++,
+            originWorldId: plan.originWorldId,
+            originTownId: plan.originTownId,
+            originName: plan.originName || originTown.name,
+            targetWorldId: plan.targetWorldId,
+            targetName: plan.targetName || "Unknown World",
+            motive: plan.motive || "frontier",
+            motiveLabel: plan.motiveLabel || "seek new horizons",
+            createdDay: day,
+            launchDay: day + prepDays,
+            arrivalDay: null,
+            stage: "preparing",
+            endorsed: !!options.endorsed
+        };
+
+        registry.charters.push(charter);
+        originTown._paultendoCharterDay = getUniverseDay();
+        originTown._paultendoCharterId = charter.id;
+
+        const originLabel = formatTownRef({ worldId: charter.originWorldId, townId: charter.originTownId });
+        const targetLabel = charter.targetName;
+        const starter = options.endorsed
+            ? `${originLabel} signs a frontier charter to ${targetLabel}.`
+            : `${originLabel} drafts a frontier charter to ${targetLabel}.`;
+        logFrontierEvent(starter, "milestone");
+
+        scheduleFrontierBeats(charter, originLabel);
+        return charter;
+    }
+
+    function computeFrontierTravelDays(originWorld, targetWorld) {
+        const orbitDistance = Math.abs((originWorld?.orbitIndex || 0) - (targetWorld?.orbitIndex || 0)) + 1;
+        return FRONTIER_CHARTER_CONFIG.travelBase + orbitDistance * FRONTIER_CHARTER_CONFIG.travelOrbit + randRange(0, 2);
+    }
+
+    function applyFrontierLaunchCost(town) {
+        if (!town) return 0;
+        const pop = town.pop || 0;
+        if (pop <= 0) return 0;
+        const emigrants = clampValue(
+            Math.round(pop * FRONTIER_CHARTER_CONFIG.launchPopShare),
+            FRONTIER_CHARTER_CONFIG.launchPopMin,
+            FRONTIER_CHARTER_CONFIG.launchPopMax
+        );
+        town.pop = Math.max(1, pop - emigrants);
+        if (town.wealth !== undefined) {
+            town.wealth = Math.max(0, (town.wealth || 0) - FRONTIER_CHARTER_CONFIG.launchWealthCost);
+        }
+        return emigrants;
+    }
+
+    function findColonySite() {
+        if (typeof filterChunks !== "function") return null;
+        const candidates = filterChunks(c => {
+            if (!c || c.b === "water" || c.b === "mountain") return false;
+            if (c.v && c.v.s) return false;
+            return true;
+        });
+        if (!candidates || candidates.length === 0) return null;
+
+        if (typeof adjacentCoords !== "undefined") {
+            const coastal = candidates.filter(c => {
+                return adjacentCoords.some(coord => {
+                    const neighbor = chunkAt(c.x + coord[0], c.y + coord[1]);
+                    return neighbor && neighbor.b === "water";
+                });
+            });
+            if (coastal.length > 0) return choose(coastal);
+        }
+
+        return choose(candidates);
+    }
+
+    function createFrontierColonyTown(charter, emigrants) {
+        const targetWorld = getWorldById(charter.targetWorldId);
+        if (!targetWorld) return null;
+        ensureWorldState(targetWorld);
+        let created = null;
+        withWorldState(targetWorld, () => {
+            const site = findColonySite();
+            if (!site) return;
+            const pop = Math.max(5, Math.round(emigrants * 0.7));
+            const newTown = happen("Create", null, null, { x: site.x, y: site.y, pop }, "town");
+            if (!newTown) return;
+            ensureTownState(newTown);
+            newTown._paultendoColony = {
+                originWorldId: charter.originWorldId,
+                originTownId: charter.originTownId,
+                motive: charter.motive,
+                charterId: charter.id,
+                day: planet.day
+            };
+            if (charter.motive === "faith") {
+                happen("Influence", null, newTown, { faith: 0.6, happy: 0.2 });
+            } else if (charter.motive === "trade") {
+                happen("Influence", null, newTown, { trade: 0.6, education: 0.2 });
+            } else if (charter.motive === "refuge") {
+                happen("Influence", null, newTown, { happy: 0.3, justice: 0.2 });
+            } else if (charter.motive === "prestige") {
+                happen("Influence", null, newTown, { education: 0.3, military: 0.2 });
+            } else {
+                happen("Influence", null, newTown, { travel: 0.2, trade: 0.2 });
+            }
+            try { markTownExplored(newTown); } catch {}
+            created = newTown;
+        }, { silent: true });
+        return created;
+    }
+
+    function computeFrontierSuccessChance(charter, originTown, targetWorld) {
+        let chance = FRONTIER_CHARTER_CONFIG.baseSuccess;
+        const influences = originTown.influences || {};
+        chance += (getFrontierSpaceTech() - FRONTIER_CHARTER_CONFIG.minSpaceTech) * 0.004;
+        chance += (influences.education || 0) * 0.02;
+        chance += (influences.trade || 0) * 0.02;
+        chance += (influences.travel || 0) * 0.025;
+        chance += (influences.military || 0) * 0.012;
+        if (charter.motive === "faith") chance += (influences.faith || 0) * 0.02;
+        if (charter.motive === "refuge") chance -= 0.03;
+        if (isWorldHarsh(targetWorld)) chance -= FRONTIER_CHARTER_CONFIG.harshPenalty;
+        const unrest = originTown.unrest || 0;
+        chance -= Math.max(0, unrest - 15) * 0.002;
+        return clampValue(chance, 0.15, 0.9);
+    }
+
+    function resolveFrontierCharter(charter, registry) {
+        if (!charter || !registry) return;
+        const originTown = getTownByRef({ worldId: charter.originWorldId, townId: charter.originTownId });
+        const originWorld = getWorldById(charter.originWorldId);
+        const targetWorld = getWorldById(charter.targetWorldId);
+        if (!originTown || !originWorld || !targetWorld) {
+            charter.stage = "failed";
+            charter.outcome = "lost";
+            archiveFrontierCharter(charter, registry);
+            return;
+        }
+        try { initUnrest(originTown); } catch {}
+
+        const chance = computeFrontierSuccessChance(charter, originTown, targetWorld);
+        if (Math.random() <= chance) {
+            const emigrants = charter.emigrants || Math.max(6, Math.round((originTown.pop || 0) * 0.04));
+            const newTown = createFrontierColonyTown(charter, emigrants);
+            if (newTown) {
+                charter.stage = "completed";
+                charter.outcome = "success";
+                registry.worldLastColony[targetWorld.id] = getUniverseDay();
+
+                const originLabel = formatTownRef({ worldId: charter.originWorldId, townId: charter.originTownId });
+                const worldName = formatWorldName(targetWorld, charter.targetName);
+                logFrontierEvent(`A colony from ${originLabel} establishes {{b:${newTown.name}}} on ${worldName}.`, "milestone");
+                try {
+                    recordAnnalsEntry({
+                        theme: "discovery",
+                        title: `${newTown.name} Founded`,
+                        body: `${originLabel} plants a new settlement on ${worldName}.`,
+                        sourceType: "frontier_charter",
+                        sourceId: charter.id,
+                        day: getUniverseDay(),
+                        townId: newTown.id
+                    });
+                } catch {}
+
+                const originRef = { worldId: charter.originWorldId, townId: charter.originTownId };
+                const newRef = { worldId: charter.targetWorldId, townId: newTown.id };
+                try { addSpaceWarRelation(originRef, newRef, 1.2); } catch {}
+                if (Math.random() < FRONTIER_CHARTER_CONFIG.routeChance) {
+                    try { createSpaceRoute(originRef, newRef); } catch {}
+                }
+            } else {
+                charter.stage = "failed";
+                charter.outcome = "landing_failed";
+                logFrontierEvent(`The frontier flotilla from {{regname:town|${charter.originTownId}}} fails to establish a foothold on ${formatWorldName(targetWorld, charter.targetName)}.`, "warning");
+            }
+        } else {
+            charter.stage = "failed";
+            charter.outcome = "lost";
+            const originLabel = formatTownRef({ worldId: charter.originWorldId, townId: charter.originTownId });
+            logFrontierEvent(`A frontier expedition from ${originLabel} is lost en route to ${formatWorldName(targetWorld, charter.targetName)}.`, "warning");
+            try {
+                recordAnnalsEntry({
+                    theme: "hardship",
+                    title: "A Frontier Charter Lost",
+                    body: `${originLabel} sent a charter toward ${formatWorldName(targetWorld, charter.targetName)}, but no settlers returned.`,
+                    sourceType: "frontier_charter",
+                    sourceId: charter.id,
+                    day: getUniverseDay()
+                });
+            } catch {}
+        }
+
+        archiveFrontierCharter(charter, registry);
+    }
+
+    function archiveFrontierCharter(charter, registry) {
+        if (!registry) return;
+        if (!registry.history) registry.history = [];
+        registry.history.push({
+            id: charter.id,
+            originWorldId: charter.originWorldId,
+            originTownId: charter.originTownId,
+            targetWorldId: charter.targetWorldId,
+            targetName: charter.targetName,
+            motive: charter.motive,
+            outcome: charter.outcome || charter.stage,
+            day: getUniverseDay()
+        });
+        if (registry.history.length > 40) registry.history.shift();
+        registry.charters = registry.charters.filter(c => c && c.id !== charter.id);
+    }
+
+    function processFrontierCharters() {
+        const registry = getColonizationRegistry();
+        if (!registry || registry.charters.length === 0) return;
+        const day = getUniverseDay();
+        registry.charters.slice().forEach(charter => {
+            if (!charter || charter.stage === "completed" || charter.stage === "failed") return;
+            if (Array.isArray(charter.beats)) {
+                charter.beats.forEach(beat => {
+                    if (beat && !beat.done && day >= beat.day) {
+                        logFrontierEvent(beat.text, beat.type || null);
+                        beat.done = true;
+                    }
+                });
+            }
+            if (charter.stage === "preparing" && day >= charter.launchDay) {
+                const originTown = getTownByRef({ worldId: charter.originWorldId, townId: charter.originTownId });
+                const originWorld = getWorldById(charter.originWorldId);
+                const targetWorld = getWorldById(charter.targetWorldId);
+                if (!originTown || !originWorld || !targetWorld) {
+                    charter.stage = "failed";
+                    charter.outcome = "abandoned";
+                    archiveFrontierCharter(charter, registry);
+                    return;
+                }
+                const emigrants = applyFrontierLaunchCost(originTown);
+                charter.emigrants = emigrants;
+                const travelDays = computeFrontierTravelDays(originWorld, targetWorld);
+                charter.arrivalDay = day + travelDays;
+                charter.stage = "enroute";
+
+                const originLabel = formatTownRef({ worldId: charter.originWorldId, townId: charter.originTownId });
+                logFrontierEvent(`A frontier flotilla lifts off from ${originLabel}, bound for ${formatWorldName(targetWorld, charter.targetName)}.`, "milestone");
+            } else if (charter.stage === "enroute" && charter.arrivalDay && day >= charter.arrivalDay) {
+                resolveFrontierCharter(charter, registry);
+            }
+        });
+    }
+
+    modEvent("frontierStirring", {
+        random: true,
+        auto: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject) => {
+            const day = getUniverseDay();
+            if (day < FRONTIER_CHARTER_CONFIG.minDay - 120) return false;
+            if (getFrontierSpaceTech() < FRONTIER_CHARTER_CONFIG.minSpaceTech - 6) return false;
+            if ((subject.influences?.education || 0) < 3 && (subject.influences?.trade || 0) < 3) return false;
+            if (subject._paultendoStarLookDay && (day - subject._paultendoStarLookDay) < 80) return false;
+            return true;
+        },
+        message: (subject) => {
+            const townName = `{{regname:town|${subject.id}}}`;
+            const options = [
+                `${townName}'s stargazers speak of journeys beyond the sky.`,
+                `Workshops in ${townName} whisper about vessels that could brave the void.`,
+                `${townName} keeps watch for omens among the stars.`
+            ];
+            return choose(options);
+        },
+        func: (subject) => {
+            subject._paultendoStarLookDay = getUniverseDay();
+        }
+    });
+
+    modEvent("frontierCharterPrompt", {
+        random: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            const plan = planFrontierCharter(subject);
+            if (!plan) return false;
+            args.plan = plan;
+            return true;
+        },
+        message: (subject, target, args) => {
+            const plan = args.plan;
+            if (!plan) return null;
+            return `Leaders in {{regname:town|${subject.id}}} propose a frontier charter to {{b:${plan.targetName}}}, hoping to ${plan.motiveLabel}. Endorse the preparations? {{should}}`;
+        },
+        messageDone: "You bless the charter and release its funding.",
+        messageNo: "You ask them to wait a while longer.",
+        func: (subject, target, args) => {
+            if (!args.plan) return;
+            startFrontierCharter(args.plan, { endorsed: true });
+        },
+        funcNo: (subject) => {
+            subject._paultendoCharterDay = getUniverseDay();
+        }
+    });
+
+    modEvent("frontierCharterAuto", {
+        random: true,
+        auto: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            const plan = planFrontierCharter(subject);
+            if (!plan) return false;
+            args.plan = plan;
+            args.choice = decideTownChoice(subject, {
+                baseYes: 0.58,
+                minYes: 0.18,
+                maxYes: 0.9,
+                influences: { travel: 0.07, trade: 0.05, education: 0.05, faith: 0.03 },
+                values: { change: 0.06, order: -0.02, wealth: 0.03 },
+                randomness: 0.08
+            });
+            return true;
+        },
+        message: (subject, target, args) => {
+            const plan = args.plan;
+            if (!plan) return null;
+            if (args.choice === "yes") {
+                return `{{regname:town|${subject.id}}} drafts a frontier charter bound for {{b:${plan.targetName}}}.`;
+            }
+            return `{{regname:town|${subject.id}}} postpones its starward plans.`;
+        },
+        func: (subject, target, args) => {
+            if (args.choice !== "yes") {
+                subject._paultendoCharterDay = getUniverseDay();
+                return;
+            }
+            startFrontierCharter(args.plan, { endorsed: false });
+        }
+    });
+
     function syncLogToPlanet() {
         if (!planet || typeof document === "undefined") return;
         const logDiv = document.getElementById("logMessages");
@@ -6049,6 +7063,7 @@
             } else {
                 logDiv.innerHTML = planet._paultendoLogHTML;
             }
+            try { rebuildChronicleUiStateFromLog(); } catch {}
         }
     }
 
@@ -6069,21 +7084,45 @@
         syncCurrentWorldState(universe);
         ensureWorldState(target);
 
+        const previousDay = getUniverseDay();
         universe.currentWorldId = worldId;
         applyWorldState(target.state, target);
+        if (planet && (typeof planet.day !== "number" || !isFinite(planet.day))) {
+            planet.day = previousDay || 1;
+        }
+        if (planet && planet.day < 1) planet.day = 1;
+        if (planet && (planet.settled === undefined || planet.settled === null)) {
+            try {
+                if (typeof regCount === "function" && regCount("town") > 0) {
+                    planet.settled = planet.day;
+                }
+            } catch {}
+        }
+        if (planet && !planet._paultendoWorldProfiled) {
+            try {
+                applyWorldClimateProfile(target);
+                planet._paultendoWorldProfiled = true;
+                if (typeof updateBiomes === "function") updateBiomes();
+                if (typeof calculateLandmasses === "function") calculateLandmasses();
+            } catch {}
+        }
         if (planet && planet.unlocks) {
             planet.unlocks.space = Math.max(planet.unlocks.space || 0, universe.spaceTech || 0);
         }
 
         if (typeof initGame === "function") {
             let prevSuppress = undefined;
+            let prevSkipRestore = undefined;
             if (typeof window !== "undefined") {
                 prevSuppress = window._paultendoSuppressLogSync;
                 window._paultendoSuppressLogSync = true;
+                prevSkipRestore = window._paultendoSkipLogRestore;
+                window._paultendoSkipLogRestore = true;
             }
             initGame();
             if (typeof window !== "undefined") {
                 window._paultendoSuppressLogSync = prevSuppress;
+                window._paultendoSkipLogRestore = prevSkipRestore;
             }
             restoreLogFromPlanet({ merge: true });
             try { syncLogToPlanet(); } catch {}
@@ -6095,6 +7134,8 @@
 
         try { ensureMapCanvasSync(); } catch {}
         try { ensureFogLayer(); } catch {}
+        try { rebuildFogVisibility(); } catch {}
+        try { scheduleFogRefresh(true); } catch {}
         try { applyScaleAwareZoom(true); } catch {}
         try { updateSeasonState(); } catch {}
         return true;
@@ -6993,12 +8034,16 @@
         if (!universe) return;
         initSpaceRoutes();
         initSpaceWars();
+        initColonization(universe);
     }
 
     function wrapNextDayForUniverse() {
         if (typeof nextDay !== "function" || nextDay._paultendoUniverse) return;
         const baseNextDay = nextDay;
         nextDay = function(...args) {
+            if (planet && (typeof planet.day !== "number" || !isFinite(planet.day))) {
+                planet.day = 1;
+            }
             const dayBefore = (typeof planet !== "undefined") ? planet.day : undefined;
             let restoreTechBias = null;
             try { restoreTechBias = applyTechWeightBias(); } catch {}
@@ -7018,6 +8063,7 @@
             try { tickInactiveWorlds(); } catch {}
             try { processSpaceRoutes(); } catch {}
             try { processSpaceWars(); } catch {}
+            try { processFrontierCharters(); } catch {}
             return result;
         };
         nextDay._paultendoUniverse = true;
@@ -7034,8 +8080,11 @@
                     universe.currentWorldId = getCurrentWorldId();
                     syncCurrentWorldState(universe);
                 }
-                restoreLogFromPlanet({ merge: true });
-                syncLogToPlanet();
+                if (typeof window === "undefined" || !window._paultendoSkipLogRestore) {
+                    restoreLogFromPlanet({ merge: true });
+                    syncLogToPlanet();
+                }
+                try { rebuildFogVisibility(); } catch {}
             } catch {}
             return result;
         };
@@ -7088,7 +8137,8 @@
             worlds: {},
             worldSaves: {},
             spaceRoutes: universe.spaceRoutes || [],
-            spaceWars: universe.spaceWars || []
+            spaceWars: universe.spaceWars || [],
+            colonization: universe._paultendoColonization || null
         };
 
         for (const world of Object.values(universe.worlds || {})) {
@@ -7146,6 +8196,10 @@
         universe.relations = saved.relations || {};
         universe.spaceRoutes = saved.spaceRoutes || [];
         universe.spaceWars = saved.spaceWars || [];
+        if (saved.colonization) {
+            universe._paultendoColonization = saved.colonization;
+        }
+        initColonization(universe);
 
         universe.worlds = {};
         for (const id in saved.worlds || {}) {
@@ -9624,6 +10678,315 @@
         if (!planet.embargoes) planet.embargoes = [];
     }
 
+    const ECONOMY_FLOW_CONFIG = {
+        baseIncome: 0.4,
+        popIncome: 0.012,
+        tradeIncome: 0.22,
+        educationIncome: 0.08,
+        routeBaseIncome: 0.4,
+        routeTradeIncome: 0.06,
+        roadIncome: 0.006,
+        baseUpkeep: 0.35,
+        popUpkeep: 0.01,
+        sizeUpkeep: 0.06,
+        infraUpkeep: 0.0025,
+        warUpkeep: 0.6,
+        unrestUpkeep: 0.004,
+        famineUpkeep: 0.4,
+        minNet: -25,
+        maxNet: 25
+    };
+
+    const MARKET_CONFIG = {
+        minCash: 18,
+        basePrice: 8,
+        foodPrice: 6,
+        luxuryPrice: 8,
+        toolPrice: 10,
+        maxDistance: 140
+    };
+
+    const LAND_MARKET_CONFIG = {
+        minRelations: 1,
+        minBuyerCash: 45,
+        pricePerChunk: 9,
+        maxChunks: 6,
+        minSellerSize: 10,
+        minRemainingSize: 6
+    };
+
+    function initTownEconomyState(town) {
+        if (!town || town.end) return;
+        ensureTownState(town);
+        if (!town.resources || typeof town.resources !== "object") town.resources = {};
+        if (typeof town.resources.cash !== "number" || Number.isNaN(town.resources.cash)) town.resources.cash = 0;
+    }
+
+    function clampCashDelta(value) {
+        return clampValue(value, ECONOMY_FLOW_CONFIG.minNet, ECONOMY_FLOW_CONFIG.maxNet);
+    }
+
+    function getTownTradePartners(town) {
+        const partners = [];
+        const routes = getTownRoutes(town);
+        const seen = new Set();
+        routes.forEach(route => {
+            const partner = getRoutePartner(route, town);
+            if (!partner || partner.end) return;
+            if (seen.has(partner.id)) return;
+            seen.add(partner.id);
+            partners.push(partner);
+        });
+        return partners;
+    }
+
+    function computeTownEconomySnapshot(town) {
+        if (!town || town.end) return null;
+        initTownEconomyState(town);
+        if (town._paultendoEconomy && town._paultendoEconomy.day === planet.day) {
+            return town._paultendoEconomy;
+        }
+
+        const trade = Math.max(0, town.influences?.trade || 0);
+        const education = Math.max(0, town.influences?.education || 0);
+        const pop = Math.max(0, town.pop || 0);
+        const size = Math.max(1, town.size || 1);
+        const roads = getInfrastructureLevel(town, "roads");
+        const buildings = getInfrastructureLevel(town, "buildings");
+        const institutions = getInfrastructureLevel(town, "institutions");
+
+        let income = ECONOMY_FLOW_CONFIG.baseIncome;
+        income += pop * ECONOMY_FLOW_CONFIG.popIncome;
+        income += trade * ECONOMY_FLOW_CONFIG.tradeIncome;
+        income += education * ECONOMY_FLOW_CONFIG.educationIncome;
+        income += roads * ECONOMY_FLOW_CONFIG.roadIncome;
+
+        let routeIncome = 0;
+        const routes = getTownRoutes(town);
+        routes.forEach(route => {
+            if (!route || route.active === false) return;
+            const partner = getRoutePartner(route, town);
+            if (!partner || partner.end) return;
+            if (hasEmbargo(town, partner)) return;
+            const partnerTrade = Math.max(0, partner.influences?.trade || 0);
+            const tradeAvg = (trade + partnerTrade) / 2;
+            const condition = clampValue(route.condition ?? 1, 0, 1);
+            const difficulty = Math.max(0.7, route.difficulty || 1);
+            const base = ECONOMY_FLOW_CONFIG.routeBaseIncome + tradeAvg * ECONOMY_FLOW_CONFIG.routeTradeIncome;
+            routeIncome += (base * condition) / difficulty;
+        });
+        income += routeIncome;
+
+        let expenses = ECONOMY_FLOW_CONFIG.baseUpkeep;
+        expenses += pop * ECONOMY_FLOW_CONFIG.popUpkeep;
+        expenses += size * ECONOMY_FLOW_CONFIG.sizeUpkeep;
+        expenses += (buildings + institutions) * ECONOMY_FLOW_CONFIG.infraUpkeep;
+        initUnrest(town);
+        const unrest = town.unrest || 0;
+        expenses += Math.max(0, unrest - 40) * ECONOMY_FLOW_CONFIG.unrestUpkeep;
+        if (hasIssue(town, "war")) expenses += ECONOMY_FLOW_CONFIG.warUpkeep;
+        if (town.famine && !town.famine.ended) expenses += ECONOMY_FLOW_CONFIG.famineUpkeep;
+
+        const net = clampCashDelta(income - expenses);
+        const snapshot = {
+            day: planet.day,
+            income,
+            expenses,
+            net,
+            routeIncome,
+            trade,
+            roads,
+            cash: town.resources.cash || 0,
+            routes: routes.length
+        };
+        town._paultendoEconomy = snapshot;
+        return snapshot;
+    }
+
+    function applyTownCashDelta(town, delta) {
+        if (!town || town.end) return 0;
+        initTownEconomyState(town);
+        if (!delta || !Number.isFinite(delta)) return 0;
+        const current = town.resources.cash || 0;
+        let applied = delta;
+        if (current + applied < 0) applied = -current;
+        if (Math.abs(applied) < 0.01) return 0;
+        happen("Resource", null, town, { cash: applied });
+        return applied;
+    }
+
+    function transferCash(fromTown, toTown, amount) {
+        if (!fromTown || !toTown || fromTown.end || toTown.end) return 0;
+        initTownEconomyState(fromTown);
+        initTownEconomyState(toTown);
+        const available = fromTown.resources?.cash || 0;
+        const paid = Math.max(0, Math.min(available, amount));
+        if (paid <= 0) return 0;
+        happen("Resource", null, fromTown, { cash: -paid });
+        happen("Resource", null, toTown, { cash: paid });
+        return paid;
+    }
+
+    function getTownMarketNeed(town) {
+        if (!town || town.end) return null;
+        const hunger = town.influences?.hunger || 0;
+        const happy = town.influences?.happy || 0;
+        const trade = town.influences?.trade || 0;
+        const education = town.influences?.education || 0;
+        if (town.famine && !town.famine.ended) return { type: "food", severity: 2 + hunger * 0.3 };
+        if (hunger > 2) return { type: "food", severity: hunger };
+        if (happy < -0.5) return { type: "luxury", severity: Math.abs(happy) };
+        if (trade < 2 && education < 2) return { type: "tools", severity: 1.2 };
+        return null;
+    }
+
+    function pickMarketSeller(buyer, type) {
+        if (!buyer) return null;
+        let candidates = getTownTradePartners(buyer);
+        if (!candidates.length) {
+            candidates = regFilter("town", t => t && !t.end && t.id !== buyer.id);
+        }
+        candidates = candidates.filter(t => !areAtWar(buyer, t) && !hasEmbargo(buyer, t));
+        candidates = candidates.filter(t => {
+            const dist = getTownDistance(buyer, t);
+            return dist === null || dist <= MARKET_CONFIG.maxDistance;
+        });
+
+        if (type === "food") {
+            candidates = candidates.filter(t => (t.influences?.farm || 0) >= 5);
+        } else if (type === "luxury") {
+            candidates = candidates.filter(t => (t.influences?.trade || 0) >= 5 || (t.influences?.happy || 0) >= 2);
+        } else if (type === "tools") {
+            candidates = candidates.filter(t => (t.influences?.education || 0) >= 5 || (t.influences?.trade || 0) >= 5);
+        }
+
+        if (!candidates.length) return null;
+        return weightedChoice(candidates, t => {
+            const relation = getRelations(buyer, t);
+            const trade = t.influences?.trade || 0;
+            const farm = t.influences?.farm || 0;
+            return 1 + Math.max(0, relation) * 0.1 + trade * 0.05 + farm * 0.04;
+        });
+    }
+
+    function computeMarketPrice(buyer, seller, type, severity) {
+        const dist = getTownDistance(buyer, seller) || 0;
+        const distanceFactor = Math.min(1.4, dist / 80);
+        const relation = getRelations(buyer, seller);
+        let base = MARKET_CONFIG.basePrice + distanceFactor * 4;
+        let typeBase = MARKET_CONFIG.foodPrice;
+        if (type === "luxury") typeBase = MARKET_CONFIG.luxuryPrice;
+        if (type === "tools") typeBase = MARKET_CONFIG.toolPrice;
+        const scarcity = Math.max(0, severity) * 2.2;
+        let price = base + typeBase + scarcity;
+        if (relation >= 4) price *= 0.9;
+        if (relation <= -2) price *= 1.15;
+        return Math.max(6, Math.round(price));
+    }
+
+    function applyMarketPurchase(buyer, seller, type, price) {
+        if (!buyer || !seller) return false;
+        const paid = transferCash(buyer, seller, price);
+        if (paid <= 0) return false;
+
+        if (type === "food") {
+            applyInfluenceSafe(null, buyer, { hunger: -0.6, happy: 0.2, farm: 0.2 }, { temp: true });
+        } else if (type === "luxury") {
+            applyInfluenceSafe(null, buyer, { happy: 0.6, trade: 0.2 }, { temp: true });
+        } else if (type === "tools") {
+            applyInfluenceSafe(null, buyer, { education: 0.4, trade: 0.2 }, { temp: true });
+        }
+
+        applyInfluenceSafe(null, seller, { trade: 0.15, happy: 0.1 }, { temp: true });
+        improveRelations(buyer, seller, 1);
+        return true;
+    }
+
+    function getBorderChunksBetweenTowns(buyer, seller) {
+        if (!buyer || !seller) return [];
+        const sellerChunks = getTownClaimedChunks(seller);
+        const buyerChunks = getTownClaimedChunks(buyer);
+        if (!sellerChunks.length || !buyerChunks.length) return [];
+
+        const buyerSet = new Set(buyerChunks.map(c => getChunkKey(c.x, c.y)));
+        const adjacency = (typeof adjacentCoords !== "undefined" && Array.isArray(adjacentCoords) && adjacentCoords.length)
+            ? adjacentCoords
+            : [[0, -1], [1, 0], [0, 1], [-1, 0]];
+
+        const border = [];
+        const seen = new Set();
+        for (let i = 0; i < sellerChunks.length; i++) {
+            const chunk = sellerChunks[i];
+            if (!chunk) continue;
+            for (let j = 0; j < adjacency.length; j++) {
+                const dx = adjacency[j][0];
+                const dy = adjacency[j][1];
+                const key = getChunkKey(chunk.x, chunk.y);
+                const neighborKey = getChunkKey(chunk.x + dx, chunk.y + dy);
+                if (buyerSet.has(neighborKey)) {
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        border.push(chunk);
+                    }
+                    break;
+                }
+            }
+        }
+        return border;
+    }
+
+    function pickLandChunksForSale(borderChunks, buyer, count) {
+        if (!borderChunks.length) return [];
+        const center = getTownCenter(buyer);
+        const sorted = borderChunks.slice().sort((a, b) => {
+            if (!center) return 0;
+            const da = Math.hypot(a.x - center[0], a.y - center[1]);
+            const db = Math.hypot(b.x - center[0], b.y - center[1]);
+            return da - db;
+        });
+        return sorted.slice(0, count);
+    }
+
+    function transferLandBetweenTowns(buyer, seller, chunks) {
+        if (!buyer || !seller || !chunks || !chunks.length) return 0;
+        const keySet = new Set(chunks.map(c => getChunkKey(c.x, c.y)));
+        let transferred = 0;
+
+        chunks.forEach(chunk => {
+            if (!chunk || !chunk.v) return;
+            if (chunk.v.s !== seller.id) return;
+            chunk.v.s = buyer.id;
+            transferred += 1;
+        });
+
+        if (transferred <= 0) return 0;
+
+        buyer.size = Math.max(1, (buyer.size || 1) + transferred);
+        seller.size = Math.max(1, (seller.size || 1) - transferred);
+
+        const markers = regToArray("marker", true);
+        markers.forEach(marker => {
+            if (!marker || marker.town !== seller.id) return;
+            if (typeof marker.x !== "number" || typeof marker.y !== "number") return;
+            if (keySet.has(getChunkKey(marker.x, marker.y))) {
+                marker.town = buyer.id;
+            }
+        });
+
+        buyer._paultendoClaimedCache = null;
+        seller._paultendoClaimedCache = null;
+        try { happen("UpdateCenter", null, buyer); } catch {}
+        try { happen("UpdateCenter", null, seller); } catch {}
+        try { markTownExplored(buyer); } catch {}
+        try { markTownExplored(seller); } catch {}
+        try { markFogDirty(); } catch {}
+        try { scheduleFogRefresh(true); } catch {}
+        try { markRoadDirty(); } catch {}
+        try { scheduleRoadRefresh(true); } catch {}
+
+        return transferred;
+    }
+
     // Loan system - simple flat repayment, no compounding interest
     function createLoan(lender, borrower, amount, repaymentAmount, turnsToRepay) {
         initEconomics();
@@ -9743,6 +11106,69 @@
     // Economic Events - Autonomous town behavior
     // -------------------------------------------------------------------------
 
+    // Daily cashflow for towns (income - upkeep)
+    modEvent("townEconomyTick", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!subject || subject.end) return false;
+            return true;
+        },
+        func: (subject) => {
+            const snapshot = computeTownEconomySnapshot(subject);
+            if (!snapshot) return;
+            const delta = Math.round(snapshot.net * 10) / 10;
+            const applied = applyTownCashDelta(subject, delta);
+            snapshot.cash = (subject.resources?.cash || 0);
+            snapshot.applied = applied;
+        }
+    });
+
+    // Towns buy goods from trade partners when under strain
+    modEvent("townMarketPurchase", {
+        random: true,
+        auto: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || subject.end) return false;
+            const need = getTownMarketNeed(subject);
+            if (!need) return false;
+            const seller = pickMarketSeller(subject, need.type);
+            if (!seller) return false;
+            if (areAtWar(subject, seller)) return false;
+            if (hasEmbargo(subject, seller)) return false;
+            const price = computeMarketPrice(subject, seller, need.type, need.severity);
+            const cash = subject.resources?.cash || 0;
+            if (cash < Math.max(MARKET_CONFIG.minCash, price)) return false;
+
+            args.seller = seller;
+            args.goodsType = need.type;
+            args.severity = need.severity;
+            args.price = price;
+            return true;
+        },
+        func: (subject, target, args) => {
+            if (!args.seller || !args.goodsType) return;
+            const ok = applyMarketPurchase(subject, args.seller, args.goodsType, args.price);
+            if (!ok) return;
+
+            if (args.price >= 25 || Math.random() < 0.12) {
+                const label = args.goodsType === "food"
+                    ? "grain shipments"
+                    : args.goodsType === "luxury"
+                        ? "luxury goods"
+                        : "artisan tools";
+                modLog(
+                    "trade",
+                    `Merchants in {{regname:town|${subject.id}}} purchase ${label} from {{regname:town|${args.seller.id}}}.`,
+                    null,
+                    { town: subject }
+                );
+            }
+        }
+    });
+
     // Towns request loans from wealthier towns
     modEvent("townRequestLoan", {
         random: true,
@@ -9753,23 +11179,26 @@
         value: (subject, target, args) => {
             initEconomics();
             if (getLoansFor(target).length >= 2) return false;
-            const towns = regFilter("town", t => t.id !== target.id && (t.resources?.cash || 0) > 60);
+            const econ = computeTownEconomySnapshot(target);
+            const towns = regFilter("town", t => t.id !== target.id && (t.resources?.cash || 0) > 70);
             if (towns.length === 0) return false;
             const lender = choose(towns);
             const targetCash = target.resources?.cash || 0;
             const lenderCash = lender.resources?.cash || 0;
 
             // Only borrow if struggling and lender has means
-            if (targetCash > 60) return false;
-            if (lenderCash < 60) return false;
+            if (targetCash > 45 && (econ?.net || 0) > -0.4 && !hasIssue(target, "war")) return false;
+            if (lenderCash < 70) return false;
 
             const relation = target.relations[lender.id] || 0;
             if (relation < -2) return false; // Won't lend to enemies
 
             args.lender = lender;
-            args.amount = Math.min(70, Math.floor(lenderCash * 0.28));
-            args.repayment = Math.floor(args.amount * 1.18); // modest fee
-            args.turns = 10 + Math.floor(Math.random() * 5);
+            const need = Math.max(0, 50 - targetCash) + Math.max(0, -(econ?.net || 0) * 12);
+            const baseAmount = Math.max(25, Math.floor(30 + need));
+            args.amount = Math.min(90, Math.max(baseAmount, Math.floor(lenderCash * 0.25)));
+            args.repayment = Math.floor(args.amount * 1.22); // modest fee
+            args.turns = 10 + Math.floor(Math.random() * 6);
             return true;
         },
         message: (subject, target, args) => {
@@ -9830,8 +11259,8 @@
 
     // Debt diplomacy escalation (autonomous)
     const DEBT_DIPLOMACY_CONFIG = {
-        escalationCooldown: 30,
-        minMissedPayments: 2,
+        escalationCooldown: 20,
+        minMissedPayments: 1,
         maxPressure: 10
     };
 
@@ -10033,6 +11462,88 @@
         },
         messageDone: (subject, target, args) => {
             return `{{regname:town|${target.id}}} sends aid to {{regname:town|${args.recipient.id}}}. The {{residents:${args.recipient.id}}} are {{c:grateful|thankful|moved}}.`;
+        }
+    });
+
+    // Towns purchase land from neighboring towns
+    modEvent("townLandPurchase", {
+        random: true,
+        auto: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        target: { reg: "town", nearby: true },
+        value: (subject, target, args) => {
+            if (!subject || !target || subject.end || target.end) return false;
+            if (subject.id === target.id) return false;
+            if (areAtWar(subject, target)) return false;
+            if (hasEmbargo(subject, target)) return false;
+            const relation = getRelations(subject, target);
+            if (relation < LAND_MARKET_CONFIG.minRelations) return false;
+
+            const buyerCash = subject.resources?.cash || 0;
+            if (buyerCash < LAND_MARKET_CONFIG.minBuyerCash) return false;
+
+            if ((target.size || 0) < LAND_MARKET_CONFIG.minSellerSize) return false;
+            const border = getBorderChunksBetweenTowns(subject, target);
+            if (!border.length) return false;
+
+            let maxCount = Math.min(LAND_MARKET_CONFIG.maxChunks, border.length);
+            maxCount = Math.min(maxCount, Math.floor(buyerCash / LAND_MARKET_CONFIG.pricePerChunk));
+            maxCount = Math.max(1, maxCount);
+
+            const desired = Math.min(maxCount, 1 + Math.floor(Math.random() * Math.min(3, maxCount)));
+            if ((target.size || 0) - desired < LAND_MARKET_CONFIG.minRemainingSize) return false;
+
+            const chunks = pickLandChunksForSale(border, subject, desired);
+            if (!chunks.length) return false;
+
+            let price = LAND_MARKET_CONFIG.pricePerChunk * chunks.length;
+            if (relation >= 4) price *= 0.88;
+            price = Math.round(price);
+            if (buyerCash < price) return false;
+
+            const sellerCash = target.resources?.cash || 0;
+            let baseYes = 0.45;
+            if (sellerCash < 25) baseYes += 0.15;
+            if (relation >= 3) baseYes += 0.1;
+            if (target.size <= LAND_MARKET_CONFIG.minSellerSize + 1) baseYes -= 0.2;
+
+            args.price = price;
+            args.chunks = chunks;
+            args.count = chunks.length;
+            args.choice = decideTownChoice(target, {
+                baseYes,
+                minYes: 0.1,
+                maxYes: 0.85,
+                values: { order: -0.02, wealth: 0.07, openness: 0.05 },
+                influences: { trade: 0.05 },
+                relations: relation,
+                randomness: 0.08
+            });
+
+            return true;
+        },
+        func: (subject, target, args) => {
+            if (args.choice !== "yes") {
+                if ((getRelations(subject, target) || 0) < 1 && Math.random() < 0.3) {
+                    worsenRelations(subject, target, 1);
+                }
+                return;
+            }
+
+            const paid = transferCash(subject, target, args.price || 0);
+            if (paid <= 0) return;
+
+            const transferred = transferLandBetweenTowns(subject, target, args.chunks || []);
+            if (transferred <= 0) return;
+
+            improveRelations(subject, target, 2);
+            modLog(
+                "trade",
+                `{{regname:town|${subject.id}}} purchases border land from {{regname:town|${target.id}}}.`,
+                "milestone",
+                { town: subject }
+            );
         }
     });
 
@@ -11520,6 +13031,53 @@
         return state;
     }
 
+    function initTechUnlockMap() {
+        if (!planet) return null;
+        if (!planet._paultendoTechUnlocks || typeof planet._paultendoTechUnlocks !== "object") {
+            planet._paultendoTechUnlocks = {};
+        }
+        return planet._paultendoTechUnlocks;
+    }
+
+    function recordTechUnlockMapping(variant, unlockKey, unlockLevel, eventId) {
+        if (!variant || !unlockKey || unlockLevel === null || unlockLevel === undefined) return;
+        const store = initTechUnlockMap();
+        if (!store) return;
+        if (!store[unlockKey]) store[unlockKey] = {};
+        store[unlockKey][unlockLevel] = {
+            name: variant.baseName,
+            method: variant.method,
+            school: variant.school,
+            day: variant.discoveredDay || planet.day,
+            eventId: eventId || variant.id || null
+        };
+    }
+
+    function getTechUnlockMeta(unlockKey, unlockLevel) {
+        const store = initTechUnlockMap();
+        if (!store || !store[unlockKey]) return null;
+        return store[unlockKey][unlockLevel] || null;
+    }
+
+    function formatTechUnlockMeta(meta) {
+        if (!meta) return "";
+        const name = meta.name ? `{{b:${meta.name}}}` : "a breakthrough";
+        const details = [];
+        if (meta.method) details.push(meta.method);
+        if (meta.school) details.push(meta.school);
+        if (meta.day) details.push(`Day ${meta.day}`);
+        const suffix = details.length ? ` (${details.join(" · ")})` : "";
+        return `{{b:Breakthrough}}: ${name}${suffix}`;
+    }
+
+    function formatUnlockBadge(variant) {
+        if (!variant || !variant.unlockKey || variant.unlockLevel === null || variant.unlockLevel === undefined) return "";
+        const label = (typeof titleCase === "function")
+            ? titleCase(variant.unlockKey)
+            : variant.unlockKey.toString().replace(/\b\w/g, (c) => c.toUpperCase());
+        return `${label} ${variant.unlockLevel}`;
+    }
+
     function getTechBaseName(eventId) {
         if (!eventId) return "Technology";
         let name = eventId.replace(/^unlock/, "");
@@ -11706,6 +13264,7 @@
         });
 
         if (!variant) return;
+        try { recordTechUnlockMapping(variant, unlockKey, unlockLevel, eventId); } catch {}
         args._paultendoTechVariant = variant;
 
         const state = initTechFlavorState();
@@ -11739,7 +13298,10 @@
         const origin = variant && variant.originTownId ? `in {{regname:town|${variant.originTownId}}}` : "somewhere";
         const method = variant && variant.method ? `{{b:${variant.method}}}` : "{{b:a new method}}";
         const school = variant && variant.school ? `of the {{b:${variant.school}}}` : "";
-        const techName = variant && variant.baseName ? `{{b:${variant.baseName}}}` : "{{b:technology}}";
+        const unlockBadge = formatUnlockBadge(variant);
+        const techName = variant && variant.baseName
+            ? `{{b:${variant.baseName}}}${unlockBadge ? ` (${unlockBadge})` : ""}`
+            : "{{b:technology}}";
         return `${lead}. {{b:Breakthrough}}: ${techName} is formalized ${origin} as ${method} ${school}.`;
     }
 
@@ -12736,6 +14298,208 @@
         return ["commune", "council", "democracy", "republic"].includes(govId);
     }
 
+    const SUCCESSION_CONFIG = {
+        minDay: 220,
+        cooldown: 140,
+        minPop: 35,
+        crisisWindow: 40,
+        unrest: { smooth: -6, uneasy: 6, contested: 16 },
+        contestedExtraRange: 8,
+        aftershockRevolutionChance: 0.35,
+        aftershockSplitChance: 0.25
+    };
+    const GOVERNANCE_CYCLE_CONFIG = {
+        minDay: 200,
+        variance: 25,
+        cycles: {
+            democracy: 90,
+            republic: 110,
+            council: 120,
+            commune: 120,
+            theocracy: 140,
+            oligarchy: 160,
+            monarchy: 180,
+            chiefdom: 170,
+            dictatorship: 200,
+            tribal: 150
+        }
+    };
+
+    const SUCCESSION_GOV_PROFILES = {
+        monarchy: { mode: "dynastic", baseLegitimacy: 0.5, splitChance: 0.35 },
+        dictatorship: { mode: "personalist", baseLegitimacy: 0.42 },
+        chiefdom: { mode: "dynastic", baseLegitimacy: 0.55, splitChance: 0.22 },
+        oligarchy: { mode: "elite", baseLegitimacy: 0.6, splitChance: 0.12 },
+        theocracy: { mode: "clerical", baseLegitimacy: 0.58, splitChance: 0.1 },
+        republic: { mode: "election", baseLegitimacy: 0.68 },
+        democracy: { mode: "election", baseLegitimacy: 0.7 },
+        council: { mode: "election", baseLegitimacy: 0.66 },
+        commune: { mode: "election", baseLegitimacy: 0.64 },
+        tribal: { mode: "dynastic", baseLegitimacy: 0.52, splitChance: 0.2 }
+    };
+
+    function getSuccessionProfile(govId) {
+        return SUCCESSION_GOV_PROFILES[govId] || null;
+    }
+
+    function getLeaderTitleForGov(govId) {
+        switch (govId) {
+            case "monarchy":
+                return "Monarch";
+            case "dictatorship":
+                return "Strongman";
+            case "chiefdom":
+                return "Chief";
+            case "oligarchy":
+                return "Magnate";
+            case "theocracy":
+                return "High Priest";
+            case "republic":
+                return "Consul";
+            case "democracy":
+                return "Speaker";
+            case "council":
+                return "Speaker";
+            case "commune":
+                return "Coordinator";
+            case "tribal":
+                return "Elder";
+            default:
+                return "Leader";
+        }
+    }
+
+    function getTownLeader(town) {
+        if (!town || !town._paultendoLeaderId) return null;
+        initHistory();
+        return planet.figures.find(f => f.id === town._paultendoLeaderId) || null;
+    }
+
+    function createTownLeader(town, govId, opts = {}) {
+        if (!town) return null;
+        const gov = govId || getTownGovernment(town).id;
+        if (gov === "anarchy") return null;
+        const title = opts.title || getLeaderTitleForGov(gov);
+        const deeds = opts.deeds || [`Led ${town.name || "a town"}`];
+        const figure = createFigure("RULER", { town: town.id, deeds, govId: gov });
+        if (figure && title) figure.title = title;
+        town._paultendoLeaderId = figure?.id || null;
+        town._paultendoLeaderTitle = title;
+        town._paultendoLeaderSince = planet.day;
+        return figure;
+    }
+
+    function ensureTownLeader(town, govId = null) {
+        if (!town) return null;
+        const gov = govId || getTownGovernment(town).id;
+        if (gov === "anarchy") return null;
+        const leader = getTownLeader(town);
+        if (leader && !leader.died) return leader;
+        return createTownLeader(town, gov);
+    }
+
+    function computeSuccessionLegitimacy(town, govId, profile) {
+        const influences = town.influences || {};
+        let legitimacy = profile?.baseLegitimacy || 0.55;
+        legitimacy += (influences.law || 0) * 0.015;
+        if (isCollectiveGov(govId)) {
+            legitimacy += (influences.education || 0) * 0.02;
+            legitimacy += (influences.happy || 0) * 0.012;
+        }
+        if (isAutocraticGov(govId)) {
+            legitimacy += (influences.military || 0) * 0.02;
+            legitimacy += (influences.faith || 0) * 0.015;
+            legitimacy -= (influences.education || 0) * 0.01;
+        }
+        if (govId === "theocracy") legitimacy += (influences.faith || 0) * 0.025;
+        if (govId === "oligarchy") legitimacy += (influences.trade || 0) * 0.015;
+        const unrest = town.unrest || 0;
+        legitimacy -= Math.max(0, unrest - 20) * 0.005;
+        return clampValue(legitimacy, 0.15, 0.9);
+    }
+
+    function resolveSuccessionOutcome(legitimacy) {
+        if (legitimacy >= 0.7) return "smooth";
+        if (legitimacy >= 0.55) return Math.random() < 0.7 ? "uneasy" : "smooth";
+        if (legitimacy >= 0.45) return Math.random() < 0.6 ? "uneasy" : "contested";
+        return "contested";
+    }
+
+    function applySuccessionUnrest(town, outcome) {
+        initUnrest(town);
+        const scale = arguments.length > 2 ? (arguments[2] || 0) : 1;
+        let delta = (SUCCESSION_CONFIG.unrest[outcome] || 0) * scale;
+        if (outcome === "contested") {
+            delta += randRange(0, SUCCESSION_CONFIG.contestedExtraRange) * scale;
+        }
+        town.unrest = clampValue((town.unrest || 0) + delta, 0, 100);
+        if (outcome === "smooth") {
+            happen("Influence", null, town, { happy: 0.4 * scale, law: 0.1 * scale, temp: true });
+        } else if (outcome === "uneasy") {
+            happen("Influence", null, town, { happy: -0.2 * scale, law: -0.05 * scale, temp: true });
+        } else {
+            happen("Influence", null, town, { happy: -0.4 * scale, law: -0.1 * scale, temp: true });
+        }
+    }
+
+    function getGovernanceCycleLength(govId) {
+        return GOVERNANCE_CYCLE_CONFIG.cycles[govId] || 160;
+    }
+
+    function ensureGovernanceCycle(town, govId) {
+        if (!town) return null;
+        if (!town._paultendoGovCycleDay || !isFinite(town._paultendoGovCycleDay)) {
+            const base = getGovernanceCycleLength(govId);
+            town._paultendoGovCycleDay = planet.day + base + randRange(-GOVERNANCE_CYCLE_CONFIG.variance, GOVERNANCE_CYCLE_CONFIG.variance);
+        }
+        return town._paultendoGovCycleDay;
+    }
+
+    function scheduleNextGovernanceCycle(town, govId) {
+        if (!town) return;
+        const base = getGovernanceCycleLength(govId);
+        town._paultendoGovCycleDay = planet.day + base + randRange(-GOVERNANCE_CYCLE_CONFIG.variance, GOVERNANCE_CYCLE_CONFIG.variance);
+    }
+
+    function resolveGovernanceCycle(town, govId, endorse) {
+        const profile = getSuccessionProfile(govId);
+        if (!profile) return null;
+        let legitimacy = computeSuccessionLegitimacy(town, govId, profile);
+        if (profile.mode === "election") {
+            legitimacy += endorse ? 0.06 : -0.03;
+        } else {
+            legitimacy += endorse ? 0.04 : -0.04;
+        }
+        legitimacy = clampValue(legitimacy, 0.1, 0.95);
+        const outcome = resolveSuccessionOutcome(legitimacy);
+        const oldLeader = ensureTownLeader(town, govId);
+        let changeChance = profile.mode === "election" ? 0.65 : 0.35;
+        if (outcome === "contested") changeChance += 0.2;
+        if (outcome === "smooth") changeChance -= 0.1;
+        if (Math.random() < changeChance) {
+            if (oldLeader && !oldLeader.died) {
+                try { killFigure(oldLeader, "retired", town.name); } catch {}
+            }
+            const deeds = profile.mode === "election"
+                ? [`Elected to lead ${town.name || "a town"}`]
+                : [`Selected to lead ${town.name || "a town"}`];
+            createTownLeader(town, govId, { deeds });
+        }
+
+        applySuccessionUnrest(town, outcome, 0.55);
+        town._paultendoGovCycleProcessedDay = planet.day;
+        scheduleNextGovernanceCycle(town, govId);
+
+        if (outcome === "contested") {
+            town._paultendoSuccessionCrisisDay = planet.day;
+            town._paultendoSuccessionCrisisGov = govId;
+            if (profile?.splitChance && Math.random() < profile.splitChance * 0.7) {
+                attemptSuccessionSplit(town, { govId, reason: "succession" });
+            }
+        }
+        return outcome;
+    }
+
     // Check if a town qualifies for a government type
     function canHaveGovernment(town, govId) {
         const gov = GOVERNMENT_TYPES[govId];
@@ -12899,6 +14663,229 @@
             if (Math.random() < 0.1) {
                 logMessage(`{{regname:town|${subject.id}}} and {{regname:town|${args.other.id}}} bond over their shared {{b:${args.gov.name}}} values.`);
             }
+        }
+    });
+
+    // Leadership transitions and succession crises
+    modEvent("governmentSuccession", {
+        random: true,
+        auto: true,
+        weight: $c.RARE,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || subject.end) return false;
+            if (planet.day < SUCCESSION_CONFIG.minDay) return false;
+            if ((subject.pop || 0) < SUCCESSION_CONFIG.minPop) return false;
+            if (hasIssue(subject, "war") || hasIssue(subject, "revolution")) return false;
+            if (subject._paultendoSuccessionDay && planet.day - subject._paultendoSuccessionDay < SUCCESSION_CONFIG.cooldown) return false;
+
+            const govId = getTownGovernment(subject).id;
+            const profile = getSuccessionProfile(govId);
+            if (!profile) return false;
+
+            initUnrest(subject);
+            args.govId = govId;
+            args.profile = profile;
+            args.title = getLeaderTitleForGov(govId);
+            args.legitimacy = computeSuccessionLegitimacy(subject, govId, profile);
+            args.outcome = resolveSuccessionOutcome(args.legitimacy);
+            args.oldLeader = ensureTownLeader(subject, govId);
+            return true;
+        },
+        message: (subject, target, args) => {
+            const townName = `{{regname:town|${subject.id}}}`;
+            const title = args.title || "leader";
+            const mode = args.profile?.mode;
+            if (mode === "election") {
+                if (args.outcome === "smooth") {
+                    return `${townName} holds a calm election and installs a new ${title}.`;
+                }
+                if (args.outcome === "uneasy") {
+                    return `A tense election in ${townName} leaves factions grumbling.`;
+                }
+                return `A bitter election in ${townName} leaves the council divided.`;
+            }
+            if (args.outcome === "smooth") {
+                return `The ${title} of ${townName} dies, and a successor is acclaimed.`;
+            }
+            if (args.outcome === "uneasy") {
+                return `The ${title} of ${townName} dies, and the succession stirs unease.`;
+            }
+            return `The ${title} of ${townName} dies; rival claimants stir unrest.`;
+        },
+        func: (subject, target, args) => {
+            const govId = args.govId;
+            const profile = args.profile;
+            const outcome = args.outcome;
+            const oldLeader = args.oldLeader;
+
+            if (profile?.mode !== "election" && oldLeader && !oldLeader.died) {
+                try { killFigure(oldLeader, "succession", subject.name); } catch {}
+            }
+
+            const deeds = profile?.mode === "election"
+                ? [`Elected to lead ${subject.name || "a town"}`]
+                : [`Inherited the mantle of ${getLeaderTitleForGov(govId)}`];
+            createTownLeader(subject, govId, { deeds });
+
+            applySuccessionUnrest(subject, outcome);
+            subject._paultendoSuccessionDay = planet.day;
+
+            if (outcome === "contested") {
+                subject._paultendoSuccessionCrisisDay = planet.day;
+                subject._paultendoSuccessionCrisisGov = govId;
+                if (profile?.splitChance && Math.random() < profile.splitChance) {
+                    attemptSuccessionSplit(subject, { govId, reason: "succession" });
+                }
+            } else {
+                subject._paultendoSuccessionCrisisDay = null;
+            }
+        }
+    });
+
+    modEvent("successionAftershock", {
+        random: true,
+        auto: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || subject.end) return false;
+            if (!subject._paultendoSuccessionCrisisDay) return false;
+            if (planet.day - subject._paultendoSuccessionCrisisDay > SUCCESSION_CONFIG.crisisWindow) return false;
+            if (hasIssue(subject, "war") || hasIssue(subject, "revolution")) return false;
+            initUnrest(subject);
+            if (subject.unrest < 70) return false;
+            args.govId = getTownGovernment(subject).id;
+            return true;
+        },
+        message: (subject) => {
+            return `Discontent flares in {{regname:town|${subject.id}}} as the succession remains disputed.`;
+        },
+        func: (subject, target, args) => {
+            if ((subject.unrest || 0) >= 80 && Math.random() < SUCCESSION_CONFIG.aftershockRevolutionChance) {
+                const process = happen("Create", subject, null, {
+                    type: "revolution",
+                    town: subject.id,
+                    duration: Math.max(Math.floor((subject.size || 1) / 10), 5)
+                }, "process");
+                subject.issues = subject.issues || {};
+                subject.issues.revolution = process.id;
+                subject.unrest = Math.max(0, (subject.unrest || 0) - 15);
+                subject._paultendoSuccessionCrisisDay = null;
+                logMessage(`A succession crisis ignites revolution in {{regname:town|${subject.id}}}!`, "warning");
+                return;
+            }
+
+            if (args.govId === "monarchy" && Math.random() < SUCCESSION_CONFIG.aftershockSplitChance) {
+                const split = attemptSuccessionSplit(subject, { govId: args.govId, reason: "succession" });
+                if (split) {
+                    subject._paultendoSuccessionCrisisDay = null;
+                    return;
+                }
+            }
+
+            subject.unrest = Math.min(100, (subject.unrest || 0) + 5);
+        }
+    });
+
+    modEvent("governanceCyclePrompt", {
+        random: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || subject.end) return false;
+            if (planet.day < GOVERNANCE_CYCLE_CONFIG.minDay) return false;
+            if ((subject.pop || 0) < SUCCESSION_CONFIG.minPop) return false;
+            if (hasIssue(subject, "war") || hasIssue(subject, "revolution")) return false;
+
+            const govId = getTownGovernment(subject).id;
+            if (govId === "anarchy") return false;
+            ensureGovernanceCycle(subject, govId);
+            if (planet.day < (subject._paultendoGovCycleDay || 0)) return false;
+            if (subject._paultendoGovCycleProcessedDay === planet.day) return false;
+            if (subject._paultendoGovCycleQueuedDay === planet.day) return false;
+
+            args.govId = govId;
+            args.profile = getSuccessionProfile(govId);
+            if (!args.profile) return false;
+            args.title = getLeaderTitleForGov(govId);
+            subject._paultendoGovCycleQueuedDay = planet.day;
+            return true;
+        },
+        message: (subject, target, args) => {
+            const townName = `{{regname:town|${subject.id}}}`;
+            const title = args.title || "leader";
+            const mode = args.profile?.mode;
+            if (mode === "election") {
+                return `${townName} prepares for an election to choose a new ${title}. Encourage a broad, open contest? {{should}}`;
+            }
+            if (mode === "clerical") {
+                return `A conclave in ${townName} must select a new ${title}. Encourage open debate among the faithful? {{should}}`;
+            }
+            if (mode === "elite") {
+                return `${townName}'s elite council prepares to choose a new ${title}. Push for a wider consensus? {{should}}`;
+            }
+            return `Succession looms in ${townName}. Should the court open the selection to rival claimants? {{should}}`;
+        },
+        messageDone: "You encourage a broader mandate for the next leader.",
+        messageNo: "You urge continuity and order.",
+        func: (subject, target, args) => {
+            resolveGovernanceCycle(subject, args.govId, true);
+        },
+        funcNo: (subject, target, args) => {
+            resolveGovernanceCycle(subject, args.govId, false);
+        }
+    });
+
+    modEvent("governanceCycleAuto", {
+        random: true,
+        auto: true,
+        weight: $c.UNCOMMON,
+        subject: { reg: "town", random: true },
+        value: (subject, target, args) => {
+            if (!subject || subject.end) return false;
+            if (planet.day < GOVERNANCE_CYCLE_CONFIG.minDay) return false;
+            if ((subject.pop || 0) < SUCCESSION_CONFIG.minPop) return false;
+            if (hasIssue(subject, "war") || hasIssue(subject, "revolution")) return false;
+
+            const govId = getTownGovernment(subject).id;
+            if (govId === "anarchy") return false;
+            ensureGovernanceCycle(subject, govId);
+            if (planet.day < (subject._paultendoGovCycleDay || 0)) return false;
+            if (subject._paultendoGovCycleProcessedDay === planet.day) return false;
+            if (subject._paultendoGovCycleQueuedDay === planet.day) return false;
+
+            args.govId = govId;
+            args.profile = getSuccessionProfile(govId);
+            if (!args.profile) return false;
+            args.title = getLeaderTitleForGov(govId);
+            args.choice = decideTownChoice(subject, {
+                baseYes: 0.55,
+                minYes: 0.2,
+                maxYes: 0.85,
+                influences: { education: 0.05, law: 0.05, trade: 0.03, faith: 0.03, military: -0.02 },
+                values: { change: 0.06, order: -0.03, openness: 0.05 },
+                randomness: 0.08
+            });
+            subject._paultendoGovCycleQueuedDay = planet.day;
+            return true;
+        },
+        message: (subject, target, args) => {
+            const townName = `{{regname:town|${subject.id}}}`;
+            const mode = args.profile?.mode;
+            if (args.choice === "yes") {
+                if (mode === "election") return `${townName} opens its election to wider debate.`;
+                if (mode === "clerical") return `${townName}'s conclave invites broader counsel.`;
+                if (mode === "elite") return `${townName}'s council seeks a wider mandate.`;
+                return `${townName} opens its succession council to rival voices.`;
+            }
+            if (mode === "election") return `${townName} favors stability over upheaval in its election.`;
+            if (mode === "clerical") return `${townName}'s conclave keeps to strict rites.`;
+            if (mode === "elite") return `${townName}'s council preserves the existing order.`;
+            return `${townName} keeps succession tightly controlled.`;
+        },
+        func: (subject, target, args) => {
+            resolveGovernanceCycle(subject, args.govId, args.choice === "yes");
         }
     });
 
@@ -20452,6 +22439,13 @@
         recoverStrong: 0.22,
         minDay: 6
     };
+    const FAITH_BASELINE_CONFIG = {
+        enabled: true,
+        minDay: 6,
+        minFaith: -3.5,
+        promptFloor: -3,
+        gain: 0.08
+    };
 
     modEvent("faithResilience", {
         daily: true,
@@ -20498,6 +22492,25 @@
                 ? FAITH_TRUST_CONFIG.recoverStrong
                 : FAITH_TRUST_CONFIG.recoverSoft;
             happen("Influence", null, subject, { faith: gain, temp: true });
+        }
+    });
+
+    modEvent("faithBaselineTrust", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!FAITH_BASELINE_CONFIG.enabled) return false;
+            if (!subject || subject.end) return false;
+            if (planet && planet.usurp) return false;
+            if (subject.usurp) return false;
+            if (planet.day < FAITH_BASELINE_CONFIG.minDay) return false;
+            const promptstreak = planet?.stats?.promptstreak ?? 0;
+            if (promptstreak <= FAITH_BASELINE_CONFIG.promptFloor) return false;
+            const faith = subject.influences?.faith || 0;
+            return faith < FAITH_BASELINE_CONFIG.minFaith;
+        },
+        func: (subject) => {
+            happen("Influence", null, subject, { faith: FAITH_BASELINE_CONFIG.gain, temp: true });
         }
     });
 
@@ -21075,7 +23088,8 @@
         GENERAL: { title: "General", adjectives: ["cunning", "victorious", "feared", "celebrated"] },
         FOUNDER: { title: "Founder", adjectives: ["visionary", "pioneering", "revered", "first"] },
         ARTIST: { title: "Artist", adjectives: ["gifted", "celebrated", "inspired", "master"] },
-        HEALER: { title: "Healer", adjectives: ["compassionate", "miraculous", "selfless", "beloved"] }
+        HEALER: { title: "Healer", adjectives: ["compassionate", "miraculous", "selfless", "beloved"] },
+        RULER: { title: "Ruler", adjectives: ["crowned", "steadfast", "stern", "beloved"] }
     };
 
     // Initialize history system
@@ -23007,6 +25021,26 @@
         initExecutive._paultendoChronicle = true;
     }
 
+    if (typeof initExecutive === "function" && !initExecutive._paultendoFestivals) {
+        const baseInitExecutive = initExecutive;
+        initExecutive = function(...args) {
+            const result = baseInitExecutive.apply(this, args);
+            try { addFestivalsButton(); } catch {}
+            return result;
+        };
+        initExecutive._paultendoFestivals = true;
+    }
+
+    if (typeof initExecutive === "function" && !initExecutive._paultendoUnlocksOverride) {
+        const baseInitExecutive = initExecutive;
+        initExecutive = function(...args) {
+            const result = baseInitExecutive.apply(this, args);
+            try { overrideUnlocksPanel(); } catch {}
+            return result;
+        };
+        initExecutive._paultendoUnlocksOverride = true;
+    }
+
     if (typeof initExecutive === "function" && !initExecutive._paultendoAutoplay) {
         const baseInitExecutive = initExecutive;
         initExecutive = function(...args) {
@@ -23032,8 +25066,10 @@
             try { addAnnalsButton(); } catch {}
             try { addWorldStatusButton(); } catch {}
             try { addChronicleButton(); } catch {}
+            try { addFestivalsButton(); } catch {}
             try { addAutoplayButton(); } catch {}
             try { addDivineStanceButton(); } catch {}
+            try { overrideUnlocksPanel(); } catch {}
             try { initAutoplaySettings(); } catch {}
             try { ensureAutoplayControls(); } catch {}
             try { wrapPromptHandlersForAutoplay(); } catch {}
@@ -26229,6 +28265,9 @@
                 // Successful trade
                 happen("Influence", null, subject, { trade: 0.2, temp: true });
                 happen("Influence", null, partner, { trade: 0.2, temp: true });
+                const cashGain = Math.max(1, Math.round(goods * 0.7));
+                applyTownCashDelta(subject, cashGain);
+                applyTownCashDelta(partner, Math.max(1, Math.round(cashGain * 0.7)));
 
                 // Occasional notable trade
                 if (Math.random() < 0.1) {
@@ -27185,7 +29224,7 @@
             2: [98, 98, 98],
             3: [154, 154, 154]
         },
-        widths: { 1: 1, 2: 2, 3: 3 }
+        widths: { 1: 2, 2: 3, 3: 4 }
     };
 
     const BASE_TERRAIN_COST = {
@@ -27901,7 +29940,7 @@
 
                 const level = Math.min(road.level, nRoad.level);
                 const color = ROAD_CONFIG.colors[level] || [150, 150, 150];
-                const alpha = 0.25 + 0.55 * Math.min(road.condition, nRoad.condition);
+                const alpha = 0.35 + 0.5 * Math.min(road.condition, nRoad.condition);
                 ctx.strokeStyle = `rgba(${color[0]},${color[1]},${color[2]},${alpha.toFixed(2)})`;
                 ctx.lineWidth = ROAD_CONFIG.widths[level] || 1;
                 ctx.lineCap = "round";
@@ -28785,7 +30824,7 @@
         return region;
     }
 
-    function createSecessionTown(parentTown, splitChunks) {
+    function createSecessionTown(parentTown, splitChunks, options = {}) {
         if (!parentTown || !splitChunks || splitChunks.length === 0) return null;
         const seed = splitChunks[Math.floor(splitChunks.length / 2)];
         if (!seed) return null;
@@ -28795,7 +30834,7 @@
         ensureTownState(newTown);
 
         newTown.former = parentTown.id;
-        newTown.type = "breakaway";
+        newTown.type = options.type || "breakaway";
         newTown.level = Math.max(0, (parentTown.level || 1) - 1);
         newTown.color = colorChange(parentTown.color);
         if (parentTown.legal) newTown.legal = JSON.parse(JSON.stringify(parentTown.legal));
@@ -28842,9 +30881,48 @@
         try { happen("UpdateCenter", null, parentTown); } catch {}
         try { happen("UpdateCenter", null, newTown); } catch {}
 
-        recordGrudge(parentTown, newTown.id, "secession", 4);
-        recordGrudge(newTown, parentTown.id, "independence", 3);
+        if (!options.peaceful) {
+            recordGrudge(parentTown, newTown.id, "secession", 4);
+            recordGrudge(newTown, parentTown.id, "independence", 3);
+        } else {
+            try { improveRelations(parentTown, newTown, 2); } catch {}
+            try { improveRelations(newTown, parentTown, 2); } catch {}
+            initUnrest(parentTown);
+            initUnrest(newTown);
+            parentTown.unrest = Math.max(0, (parentTown.unrest || 0) - 8);
+            newTown.unrest = Math.max(0, (newTown.unrest || 0) - 4);
+        }
 
+        return newTown;
+    }
+
+    function attemptSuccessionSplit(parentTown, options = {}) {
+        if (!parentTown || parentTown.end) return null;
+        if (parentTown._paultendoSuccessionSplitDay && planet.day - parentTown._paultendoSuccessionSplitDay < SECESSION_CONFIG.cooldown) {
+            return null;
+        }
+        if ((parentTown.size || 0) < Math.max(SECESSION_CONFIG.sizeThreshold, 20)) return null;
+        const desiredSize = Math.max(SECESSION_CONFIG.minSplitSize, Math.floor((parentTown.size || 1) * 0.2));
+        const splitChunks = splitTownTerritory(parentTown, desiredSize);
+        if (!splitChunks) return null;
+
+        const newTown = createSecessionTown(parentTown, splitChunks, { type: "succession", peaceful: true });
+        if (!newTown) return null;
+
+        parentTown._paultendoSuccessionSplitDay = planet.day;
+        parentTown._paultendoSecessionDay = planet.day;
+        logMessage(`Rival heirs agree to divide {{regname:town|${parentTown.id}}}, founding {{regname:town|${newTown.id}}}.`, "milestone");
+        try {
+            recordAnnalsEntry({
+                theme: "expansion",
+                title: `Succession Division`,
+                body: `Rival heirs peacefully divide {{regname:town|${parentTown.id}}}, founding {{regname:town|${newTown.id}}}.`,
+                sourceType: "succession",
+                sourceId: newTown.id,
+                day: planet.day,
+                town: newTown.id
+            });
+        } catch {}
         return newTown;
     }
 
