@@ -1,8 +1,41 @@
 // paultendo-mod.js
-// GenTown mod by paultendo (github.com/paultendo)
+// GenTown overhaul mod by paultendo (github.com/paultendo).
 //
-// To install: In GenTown, go to Settings > Add mod > enter "paultendo-mod.js"
-// Or use full URL during development
+// What it does (systems overview):
+// - Chronicle & narrative: chronicle UI polish, causal storytelling, living memory/prophecy,
+//   legacy & history, annals (long-form), lore UI, regname tombstones for deleted entities.
+// - World & map: proper fog of war, road networks + decay, climate/environment + effects + resources,
+//   trade routes, solar system & multi-world, frontier charters/colonies.
+// - Society & politics: values, government types, alliances, vassals/tributaries,
+//   emergent war pressure + casus belli/objectives.
+// - Economy & tech: loans/embargoes/aid/currency spread, specialisations, extended jobs,
+//   extended tech tree + flavour/bias + faith tech branch.
+// - Culture & religion: culture system, war/culture interactions, religion emergence/spread/reform/schism,
+//   religion effects, heresy/sects + holy politics, religion/culture + religion/government links.
+// - Disasters & migration: drought/famine, disaster interactions (economic/migration/diplomacy/culture/health/gov),
+//   migration system.
+// - Espionage & eras: espionage/secrets, era system, great works & wonders.
+// - UI/UX: discovery & system indicators, divine guidance cooldowns.
+//
+// Install: GenTown -> Settings -> Add mod -> "paultendo-mod.js"
+// Dev: Use a full URL while iterating.
+//
+// Compatibility: Designed for current GenTown builds; avoid stacking with other large overhaul mods.
+//
+// Table of contents (rough):
+// - Core state + mod plumbing
+// - Chronicle enhancements
+// - Narrative causality + "because" clauses
+// - Regname tombstones + safe entity rendering
+// - Mod API wrappers + event hooks
+// - Values + seasons + fog of war + UI indicators
+// - Multi-world / solar system / frontier
+// - Alliances / vassals / economy / tech / gov
+// - Culture / religion / disasters / migration
+// - Memory / annals / lore / espionage / eras
+// - Climate / trade routes / roads
+// - Init flow (hooks + bootstraps)
+// - Optional world crises / raiders / secession
 //
 // Mod API:
 //   Mod.event(id, data)          - Register a custom event
@@ -15,21 +48,36 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.15";
+    const MOD_VERSION = "1.6.16";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
     console.log(`[paultendo-mod] Loaded v${MOD_VERSION}`);
 
+    // =========================================================================
+    // CORE STATE + MOD PLUMBING
+    // =========================================================================
+
     const PAULTENDO_GLOBAL = (typeof window !== "undefined")
         ? window
         : (typeof globalThis !== "undefined" ? globalThis : {});
-    if (!PAULTENDO_GLOBAL._paultendoEventStack) {
-        PAULTENDO_GLOBAL._paultendoEventStack = [];
+    const PAULTENDO_STATE = PAULTENDO_GLOBAL._paultendoState || (PAULTENDO_GLOBAL._paultendoState = {});
+    const PAULTENDO_EVENT_STACK = PAULTENDO_STATE.eventStack || PAULTENDO_GLOBAL._paultendoEventStack || [];
+    PAULTENDO_STATE.eventStack = PAULTENDO_EVENT_STACK;
+    PAULTENDO_GLOBAL._paultendoEventStack = PAULTENDO_EVENT_STACK;
+
+    function isNarrativeLocked() {
+        return !!PAULTENDO_STATE.narrativeLock || !!PAULTENDO_GLOBAL._paultendoNarrativeLock;
+    }
+
+    function setNarrativeLock(locked) {
+        const val = !!locked;
+        PAULTENDO_STATE.narrativeLock = val;
+        PAULTENDO_GLOBAL._paultendoNarrativeLock = val;
     }
 
     function withModEventContext(id, context, fn) {
-        const stack = PAULTENDO_GLOBAL._paultendoEventStack;
+        const stack = PAULTENDO_EVENT_STACK;
         let entry = { id };
         if (typeof context === "function") {
             fn = context;
@@ -45,7 +93,7 @@
     }
 
     function getActiveModEventId() {
-        const stack = PAULTENDO_GLOBAL._paultendoEventStack || [];
+        const stack = PAULTENDO_EVENT_STACK || [];
         if (!stack.length) return null;
         const entry = stack[stack.length - 1];
         if (typeof entry === "string") return entry;
@@ -53,7 +101,7 @@
     }
 
     function getActiveModEventContext() {
-        const stack = PAULTENDO_GLOBAL._paultendoEventStack || [];
+        const stack = PAULTENDO_EVENT_STACK || [];
         if (!stack.length) return null;
         const entry = stack[stack.length - 1];
         if (entry && typeof entry === "object") return entry;
@@ -662,7 +710,7 @@
 
     function maybeEmitNarrativeAside(baseLogMessage, logText, logType) {
         if (!NARRATIVE_CONFIG.enabled) return;
-        if (PAULTENDO_GLOBAL._paultendoNarrativeLock) return;
+        if (isNarrativeLocked()) return;
         const ctx = getActiveModEventContext();
         if (!ctx) return;
         const town = (ctx.subject && ctx.subject._reg === "town") ? ctx.subject
@@ -681,11 +729,11 @@
         if (!line) return;
 
         state.lastDayByTown[town.id] = planet.day;
-        PAULTENDO_GLOBAL._paultendoNarrativeLock = true;
+        setNarrativeLock(true);
         try {
             baseLogMessage(line, "tip");
         } finally {
-            PAULTENDO_GLOBAL._paultendoNarrativeLock = false;
+            setNarrativeLock(false);
         }
     }
 
@@ -1784,122 +1832,130 @@
         });
     }
 
-    try { wrapRegRemove(); } catch {}
-    try { overrideRegnameParser(); } catch {}
+    function initRegnameOverrides() {
+        try { wrapRegRemove(); } catch {}
+        try { overrideRegnameParser(); } catch {}
+    }
 
-    if (typeof logMessage === "function" && !logMessage._paultendoChronicle) {
-        const baseLogMessage = logMessage;
-        logMessage = function(text, type, args) {
-            let logText = text;
-            const ctx = getActiveModEventContext() || consumePendingLogContext();
-            if (!PAULTENDO_GLOBAL._paultendoNarrativeLock && ctx && typeof logText === "string") {
-                const isSwayFailure = ctx.id && ctx.id.startsWith("sway") &&
-                    (ctx.args?.success === false || ctx.args?.approved === false ||
-                     /(ignores|dismisses|declines|refuses|rejects|hesitate|unconvinced|prefer)/i.test(logText));
-                const swayClause = isSwayFailure ? buildSwayFailureClause(ctx) : null;
-                if (swayClause && !/\(.*\)/.test(logText)) {
-                    logText = `${logText} (${swayClause})`;
-                } else {
-                    logText = maybeAppendBecauseClause(logText, ctx, type);
-                }
-            }
-            let logPanel = null;
-            let prevScrollTop = 0;
-            let prevScrollHeight = 0;
-            const follow = CHRONICLE_UI_CONFIG.enabled ? getChronicleFollowLive() : true;
-            if (!follow && typeof document !== "undefined") {
-                try { ensureChronicleHeader(); } catch {}
-                logPanel = document.getElementById("logPanel");
-                if (logPanel) {
-                    prevScrollTop = logPanel.scrollTop;
-                    prevScrollHeight = logPanel.scrollHeight;
-                }
-            }
-            const uuid = baseLogMessage(logText, type, args);
-            if (!uuid) return uuid;
-            try { maybeAccelerateLogEntry(uuid); } catch {}
-            try {
-                const context = ctx || getActiveModEventContext();
-                if (context) {
-                    recordNarrativeSignals(context.id, context.subject, context.target, context.args, logText, 0.6);
-                }
-            } catch {}
-            if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
-                try {
-                    ensureChronicleHeader();
-                    const elem = document.getElementById("logMessage-" + uuid);
-                    const dayElem = elem ? elem.querySelector(".logDay") : null;
-                    const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
-                    const plainText = elem ? (elem.querySelector(".logText")?.innerText || "") : "";
-                    if (dayValue) {
-                        const causeSummary = ctx ? buildCauseSummary(ctx, logText) : null;
-                        const cause = causeSummary ? causeSummary.compact : null;
-                        addChronicleEntry(dayValue, uuid, type, plainText, { cause });
-                        updateChronicleHeadlines(dayValue);
-                        scheduleChronicleDayMarkers();
+    // =========================================================================
+    // LOG + CHRONICLE OVERRIDES (hooked in init flow)
+    // =========================================================================
+
+    function initLogOverrides() {
+        if (typeof logMessage === "function" && !logMessage._paultendoChronicle) {
+            const baseLogMessage = logMessage;
+            logMessage = function(text, type, args) {
+                let logText = text;
+                const ctx = getActiveModEventContext() || consumePendingLogContext();
+                if (!isNarrativeLocked() && ctx && typeof logText === "string") {
+                    const isSwayFailure = ctx.id && ctx.id.startsWith("sway") &&
+                        (ctx.args?.success === false || ctx.args?.approved === false ||
+                         /(ignores|dismisses|declines|refuses|rejects|hesitate|unconvinced|prefer)/i.test(logText));
+                    const swayClause = isSwayFailure ? buildSwayFailureClause(ctx) : null;
+                    if (swayClause && !/\(.*\)/.test(logText)) {
+                        logText = `${logText} (${swayClause})`;
+                    } else {
+                        logText = maybeAppendBecauseClause(logText, ctx, type);
                     }
-                    if (elem) {
-                        const causeSummary = ctx ? buildCauseSummary(ctx, logText) : null;
-                        if (causeSummary && causeSummary.compact) {
-                            elem.setAttribute("data-cause", causeSummary.compact);
-                            if (!elem.getAttribute("title")) {
-                                elem.setAttribute("title", `Cause: ${causeSummary.summary}`);
+                }
+                let logPanel = null;
+                let prevScrollTop = 0;
+                let prevScrollHeight = 0;
+                const follow = CHRONICLE_UI_CONFIG.enabled ? getChronicleFollowLive() : true;
+                if (!follow && typeof document !== "undefined") {
+                    try { ensureChronicleHeader(); } catch {}
+                    logPanel = document.getElementById("logPanel");
+                    if (logPanel) {
+                        prevScrollTop = logPanel.scrollTop;
+                        prevScrollHeight = logPanel.scrollHeight;
+                    }
+                }
+                const uuid = baseLogMessage(logText, type, args);
+                if (!uuid) return uuid;
+                try { maybeAccelerateLogEntry(uuid); } catch {}
+                try {
+                    const context = ctx || getActiveModEventContext();
+                    if (context) {
+                        recordNarrativeSignals(context.id, context.subject, context.target, context.args, logText, 0.6);
+                    }
+                } catch {}
+                if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
+                    try {
+                        ensureChronicleHeader();
+                        const elem = document.getElementById("logMessage-" + uuid);
+                        const dayElem = elem ? elem.querySelector(".logDay") : null;
+                        const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
+                        const plainText = elem ? (elem.querySelector(".logText")?.innerText || "") : "";
+                        if (dayValue) {
+                            const causeSummary = ctx ? buildCauseSummary(ctx, logText) : null;
+                            const cause = causeSummary ? causeSummary.compact : null;
+                            addChronicleEntry(dayValue, uuid, type, plainText, { cause });
+                            updateChronicleHeadlines(dayValue);
+                            scheduleChronicleDayMarkers();
+                        }
+                        if (elem) {
+                            const causeSummary = ctx ? buildCauseSummary(ctx, logText) : null;
+                            if (causeSummary && causeSummary.compact) {
+                                elem.setAttribute("data-cause", causeSummary.compact);
+                                if (!elem.getAttribute("title")) {
+                                    elem.setAttribute("title", `Cause: ${causeSummary.summary}`);
+                                }
                             }
                         }
-                    }
-                } catch {}
-            }
-            if (!follow && logPanel) {
-                const newHeight = logPanel.scrollHeight;
-                const delta = newHeight - prevScrollHeight;
-                logPanel.scrollTop = prevScrollTop + delta;
-            }
-            try { maybeEmitNarrativeAside(baseLogMessage, logText, type); } catch {}
-            return uuid;
-        };
-        logMessage._paultendoChronicle = true;
-    }
+                    } catch {}
+                }
+                if (!follow && logPanel) {
+                    const newHeight = logPanel.scrollHeight;
+                    const delta = newHeight - prevScrollHeight;
+                    logPanel.scrollTop = prevScrollTop + delta;
+                }
+                try { maybeEmitNarrativeAside(baseLogMessage, logText, type); } catch {}
+                return uuid;
+            };
+            logMessage._paultendoChronicle = true;
+        }
 
-    if (typeof logChange === "function" && !logChange._paultendoChronicle) {
-        const baseLogChange = logChange;
-        logChange = function(uuid, text) {
-            const result = baseLogChange(uuid, text);
-            if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
-                try {
-                    const elem = document.getElementById("logMessage-" + uuid);
-                    if (elem) {
-                        const dayElem = elem.querySelector(".logDay");
-                        const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
-                        const plainText = elem.querySelector(".logText")?.innerText || "";
-                        const safeText = sanitizeChronicleMessage(plainText);
-                        const state = initChronicleState();
-                        if (state && state.entriesById[uuid]) {
-                            state.entriesById[uuid].text = safeText;
-                            const day = parseInt(dayValue);
-                            if (!isNaN(day)) updateChronicleHeadlines(day);
+        if (typeof logChange === "function" && !logChange._paultendoChronicle) {
+            const baseLogChange = logChange;
+            logChange = function(uuid, text) {
+                const result = baseLogChange(uuid, text);
+                if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
+                    try {
+                        const elem = document.getElementById("logMessage-" + uuid);
+                        if (elem) {
+                            const dayElem = elem.querySelector(".logDay");
+                            const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
+                            const plainText = elem.querySelector(".logText")?.innerText || "";
+                            const safeText = sanitizeChronicleMessage(plainText);
+                            const state = initChronicleState();
+                            if (state && state.entriesById[uuid]) {
+                                state.entriesById[uuid].text = safeText;
+                                const day = parseInt(dayValue);
+                                if (!isNaN(day)) updateChronicleHeadlines(day);
+                            }
+                            const store = getChronicleStore();
+                            if (store && store.byLogId && store.byLogId[uuid]) {
+                                store.byLogId[uuid].message = safeText;
+                            }
                         }
-                        const store = getChronicleStore();
-                        if (store && store.byLogId && store.byLogId[uuid]) {
-                            store.byLogId[uuid].message = safeText;
-                        }
-                    }
-                } catch {}
-            }
-            return result;
-        };
-        logChange._paultendoChronicle = true;
-    }
+                    } catch {}
+                }
+                return result;
+            };
+            logChange._paultendoChronicle = true;
+        }
 
-    if (typeof clearLog === "function" && !clearLog._paultendoChronicle) {
-        const baseClearLog = clearLog;
-        clearLog = function(...args) {
-            const result = baseClearLog.apply(this, args);
-            try { resetChronicleUiState(); } catch {}
-            try { scheduleChronicleDayMarkers(); } catch {}
-            try { updateChronicleHeadlines(planet?.day); } catch {}
-            return result;
-        };
-        clearLog._paultendoChronicle = true;
+        if (typeof clearLog === "function" && !clearLog._paultendoChronicle) {
+            const baseClearLog = clearLog;
+            clearLog = function(...args) {
+                const result = baseClearLog.apply(this, args);
+                try { resetChronicleUiState(); } catch {}
+                try { scheduleChronicleDayMarkers(); } catch {}
+                try { updateChronicleHeadlines(planet?.day); } catch {}
+                return result;
+            };
+            clearLog._paultendoChronicle = true;
+        }
     }
 
     // =========================================================================
@@ -7073,27 +7129,54 @@
         updateCanvas._paultendoFogSync = true;
     }
 
-    if (!initDiscoveryHooks() && typeof window !== "undefined") {
-        window.addEventListener("load", () => { initDiscoveryHooks(); });
+    function initMapHooks() {
+        if (!initDiscoveryHooks() && typeof window !== "undefined") {
+            window.addEventListener("load", () => { initDiscoveryHooks(); });
+        }
+        if (typeof window !== "undefined") {
+            window.addEventListener("load", () => {
+                try { ensureMapCanvasSync(); } catch {}
+                try { ensureMapControls(); } catch {}
+                try { applyScaleAwareZoom(); } catch {}
+                try { ensureFogLayer(); } catch {}
+                try { ensureEpidemicLayer(); } catch {}
+                try { wrapSetViewForFog(); } catch {}
+                try { wrapUpdateCanvasForFog(); } catch {}
+                try { ensureChronicleHeader(); } catch {}
+                try { rebuildChronicleUiStateFromLog(); } catch {}
+            });
+        }
+        try { wrapSetViewForFog(); } catch {}
+        try { wrapUpdateCanvasForFog(); } catch {}
+        try { ensureEpidemicLayer(); } catch {}
+        try { ensureChronicleHeader(); } catch {}
+        try { scheduleChronicleDayMarkers(); } catch {}
+
+        if (!initDiscoveryRenderHooks() && typeof window !== "undefined") {
+            window.addEventListener("load", () => { initDiscoveryRenderHooks(); });
+        }
+
+        if (typeof renderCursor === "function" && !renderCursor._paultendoCrosshair) {
+            const baseRenderCursor = renderCursor;
+            renderCursor = function(...args) {
+                const result = baseRenderCursor.apply(this, args);
+                try { drawCursorCrosshair(); } catch {}
+                try { updateMapHoverOverlay(); } catch {}
+                return result;
+            };
+            renderCursor._paultendoCrosshair = true;
+        }
+
+        if (typeof handleCursor === "function" && !handleCursor._paultendoHoverOverlay) {
+            const baseHandleCursor = handleCursor;
+            handleCursor = function(...args) {
+                const result = baseHandleCursor.apply(this, args);
+                try { updateMapHoverOverlay(); } catch {}
+                return result;
+            };
+            handleCursor._paultendoHoverOverlay = true;
+        }
     }
-    if (typeof window !== "undefined") {
-        window.addEventListener("load", () => {
-            try { ensureMapCanvasSync(); } catch {}
-            try { ensureMapControls(); } catch {}
-            try { applyScaleAwareZoom(); } catch {}
-            try { ensureFogLayer(); } catch {}
-            try { ensureEpidemicLayer(); } catch {}
-            try { wrapSetViewForFog(); } catch {}
-            try { wrapUpdateCanvasForFog(); } catch {}
-            try { ensureChronicleHeader(); } catch {}
-            try { rebuildChronicleUiStateFromLog(); } catch {}
-        });
-    }
-    try { wrapSetViewForFog(); } catch {}
-    try { wrapUpdateCanvasForFog(); } catch {}
-    try { ensureEpidemicLayer(); } catch {}
-    try { ensureChronicleHeader(); } catch {}
-    try { scheduleChronicleDayMarkers(); } catch {}
 
     function initDiscoveryRenderHooks() {
         let hooked = false;
@@ -7120,31 +7203,6 @@
             hooked = true;
         }
         return hooked;
-    }
-
-    if (!initDiscoveryRenderHooks() && typeof window !== "undefined") {
-        window.addEventListener("load", () => { initDiscoveryRenderHooks(); });
-    }
-
-    if (typeof renderCursor === "function" && !renderCursor._paultendoCrosshair) {
-        const baseRenderCursor = renderCursor;
-        renderCursor = function(...args) {
-            const result = baseRenderCursor.apply(this, args);
-            try { drawCursorCrosshair(); } catch {}
-            try { updateMapHoverOverlay(); } catch {}
-            return result;
-        };
-        renderCursor._paultendoCrosshair = true;
-    }
-
-    if (typeof handleCursor === "function" && !handleCursor._paultendoHoverOverlay) {
-        const baseHandleCursor = handleCursor;
-        handleCursor = function(...args) {
-            const result = baseHandleCursor.apply(this, args);
-            try { updateMapHoverOverlay(); } catch {}
-            return result;
-        };
-        handleCursor._paultendoHoverOverlay = true;
     }
 
     // -------------------------------------------------------------------------
@@ -9776,15 +9834,17 @@
         }
     });
 
-    if (typeof window !== "undefined") {
-        window.addEventListener("load", () => {
-            try { initMultiWorldSystem(); } catch {}
-        });
-    }
+    function initMultiWorldHooks() {
+        if (typeof window !== "undefined") {
+            window.addEventListener("load", () => {
+                try { initMultiWorldSystem(); } catch {}
+            });
+        }
 
-    if (typeof document !== "undefined") {
-        if (document.readyState === "complete" || document.readyState === "interactive") {
-            try { initMultiWorldSystem(); } catch {}
+        if (typeof document !== "undefined") {
+            if (document.readyState === "complete" || document.readyState === "interactive") {
+                try { initMultiWorldSystem(); } catch {}
+            }
         }
     }
 
@@ -18600,17 +18660,19 @@
         }
     }
 
-    if (typeof renderMap === "function" && !renderMap._paultendoEpidemicOverlay) {
-        const baseRenderMap = renderMap;
-        const wrappedRenderMap = function() {
-            baseRenderMap();
-            try { renderEpidemicOverlay(); } catch {}
-            try { renderDiscoveryFog(); } catch {}
-            try { renderMarkers(); } catch {}
-        };
-        wrappedRenderMap._paultendoEpidemicOverlay = true;
-        wrappedRenderMap._paultendoBase = baseRenderMap;
-        renderMap = wrappedRenderMap;
+    function initEpidemicRenderOverride() {
+        if (typeof renderMap === "function" && !renderMap._paultendoEpidemicOverlay) {
+            const baseRenderMap = renderMap;
+            const wrappedRenderMap = function() {
+                baseRenderMap();
+                try { renderEpidemicOverlay(); } catch {}
+                try { renderDiscoveryFog(); } catch {}
+                try { renderMarkers(); } catch {}
+            };
+            wrappedRenderMap._paultendoEpidemicOverlay = true;
+            wrappedRenderMap._paultendoBase = baseRenderMap;
+            renderMap = wrappedRenderMap;
+        }
     }
 
     // Epidemics cause extra deaths
@@ -26155,19 +26217,21 @@
         }
     }
 
-    if (typeof recordHistory === "function" && !recordHistory._paultendoAnnals) {
-        const baseRecordHistory = recordHistory;
-        recordHistory = function(type, data) {
-            const entry = baseRecordHistory(type, data);
-            if (entry && !entry.historyType) entry.historyType = type;
-            if (entry && type === HISTORY_TYPES.CULTURAL_ACHIEVEMENT && data && data.type) {
-                entry.achievementType = data.type;
-            }
-            try { buildAnnalsFromHistory(entry); } catch {}
-            try { applyPrestigeFromHistory(entry); } catch {}
-            return entry;
-        };
-        recordHistory._paultendoAnnals = true;
+    function initHistoryOverrides() {
+        if (typeof recordHistory === "function" && !recordHistory._paultendoAnnals) {
+            const baseRecordHistory = recordHistory;
+            recordHistory = function(type, data) {
+                const entry = baseRecordHistory(type, data);
+                if (entry && !entry.historyType) entry.historyType = type;
+                if (entry && type === HISTORY_TYPES.CULTURAL_ACHIEVEMENT && data && data.type) {
+                    entry.achievementType = data.type;
+                }
+                try { buildAnnalsFromHistory(entry); } catch {}
+                try { applyPrestigeFromHistory(entry); } catch {}
+                return entry;
+            };
+            recordHistory._paultendoAnnals = true;
+        }
     }
 
     // ----------------------------------------
@@ -26399,96 +26463,98 @@
         list.appendChild(button);
     }
 
-    if (typeof initExecutive === "function" && !initExecutive._paultendoAnnals) {
-        const baseInitExecutive = initExecutive;
-        initExecutive = function(...args) {
-            const result = baseInitExecutive.apply(this, args);
-            try { addAnnalsButton(); } catch {}
-            return result;
-        };
-        initExecutive._paultendoAnnals = true;
-    }
+    function initExecutiveOverrides() {
+        if (typeof initExecutive === "function" && !initExecutive._paultendoAnnals) {
+            const baseInitExecutive = initExecutive;
+            initExecutive = function(...args) {
+                const result = baseInitExecutive.apply(this, args);
+                try { addAnnalsButton(); } catch {}
+                return result;
+            };
+            initExecutive._paultendoAnnals = true;
+        }
 
-    if (typeof initExecutive === "function" && !initExecutive._paultendoWorldStatus) {
-        const baseInitExecutive = initExecutive;
-        initExecutive = function(...args) {
-            const result = baseInitExecutive.apply(this, args);
-            try { addWorldStatusButton(); } catch {}
-            return result;
-        };
-        initExecutive._paultendoWorldStatus = true;
-    }
+        if (typeof initExecutive === "function" && !initExecutive._paultendoWorldStatus) {
+            const baseInitExecutive = initExecutive;
+            initExecutive = function(...args) {
+                const result = baseInitExecutive.apply(this, args);
+                try { addWorldStatusButton(); } catch {}
+                return result;
+            };
+            initExecutive._paultendoWorldStatus = true;
+        }
 
-    if (typeof initExecutive === "function" && !initExecutive._paultendoChronicle) {
-        const baseInitExecutive = initExecutive;
-        initExecutive = function(...args) {
-            const result = baseInitExecutive.apply(this, args);
-            try { addChronicleButton(); } catch {}
-            return result;
-        };
-        initExecutive._paultendoChronicle = true;
-    }
+        if (typeof initExecutive === "function" && !initExecutive._paultendoChronicle) {
+            const baseInitExecutive = initExecutive;
+            initExecutive = function(...args) {
+                const result = baseInitExecutive.apply(this, args);
+                try { addChronicleButton(); } catch {}
+                return result;
+            };
+            initExecutive._paultendoChronicle = true;
+        }
 
-    if (typeof initExecutive === "function" && !initExecutive._paultendoFestivals) {
-        const baseInitExecutive = initExecutive;
-        initExecutive = function(...args) {
-            const result = baseInitExecutive.apply(this, args);
-            try { addFestivalsButton(); } catch {}
-            return result;
-        };
-        initExecutive._paultendoFestivals = true;
-    }
+        if (typeof initExecutive === "function" && !initExecutive._paultendoFestivals) {
+            const baseInitExecutive = initExecutive;
+            initExecutive = function(...args) {
+                const result = baseInitExecutive.apply(this, args);
+                try { addFestivalsButton(); } catch {}
+                return result;
+            };
+            initExecutive._paultendoFestivals = true;
+        }
 
-    if (typeof initExecutive === "function" && !initExecutive._paultendoUnlocksOverride) {
-        const baseInitExecutive = initExecutive;
-        initExecutive = function(...args) {
-            const result = baseInitExecutive.apply(this, args);
-            try { overrideUnlocksPanel(); } catch {}
-            return result;
-        };
-        initExecutive._paultendoUnlocksOverride = true;
-    }
+        if (typeof initExecutive === "function" && !initExecutive._paultendoUnlocksOverride) {
+            const baseInitExecutive = initExecutive;
+            initExecutive = function(...args) {
+                const result = baseInitExecutive.apply(this, args);
+                try { overrideUnlocksPanel(); } catch {}
+                return result;
+            };
+            initExecutive._paultendoUnlocksOverride = true;
+        }
 
-    if (typeof initExecutive === "function" && !initExecutive._paultendoAutoplay) {
-        const baseInitExecutive = initExecutive;
-        initExecutive = function(...args) {
-            const result = baseInitExecutive.apply(this, args);
-            try { addAutoplayButton(); } catch {}
-            return result;
-        };
-        initExecutive._paultendoAutoplay = true;
-    }
+        if (typeof initExecutive === "function" && !initExecutive._paultendoAutoplay) {
+            const baseInitExecutive = initExecutive;
+            initExecutive = function(...args) {
+                const result = baseInitExecutive.apply(this, args);
+                try { addAutoplayButton(); } catch {}
+                return result;
+            };
+            initExecutive._paultendoAutoplay = true;
+        }
 
-    if (typeof initExecutive === "function" && !initExecutive._paultendoDivineStance) {
-        const baseInitExecutive = initExecutive;
-        initExecutive = function(...args) {
-            const result = baseInitExecutive.apply(this, args);
-            try { addDivineStanceButton(); } catch {}
-            return result;
-        };
-        initExecutive._paultendoDivineStance = true;
-    }
+        if (typeof initExecutive === "function" && !initExecutive._paultendoDivineStance) {
+            const baseInitExecutive = initExecutive;
+            initExecutive = function(...args) {
+                const result = baseInitExecutive.apply(this, args);
+                try { addDivineStanceButton(); } catch {}
+                return result;
+            };
+            initExecutive._paultendoDivineStance = true;
+        }
 
-    if (typeof window !== "undefined") {
-        window.addEventListener("load", () => {
-            try { addAnnalsButton(); } catch {}
-            try { addWorldStatusButton(); } catch {}
-            try { addChronicleButton(); } catch {}
-            try { addFestivalsButton(); } catch {}
-            try { addAutoplayButton(); } catch {}
-            try { addDivineStanceButton(); } catch {}
-            try { overrideUnlocksPanel(); } catch {}
-            try { initAutoplaySettings(); } catch {}
-            try { ensureAutoplayControls(); } catch {}
-            try { wrapPromptHandlersForAutoplay(); } catch {}
-            try { updateSeasonState(); } catch {}
-            try { ensureGreatWorkForEra(planet.currentEra); } catch {}
-        });
-    }
+        if (typeof window !== "undefined") {
+            window.addEventListener("load", () => {
+                try { addAnnalsButton(); } catch {}
+                try { addWorldStatusButton(); } catch {}
+                try { addChronicleButton(); } catch {}
+                try { addFestivalsButton(); } catch {}
+                try { addAutoplayButton(); } catch {}
+                try { addDivineStanceButton(); } catch {}
+                try { overrideUnlocksPanel(); } catch {}
+                try { initAutoplaySettings(); } catch {}
+                try { ensureAutoplayControls(); } catch {}
+                try { wrapPromptHandlersForAutoplay(); } catch {}
+                try { updateSeasonState(); } catch {}
+                try { ensureGreatWorkForEra(planet.currentEra); } catch {}
+            });
+        }
 
-    if (typeof document !== "undefined") {
-        if (document.readyState === "complete" || document.readyState === "interactive") {
-            try { updateSeasonState(); } catch {}
+        if (typeof document !== "undefined") {
+            if (document.readyState === "complete" || document.readyState === "interactive") {
+                try { updateSeasonState(); } catch {}
+            }
         }
     }
 
@@ -31600,6 +31666,24 @@
     });
 
     // =========================================================================
+    // =========================================================================
+    // INIT FLOW (hooks + bootstraps)
+    // =========================================================================
+
+    function initPaultendoHooks() {
+        if (PAULTENDO_STATE.initDone) return;
+        PAULTENDO_STATE.initDone = true;
+        try { initRegnameOverrides(); } catch {}
+        try { initLogOverrides(); } catch {}
+        try { initHistoryOverrides(); } catch {}
+        try { initMapHooks(); } catch {}
+        try { initEpidemicRenderOverride(); } catch {}
+        try { initExecutiveOverrides(); } catch {}
+        try { initMultiWorldHooks(); } catch {}
+    }
+
+    initPaultendoHooks();
+
     // OPTIONAL MODULES - WORLD CRISES, RAIDERS, SECESSION
     // =========================================================================
 
