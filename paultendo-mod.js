@@ -48,7 +48,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.21";
+    const MOD_VERSION = "1.6.22";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -179,6 +179,32 @@
         chainWindowDays: 6,
         chainChance: 0.28,
         maxNarrativeHistory: 6
+    };
+
+    const ATTENTION_CONFIG = {
+        enabled: true,
+        focusDecayDays: 4,
+        digestIntervalDays: 3,
+        minDigestEvents: 3,
+        maxDigestEvents: 6,
+        maxQueue: 30
+    };
+
+    const TRADEOFF_CONFIG = {
+        enabled: true,
+        minInfluenceDelta: 0.6,
+        minUnrestDelta: 1,
+        minPopDelta: 1,
+        minCashDelta: 6,
+        maxItems: 2
+    };
+
+    const SYNERGY_CONFIG = {
+        enabled: true,
+        intervalDays: 3,
+        chance: 0.45,
+        minScore: 0.7,
+        logChance: 0.18
     };
 
     const NARRATIVE_TAGS = {
@@ -949,10 +975,10 @@
             causeB = prevCause;
         }
 
+        const names = ctx ? buildNarrativeNameContext(ctx, logText) : {};
         const specificEvent = inferSpecificEventPhrase(eventId, logText, ctx, names);
         const eventPhrase = specificEvent || inferEventPhrase(eventId, logText);
         const positive = isPositiveNarrativeEvent(eventId, logText, tags);
-        const names = ctx ? buildNarrativeNameContext(ctx, logText) : {};
         let structures = NARRATIVE_STRUCTURES
             .filter(s => {
                 if (!hasSecond && !s.id.startsWith("singleCause") && !s.allowSingle) return false;
@@ -1499,6 +1525,249 @@
         });
     }
 
+    function buildTradeoffSummary(before, after) {
+        if (!before || !after) return null;
+        const positives = [];
+        const negatives = [];
+        const push = (label, delta, threshold) => {
+            if (Math.abs(delta) < threshold) return;
+            const entry = { label, delta };
+            if (delta > 0) positives.push(entry);
+            if (delta < 0) negatives.push(entry);
+        };
+
+        push("Unrest", (after.unrest - before.unrest), TRADEOFF_CONFIG.minUnrestDelta);
+        push("Population", (after.pop - before.pop), TRADEOFF_CONFIG.minPopDelta);
+        push("Territory", (after.size - before.size), 1);
+        push("Cash", (after.cash - before.cash), TRADEOFF_CONFIG.minCashDelta);
+
+        const keys = Object.keys(before.influences || {});
+        keys.forEach(key => {
+            const delta = (after.influences[key] || 0) - (before.influences[key] || 0);
+            push(titleCase(key), delta, TRADEOFF_CONFIG.minInfluenceDelta);
+        });
+
+        if (!positives.length || !negatives.length) return null;
+        positives.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+        negatives.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+        const maxItems = TRADEOFF_CONFIG.maxItems || 2;
+        const posTop = positives.slice(0, maxItems);
+        const negTop = negatives.slice(0, maxItems);
+        const formatList = (list) => list.map(entry => `${entry.label} ${entry.delta > 0 ? "+" : ""}${entry.delta.toFixed(1)}`).join(", ");
+        const text = `Tradeoff · ${formatList(posTop)} · ${formatList(negTop)}`;
+        return { text, positives: posTop, negatives: negTop };
+    }
+
+    function recordTradeoffContext(ctx, town, before) {
+        if (!TRADEOFF_CONFIG.enabled || !ctx || !town || !before) return;
+        const after = snapshotTownMetrics(town);
+        if (!after) return;
+        const summary = buildTradeoffSummary(before, after);
+        if (!summary) return;
+        if (!ctx._paultendoTradeoffs) ctx._paultendoTradeoffs = [];
+        ctx._paultendoTradeoffs.push({
+            townId: town.id,
+            townName: town.name || null,
+            text: summary.text,
+            positives: summary.positives,
+            negatives: summary.negatives
+        });
+    }
+
+    function formatTradeoffForChronicle(tradeoffs) {
+        if (!tradeoffs || !tradeoffs.length) return null;
+        const items = tradeoffs.slice(0, 2).map(entry => {
+            const townLabel = entry.townId ? townRef(entry.townId) : (entry.townName || null);
+            return townLabel ? `${townLabel} · ${entry.text}` : entry.text;
+        }).filter(Boolean);
+        return items.length ? items.join(" · ") : null;
+    }
+
+    function getTradeoffSummaryFromContext(ctx) {
+        if (!ctx) return null;
+        if (ctx._paultendoTradeoffs && ctx._paultendoTradeoffs.length) {
+            return formatTradeoffForChronicle(ctx._paultendoTradeoffs);
+        }
+        const derived = [];
+        if (ctx.subject && ctx.subject._reg === "town" && ctx._paultendoPreSubject) {
+            const after = snapshotTownMetrics(ctx.subject);
+            const summary = buildTradeoffSummary(ctx._paultendoPreSubject, after);
+            if (summary) {
+                derived.push({
+                    townId: ctx.subject.id,
+                    townName: ctx.subject.name || null,
+                    text: summary.text,
+                    positives: summary.positives,
+                    negatives: summary.negatives
+                });
+            }
+        }
+        if (ctx.target && ctx.target._reg === "town" && ctx._paultendoPreTarget) {
+            const after = snapshotTownMetrics(ctx.target);
+            const summary = buildTradeoffSummary(ctx._paultendoPreTarget, after);
+            if (summary) {
+                derived.push({
+                    townId: ctx.target.id,
+                    townName: ctx.target.name || null,
+                    text: summary.text,
+                    positives: summary.positives,
+                    negatives: summary.negatives
+                });
+            }
+        }
+        return derived.length ? formatTradeoffForChronicle(derived) : null;
+    }
+
+    function buildCauseChainSummary(ctx, logText) {
+        if (!ctx) return null;
+        const town = getContextTown(ctx);
+        if (!town) return null;
+        const tags = getCauseTagsFromContext(ctx, logText);
+        if (!tags || !tags.length) return null;
+        const causeText = formatCauseList(tags.slice(0, 2), true);
+        if (!causeText) return null;
+        const names = buildNarrativeNameContext(ctx, logText);
+        const eventPhrase = inferSpecificEventPhrase(ctx.id, logText, ctx, names) || inferEventPhrase(ctx.id, logText);
+        if (!eventPhrase) return null;
+        const history = getNarrativeHistory(town);
+        let prevCause = null;
+        if (history && history.length) {
+            const last = history[history.length - 1];
+            prevCause = last?.causeA || last?.causeB || null;
+        }
+        if (prevCause && prevCause !== causeText) {
+            return `${prevCause} -> ${causeText} -> ${eventPhrase}`;
+        }
+        return `${causeText} -> ${eventPhrase}`;
+    }
+
+    const SYNERGY_RULES = [
+        { id: "scarcityUnrest", requires: ["famine", "unrest"], influence: { happy: -0.25, crime: 0.25 }, log: "Scarcity hardens tempers in {town}." },
+        { id: "debtWar", requires: ["debt", "war"], influence: { trade: -0.3, happy: -0.2 }, log: "War drains the purse of {town}." },
+        { id: "raidsTrade", requires: ["raids", "trade"], influence: { trade: -0.25, travel: -0.2 }, log: "Unsafe roads chill trade in {town}." },
+        { id: "sicknessFlight", requires: ["disease", "migration"], influence: { disease: 0.3, happy: -0.2 }, log: "Sickness spreads as people flee {town}." },
+        { id: "prosperStable", requires: ["prosperity", "stability"], influence: { trade: 0.3, happy: 0.25 }, log: "{town} thrives on steady footing." },
+        { id: "buildInnovate", requires: ["innovation", "infrastructure"], influence: { education: 0.3, trade: 0.2 }, log: "New works deepen learning in {town}." },
+        { id: "unityDiplomacy", requires: ["diplomacy", "unity"], influence: { law: 0.2, happy: 0.2 }, log: "Shared purpose steadies {town}." },
+        { id: "faithOrder", requires: ["faith_renewal", "stability"], influence: { faith: 0.3, law: 0.1 }, log: "Renewed faith steadies {town}." },
+        { id: "harvestRecovery", requires: ["harvest", "recovery"], influence: { happy: 0.25, farm: 0.2 }, log: "Fields recover and spirits lift in {town}." },
+        { id: "roadsTrade", requires: ["roads", "trade"], influence: { trade: 0.3, travel: 0.25 }, log: "Reliable roads open markets for {town}." }
+    ];
+
+    function getDominantNarrativeTags(town, minScore) {
+        const scored = getTopNarrativeTags(town, { useDecay: true, novelty: true });
+        if (!scored || !scored.length) return [];
+        const threshold = minScore ?? SYNERGY_CONFIG.minScore;
+        return scored.filter(entry => entry.score >= threshold).map(entry => entry.tag);
+    }
+
+    function pickSynergyRule(tags) {
+        if (!tags || tags.length < 2) return null;
+        const matches = SYNERGY_RULES.filter(rule => rule.requires.every(tag => tags.includes(tag)));
+        if (!matches.length) return null;
+        return matches[Math.floor(Math.random() * matches.length)];
+    }
+
+    function applySynergyRule(town, rule) {
+        if (!town || !rule || !rule.influence) return false;
+        happen("Influence", null, town, { ...rule.influence, temp: true });
+        return true;
+    }
+
+    function getAttentionState() {
+        if (!ATTENTION_CONFIG.enabled) return null;
+        if (!PAULTENDO_STATE.attention) {
+            PAULTENDO_STATE.attention = {
+                focus: {},
+                queue: [],
+                lastDigestDay: 0,
+                lock: false
+            };
+        }
+        return PAULTENDO_STATE.attention;
+    }
+
+    function noteTownFocus(townId) {
+        if (!ATTENTION_CONFIG.enabled || townId === undefined || townId === null) return;
+        const state = getAttentionState();
+        if (!state) return;
+        state.focus[townId] = planet.day;
+    }
+
+    function isTownFocused(townId) {
+        const state = getAttentionState();
+        if (!state) return false;
+        const last = state.focus[townId];
+        if (!last) return false;
+        return (planet.day - last) <= ATTENTION_CONFIG.focusDecayDays;
+    }
+
+    function extractTownIdsFromText(text) {
+        if (!text) return [];
+        const matches = Array.from(String(text).matchAll(/\{\{regname:town\|([^\}]+)\}\}/gi));
+        const ids = matches.map(match => {
+            const raw = match[1];
+            const parsed = parseInt(raw, 10);
+            return isNaN(parsed) ? raw : parsed;
+        });
+        return ids.filter(id => id !== null && id !== undefined);
+    }
+
+    function isPlayerDrivenContext(ctx) {
+        if (!ctx) return false;
+        if (ctx.id && ctx.id.startsWith("sway")) return true;
+        if (ctx.subject && ctx.subject._reg === "player") return true;
+        if (ctx.target && ctx.target._reg === "player") return true;
+        return false;
+    }
+
+    function recordOffscreenEvent(logText, type, ctx) {
+        if (!ATTENTION_CONFIG.enabled || !logText) return;
+        const state = getAttentionState();
+        if (!state || state.lock) return;
+        if (type === "tip") return;
+        if (isPlayerDrivenContext(ctx)) return;
+        const townIds = new Set();
+        const ctxTown = getContextTown(ctx);
+        if (ctxTown) townIds.add(ctxTown.id);
+        const textTownIds = extractTownIdsFromText(logText);
+        textTownIds.forEach(id => townIds.add(id));
+        if (townIds.size > 0) {
+            const focused = Array.from(townIds).some(id => isTownFocused(id));
+            if (focused) return;
+        }
+        const safeText = sanitizeChronicleMessage(logText);
+        if (!safeText) return;
+        state.queue.push({
+            day: planet.day,
+            type: type || "normal",
+            text: safeText,
+            towns: Array.from(townIds)
+        });
+        if (state.queue.length > ATTENTION_CONFIG.maxQueue) {
+            state.queue.splice(0, state.queue.length - ATTENTION_CONFIG.maxQueue);
+        }
+    }
+
+    function maybeEmitOffscreenDigest() {
+        if (!ATTENTION_CONFIG.enabled) return;
+        const state = getAttentionState();
+        if (!state || state.lock) return;
+        if (planet.day - (state.lastDigestDay || 0) < ATTENTION_CONFIG.digestIntervalDays) return;
+        if (state.queue.length < ATTENTION_CONFIG.minDigestEvents) return;
+        const items = state.queue.slice(-ATTENTION_CONFIG.maxDigestEvents);
+        const lines = items.map(entry => {
+            const townId = entry.towns && entry.towns.length ? entry.towns[0] : null;
+            const townLabel = townId ? townRef(townId) : null;
+            return townLabel ? `${townLabel} · ${entry.text}` : entry.text;
+        });
+        state.queue = [];
+        state.lastDigestDay = planet.day;
+        const digest = `While you watched elsewhere: ${lines.join(" · ")}`;
+        state.lock = true;
+        try { logMessage(digest, "tip"); } finally { state.lock = false; }
+    }
+
     const FAST_ADVANCE_CONFIG = {
         pressWindowMs: 550,
         minStreak: 3,
@@ -1825,6 +2094,8 @@
         const priority = getChroniclePriority(type, safeText);
         const entry = { id: uuid, day, type, text: safeText, priority };
         if (options && options.cause) entry.cause = options.cause;
+        if (options && options.chain) entry.chain = options.chain;
+        if (options && options.tradeoff) entry.tradeoff = options.tradeoff;
         state.entriesById[uuid] = entry;
         if (!state.entriesByDay[day]) state.entriesByDay[day] = [];
         state.entriesByDay[day].unshift(entry);
@@ -1928,7 +2199,10 @@
             if (!dayValue) continue;
             const text = entry.querySelector(".logText")?.innerText || "";
             const type = getChronicleTypeFromElement(entry);
-            addChronicleEntry(dayValue, id, type, text);
+            const cause = entry.getAttribute("data-cause") || null;
+            const chain = entry.getAttribute("data-chain") || null;
+            const tradeoff = entry.getAttribute("data-tradeoff") || null;
+            addChronicleEntry(dayValue, id, type, text, { cause, chain, tradeoff });
         }
         try { updateChronicleDayMarkers(); } catch {}
         try { updateChronicleHeadlines(planet?.day); } catch {}
@@ -2234,20 +2508,28 @@
                         const dayElem = elem ? elem.querySelector(".logDay") : null;
                         const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
                         const plainText = elem ? (elem.querySelector(".logText")?.innerText || "") : "";
+                        const context = ctx || getActiveModEventContext();
+                        const causeSummary = context ? buildCauseSummary(context, logText) : null;
+                        const chainSummary = context ? buildCauseChainSummary(context, logText) : null;
+                        const tradeoffSummary = context ? getTradeoffSummaryFromContext(context) : null;
                         if (dayValue) {
-                            const causeSummary = ctx ? buildCauseSummary(ctx, logText) : null;
                             const cause = causeSummary ? causeSummary.compact : null;
-                            addChronicleEntry(dayValue, uuid, type, plainText, { cause });
+                            addChronicleEntry(dayValue, uuid, type, plainText, { cause, chain: chainSummary, tradeoff: tradeoffSummary });
                             updateChronicleHeadlines(dayValue);
                             scheduleChronicleDayMarkers();
                         }
                         if (elem) {
-                            const causeSummary = ctx ? buildCauseSummary(ctx, logText) : null;
                             if (causeSummary && causeSummary.compact) {
                                 elem.setAttribute("data-cause", causeSummary.compact);
                                 if (!elem.getAttribute("title")) {
                                     elem.setAttribute("title", `Cause: ${causeSummary.summary}`);
                                 }
+                            }
+                            if (chainSummary) {
+                                elem.setAttribute("data-chain", chainSummary);
+                            }
+                            if (tradeoffSummary) {
+                                elem.setAttribute("data-tradeoff", tradeoffSummary);
                             }
                         }
                     } catch {}
@@ -2257,6 +2539,8 @@
                     const delta = newHeight - prevScrollHeight;
                     logPanel.scrollTop = prevScrollTop + delta;
                 }
+                try { recordOffscreenEvent(logText, type, ctx); } catch {}
+                try { maybeEmitOffscreenDigest(); } catch {}
                 try { maybeEmitNarrativeAside(baseLogMessage, logText, type); } catch {}
                 return uuid;
             };
@@ -2304,6 +2588,27 @@
             };
             clearLog._paultendoChronicle = true;
         }
+    }
+
+    function initAttentionHooks() {
+        if (typeof handleEntityClick !== "function") {
+            scheduleInitRetry("attentionHooks", initAttentionHooks);
+            return;
+        }
+        if (handleEntityClick._paultendoAttention) return;
+        const baseClick = handleEntityClick;
+        handleEntityClick = function(elem, ...args) {
+            try {
+                const reg = elem?.getAttribute?.("data-reg");
+                const rawId = elem?.getAttribute?.("data-id");
+                if (reg === "town" && rawId !== null && rawId !== undefined) {
+                    const parsed = parseInt(rawId, 10);
+                    noteTownFocus(isNaN(parsed) ? rawId : parsed);
+                }
+            } catch {}
+            return baseClick.call(this, elem, ...args);
+        };
+        handleEntityClick._paultendoAttention = true;
     }
 
     // =========================================================================
@@ -2650,10 +2955,17 @@
             data.func = (subject, target, args) => withModEventContext(id, { subject, target, args }, () => {
                 const preSubject = (subject && subject._reg === "town") ? snapshotTownMetrics(subject) : null;
                 const preTarget = (target && target._reg === "town") ? snapshotTownMetrics(target) : null;
+                const ctx = getActiveModEventContext();
+                if (ctx) {
+                    if (preSubject) ctx._paultendoPreSubject = preSubject;
+                    if (preTarget) ctx._paultendoPreTarget = preTarget;
+                }
                 const result = baseFunc(subject, target, args);
                 try { recordNarrativeSignals(id, subject, target, args); } catch {}
                 try { recordTownImpactChanges(subject, preSubject, id, args); } catch {}
                 try { recordTownImpactChanges(target, preTarget, id, args); } catch {}
+                try { recordTradeoffContext(ctx, subject, preSubject); } catch {}
+                try { recordTradeoffContext(ctx, target, preTarget); } catch {}
                 return result;
             });
             data.func._paultendoContext = true;
@@ -2663,10 +2975,17 @@
             data.funcNo = (subject, target, args) => withModEventContext(id, { subject, target, args }, () => {
                 const preSubject = (subject && subject._reg === "town") ? snapshotTownMetrics(subject) : null;
                 const preTarget = (target && target._reg === "town") ? snapshotTownMetrics(target) : null;
+                const ctx = getActiveModEventContext();
+                if (ctx) {
+                    if (preSubject) ctx._paultendoPreSubject = preSubject;
+                    if (preTarget) ctx._paultendoPreTarget = preTarget;
+                }
                 const result = baseFuncNo(subject, target, args);
                 try { recordNarrativeSignals(id, subject, target, args); } catch {}
                 try { recordTownImpactChanges(subject, preSubject, id, args); } catch {}
                 try { recordTownImpactChanges(target, preTarget, id, args); } catch {}
+                try { recordTradeoffContext(ctx, subject, preSubject); } catch {}
+                try { recordTradeoffContext(ctx, target, preTarget); } catch {}
                 return result;
             });
             data.funcNo._paultendoContext = true;
@@ -4309,6 +4628,19 @@
         const logId = options.logId || null;
         const entryData = { system: system || "misc", message: safeMessage, type: type || null, logId };
         if (options.cause) entryData.cause = options.cause;
+        if (options.chain) entryData.chain = options.chain;
+        if (options.tradeoff) entryData.tradeoff = options.tradeoff;
+        if (logId && typeof document !== "undefined") {
+            const elem = document.getElementById("logMessage-" + logId);
+            if (elem) {
+                const dataCause = elem.getAttribute("data-cause");
+                const dataChain = elem.getAttribute("data-chain");
+                const dataTradeoff = elem.getAttribute("data-tradeoff");
+                if (!entryData.cause && dataCause) entryData.cause = dataCause;
+                if (!entryData.chain && dataChain) entryData.chain = dataChain;
+                if (!entryData.tradeoff && dataTradeoff) entryData.tradeoff = dataTradeoff;
+            }
+        }
         entry.entries.push(entryData);
         entry.counts[system || "misc"] = (entry.counts[system || "misc"] || 0) + 1;
         const store = getChronicleStore();
@@ -4316,6 +4648,12 @@
             const existing = store.byLogId[logId];
             if (existing && existing.cause && !entryData.cause) {
                 entryData.cause = existing.cause;
+            }
+            if (existing && existing.chain && !entryData.chain) {
+                entryData.chain = existing.chain;
+            }
+            if (existing && existing.tradeoff && !entryData.tradeoff) {
+                entryData.tradeoff = existing.tradeoff;
             }
             store.byLogId[logId] = entryData;
         }
@@ -4375,6 +4713,12 @@
             items.push({ text: `${tag}${safeMessage}` });
             if (evt.cause) {
                 items.push({ text: `because ${evt.cause}`, indent: 1, opacity: 0.7 });
+            }
+            if (evt.chain) {
+                items.push({ text: `chain: ${evt.chain}`, indent: 1, opacity: 0.6 });
+            }
+            if (evt.tradeoff) {
+                items.push({ text: `tradeoff: ${evt.tradeoff}`, indent: 1, opacity: 0.6 });
             }
         });
         populateExecutive(items, "Chronicle Day");
@@ -4508,6 +4852,30 @@
         try { noteMemoryFromLog(system, message, options); } catch {}
         return result;
     }
+
+    modEvent("paultendoSynergyPulse", {
+        daily: true,
+        subject: { reg: "town", all: true },
+        value: (subject) => {
+            if (!SYNERGY_CONFIG.enabled) return false;
+            if (!subject || subject.end) return false;
+            return planet.day % SYNERGY_CONFIG.intervalDays === 0;
+        },
+        func: (subject) => {
+            const tags = getDominantNarrativeTags(subject, SYNERGY_CONFIG.minScore);
+            if (tags.length < 2) return;
+            if (Math.random() > SYNERGY_CONFIG.chance) return;
+            const rule = pickSynergyRule(tags);
+            if (!rule) return;
+            if (!applySynergyRule(subject, rule)) return;
+            if (rule.log && Math.random() < (SYNERGY_CONFIG.logChance || 0)) {
+                const label = typeof townRef === "function" && subject.id !== undefined
+                    ? townRef(subject.id)
+                    : (subject.name || "A town");
+                modLog("synergy", rule.log.replace("{town}", label), "tip", { town: subject });
+            }
+        }
+    });
 
     function getTownCenter(town) {
         if (!town) return null;
@@ -32195,6 +32563,7 @@
         PAULTENDO_STATE.initVersion = MOD_VERSION;
         try { initRegnameOverrides(); } catch {}
         try { initLogOverrides(); } catch {}
+        try { initAttentionHooks(); } catch {}
         try { initHistoryOverrides(); } catch {}
         try { initMapHooks(); } catch {}
         try { initEpidemicRenderOverride(); } catch {}
