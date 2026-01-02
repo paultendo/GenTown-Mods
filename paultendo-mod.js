@@ -48,7 +48,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.22";
+    const MOD_VERSION = "1.6.26";
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -198,6 +198,8 @@
         minCashDelta: 6,
         maxItems: 2
     };
+
+    const TRADEOFF_INVERTED = new Set(["unrest", "crime", "disease"]);
 
     const SYNERGY_CONFIG = {
         enabled: true,
@@ -1103,7 +1105,7 @@
         if (!tags || !tags.length) return "";
         const labels = tags.map(tag => CAUSE_LABELS[tag] || tag);
         if (compact) {
-            return labels.slice(0, 2).join(" + ");
+            return labels.slice(0, 2).join(" and ");
         }
         if (labels.length === 1) return labels[0];
         if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
@@ -1532,8 +1534,10 @@
         const push = (label, delta, threshold) => {
             if (Math.abs(delta) < threshold) return;
             const entry = { label, delta };
-            if (delta > 0) positives.push(entry);
-            if (delta < 0) negatives.push(entry);
+            const key = (label || "").toLowerCase();
+            const valence = TRADEOFF_INVERTED.has(key) ? -delta : delta;
+            if (valence > 0) positives.push(entry);
+            if (valence < 0) negatives.push(entry);
         };
 
         push("Unrest", (after.unrest - before.unrest), TRADEOFF_CONFIG.minUnrestDelta);
@@ -1553,8 +1557,26 @@
         const maxItems = TRADEOFF_CONFIG.maxItems || 2;
         const posTop = positives.slice(0, maxItems);
         const negTop = negatives.slice(0, maxItems);
-        const formatList = (list) => list.map(entry => `${entry.label} ${entry.delta > 0 ? "+" : ""}${entry.delta.toFixed(1)}`).join(", ");
-        const text = `Tradeoff · ${formatList(posTop)} · ${formatList(negTop)}`;
+        const describeDelta = (entry) => {
+            const label = (entry.label || "growth").toLowerCase();
+            const up = entry.delta > 0;
+            if (label === "unrest") return up ? "unrest flared" : "unrest eased";
+            if (label === "population") return up ? "population swelled" : "population thinned";
+            if (label === "territory") return up ? "holdings expanded" : "holdings shrank";
+            if (label === "cash") return up ? "coffers filled" : "coffers tightened";
+            if (label === "faith") return up ? "faith strengthened" : "faith waned";
+            if (label === "trade") return up ? "trade quickened" : "trade slowed";
+            if (label === "happy") return up ? "spirits lifted" : "spirits dimmed";
+            if (label === "law") return up ? "order held" : "order frayed";
+            if (label === "education") return up ? "learning grew" : "learning faded";
+            if (label === "military") return up ? "arms strengthened" : "arms weakened";
+            if (label === "crime") return up ? "crime rose" : "crime ebbed";
+            if (label === "travel") return up ? "travel stirred" : "travel slowed";
+            if (label === "farm") return up ? "fields prospered" : "fields faltered";
+            return up ? `${label} rose` : `${label} fell`;
+        };
+        const formatList = (list) => list.map(describeDelta).join(", ");
+        const text = `There were gains (${formatList(posTop)}), but costs followed (${formatList(negTop)}).`;
         return { text, positives: posTop, negatives: negTop };
     }
 
@@ -1636,9 +1658,9 @@
             prevCause = last?.causeA || last?.causeB || null;
         }
         if (prevCause && prevCause !== causeText) {
-            return `${prevCause} -> ${causeText} -> ${eventPhrase}`;
+            return `${prevCause}, then ${causeText}, then ${eventPhrase}`;
         }
-        return `${causeText} -> ${eventPhrase}`;
+        return `${causeText}, then ${eventPhrase}`;
     }
 
     const SYNERGY_RULES = [
@@ -1763,7 +1785,13 @@
         });
         state.queue = [];
         state.lastDigestDay = planet.day;
-        const digest = `While you watched elsewhere: ${lines.join(" · ")}`;
+        const intro = pickPhrase([
+            "Far from your gaze, word spreads:",
+            "While your eye wandered, whispers carried:",
+            "Elsewhere, the world murmured:",
+            "Beyond your notice, reports came in:"
+        ]);
+        const digest = `${intro} ${lines.join(" · ")}`;
         state.lock = true;
         try { logMessage(digest, "tip"); } finally { state.lock = false; }
     }
@@ -2522,7 +2550,7 @@
                             if (causeSummary && causeSummary.compact) {
                                 elem.setAttribute("data-cause", causeSummary.compact);
                                 if (!elem.getAttribute("title")) {
-                                    elem.setAttribute("title", `Cause: ${causeSummary.summary}`);
+                                    elem.setAttribute("title", `Roots: ${causeSummary.summary}`);
                                 }
                             }
                             if (chainSummary) {
@@ -2597,8 +2625,9 @@
         }
         if (handleEntityClick._paultendoAttention) return;
         const baseClick = handleEntityClick;
-        handleEntityClick = function(elem, ...args) {
+        handleEntityClick = function(...args) {
             try {
+                const elem = args[0];
                 const reg = elem?.getAttribute?.("data-reg");
                 const rawId = elem?.getAttribute?.("data-id");
                 if (reg === "town" && rawId !== null && rawId !== undefined) {
@@ -2606,8 +2635,10 @@
                     noteTownFocus(isNaN(parsed) ? rawId : parsed);
                 }
             } catch {}
-            return baseClick.call(this, elem, ...args);
+            return baseClick.apply(this, args);
         };
+        try { Object.keys(baseClick).forEach(key => { handleEntityClick[key] = baseClick[key]; }); } catch {}
+        handleEntityClick._paultendoBase = baseClick;
         handleEntityClick._paultendoAttention = true;
     }
 
@@ -4712,13 +4743,13 @@
             if (!safeMessage) return;
             items.push({ text: `${tag}${safeMessage}` });
             if (evt.cause) {
-                items.push({ text: `because ${evt.cause}`, indent: 1, opacity: 0.7 });
+                items.push({ text: `Word is, it traces back to ${evt.cause}.`, indent: 1, opacity: 0.72 });
             }
             if (evt.chain) {
-                items.push({ text: `chain: ${evt.chain}`, indent: 1, opacity: 0.6 });
+                items.push({ text: `A thread runs: ${evt.chain}.`, indent: 1, opacity: 0.6 });
             }
             if (evt.tradeoff) {
-                items.push({ text: `tradeoff: ${evt.tradeoff}`, indent: 1, opacity: 0.6 });
+                items.push({ text: `${evt.tradeoff}`, indent: 1, opacity: 0.6 });
             }
         });
         populateExecutive(items, "Chronicle Day");
@@ -5927,6 +5958,113 @@
         else items.push({ text: formatGreatWorkStatus(work) });
 
         populateExecutive(items, "World");
+    }
+
+    function openEconomyPanel() {
+        if (!planet || typeof populateExecutive !== "function") return;
+        initEconomics();
+        initTradeRoutes();
+        const items = [];
+        const towns = getActiveTowns();
+        const routes = planet.tradeRoutes || [];
+        const activeRoutes = routes.filter(r => r && r.active !== false).length;
+        const embargoes = planet.embargoes || [];
+        const loans = planet.loans || [];
+
+        items.push({ text: `Day ${planet.day} · Economy` });
+        items.push({ text: `Trade routes · ${activeRoutes}/${routes.length} active` });
+        items.push({ text: `Embargoes · ${embargoes.length || 0} active` });
+        items.push({ text: `Loans · ${loans.length || 0} outstanding` });
+
+        items.push({ spacer: true, text: "Debt Pressure" });
+        const borrowerStats = towns.map(getTownDebtStats).filter(Boolean);
+        if (!borrowerStats.length) {
+            items.push({ text: "No towns are in serious debt strain." });
+        } else {
+            borrowerStats.sort((a, b) => {
+                const scoreA = (a.pressure || 0) * 2 + (a.missed || 0) + Math.log1p(a.outstanding || 0);
+                const scoreB = (b.pressure || 0) * 2 + (b.missed || 0) + Math.log1p(b.outstanding || 0);
+                return scoreB - scoreA;
+            });
+            borrowerStats.slice(0, 5).forEach(stat => {
+                const mood = describeDebtPressure(stat);
+                items.push({
+                    text: `${townRef(stat.town.id)} · ${mood} · owes ${formatTownCurrency(stat.town, stat.outstanding)}`,
+                    opacity: 0.9
+                });
+            });
+        }
+
+        items.push({ spacer: true, text: "Lenders & Leverage" });
+        const lenderStats = towns.map(getTownLenderStats).filter(Boolean);
+        if (!lenderStats.length) {
+            items.push({ text: "No towns are holding major debts." });
+        } else {
+            lenderStats.sort((a, b) => (b.outstanding || 0) - (a.outstanding || 0));
+            lenderStats.slice(0, 4).forEach(stat => {
+                const borrowerWord = stat.borrowers === 1 ? "town" : "towns";
+                items.push({
+                    text: `${townRef(stat.town.id)} · holds ${formatTownCurrency(stat.town, stat.outstanding)} across ${stat.borrowers} ${borrowerWord}`,
+                    opacity: 0.9
+                });
+            });
+        }
+
+        items.push({ spacer: true, text: "Market Pull" });
+        const marketNeeds = towns.map(town => {
+            const need = getTownMarketNeed(town);
+            return need ? { town, need } : null;
+        }).filter(Boolean);
+        if (!marketNeeds.length) {
+            items.push({ text: "Markets feel balanced for now." });
+        } else {
+            marketNeeds.sort((a, b) => (b.need.severity || 0) - (a.need.severity || 0));
+            marketNeeds.slice(0, 4).forEach(entry => {
+                const needLabel = entry.need.type === "food"
+                    ? "food"
+                    : entry.need.type === "luxury"
+                        ? "comforts"
+                        : "tools";
+                items.push({
+                    text: `${townRef(entry.town.id)} · seeking ${needLabel}`,
+                    opacity: 0.9
+                });
+            });
+        }
+
+        items.push({ spacer: true, text: "Trade Nerve" });
+        const tradeLeaders = towns.map(town => {
+            const snap = computeTownEconomySnapshot(town);
+            const routes = getTownRoutes(town).length;
+            return { town, snap, routes };
+        }).sort((a, b) => ((b.town.influences?.trade || 0) + b.routes * 0.6) - ((a.town.influences?.trade || 0) + a.routes * 0.6));
+        tradeLeaders.slice(0, 4).forEach(entry => {
+            const mood = describeEconomyMood(entry.snap);
+            items.push({
+                text: `${townRef(entry.town.id)} · ${entry.routes} routes · ${mood}`,
+                opacity: 0.85
+            });
+        });
+
+        items.push({ spacer: true, text: "How it moves" });
+        items.push({ text: "Coin swells with trade routes, roads, learning, and population." });
+        items.push({ text: "It drains with upkeep, unrest, war footing, and famine." });
+        items.push({ text: "Debt pressure rises with missed payments; lenders may restructure, demand concessions, impose vassalage, or enforce by force." });
+
+        populateExecutive(items, "Economy");
+    }
+
+    function addEconomyButton() {
+        const list = document.getElementById("actionMainList");
+        if (!list || document.getElementById("actionItem-economy")) return;
+        const button = document.createElement("span");
+        button.className = "actionItem clickable";
+        button.id = "actionItem-economy";
+        button.innerHTML = "Economy";
+        button.addEventListener("click", () => {
+            openEconomyPanel();
+        });
+        list.appendChild(button);
     }
 
     function addWorldStatusButton() {
@@ -13042,6 +13180,89 @@
         minRemainingSize: 6
     };
 
+    function formatTownCurrency(town, amount) {
+        if (!town) return `${Math.round(amount || 0)}`;
+        const value = Math.round(amount || 0);
+        return `{{currency:${town.id}}}{{num:${value}|K}}`;
+    }
+
+    function getTownDebtStats(town) {
+        if (!town || town.end) return null;
+        const loans = getLoansFor(town);
+        if (!loans.length) return null;
+        const stats = {
+            town,
+            count: loans.length,
+            outstanding: 0,
+            missed: 0,
+            arrears: 0,
+            pressure: 0
+        };
+        loans.forEach(loan => {
+            stats.outstanding += loan.remainingAmount || 0;
+            stats.missed += loan.missedPayments || 0;
+            stats.arrears += loan.daysInArrears || 0;
+            stats.pressure = Math.max(stats.pressure, loan.pressure || 0);
+        });
+        return stats;
+    }
+
+    function getTownLenderStats(town) {
+        if (!town || town.end) return null;
+        const loans = getLoansFrom(town);
+        if (!loans.length) return null;
+        const borrowers = new Set();
+        const stats = {
+            town,
+            count: loans.length,
+            outstanding: 0,
+            borrowers: 0
+        };
+        loans.forEach(loan => {
+            stats.outstanding += loan.remainingAmount || 0;
+            if (loan.borrowerId !== undefined && loan.borrowerId !== null) {
+                borrowers.add(loan.borrowerId);
+            }
+        });
+        stats.borrowers = borrowers.size;
+        return stats;
+    }
+
+    function describeDebtPressure(stats) {
+        if (!stats) return "clear";
+        if (stats.missed >= 3 || stats.pressure >= 7) return "default risk";
+        if (stats.missed >= 1 || stats.pressure >= 4) return "strained";
+        return "managed";
+    }
+
+    function describeEconomyMood(snapshot) {
+        if (!snapshot) return "unclear";
+        const net = snapshot.net || 0;
+        if (net > 2) return "flush";
+        if (net > 0.6) return "steady";
+        if (net > -0.3) return "tight";
+        if (net > -1.2) return "strained";
+        return "bleeding";
+    }
+
+    function describeEconomyDrivers(town, snapshot) {
+        if (!town || !snapshot) return {};
+        const drivers = [];
+        const drags = [];
+        if (snapshot.routeIncome > 0.6) drivers.push("trade routes");
+        if (snapshot.trade > 5) drivers.push("market strength");
+        if (snapshot.roads > 35) drivers.push("roads");
+        if ((town.pop || 0) > 80) drivers.push("population");
+        if ((town.influences?.education || 0) > 5) drivers.push("learning");
+        initUnrest(town);
+        if ((town.unrest || 0) > 50) drags.push("unrest");
+        if (hasIssue(town, "war")) drags.push("war footing");
+        if (town.famine && !town.famine.ended) drags.push("famine");
+        if ((town._paultendoAdminStrain || 0) > 2) drags.push("administrative strain");
+        if (snapshot.expenses > snapshot.income + 0.8) drags.push("high upkeep");
+        return { drivers: drivers.slice(0, 2), drags: drags.slice(0, 2) };
+    }
+
     function initTownEconomyState(town) {
         if (!town || town.end) return;
         ensureTownState(town);
@@ -13620,16 +13841,40 @@
         return weightedChoice(weights, w => w.weight) || { id: "restructure" };
     }
 
+    function buildDebtEscalationClause(loan, borrower) {
+        if (!loan || !borrower) return null;
+        const parts = [];
+        const missed = loan.missedPayments || 0;
+        const pressure = loan.pressure || 0;
+        const debtRatio = loan.remainingAmount / Math.max(1, borrower.resources?.cash || 1);
+        if (missed >= 2) parts.push("missed payments piling up");
+        else if (missed >= 1) parts.push("a missed payment");
+        if (pressure >= 6) parts.push("pressure mounting");
+        if (debtRatio >= 2.5) parts.push("debts towering over them");
+        if (!parts.length) return null;
+        const phrase = parts.slice(0, 2).join(" and ");
+        if (phrase.startsWith("a missed payment")) return `after ${phrase}`;
+        return `as ${phrase}`;
+    }
+
+    function appendDebtClause(text, clause) {
+        if (!clause || !text) return text;
+        const cleaned = text.endsWith(".") ? text.slice(0, -1) : text;
+        return `${cleaned} ${clause}.`;
+    }
+
     function applyDebtEscalation(loan, lender, borrower) {
         const choice = evaluateDebtEscalation(loan, lender, borrower);
         loan._paultendoLastEscalation = planet.day;
+        const clause = buildDebtEscalationClause(loan, borrower);
 
         if (choice.id === "restructure") {
             loan.remainingPayments = Math.max(loan.remainingPayments || 0, 8) + 5;
             loan.paymentPerTurn = Math.ceil(loan.remainingAmount / Math.max(1, loan.remainingPayments));
             loan.missedPayments = Math.max(0, (loan.missedPayments || 0) - 2);
             loan.pressure = Math.max(0, (loan.pressure || 0) - 2);
-            logMessage(`{{regname:town|${lender.id}}} restructures {{regname:town|${borrower.id}}}'s debt, extending repayment terms.`, "milestone");
+            const line = `{{regname:town|${lender.id}}} restructures {{regname:town|${borrower.id}}}'s debt, extending repayment terms.`;
+            logMessage(appendDebtClause(line, clause), "milestone");
             return;
         }
 
@@ -13646,7 +13891,8 @@
             }
             loan.missedPayments = Math.max(0, (loan.missedPayments || 0) - 1);
             loan.pressure = Math.max(0, (loan.pressure || 0) - 1);
-            logMessage(`{{regname:town|${borrower.id}}} grants trade concessions to {{regname:town|${lender.id}}} to ease debt pressure.`, "warning");
+            const line = `{{regname:town|${borrower.id}}} grants trade concessions to {{regname:town|${lender.id}}} to ease debt pressure.`;
+            logMessage(appendDebtClause(line, clause), "warning");
             return;
         }
 
@@ -13655,7 +13901,8 @@
             if (rel) {
                 loan.missedPayments = 0;
                 loan.pressure = Math.max(0, (loan.pressure || 0) - 3);
-                logMessage(`Debt binds {{regname:town|${borrower.id}}} into tributary status under {{regname:town|${lender.id}}}.`, "warning");
+                const line = `Debt binds {{regname:town|${borrower.id}}} into tributary status under {{regname:town|${lender.id}}}.`;
+                logMessage(appendDebtClause(line, clause), "warning");
                 return;
             }
         }
@@ -13665,7 +13912,8 @@
             if (process) {
                 process.cause = { id: "debt_enforcement", label: "debt enforcement", subjectId: lender.id, targetId: borrower.id };
                 process.objective = { id: "vassalize", label: "subjugation", targetId: borrower.id };
-                logMessage(`Debt disputes boil over. {{regname:town|${lender.id}}} moves to enforce repayment from {{regname:town|${borrower.id}}}.`, "warning");
+                const line = `Debt disputes boil over. {{regname:town|${lender.id}}} moves to enforce repayment from {{regname:town|${borrower.id}}}.`;
+                logMessage(appendDebtClause(line, clause), "warning");
                 return;
             }
         }
@@ -27340,6 +27588,7 @@
             initExecutive = function(...args) {
                 const result = baseInitExecutive.apply(this, args);
                 try { addAnnalsButton(); } catch {}
+                try { addEconomyButton(); } catch {}
                 return result;
             };
             initExecutive._paultendoAnnals = true;
@@ -27350,6 +27599,7 @@
             initExecutive = function(...args) {
                 const result = baseInitExecutive.apply(this, args);
                 try { addWorldStatusButton(); } catch {}
+                try { addEconomyButton(); } catch {}
                 return result;
             };
             initExecutive._paultendoWorldStatus = true;
@@ -27360,6 +27610,7 @@
             initExecutive = function(...args) {
                 const result = baseInitExecutive.apply(this, args);
                 try { addChronicleButton(); } catch {}
+                try { addEconomyButton(); } catch {}
                 return result;
             };
             initExecutive._paultendoChronicle = true;
@@ -27370,6 +27621,7 @@
             initExecutive = function(...args) {
                 const result = baseInitExecutive.apply(this, args);
                 try { addFestivalsButton(); } catch {}
+                try { addEconomyButton(); } catch {}
                 return result;
             };
             initExecutive._paultendoFestivals = true;
@@ -27380,6 +27632,7 @@
             initExecutive = function(...args) {
                 const result = baseInitExecutive.apply(this, args);
                 try { overrideUnlocksPanel(); } catch {}
+                try { addEconomyButton(); } catch {}
                 return result;
             };
             initExecutive._paultendoUnlocksOverride = true;
@@ -27390,6 +27643,7 @@
             initExecutive = function(...args) {
                 const result = baseInitExecutive.apply(this, args);
                 try { addAutoplayButton(); } catch {}
+                try { addEconomyButton(); } catch {}
                 return result;
             };
             initExecutive._paultendoAutoplay = true;
@@ -27400,6 +27654,7 @@
             initExecutive = function(...args) {
                 const result = baseInitExecutive.apply(this, args);
                 try { addDivineStanceButton(); } catch {}
+                try { addEconomyButton(); } catch {}
                 return result;
             };
             initExecutive._paultendoDivineStance = true;
@@ -27413,6 +27668,7 @@
                 try { addFestivalsButton(); } catch {}
                 try { addAutoplayButton(); } catch {}
                 try { addDivineStanceButton(); } catch {}
+                try { addEconomyButton(); } catch {}
                 try { overrideUnlocksPanel(); } catch {}
                 try { initAutoplaySettings(); } catch {}
                 try { ensureAutoplayControls(); } catch {}
@@ -27428,6 +27684,7 @@
                     try { addFestivalsButton(); } catch {}
                     try { addAutoplayButton(); } catch {}
                     try { addDivineStanceButton(); } catch {}
+                    try { addEconomyButton(); } catch {}
                     try { overrideUnlocksPanel(); } catch {}
                     try { initAutoplaySettings(); } catch {}
                     try { ensureAutoplayControls(); } catch {}
@@ -30304,6 +30561,10 @@
         if (!regBrowserKeys.trade_goods) regBrowserKeys.trade_goods = "Goods Moved";
         if (!regBrowserKeys.trade_cash) regBrowserKeys.trade_cash = "Cash";
         if (!regBrowserKeys.trade_wealth) regBrowserKeys.trade_wealth = "Wealth";
+        if (!regBrowserKeys.econ_) regBrowserKeys.econ_ = "Economy";
+        if (!regBrowserKeys.econ_flow) regBrowserKeys.econ_flow = "Flow";
+        if (!regBrowserKeys.econ_pressure) regBrowserKeys.econ_pressure = "Pressure";
+        if (!regBrowserKeys.econ_debt) regBrowserKeys.econ_debt = "Debt";
 
         if (!regBrowserValues.trade_cash) {
             regBrowserValues.trade_cash = (value, town) => `{{currency:${town.id}}}{{num:${Math.round(value)}|K}}`;
@@ -30371,6 +30632,30 @@
             if (town.wealth) data.trade_wealth = town.wealth;
 
             return Object.keys(data).length ? data : undefined;
+        };
+
+        regBrowserExtra.town.econ_ = (town) => {
+            if (!town || town.end) return;
+            const snap = computeTownEconomySnapshot(town);
+            if (!snap) return;
+            const mood = describeEconomyMood(snap);
+            const drivers = describeEconomyDrivers(town, snap);
+            const debtStats = getTownDebtStats(town);
+            const debtMood = debtStats ? describeDebtPressure(debtStats) : null;
+            const flowLine = drivers.drivers.length
+                ? `${mood} (carried by ${drivers.drivers.join(" & ")})`
+                : mood;
+            const pressureLine = drivers.drags.length
+                ? `weighed by ${drivers.drags.join(" & ")}`
+                : "little drag";
+            const data = {
+                econ_flow: flowLine,
+                econ_pressure: pressureLine
+            };
+            if (debtStats) {
+                data.econ_debt = `${debtMood} · ${formatTownCurrency(town, debtStats.outstanding)} owed`;
+            }
+            return data;
         };
     }
 
