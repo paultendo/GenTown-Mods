@@ -16,7 +16,7 @@ test('bundled game and overhaul boot without uncaught errors', async t => {
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.30');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.31');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));
@@ -316,7 +316,7 @@ test('mod management receives complete URLs and can remove an installation', asy
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.30/paultendo-mod.js';
+  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.31/paultendo-mod.js';
   window.userSettings.mods = [url];
   window.showMods();
   window.handlePrompt(url);
@@ -330,7 +330,7 @@ test('adding an updated URL replaces older URLs before the duplicate guard retur
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.30/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.31/paultendo-mod.js';
   window.userSettings.mods = ['https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js', current, 'example_mod.js'];
   window._paultendoState.loadedVersion = '1.6.27';
   Object.defineProperty(window.document, 'currentScript', { configurable: true, get: () => ({ src: current }) });
@@ -475,7 +475,7 @@ test('legacy Chronicle markup restores as sanitized history', async t => {
   assert.deepEqual(reloaded.errors, []);
 });
 
-test('unanswered historical decisions are explicitly marked as archived after reload', async t => {
+test('unanswered historical decisions become subdued history without added prose', async t => {
   const first = await makeGame();
   t.after(first.close);
   settleGame(first);
@@ -485,9 +485,64 @@ test('unanswered historical decisions are explicitly marked as archived after re
   t.after(restored.close);
   const entry = restored.window.document.getElementById('logMessage-' + id);
   assert.equal(entry.querySelector('.logAct'), null);
-  assert.equal(entry.querySelector('.paultendoArchivedDecision').textContent.trim(), 'Past proposal. No action needed.');
+  assert.equal(entry.querySelector('.paultendoArchivedDecision'), null);
+  assert.equal(entry.classList.contains('paultendoPastDecision'), true);
+  assert.equal(entry.querySelector('.logText').textContent, 'Should the people build a bridge?');
   assert.equal(entry.getAttribute('done'), 'true');
   assert.deepEqual(restored.errors, []);
+});
+
+test('older explanatory notes are removed and the visual history state survives reload', async t => {
+  const first = await makeGame();
+  t.after(first.close);
+  settleGame(first);
+  const id = first.window.logMessage('Should the people build a bridge?');
+  const entry = first.window.document.getElementById('logMessage-' + id);
+  const note = first.window.document.createElement('small');
+  note.className = 'paultendoArchivedDecision';
+  note.textContent = ' Past proposal. No action needed.';
+  entry.appendChild(note);
+  entry.setAttribute('done', 'true');
+  const restored = await makeGame({ save: JSON.parse(JSON.stringify(first.window.generateSave())) });
+  t.after(restored.close);
+  const migrated = restored.window.document.getElementById('logMessage-' + id);
+  assert.equal(migrated.querySelector('.paultendoArchivedDecision'), null);
+  assert.equal(migrated.classList.contains('paultendoPastDecision'), true);
+  assert.equal(migrated.textContent.includes('No action needed'), false);
+  const again = await makeGame({ save: JSON.parse(JSON.stringify(restored.window.generateSave())) });
+  t.after(again.close);
+  assert.equal(again.window.document.getElementById('logMessage-' + id).classList.contains('paultendoPastDecision'), true);
+  assert.deepEqual(again.errors, []);
+});
+
+test('advancing without answering preserves native lapse and fallback behavior', async t => {
+  const game = await makeGame();
+  t.after(game.close);
+  const town = settleGame(game);
+  const { window } = game;
+  let yes = 0, no = 0, skipped = 0, defaultName;
+  window.gameEvents.unansweredProposal = { func() { yes++; }, funcNo() { no++; } };
+  window.gameEvents.skippedProposal = { func() { yes++; }, skip() { skipped++; } };
+  window.gameEvents.defaultNaming = { value: { ask: true, skip: true, default: () => 'Reedling' }, func(subject, target, args) { defaultName = args.value; } };
+  const ids = [];
+  for (const eventClass of ['unansweredProposal', 'skippedProposal', 'defaultNaming']) {
+    const id = window.logMessage('What should the people do?', undefined, { buttons: [{ name: 'Yes', type: 'yes', func() { yes++; } }, { name: 'No', type: 'no', func() { no++; } }] });
+    ids.push(id);
+    window.currentEvents[eventClass] = { eventClass, needsInput: true, done: false, subject: null, target: town, args: {}, logID: id };
+    window.document.getElementById('logMessage-' + id).dataset.eventid = eventClass;
+  }
+  window.nextDay();
+  assert.equal(yes, 0);
+  assert.equal(no, 0);
+  assert.equal(skipped, 1);
+  assert.equal(defaultName, 'Reedling');
+  for (const id of ids) {
+    const entry = window.document.getElementById('logMessage-' + id);
+    assert.equal(entry.getAttribute('done'), 'true');
+    assert.equal(entry.classList.contains('faded'), true);
+    assert.equal(entry.querySelector('[selected="true"]'), null);
+  }
+  assert.deepEqual(game.errors, []);
 });
 
 test('saving after a decision retains its updated Chronicle message', async t => {

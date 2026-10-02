@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.30/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.31/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.30";
+    const MOD_VERSION = "1.6.31";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -2088,6 +2088,16 @@
             .paultendoBackgroundReport details { display: inline-block; max-width: 100%; vertical-align: top; }
             .paultendoBackgroundReport summary { cursor: pointer; }
             .paultendoBackgroundReport li { margin: 0.3em 0; font-size: 0.9em; }
+            #logMessages .logMessage:not([done]):has(.logAct [role="button"]) {
+                background: #191607;
+                outline: 1px solid #776c32;
+                outline-offset: -1px;
+                padding: 0.3em 0.4em;
+            }
+            #logMessages .logMessage.paultendoPastDecision,
+            #logMessages .logMessage.faded { opacity: 0.66; }
+            #logMessages .logMessage[done="true"] .logAct:not(:has([selected="true"])) { display: none; }
+            #logMessages .logAct [role="button"]:focus-visible { outline: 2px solid white; outline-offset: 2px; }
             .logMessage.chronicleDayStart::before {
                 content: attr(data-chronicle-day-label);
                 display: block;
@@ -9827,13 +9837,12 @@
                 // and leave any still-live DOM decisions and their handlers untouched.
                 const archivedDecision = !entry.hasAttribute("done") && entry.querySelector(".logAct");
                 entry.querySelectorAll(".logAct").forEach(actions => actions.remove());
-                let note = entry.querySelector(".paultendoArchivedDecision");
+                const note = entry.querySelector(".paultendoArchivedDecision");
                 if (archivedDecision || note) {
-                    note ||= document.createElement("small");
-                    note.className = "paultendoArchivedDecision";
-                    note.textContent = " Past proposal. No action needed.";
-                    if (!note.parentNode) entry.appendChild(note);
+                    entry.classList.add("paultendoPastDecision");
+                    entry.title = "Earlier decision";
                 }
+                note?.remove();
                 for (const entity of entry.querySelectorAll(".entityName[data-reg][data-id]")) {
                     entity.addEventListener("click", event => {
                         event.stopPropagation();
