@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.28/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.29/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,25 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.28";
+    const MOD_VERSION = "1.6.29";
+    // An update URL must replace earlier installations before the duplicate
+    // guard returns. Otherwise the browser keeps loading the old version first.
+    const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
+    if (installURL && typeof userSettings !== "undefined" && Array.isArray(userSettings.mods)
+        && typeof normalizeMod === "function" && typeof saveSettings === "function") {
+        const currentURL = normalizeMod(installURL);
+        if (userSettings.mods.includes(currentURL)) {
+            const mods = userSettings.mods.filter(url => {
+                if (url === currentURL) return true;
+                try { return new URL(url, document.baseURI).pathname.split("/").pop() !== "paultendo-mod.js"; }
+                catch { return true; }
+            });
+            if (mods.length !== userSettings.mods.length) {
+                userSettings.mods = mods;
+                saveSettings();
+            }
+        }
+    }
     if (typeof window !== "undefined" && window._paultendoState?.loadedVersion) {
         console.warn("[paultendo-mod] Already loaded. Reload the page to apply a new version.");
         return;
@@ -3229,7 +3247,7 @@
 
     function getDailyCache(key, builder) {
         if (!planet) return builder ? builder() : undefined;
-        delete planet._paultendoDailyCache; // Migrate saves made before 1.6.28.
+        delete planet._paultendoDailyCache; // Migrate saves made before 1.6.29.
         let cache = dailyCaches.get(planet);
         if (!cache || cache.day !== planet.day) {
             cache = { day: planet.day, data: Object.create(null) };
@@ -5801,6 +5819,11 @@
         if (typeof doPrompt === "function" && !doPrompt._paultendoAutoplay) {
             const baseDoPrompt = doPrompt;
             doPrompt = function(obj) {
+                // URL choices must survive the engine's default 32-character limit.
+                if (obj?.type === "choose" && Array.isArray(obj.choices)
+                    && obj.choices.some(choice => typeof choice === "string" && /^https?:\/\//i.test(choice))) {
+                    obj.limit = 1000;
+                }
                 const result = baseDoPrompt.apply(this, arguments);
                 try {
                     const state = getAutoplayState();
@@ -10828,6 +10851,7 @@
                 try { deserializeUniverse(json, baseParseSave); } catch {}
             };
             parseSave._paultendoUniverse = true;
+            parseSave._paultendoBase = baseParseSave;
         }
     }
 
@@ -10957,6 +10981,7 @@
 
         window._paultendoUniverse = universe;
         ensureUniverseBase(universe);
+        PAULTENDO_STATE.universeRestored = true;
     }
 
     function parseSaveToWorldState(saveObj, baseParseSave) {
@@ -33865,6 +33890,22 @@
     // Adding overlay canvases resizes (and clears) the engine's layers. A mod
     // installed through Add Mod must redraw immediately; load won't fire again.
     if (typeof gameLoaded !== "undefined" && gameLoaded) {
+        // Saved mods load asynchronously in current GenTown and may execute
+        // after native autoload. Recover the mod's metadata from that same save.
+        if (!PAULTENDO_STATE.universeRestored && typeof R74n !== "undefined" && R74n.has("GenTownSave")) {
+            const stored = R74n.get("GenTownSave");
+            try {
+                const saved = JSON.parse(stored.replace(/</g, "[").replace(/>/g, "]"));
+                deserializeUniverse(saved, parseSave._paultendoBase);
+                if (typeof saved.planet?._paultendoLogHTML === "string") {
+                    planet._paultendoLogHTML = saved.planet._paultendoLogHTML;
+                }
+            } catch (error) {
+                console.warn("[paultendo-mod] Saved world metadata could not be restored:", error);
+            }
+        }
+        restoreLogFromPlanet({ merge: true });
+        syncLogToPlanet();
         ensureMapCanvasSync();
         ensureMapControls();
         ensureFogLayer();

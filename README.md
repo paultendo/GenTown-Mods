@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.28**, tested against the live **GenTown 1.4 / gt5** engine on 2 October 2026.
+Version **1.6.29**, tested against the live **GenTown 1.4 / gt5** engine on 2 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.28/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.29/paultendo-mod.js
 ```
 
-Remove any previous paultendo URL from **Enabled mods**, then reload the page. The Chronicle will show `paultendo-mod active (v1.6.28)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically. The Chronicle will show `paultendo-mod active (v1.6.29)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -36,7 +36,7 @@ npm run check
 npm test
 ```
 
-The 19 regression tests cover startup, late installation and redraw, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading, autoplay and decisions, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
+The 22 regression tests cover startup, late installation and redraw, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, mod management, autoplay and decisions, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
 
 ## Credits
 
