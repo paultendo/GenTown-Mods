@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.29/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.30/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.29";
+    const MOD_VERSION = "1.6.30";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -230,7 +230,7 @@
         focusDecayDays: 4,
         digestIntervalDays: 3,
         minDigestEvents: 3,
-        maxDigestEvents: 6,
+        maxDigestEvents: 3,
         maxQueue: 30
     };
 
@@ -1787,24 +1787,37 @@
         return false;
     }
 
-    function recordOffscreenEvent(logText, type, ctx) {
+    function recordOffscreenEvent(logText, type, ctx, args, uuid) {
         if (!ATTENTION_CONFIG.enabled || !logText) return;
         const state = getAttentionState();
         if (!state || state.lock) return;
-        if (type === "tip") return;
+        // Decisions stay in their original entry, with their live controls. Routine
+        // day transitions and tips are not news from elsewhere.
+        if (["tip", "sunset", "error"].includes(type) || args?.buttons?.length) return;
+        if (/\?|\{\{(?:should|approve)\}\}|The Sun (?:sets|rises)|An uneventful day/i.test(logText)) return;
         if (isPlayerDrivenContext(ctx)) return;
         const townIds = new Set();
         const ctxTown = getContextTown(ctx);
         if (ctxTown) townIds.add(ctxTown.id);
         const textTownIds = extractTownIdsFromText(logText);
         textTownIds.forEach(id => townIds.add(id));
+        if (!townIds.size) return;
         if (townIds.size > 0) {
             const focused = Array.from(townIds).some(id => isTownFocused(id));
             if (focused) return;
+            // Visible settlements already have their own Chronicle entries.
+            const visible = Array.from(townIds).some(id => {
+                const town = regGet("town", id);
+                const center = town && getTownCenter(town);
+                return center && isChunkVisible(center[0], center[1]);
+            });
+            if (visible) return;
         }
         const safeText = sanitizeChronicleMessage(logText);
         if (!safeText) return;
+        if (state.queue.some(entry => entry.uuid === uuid || (entry.day === planet.day && entry.text === safeText))) return;
         state.queue.push({
+            uuid,
             day: planet.day,
             type: type || "normal",
             text: safeText,
@@ -1822,22 +1835,31 @@
         if (planet.day - (state.lastDigestDay || 0) < ATTENTION_CONFIG.digestIntervalDays) return;
         if (state.queue.length < ATTENTION_CONFIG.minDigestEvents) return;
         const items = state.queue.slice(-ATTENTION_CONFIG.maxDigestEvents);
-        const lines = items.map(entry => {
-            const townId = entry.towns && entry.towns.length ? entry.towns[0] : null;
-            const townLabel = townId ? townRef(townId) : null;
-            return townLabel ? `${townLabel} · ${entry.text}` : entry.text;
-        });
         state.queue = [];
         state.lastDigestDay = planet.day;
-        const intro = pickPhrase([
-            "Far from your gaze, word spreads:",
-            "While your eye wandered, whispers carried:",
-            "Elsewhere, the world murmured:",
-            "Beyond your notice, reports came in:"
-        ]);
-        const digest = `${intro} ${lines.join(" · ")}`;
         state.lock = true;
-        try { logMessage(digest, "tip"); } finally { state.lock = false; }
+        try {
+            const uuid = logMessage(`Reports from elsewhere: ${items.length} updates. No action needed.`, "info");
+            const entry = document.getElementById("logMessage-" + uuid);
+            const text = entry?.querySelector(".logText");
+            if (text) {
+                const details = document.createElement("details");
+                const summary = document.createElement("summary");
+                summary.textContent = `Reports from elsewhere · ${items.length} updates · No action needed`;
+                details.appendChild(summary);
+                const list = document.createElement("ul");
+                for (const item of items) {
+                    const line = document.createElement("li");
+                    // Plain text keeps the digest short and independent of entity markup.
+                    line.textContent = sanitizeChronicleMessage(parseText(item.text)).slice(0, 240);
+                    list.appendChild(line);
+                }
+                details.appendChild(list);
+                text.replaceChildren(details);
+                entry.classList.add("paultendoBackgroundReport");
+                syncLogToPlanet();
+            }
+        } finally { state.lock = false; }
     }
 
     const FAST_ADVANCE_CONFIG = {
@@ -2062,6 +2084,10 @@
             .paultendoChronicleToggle.off {
                 opacity: 0.6;
             }
+            .paultendoBackgroundReport { color: #bcc9d8; }
+            .paultendoBackgroundReport details { display: inline-block; max-width: 100%; vertical-align: top; }
+            .paultendoBackgroundReport summary { cursor: pointer; }
+            .paultendoBackgroundReport li { margin: 0.3em 0; font-size: 0.9em; }
             .logMessage.chronicleDayStart::before {
                 content: attr(data-chronicle-day-label);
                 display: block;
@@ -2466,6 +2492,9 @@
 
     function renderRegnameSpan(regName, data, overrideName) {
         if (!data) return "";
+        if (overrideName === "?" && regName === "species") {
+            overrideName = `${data.type === "plant" ? "plant" : data.type === "animal" ? "animal" : "living"} species`;
+        }
         let name = data.name || null;
         if (overrideName && overrideName !== "-") name = overrideName;
         let color = data.color || null;
@@ -2569,6 +2598,10 @@
                 }
                 const uuid = baseLogMessage(logText, type, args);
                 if (!uuid) return uuid;
+                if (type === "tip") {
+                    const marker = document.getElementById("logMessage-" + uuid)?.querySelector(".logDay");
+                    if (marker) { marker.textContent = "Info"; marker.title = "Information"; }
+                }
                 try { maybeAccelerateLogEntry(uuid); } catch {}
                 try {
                     const context = ctx || getActiveModEventContext();
@@ -2613,12 +2646,14 @@
                     const delta = newHeight - prevScrollHeight;
                     logPanel.scrollTop = prevScrollTop + delta;
                 }
-                try { recordOffscreenEvent(logText, type, ctx); } catch {}
+                try { recordOffscreenEvent(logText, type, ctx, args, uuid); } catch {}
                 try { maybeEmitOffscreenDigest(); } catch {}
                 try { maybeEmitNarrativeAside(baseLogMessage, logText, type); } catch {}
                 return uuid;
             };
             logMessage._paultendoChronicle = true;
+            logMessage._paultendoLogSync = !!baseLogMessage._paultendoLogSync;
+            logMessage._paultendoBase = baseLogMessage;
         }
 
         if (typeof logChange === "function" && !logChange._paultendoChronicle) {
@@ -4846,6 +4881,7 @@
 
     function openUnlocksPanelEnhanced() {
         if (!planet || typeof populateExecutive !== "function" || typeof unlockTree === "undefined") return;
+        document.getElementById("actionItem-unlocks")?.classList.remove("notify");
         let total = 0;
         for (let type in unlockTree) {
             total += unlockTree[type].levels.length;
@@ -4863,7 +4899,9 @@
                     const suffix = meta ? ` · ${formatTechUnlockMeta(meta)}` : "";
                     items.push({
                         text: `${levelData.name}${suffix}`,
-                        indent: i
+                        indent: i,
+                        tip: "Read the discovery's story and effects",
+                        func: () => openUnlockDetail(type, levelData)
                     });
                     unlocked++;
                 } else {
@@ -4878,8 +4916,32 @@
         }
         appendTechPathUnlocks(items);
         if (!items.length) items.push("No unlocks yet..");
-        populateExecutive(items, "Unlocks");
+        if (unlocked) items.unshift({ spacer: true, text: "Select a discovery to read its story and effects." });
         populateExecutive(items, "Unlocks (" + Math.round(unlocked / total * 100) + "%)");
+    }
+
+    function openUnlockDetail(type, levelData) {
+        const meta = getTechUnlockMeta(type, levelData.level);
+        const items = [{ text: "← Back to Unlocks", func: openUnlocksPanelEnhanced }];
+        items.push({ heading: true, text: "The discovery" });
+        if (levelData.messageDone) items.push({ text: levelData.messageDone });
+        if (levelData.messageTomorrow) items.push({ text: levelData.messageTomorrow });
+        if (!levelData.messageDone && !levelData.messageTomorrow) items.push({ text: `The people of {{planet}} have developed ${levelData.name}.` });
+        if (meta) {
+            items.push({ heading: true, text: "How it happened" });
+            items.push({ text: formatTechUnlockMeta(meta) });
+        }
+        items.push({ heading: true, text: "What it changes" });
+        for (const [key, value] of Object.entries(levelData.influences || {})) {
+            if (typeof value !== "number" || !value) continue;
+            const labels = { farm: "Farming", travel: "Travel", happy: "Happiness", disease: "Disease pressure", trade: "Trade", education: "Education", military: "Military", crime: "Crime pressure", faith: "Faith" };
+            items.push({ text: `${labels[key] || titleCase(key)}: ${value > 0 ? "+" : ""}${value} influence` });
+        }
+        const jobs = typeof jobNeedsUnlock === "object" ? Object.entries(jobNeedsUnlock).filter(([, need]) => need[0] === type && need[1] === levelData.level) : [];
+        for (const [job] of jobs) items.push({ text: `Enables ${job} jobs.` });
+        const next = unlockTree[type].levels.find(level => level.level > levelData.level);
+        if (next) items.push({ spacer: true, text: `Next in this branch: ${next.name}. Further research and prerequisites are needed.` });
+        populateExecutive(items, levelData.name);
     }
 
     function overrideUnlocksPanel() {
@@ -4923,6 +4985,7 @@
         button.id = "actionItem-festivals";
         button.innerHTML = "Festivals";
         button.addEventListener("click", () => {
+            if (!isProgressMenuAvailable("festivals")) return;
             openFestivalsPanel();
         });
         list.appendChild(button);
@@ -5436,6 +5499,17 @@
             const speed = buildAutoplayButton(`paultendoAutoplaySpeed${suffix}`, "1x", "Change autoplay speed");
             speed.addEventListener("click", cycleAutoplaySpeed);
             group.append(toggle, speed);
+            const review = buildAutoplayButton(`paultendoAutoplayReview${suffix}`, "Review decision", "Go to the decision waiting in the Chronicle");
+            review.hidden = true;
+            review.addEventListener("click", () => {
+                const decision = findPendingLogDecision();
+                if (!decision) { updateAutoplayUI(); return; }
+                decision.messageEl.scrollIntoView({ block: "center", behavior: "smooth" });
+                const button = decision.buttons[0];
+                if (button) { button.tabIndex = 0; button.focus({ preventScroll: true }); }
+            });
+            group.appendChild(review);
+            review.style.display = "none";
             parent.appendChild(group);
             const status = document.createElement("span");
             status.id = `paultendoAutoplayStatus${suffix}`;
@@ -5444,6 +5518,9 @@
             parent.appendChild(status);
         }
         if (!PAULTENDO_STATE.autoplayLifecycleBound) {
+            document.getElementById("logMessages")?.addEventListener("click", () => {
+                Promise.resolve().then(updateAutoplayUI);
+            });
             document.addEventListener("visibilitychange", () => {
                 if (document.hidden) stopAutoplay("hidden");
             });
@@ -5456,6 +5533,8 @@
     function updateAutoplayUI() {
         if (typeof document === "undefined") return;
         const state = getAutoplayState();
+        const pendingDecision = findPendingLogDecision();
+        if (state.lastStopReason === "prompt" && !isPromptOpen() && !pendingDecision) state.lastStopReason = "manual";
         const speed = getAutoplaySpeed();
         const autoSeconds = getAutoDecisionSeconds();
         const autoLabel = AUTOPLAY_CONFIG.autoDecisionLabel(autoSeconds);
@@ -5479,6 +5558,11 @@
         for (const suffix of ["", "Mobile"]) {
             const status = document.getElementById(`paultendoAutoplayStatus${suffix}`);
             if (status && status.textContent !== statusText) status.textContent = statusText;
+            const review = document.getElementById(`paultendoAutoplayReview${suffix}`);
+            if (review) {
+                review.hidden = !pendingDecision;
+                review.style.display = pendingDecision ? "" : "none";
+            }
         }
 
         const speedBtn = document.getElementById("paultendoAutoplaySpeed");
@@ -5841,6 +5925,7 @@
             handlePrompt = function(...args) {
                 try { clearAutoplayPromptTimer(); } catch {}
                 const result = baseHandlePrompt.apply(this, args);
+                updateAutoplayUI();
                 return result;
             };
             handlePrompt._paultendoAutoplay = true;
@@ -6240,6 +6325,7 @@
         button.id = "actionItem-economy";
         button.innerHTML = "Economy";
         button.addEventListener("click", () => {
+            if (!isProgressMenuAvailable("economy")) return;
             openEconomyPanel();
         });
         list.appendChild(button);
@@ -6372,6 +6458,7 @@
         button.id = "actionItem-stance";
         button.innerHTML = "Divine Stance";
         button.addEventListener("click", () => {
+            if (!isProgressMenuAvailable("stance")) return;
             openDivineStancePanel();
         });
         list.appendChild(button);
@@ -7067,9 +7154,10 @@
             if (canvasLayers.fog && canvasLayers.fog.style) {
                 canvasLayers.fog.style.pointerEvents = "none";
             }
-            if (typeof resizeCanvases === "function") {
-                resizeCanvases();
-            }
+            // Resizing every canvas erases the already-rendered terrain. Only the
+            // new overlay needs sizing; native resize handles later world changes.
+            canvasLayers.fog.width = worldConfig.width;
+            canvasLayers.fog.height = worldConfig.height;
             try { rebuildFogVisibility(); } catch {}
         }
         return !!canvasLayers.fog;
@@ -9716,7 +9804,7 @@
                 history = history.replace(/\[(\/?(?:span|div|img|br|b|i|em|strong|small|u|s)\b[^\]]*)\]/gi, "<$1>");
             }
             template.innerHTML = history;
-            const tags = new Set(["SPAN", "DIV", "IMG", "BR", "B", "I", "EM", "STRONG", "SMALL", "U", "S"]);
+            const tags = new Set(["SPAN", "DIV", "IMG", "BR", "B", "I", "EM", "STRONG", "SMALL", "U", "S", "DETAILS", "SUMMARY", "UL", "LI"]);
             for (const node of template.content.querySelectorAll("*")) {
                 if (!tags.has(node.tagName)) { node.replaceWith(document.createTextNode(node.textContent)); continue; }
                 const color = node.style.color;
@@ -9732,9 +9820,20 @@
             if (!options.merge) logDiv.replaceChildren();
             for (const entry of template.content.querySelectorAll(".logMessage")) {
                 if (entry.id && liveIds.has(entry.id)) continue;
+                // Retire generated copies containing questions without controls.
+                // Their original source entries remain in the Chronicle.
+                if (/^(Far from your gaze, word spreads:|While your eye wandered, whispers carried:|Elsewhere, the world murmured:|Beyond your notice, reports came in:)/i.test(entry.querySelector(".logText")?.textContent?.trim() || "")) continue;
                 // Historical HTML cannot restore the event callback closures. Keep the story,
                 // and leave any still-live DOM decisions and their handlers untouched.
+                const archivedDecision = !entry.hasAttribute("done") && entry.querySelector(".logAct");
                 entry.querySelectorAll(".logAct").forEach(actions => actions.remove());
+                let note = entry.querySelector(".paultendoArchivedDecision");
+                if (archivedDecision || note) {
+                    note ||= document.createElement("small");
+                    note.className = "paultendoArchivedDecision";
+                    note.textContent = " Past proposal. No action needed.";
+                    if (!note.parentNode) entry.appendChild(note);
+                }
                 for (const entity of entry.querySelectorAll(".entityName[data-reg][data-id]")) {
                     entity.addEventListener("click", event => {
                         event.stopPropagation();
@@ -9746,6 +9845,10 @@
                     });
                 }
                 entry.setAttribute("done", "true");
+                if (entry.classList.contains("logTip")) {
+                    const marker = entry.querySelector(".logDay");
+                    if (marker) { marker.textContent = "Info"; marker.title = "Information"; }
+                }
                 entry.removeAttribute("new");
                 logDiv.appendChild(entry);
                 if (entry.id) liveIds.add(entry.id);
@@ -10158,9 +10261,49 @@
         button.id = "actionItem-solar";
         button.innerHTML = "Solar";
         button.addEventListener("click", () => {
+            if (!isProgressMenuAvailable("solar")) return;
             openSolarPanel();
         });
         list.appendChild(button);
+    }
+
+    function isProgressMenuAvailable(id) {
+        if (!planet) return false;
+        if (id === "economy") return (planet.unlocks?.trade || 0) >= 10;
+        if (id === "stance") return !!planet.religions?.length;
+        if (id === "festivals") return !!planet._paultendoFestivals?.length;
+        if (id === "solar") return (planet.unlocks?.astronomy || 0) >= 10
+            || (getUniverse(false)?.spaceTech || 0) >= SPACE_TECH_THRESHOLDS.orbit;
+        return true;
+    }
+
+    function updateProgressMenus() {
+        if (!planet || typeof document === "undefined") return;
+        const announced = planet._paultendoMenuAnnounced ||= {};
+        for (const id of ["economy", "stance", "solar", "festivals"]) {
+            const button = document.getElementById("actionItem-" + id);
+            if (!button) continue;
+            if (!button._paultendoProgressBound) {
+                button.addEventListener("click", () => button.classList.remove("notify"), true);
+                button.addEventListener("keydown", event => {
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        button.click();
+                    }
+                });
+                button._paultendoProgressBound = true;
+            }
+            const available = isProgressMenuAvailable(id);
+            button.hidden = !available;
+            button.style.display = available ? "" : "none";
+            button.setAttribute("role", "button");
+            button.setAttribute("tabindex", available ? "0" : "-1");
+            if (!available) button.classList.remove("notify");
+            else if (!announced[id]) {
+                announced[id] = true;
+                if (userSettings.notify !== false) button.classList.add("notify");
+            }
+        }
     }
 
     function initSpaceRoutes() {
@@ -10696,9 +10839,11 @@
             initExecutive = function(...args) {
                 const result = baseInitExecutive.apply(this, args);
                 try { addSolarButton(); } catch {}
+                try { updateProgressMenus(); } catch {}
                 return result;
             };
             initExecutive._paultendoSolar = true;
+            initExecutive._paultendoExecutive = !!baseInitExecutive._paultendoExecutive;
         }
         if (typeof logMessage === "function" && !logMessage._paultendoLogSync) {
             const baseLogMessage = logMessage;
@@ -10712,6 +10857,7 @@
                 return result;
             };
             logMessage._paultendoLogSync = true;
+            logMessage._paultendoChronicle = !!baseLogMessage._paultendoChronicle;
             logMessage._paultendoBase = baseLogMessage;
         }
     }
@@ -10830,6 +10976,9 @@
         if (typeof generateSave === "function" && !generateSave._paultendoUniverse) {
             const baseGenerateSave = generateSave;
             generateSave = function(...args) {
+                // Decisions can replace existing messages without adding a new
+                // log entry. Serialize the current Chronicle at every save.
+                syncLogToPlanet();
                 const universe = getUniverse(false);
                 if (universe) {
                     syncCurrentWorldState(universe);
@@ -19951,9 +20100,8 @@
             if (canvasLayers.epidemic && canvasLayers.epidemic.style) {
                 canvasLayers.epidemic.style.pointerEvents = "none";
             }
-            if (typeof resizeCanvases === "function") {
-                resizeCanvases();
-            }
+            canvasLayers.epidemic.width = worldConfig.width;
+            canvasLayers.epidemic.height = worldConfig.height;
         }
         return !!canvasLayers.epidemic;
     }
@@ -20063,6 +20211,8 @@
         if (typeof renderMap === "function" && !renderMap._paultendoEpidemicOverlay) {
             const baseRenderMap = renderMap;
             const wrappedRenderMap = function() {
+                ensureFogLayer();
+                ensureEpidemicLayer();
                 baseRenderMap();
                 try { renderEpidemicOverlay(); } catch {}
                 try { renderDiscoveryFog(); } catch {}
@@ -27885,6 +28035,7 @@
                 try { updateSeasonState(); } catch {}
                 try { ensureGreatWorkForEra(planet.currentEra); } catch {}
             }
+            try { updateProgressMenus(); } catch {}
         };
         if (!initExecutive._paultendoExecutive) {
             const baseInitExecutive = initExecutive;
@@ -27894,12 +28045,14 @@
                 return result;
             };
             initExecutive._paultendoExecutive = true;
+            initExecutive._paultendoSolar = !!baseInitExecutive._paultendoSolar;
         }
         if (typeof updateStats === "function" && !updateStats._paultendoAutoplay) {
             const baseUpdateStats = updateStats;
             updateStats = function(...args) {
                 const result = baseUpdateStats.apply(this, args);
                 updateAutoplayUI();
+                updateProgressMenus();
                 return result;
             };
             updateStats._paultendoAutoplay = true;
@@ -32772,9 +32925,8 @@
             if (canvasLayers.roads && canvasLayers.roads.style) {
                 canvasLayers.roads.style.pointerEvents = "none";
             }
-            if (typeof resizeCanvases === "function") {
-                resizeCanvases();
-            }
+            canvasLayers.roads.width = worldConfig.width;
+            canvasLayers.roads.height = worldConfig.height;
         }
         return !!canvasLayers.roads;
     }
@@ -33887,8 +34039,8 @@
         }
     });
 
-    // Adding overlay canvases resizes (and clears) the engine's layers. A mod
-    // installed through Add Mod must redraw immediately; load won't fire again.
+    // A mod installed through Add Mod must initialize and redraw immediately;
+    // the page's load event won't fire again.
     if (typeof gameLoaded !== "undefined" && gameLoaded) {
         // Saved mods load asynchronously in current GenTown and may execute
         // after native autoload. Recover the mod's metadata from that same save.

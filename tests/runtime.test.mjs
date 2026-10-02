@@ -16,13 +16,149 @@ test('bundled game and overhaul boot without uncaught errors', async t => {
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.29');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.30');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));
   settleGame(game);
   game.window.document.getElementById('nextDay').click();
   assert.equal(game.window.planet.day, 2);
+  assert.deepEqual(game.errors, []);
+});
+
+test('adding discovery overlays does not erase the terrain or composite canvas', async t => {
+  const game = await makeGame();
+  t.after(game.close);
+  const { window } = game;
+  const terrain = window.canvasLayers.terrain;
+  const width = Object.getOwnPropertyDescriptor(window.HTMLCanvasElement.prototype, 'width');
+  let terrainClears = 0;
+  Object.defineProperty(terrain, 'width', { get() { return width.get.call(this); }, set(value) { terrainClears++; width.set.call(this, value); } });
+  delete window.canvasLayers.fog;
+  delete window.canvasLayers.epidemic;
+  window.canvasLayersOrder = window.canvasLayersOrder.filter(name => !['fog', 'epidemic'].includes(name));
+  window.renderMap();
+  delete window.canvasLayers.roads;
+  window.canvasLayersOrder = window.canvasLayersOrder.filter(name => name !== 'roads');
+  window.planet.day = 3;
+  window.gameEvents.roadNetworkUpdate.func();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(terrainClears, 0, 'Creating overlays must preserve painted terrain');
+  for (const name of ['fog', 'epidemic', 'roads']) {
+    assert.equal(window.canvasLayers[name].width, window.planet.config.width);
+    assert.equal(window.canvasLayers[name].height, window.planet.config.height);
+  }
+  assert.deepEqual(game.errors, []);
+});
+
+test('repeated initialization keeps one reporting hook and excludes questions and routine days', async t => {
+  const game = await makeGame();
+  t.after(game.close);
+  settleGame(game);
+  const { window } = game;
+  const message = window.logMessage;
+  const executive = window.initExecutive;
+  for (let n = 0; n < 3; n++) {
+    window.dispatchEvent(new window.Event('tools-initialized'));
+    window.initExecutive();
+  }
+  assert.equal(window.logMessage, message);
+  assert.equal(window.initExecutive, executive);
+  const state = window._paultendoState.attention;
+  state.queue = [];
+  const proposal = window.logMessage('Should the people plant seeds?', undefined, { buttons: [{ name: 'Yes', func() {} }] });
+  window.logMessage('How should research proceed?');
+  window.logMessage('The Sun sets...', 'sunset');
+  window.logMessage('An uneventful day.');
+  assert.equal(state.queue.length, 0);
+  assert.equal(window.document.querySelectorAll('.paultendoBackgroundReport').length, 0);
+  assert.equal(window.document.getElementById('logMessage-' + proposal).querySelectorAll('.logAct [role="button"]').length, 1);
+  assert.deepEqual(game.errors, []);
+});
+
+test('background reports are dated, collapsed, bounded, and retained through reload', async t => {
+  const game = await makeGame();
+  t.after(game.close);
+  settleGame(game);
+  const { window } = game;
+  window.planet.day = 6;
+  window._paultendoState.attention.queue = Array.from({ length: 6 }, (_, index) => ({ day: 5, text: `A distant caravan arrives ${index}.`, towns: [] }));
+  window.logMessage('A new day begins.');
+  const report = window.document.querySelector('.paultendoBackgroundReport');
+  assert.ok(report);
+  assert.equal(report.querySelector('.logDay').dataset.day, '6');
+  assert.match(report.querySelector('summary').textContent, /No action needed/);
+  assert.equal(report.querySelector('details').open, false);
+  assert.equal(report.querySelectorAll('li').length, 3);
+  const saved = JSON.parse(JSON.stringify(window.generateSave()));
+  const restored = await makeGame({ save: saved });
+  t.after(restored.close);
+  assert.equal(restored.window.document.querySelector('.paultendoBackgroundReport details').open, false);
+  assert.deepEqual(game.errors, []);
+  assert.deepEqual(restored.errors, []);
+});
+
+test('opening Unlocks clears its alert and discoveries open stories and effects', async t => {
+  const game = await makeGame();
+  t.after(game.close);
+  const { window } = game;
+  settleGame(game);
+  window.planet.unlocks.farm = 10;
+  window.unlockExecutive('unlocks');
+  const button = window.document.getElementById('actionItem-unlocks');
+  assert.ok(button.classList.contains('notify'));
+  button.querySelector('span')?.click();
+  if (button.classList.contains('notify')) button.click();
+  assert.equal(button.classList.contains('notify'), false);
+  const agriculture = [...window.document.querySelectorAll('#actionSubList .actionItem')].find(node => node.textContent === 'Agriculture');
+  assert.equal(agriculture.getAttribute('role'), 'button');
+  agriculture.click();
+  const text = window.document.getElementById('actionSubList').textContent;
+  assert.match(text, /Crops quickly become a popular product/);
+  assert.match(text, /Farming: \+1 influence/);
+  assert.match(text, /Enables farmer jobs/);
+  window.document.querySelector('#actionSubList [role="button"]').click();
+  assert.match(window.document.getElementById('actionSubList').textContent, /Select a discovery/);
+  assert.deepEqual(game.errors, []);
+});
+
+test('advanced menus follow discoveries and persist their read notification state', async t => {
+  const game = await makeGame();
+  t.after(game.close);
+  const { window } = game;
+  settleGame(game);
+  for (const id of ['economy', 'stance', 'solar', 'festivals']) assert.equal(window.document.getElementById('actionItem-' + id).style.display, 'none');
+  window.planet.unlocks.trade = 10;
+  window.planet.unlocks.astronomy = 10;
+  window.planet.religions = [{ id: 1, name: 'The River Faith' }];
+  window.updateStats();
+  for (const id of ['economy', 'stance', 'solar']) {
+    const button = window.document.getElementById('actionItem-' + id);
+    assert.equal(button.hidden, false);
+    assert.ok(button.classList.contains('notify'));
+    button.click();
+    window.closeExecutive();
+    window.updateStats();
+    assert.equal(button.classList.contains('notify'), false);
+  }
+  const saved = JSON.parse(JSON.stringify(window.generateSave()));
+  const restored = await makeGame({ save: saved });
+  t.after(restored.close);
+  assert.equal(restored.window.document.getElementById('actionItem-economy').classList.contains('notify'), false);
+  assert.deepEqual(game.errors, []);
+});
+
+test('unnamed species display plant or animal in discovery messages and naming dialogs', async t => {
+  const game = await makeGame();
+  t.after(game.close);
+  const { window } = game;
+  for (const type of ['plant', 'animal']) {
+    const species = window.regToArray('species').find(species => species.type === type);
+    assert.ok(species);
+    const text = window.parseText(`What should the {{regname:species|${species.id}|?}} be called?`);
+    assert.match(text, new RegExp(type + ' species'));
+    assert.doesNotMatch(text, />\?</);
+  }
   assert.deepEqual(game.errors, []);
 });
 
@@ -180,7 +316,7 @@ test('mod management receives complete URLs and can remove an installation', asy
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.29/paultendo-mod.js';
+  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.30/paultendo-mod.js';
   window.userSettings.mods = [url];
   window.showMods();
   window.handlePrompt(url);
@@ -194,7 +330,7 @@ test('adding an updated URL replaces older URLs before the duplicate guard retur
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.29/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.30/paultendo-mod.js';
   window.userSettings.mods = ['https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js', current, 'example_mod.js'];
   window._paultendoState.loadedVersion = '1.6.27';
   Object.defineProperty(window.document, 'currentScript', { configurable: true, get: () => ({ src: current }) });
@@ -254,6 +390,36 @@ test('resuming an open gameplay prompt schedules its decision; replacement cance
   assert.equal(window._paultendoAutoplay.active, false);
 });
 
+test('waiting decisions can be located and the waiting state clears after answering', async t => {
+  const game = await makeGame();
+  t.after(game.close);
+  settleGame(game);
+  const { window } = game;
+  const clock = fakeTimers(window);
+  let answered = false;
+  const event = { needsInput: true, done: false };
+  window.currentEvents.reviewTest = event;
+  const uuid = window.logMessage('Approve a new school?', undefined, { buttons: [{ name: 'Yes', type: 'yes', func() { answered = true; event.done = true; window.document.getElementById('logMessage-' + uuid).setAttribute('done', 'true'); } }] });
+  const message = window.document.getElementById('logMessage-' + uuid);
+  message.dataset.eventid = 'reviewTest';
+  let located = false;
+  message.scrollIntoView = () => { located = true; };
+  window.document.getElementById('paultendoAutoplayToggle').click();
+  clock.run(window._paultendoAutoplay.timer);
+  assert.match(window.document.getElementById('paultendoAutoplayStatus').textContent, /Waiting for your decision/);
+  const review = window.document.getElementById('paultendoAutoplayReview');
+  assert.equal(review.hidden, false);
+  review.click();
+  assert.equal(located, true);
+  assert.equal(window.document.activeElement, message.querySelector('[type="yes"]'));
+  window.document.activeElement.click();
+  await Promise.resolve();
+  assert.equal(answered, true);
+  assert.equal(review.hidden, true);
+  assert.equal(window.document.getElementById('paultendoAutoplayStatus').textContent, 'Paused');
+  assert.deepEqual(game.errors, []);
+});
+
 test('settings values are normalized and changing speed updates the running timer', async t => {
   const game = await makeGame({ settings: { paultendoAutoplaySpeed: 'garbage', paultendoAutoplayAutoDecide: -8, paultendoAutoplayBias: 'unknown' } });
   t.after(game.close);
@@ -306,6 +472,36 @@ test('legacy Chronicle markup restores as sanitized history', async t => {
     assert.equal(entry.querySelectorAll('[onclick], [onmouseenter], .logAct').length, 0);
   }
   assert.ok(reloaded.window.planet._paultendoLogHTML.startsWith('uri:'));
+  assert.deepEqual(reloaded.errors, []);
+});
+
+test('unanswered historical decisions are explicitly marked as archived after reload', async t => {
+  const first = await makeGame();
+  t.after(first.close);
+  settleGame(first);
+  const id = first.window.logMessage('Should the people build a bridge?', undefined, { buttons: [{ name: 'Yes', func() {} }] });
+  const saved = JSON.parse(JSON.stringify(first.window.generateSave()));
+  const restored = await makeGame({ save: saved });
+  t.after(restored.close);
+  const entry = restored.window.document.getElementById('logMessage-' + id);
+  assert.equal(entry.querySelector('.logAct'), null);
+  assert.equal(entry.querySelector('.paultendoArchivedDecision').textContent.trim(), 'Past proposal. No action needed.');
+  assert.equal(entry.getAttribute('done'), 'true');
+  assert.deepEqual(restored.errors, []);
+});
+
+test('saving after a decision retains its updated Chronicle message', async t => {
+  const first = await makeGame();
+  t.after(first.close);
+  settleGame(first);
+  const id = first.window.logMessage('A civic proposal awaits a decision.');
+  first.window.logChange(id, 'The civic proposal was accepted.');
+  const save = JSON.parse(JSON.stringify(first.window.generateSave()));
+  const reloaded = await makeGame({ save, mod: 'late' });
+  t.after(reloaded.close);
+  const entry = reloaded.window.document.getElementById('logMessage-' + id);
+  assert.ok(entry.textContent.includes('The civic proposal was accepted.'));
+  assert.equal(entry.textContent.includes('awaits a decision'), false);
   assert.deepEqual(reloaded.errors, []);
 });
 

@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.29**, tested against the live **GenTown 1.4 / gt5** engine on 2 October 2026.
+Version **1.6.30**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.29/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.30/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically. The Chronicle will show `paultendo-mod active (v1.6.29)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically. The Chronicle will show `paultendo-mod active (v1.6.30)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -31,12 +31,14 @@ The local origin has its own saves; it does not share storage with r74n.com. The
 
 The overhaul now reads per-planet configuration, preserves native custom map sizes, initializes save hooks before autoload, restores inactive worlds, and redraws the map when installed after the game is already running. Chronicle history is encoded for GenTown's save import format and restored with sanitized markup. Play/Pause uses one timer, pauses for decisions or hidden pages, and does not automatically confirm destructive dialogs. Runtime caches stay out of saved games.
 
+Discovery and road overlays preserve the painted terrain when added, including after reload and daily road updates. Background reports are dated, collapsed, and exclude decisions and routine sunsets. Unlocks clears its notification when opened and offers discovery stories and gameplay effects. Advanced menus appear as their discoveries become available. Unnamed species identify themselves as plants or animals, informational entries use an Info label, and Review decision takes you to a pending choice.
+
 ```sh
 npm run check
 npm test
 ```
 
-The 22 regression tests cover startup, late installation and redraw, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, mod management, autoplay and decisions, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
+The 31 regression tests cover startup, late installation and redraw, overlay creation, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, background reports, unlock details and notifications, discovery menus, species naming, mod management, autoplay and decisions, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
 
 ## Credits
 
