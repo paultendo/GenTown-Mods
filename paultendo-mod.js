@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.28/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.27";
+    const MOD_VERSION = "1.6.28";
     if (typeof window !== "undefined" && window._paultendoState?.loadedVersion) {
         console.warn("[paultendo-mod] Already loaded. Reload the page to apply a new version.");
         return;
@@ -3229,7 +3229,7 @@
 
     function getDailyCache(key, builder) {
         if (!planet) return builder ? builder() : undefined;
-        delete planet._paultendoDailyCache; // Migrate saves made before 1.6.27.
+        delete planet._paultendoDailyCache; // Migrate saves made before 1.6.28.
         let cache = dailyCaches.get(planet);
         if (!cache || cache.day !== planet.day) {
             cache = { day: planet.day, data: Object.create(null) };
@@ -9674,7 +9674,9 @@
     function syncLogToPlanet() {
         if (!planet || typeof document === "undefined") return;
         const logDiv = document.getElementById("logMessages");
-        if (logDiv) planet._paultendoLogHTML = logDiv.innerHTML;
+        // GenTown replaces angle brackets throughout imported JSON. Store the
+        // Chronicle as encoded text, then sanitize it before restoring any DOM.
+        if (logDiv) planet._paultendoLogHTML = "uri:" + encodeURIComponent(logDiv.innerHTML);
     }
 
     function restoreLogFromPlanet(options = {}) {
@@ -9683,7 +9685,26 @@
         if (!logDiv) return;
         if (planet._paultendoLogHTML !== undefined) {
             const template = document.createElement("template");
-            template.innerHTML = planet._paultendoLogHTML || "";
+            let history = planet._paultendoLogHTML || "";
+            if (history.startsWith("uri:")) {
+                try { history = decodeURIComponent(history.slice(4)); } catch { return; }
+            } else {
+                // Older saves passed through GenTown's bracket substitution.
+                history = history.replace(/\[(\/?(?:span|div|img|br|b|i|em|strong|small|u|s)\b[^\]]*)\]/gi, "<$1>");
+            }
+            template.innerHTML = history;
+            const tags = new Set(["SPAN", "DIV", "IMG", "BR", "B", "I", "EM", "STRONG", "SMALL", "U", "S"]);
+            for (const node of template.content.querySelectorAll("*")) {
+                if (!tags.has(node.tagName)) { node.replaceWith(document.createTextNode(node.textContent)); continue; }
+                const color = node.style.color;
+                for (const attr of Array.from(node.attributes)) {
+                    const allowed = /^(id|class|title|alt|role|tabindex|data-[a-z-]+|aria-[a-z-]+)$/.test(attr.name)
+                        || (node.tagName === "IMG" && attr.name === "src" && /^icons\/[a-z-]+\.png$/.test(attr.value));
+                    if (!allowed) node.removeAttribute(attr.name);
+                }
+                if (node.id && !/^logMessage-[a-f0-9-]{36}$/i.test(node.id)) node.removeAttribute("id");
+                if (color) node.style.color = color;
+            }
             const liveIds = new Set(options.merge ? Array.from(logDiv.children, node => node.id) : []);
             if (!options.merge) logDiv.replaceChildren();
             for (const entry of template.content.querySelectorAll(".logMessage")) {
@@ -9691,6 +9712,16 @@
                 // Historical HTML cannot restore the event callback closures. Keep the story,
                 // and leave any still-live DOM decisions and their handlers untouched.
                 entry.querySelectorAll(".logAct").forEach(actions => actions.remove());
+                for (const entity of entry.querySelectorAll(".entityName[data-reg][data-id]")) {
+                    entity.addEventListener("click", event => {
+                        event.stopPropagation();
+                        const registry = entity.dataset.reg;
+                        const id = Number(entity.dataset.id);
+                        if (typeof regGet === "function" && typeof handleEntityClick === "function"
+                            && Object.prototype.hasOwnProperty.call(reg, registry) && Number.isInteger(id) && id > 0
+                            && regGet(registry, id)) handleEntityClick(entity);
+                    });
+                }
                 entry.setAttribute("done", "true");
                 entry.removeAttribute("new");
                 logDiv.appendChild(entry);
@@ -10731,7 +10762,16 @@
         if (typeof initGame !== "function" || initGame._paultendoUniverse) return;
         const baseInitGame = initGame;
         initGame = function(...args) {
-            const result = baseInitGame.apply(this, args);
+            // Startup clears the visible log and can emit new entries. Preserve
+            // the saved history until it has been merged into that fresh DOM.
+            const previousSuppress = PAULTENDO_GLOBAL._paultendoSuppressLogSync;
+            PAULTENDO_GLOBAL._paultendoSuppressLogSync = true;
+            let result;
+            try {
+                result = baseInitGame.apply(this, args);
+            } finally {
+                PAULTENDO_GLOBAL._paultendoSuppressLogSync = previousSuppress;
+            }
             try {
                 const universe = getUniverse();
                 if (universe) {

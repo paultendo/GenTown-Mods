@@ -16,7 +16,7 @@ test('bundled game and overhaul boot without uncaught errors', async t => {
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.27');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.28');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));
@@ -239,6 +239,7 @@ test('save/reload keeps town state, has no runtime entity cache, and no duplicat
   settleGame(first);
   for (let day = 0; day < 15; day++) first.window.nextDay();
   const originalTown = first.window.regToArray('town')[0];
+  const originalLogIds = [...first.window.document.querySelectorAll('.logMessage')].map(node => node.id);
   const expected = { id: originalTown.id, pop: originalTown.pop, name: originalTown.name };
   const save = JSON.parse(JSON.stringify(first.window.generateSave()));
   assert.equal('_paultendoDailyCache' in save.planet, false);
@@ -249,8 +250,27 @@ test('save/reload keeps town state, has no runtime entity cache, and no duplicat
   assert.deepEqual({ id: town.id, pop: town.pop, name: town.name }, expected);
   const ids = [...reloaded.window.document.querySelectorAll('.logMessage')].map(node => node.id);
   assert.equal(new Set(ids).size, ids.length);
+  for (const id of originalLogIds) assert.ok(ids.includes(id), `Lost Chronicle entry ${id}`);
   reloaded.window.nextDay();
   assert.equal(reloaded.window.planet.day, 17);
+  assert.deepEqual(reloaded.errors, []);
+});
+
+test('legacy Chronicle markup restores as sanitized history', async t => {
+  const first = await makeGame();
+  t.after(first.close);
+  settleGame(first);
+  const entries = [...first.window.document.querySelectorAll('.logMessage')].map(node => node.id);
+  const save = JSON.parse(JSON.stringify(first.window.generateSave()));
+  save.planet._paultendoLogHTML = first.window.document.getElementById('logMessages').innerHTML;
+  const reloaded = await makeGame({ save });
+  t.after(reloaded.close);
+  for (const id of entries) {
+    const entry = reloaded.window.document.getElementById(id);
+    assert.ok(entry);
+    assert.equal(entry.querySelectorAll('[onclick], [onmouseenter], .logAct').length, 0);
+  }
+  assert.ok(reloaded.window.planet._paultendoLogHTML.startsWith('uri:'));
   assert.deepEqual(reloaded.errors, []);
 });
 
