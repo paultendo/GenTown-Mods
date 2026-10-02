@@ -17,10 +17,11 @@
 // - Espionage & eras: espionage/secrets, era system, great works & wonders.
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
-// Install: GenTown -> Settings -> Add mod -> "paultendo-mod.js"
+// Install: GenTown -> Settings -> Add mod ->
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
-// Compatibility: Designed for current GenTown builds; avoid stacking with other large overhaul mods.
+// Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
 //
 // Table of contents (rough):
 // - Core state + mod plumbing
@@ -48,7 +49,11 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.26";
+    const MOD_VERSION = "1.6.27";
+    if (typeof window !== "undefined" && window._paultendoState?.loadedVersion) {
+        console.warn("[paultendo-mod] Already loaded. Reload the page to apply a new version.");
+        return;
+    }
     if (typeof window !== "undefined") {
         window.PAULTENDO_MOD_VERSION = MOD_VERSION;
     }
@@ -65,6 +70,27 @@
     const PAULTENDO_EVENT_STACK = PAULTENDO_STATE.eventStack || PAULTENDO_GLOBAL._paultendoEventStack || [];
     PAULTENDO_STATE.eventStack = PAULTENDO_EVENT_STACK;
     PAULTENDO_GLOBAL._paultendoEventStack = PAULTENDO_EVENT_STACK;
+    // Runtime entity references belong outside the serialized planet/save data.
+    const dailyCaches = new WeakMap();
+    // GenTown 1.2+ keeps dimensions on each planet rather than in globals.
+    const usesPlanetConfig = typeof defaultPlanet === "function" && !!defaultPlanet().config;
+    const worldConfig = {};
+    for (const [key, legacy, fallback] of [
+        ["width", "planetWidth", "defaultPlanetWidth"],
+        ["height", "planetHeight", "defaultPlanetHeight"],
+        ["pixelSize", "pixelSize", "defaultPixelSize"],
+        ["chunkSize", "chunkSize", "defaultChunkSize"],
+        ["waterLevel", "waterLevel", "defaultWaterLevel"]
+    ]) {
+        Object.defineProperty(worldConfig, key, {
+            get: () => (typeof planet !== "undefined" && planet?.config)
+                ? planet.config[key] : (PAULTENDO_GLOBAL[legacy] ?? $c[fallback]),
+            set: value => {
+                if (typeof planet !== "undefined" && planet?.config) planet.config[key] = value;
+                else if (!usesPlanetConfig) PAULTENDO_GLOBAL[legacy] = value;
+            }
+        });
+    }
 
     function scheduleInitRetry(key, fn, delay = 80, max = 25) {
         if (!key || typeof fn !== "function") return;
@@ -2192,12 +2218,15 @@
     }
 
     let chronicleMarkersPending = false;
-    function scheduleChronicleDayMarkers() {
+    let chronicleHeadlineDay;
+    function scheduleChronicleDayMarkers(dayValue) {
+        chronicleHeadlineDay = dayValue || (typeof planet !== "undefined" ? planet?.day : undefined);
         if (chronicleMarkersPending) return;
         chronicleMarkersPending = true;
         const run = () => {
             chronicleMarkersPending = false;
             try { updateChronicleDayMarkers(); } catch {}
+            try { updateChronicleHeadlines(chronicleHeadlineDay); } catch {}
         };
         if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
             window.requestAnimationFrame(run);
@@ -2543,8 +2572,7 @@
                         if (dayValue) {
                             const cause = causeSummary ? causeSummary.compact : null;
                             addChronicleEntry(dayValue, uuid, type, plainText, { cause, chain: chainSummary, tradeoff: tradeoffSummary });
-                            updateChronicleHeadlines(dayValue);
-                            scheduleChronicleDayMarkers();
+                            scheduleChronicleDayMarkers(dayValue);
                         }
                         if (elem) {
                             if (causeSummary && causeSummary.compact) {
@@ -2578,6 +2606,8 @@
         if (typeof logChange === "function" && !logChange._paultendoChronicle) {
             const baseLogChange = logChange;
             logChange = function(uuid, text) {
+                // Some automatic discoveries intentionally have no completion message.
+                if (text === null || text === undefined) return;
                 const result = baseLogChange(uuid, text);
                 if (CHRONICLE_UI_CONFIG.enabled && typeof document !== "undefined") {
                     try {
@@ -2734,6 +2764,22 @@
             if (subjectIsTown) return subject;
             return null;
         };
+
+        // Current GenTown formats candidate messages before checking eligibility.
+        // Check once after values are prepared, before messages use those values.
+        if (!isDaily && checkFn && data.message) {
+            const baseMessage = data.message;
+            const baseCheck = data.check;
+            const eligibility = new WeakMap();
+            data.message = (subject, target, args) => {
+                const allowed = baseCheck(subject, target, args);
+                eligibility.set(args, allowed);
+                if (!allowed) return null;
+                return typeof baseMessage === "function" ? baseMessage(subject, target, args) : baseMessage;
+            };
+            data.check = (subject, target, args) => eligibility.has(args)
+                ? eligibility.get(args) : baseCheck(subject, target, args);
+        }
 
         if (isSwayPrompt) {
             const originalValue = valueFn;
@@ -3162,8 +3208,8 @@
                 try { scheduleFogRefresh(true); } catch {}
             }
             try { handleAutoplayEventForHappen(action, subject, target, result); } catch {}
-            if (planet && planet._paultendoDailyCache && (action === "Create" || action === "End" || action === "Finish")) {
-                planet._paultendoDailyCache.day = -1;
+            if (planet && (action === "Create" || action === "End" || action === "Finish")) {
+                dailyCaches.delete(planet);
             }
             return result;
         };
@@ -3183,10 +3229,13 @@
 
     function getDailyCache(key, builder) {
         if (!planet) return builder ? builder() : undefined;
-        if (!planet._paultendoDailyCache || planet._paultendoDailyCache.day !== planet.day) {
-            planet._paultendoDailyCache = { day: planet.day, data: {} };
+        delete planet._paultendoDailyCache; // Migrate saves made before 1.6.27.
+        let cache = dailyCaches.get(planet);
+        if (!cache || cache.day !== planet.day) {
+            cache = { day: planet.day, data: Object.create(null) };
+            dailyCaches.set(planet, cache);
         }
-        const data = planet._paultendoDailyCache.data;
+        const data = cache.data;
         if (key in data) return data[key];
         const value = builder ? builder() : undefined;
         data[key] = value;
@@ -5189,6 +5238,10 @@
         if (userSettings.paultendoAutoplayAutoDecide === undefined) userSettings.paultendoAutoplayAutoDecide = 0;
         if (userSettings.paultendoAutoplayPauseMajor === undefined) userSettings.paultendoAutoplayPauseMajor = AUTOPLAY_CONFIG.autoPauseMajorDefault;
         if (!userSettings.paultendoAutoplayBias) userSettings.paultendoAutoplayBias = AUTOPLAY_CONFIG.decisionBiasDefault;
+        const speed = Number(userSettings.paultendoAutoplaySpeed);
+        userSettings.paultendoAutoplaySpeed = Number.isFinite(speed) ? Math.trunc(clampValue(speed, 0, AUTOPLAY_CONFIG.speeds.length - 1)) : 0;
+        if (!AUTOPLAY_CONFIG.autoDecisionOptions.includes(userSettings.paultendoAutoplayAutoDecide)) userSettings.paultendoAutoplayAutoDecide = 0;
+        if (!["conservative", "balanced", "bold"].includes(userSettings.paultendoAutoplayBias)) userSettings.paultendoAutoplayBias = AUTOPLAY_CONFIG.decisionBiasDefault;
     }
 
     function getAutoplayState() {
@@ -5224,6 +5277,7 @@
             if (typeof saveSettings === "function") saveSettings();
         }
         updateAutoplayUI();
+        if (getAutoplayState().active) scheduleAutoplayTick();
     }
 
     function cycleAutoplaySpeed() {
@@ -5241,6 +5295,12 @@
         if (typeof userSettings !== "undefined") {
             userSettings.paultendoAutoplayAutoDecide = seconds;
             if (typeof saveSettings === "function") saveSettings();
+        }
+        clearAutoplayPromptTimer();
+        clearAutoplayLogTimer();
+        if (getAutoplayState().active && isPromptOpen()) {
+            if (!getAutoDecisionSeconds()) stopAutoplay("prompt");
+            else scheduleAutoplayPromptDecision(promptState);
         }
         updateAutoplayUI();
     }
@@ -5283,6 +5343,11 @@
                 margin-left: 6px;
             }
             .paultendoAutoplayButton {
+                font-family: inherit;
+                color: inherit;
+                background: transparent;
+                border: 1px solid currentColor;
+                cursor: pointer;
                 font-size: 0.85em;
                 padding: 0 6px;
                 line-height: 1.7em;
@@ -5292,12 +5357,29 @@
             #paultendoAutoplayAuto {
                 min-width: 64px;
             }
+            #underStats { flex-wrap: wrap; align-items: center; }
+            .paultendoAutoplayStatus {
+                flex-basis: 100%; text-align: center;
+                font-size: 0.75em; line-height: 1.3;
+            }
+            .paultendoAutoplayButton:disabled { opacity: 0.5; cursor: default; }
+            .paultendoAutoplayButton:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+            @media (max-width: 599px) {
+                #gameHalf1-2 { display: flex; flex-direction: column; }
+                #mobileControlBar { height: auto; min-height: 1.75em; flex-wrap: wrap; flex-shrink: 0; }
+                #paultendoAutoplayControlsMobile { height: auto; flex-grow: 0; margin: 0 6px; }
+                #paultendoAutoplayControlsMobile button { min-height: 36px; }
+                #paultendoAutoplayStatusMobile { padding-bottom: 4px; }
+                #logPanel { height: auto; flex: 1; min-height: 0; }
+                #mobileBelowBar { flex-shrink: 0; }
+            }
         `;
         document.head.appendChild(style);
     }
 
     function buildAutoplayButton(id, label, title) {
-        const button = document.createElement("span");
+        const button = document.createElement("button");
+        button.type = "button";
         button.id = id;
         button.className = "nextDay paultendoAutoplayButton";
         button.setAttribute("role", "button");
@@ -5308,6 +5390,48 @@
 
     function ensureAutoplayControls() {
         if (typeof document === "undefined") return;
+        ensureAutoplayStyles();
+        // GenTown 1.4 added its own timer. Route it through the mod's single clock.
+        if (typeof autoPlay === "function" && !autoPlay._paultendo) {
+            const baseAutoPlay = autoPlay;
+            if (typeof autoPlaying !== "undefined" && autoPlaying) baseAutoPlay(true);
+            for (const id of ["autoPlay", "autoPlayMobile"]) {
+                document.getElementById(id)?.removeEventListener("click", baseAutoPlay);
+                document.getElementById(id)?.addEventListener("click", toggleAutoplay);
+            }
+            autoPlay = toggleAutoplay;
+            autoPlay._paultendo = true;
+            const style = document.createElement("style");
+            style.textContent = "#autoPlay, #autoPlayMobile { display: none !important; }";
+            document.head.appendChild(style);
+        }
+        for (const mobile of [false, true]) {
+            const suffix = mobile ? "Mobile" : "";
+            const parent = document.getElementById(mobile ? "mobileControlBar" : "underStats");
+            if (!parent || document.getElementById(`paultendoAutoplayControls${suffix}`)) continue;
+            const group = document.createElement("div");
+            group.id = `paultendoAutoplayControls${suffix}`;
+            group.setAttribute("role", "group");
+            group.setAttribute("aria-label", "Time controls");
+            const toggle = buildAutoplayButton(`paultendoAutoplayToggle${suffix}`, "Play", "Start autoplay");
+            toggle.addEventListener("click", toggleAutoplay);
+            const speed = buildAutoplayButton(`paultendoAutoplaySpeed${suffix}`, "1x", "Change autoplay speed");
+            speed.addEventListener("click", cycleAutoplaySpeed);
+            group.append(toggle, speed);
+            parent.appendChild(group);
+            const status = document.createElement("span");
+            status.id = `paultendoAutoplayStatus${suffix}`;
+            status.className = "paultendoAutoplayStatus";
+            status.setAttribute("role", "status");
+            parent.appendChild(status);
+        }
+        if (!PAULTENDO_STATE.autoplayLifecycleBound) {
+            document.addEventListener("visibilitychange", () => {
+                if (document.hidden) stopAutoplay("hidden");
+            });
+            window.addEventListener("pagehide", () => stopAutoplay("hidden"));
+            PAULTENDO_STATE.autoplayLifecycleBound = true;
+        }
         updateAutoplayUI();
     }
 
@@ -5323,9 +5447,21 @@
         if (toggle) {
             toggle.textContent = state.active ? "Pause" : "Play";
             toggle.setAttribute("title", state.active ? "Pause autoplay" : "Start autoplay");
+            toggle.setAttribute("aria-pressed", String(state.active));
+            toggle.disabled = !!planet?.dead || !planet?.settled;
         }
         const toggleMobile = document.getElementById("paultendoAutoplayToggleMobile");
-        if (toggleMobile) toggleMobile.textContent = state.active ? "Pause" : "Play";
+        if (toggleMobile) {
+            toggleMobile.textContent = state.active ? "Pause" : "Play";
+            toggleMobile.setAttribute("aria-pressed", String(state.active));
+            toggleMobile.disabled = !!planet?.dead || !planet?.settled;
+        }
+        const reasons = { prompt: "Waiting for your decision", manual: "Paused", hidden: "Paused while away", error: "Paused after a simulation error", ended: "This world has ended" };
+        const statusText = !planet?.settled ? "Choose a place on the map to begin" : planet.dead ? "This world has ended" : state.active ? `Playing at ${speed.label}` : reasons[state.lastStopReason] || (state.lastStopReason ? `Paused: ${state.lastStopReason}` : "Ready to play");
+        for (const suffix of ["", "Mobile"]) {
+            const status = document.getElementById(`paultendoAutoplayStatus${suffix}`);
+            if (status && status.textContent !== statusText) status.textContent = statusText;
+        }
 
         const speedBtn = document.getElementById("paultendoAutoplaySpeed");
         if (speedBtn) {
@@ -5369,15 +5505,19 @@
     function startAutoplay() {
         const state = getAutoplayState();
         if (state.active) return;
+        if (!planet || planet.dead || !planet.settled) return;
         state.active = true;
         state.lastStopReason = null;
+        if (isPromptOpen()) {
+            if (!getAutoDecisionSeconds()) { stopAutoplay("prompt"); return; }
+            scheduleAutoplayPromptDecision(promptState);
+        }
         scheduleAutoplayTick();
         updateAutoplayUI();
     }
 
     function stopAutoplay(reason) {
         const state = getAutoplayState();
-        if (!state.active) return;
         state.active = false;
         state.lastStopReason = reason || null;
         if (state.timer) {
@@ -5403,6 +5543,8 @@
     function autoplayTick() {
         const state = getAutoplayState();
         if (!state.active) return;
+        state.timer = null;
+        if (!planet || planet.dead) { stopAutoplay("ended"); return; }
 
         const pendingLog = findPendingLogDecision();
         if (pendingLog) {
@@ -5464,10 +5606,17 @@
         if (!state.active) return;
         const delaySeconds = getAutoDecisionSeconds();
         if (!delaySeconds) return;
+        // Automatic gameplay decisions must never confirm save deletion or settings dialogs.
+        if (!prompt || prompt.danger || !(prompt.subject || prompt.target)) {
+            stopAutoplay("prompt");
+            return;
+        }
         clearAutoplayPromptTimer();
         state.promptTimer = setTimeout(() => {
             state.promptTimer = null;
-            try { autoResolvePrompt(prompt || promptState); } catch {}
+            if (state.active && getAutoDecisionSeconds() && prompt === promptState) {
+                try { autoResolvePrompt(prompt); } catch (error) { console.error(error); stopAutoplay("error"); }
+            }
         }, Math.max(2000, delaySeconds * 1000));
     }
 
@@ -5475,7 +5624,11 @@
         if (typeof document === "undefined") return null;
         const logMessages = document.getElementById("logMessages");
         if (!logMessages) return null;
-        const logAct = logMessages.querySelector(".logMessage:not([done]) .logAct");
+        const logAct = Array.from(logMessages.querySelectorAll(".logMessage:not([done]) .logAct")).find(act => {
+            const eventId = act.closest(".logMessage")?.getAttribute("data-eventid");
+            const event = typeof currentEvents !== "undefined" && currentEvents[eventId];
+            return event && event.needsInput && !event.done;
+        });
         if (!logAct) return null;
         const messageEl = logAct.closest(".logMessage");
         const buttons = logAct.querySelectorAll("span[role='button']");
@@ -5535,6 +5688,8 @@
         state.logTimer = setTimeout(() => {
             state.logTimer = null;
             state.pendingLogId = null;
+            const pending = findPendingLogDecision();
+            if (!state.active || !getAutoDecisionSeconds() || !decision.messageEl?.isConnected || pending?.messageEl !== decision.messageEl) return;
             try {
                 const btn = pickLogDecision(decision.buttons, decision.messageEl);
                 if (btn && typeof btn.click === "function") {
@@ -5555,7 +5710,7 @@
 
     function autoResolvePrompt(prompt) {
         const state = getAutoplayState();
-        if (!state.active || !prompt || typeof handlePrompt !== "function") return false;
+        if (!state.active || !prompt || prompt !== promptState || prompt.danger || typeof handlePrompt !== "function") return false;
         if (prompt.subtype === "share") {
             handlePrompt(null);
             scheduleAutoplayTick(200);
@@ -5661,8 +5816,8 @@
         if (typeof handlePrompt === "function" && !handlePrompt._paultendoAutoplay) {
             const baseHandlePrompt = handlePrompt;
             handlePrompt = function(...args) {
-                const result = baseHandlePrompt.apply(this, args);
                 try { clearAutoplayPromptTimer(); } catch {}
+                const result = baseHandlePrompt.apply(this, args);
                 return result;
             };
             handlePrompt._paultendoAutoplay = true;
@@ -5931,7 +6086,7 @@
         const worldName = formatWorldName(currentWorld, planet._paultendoWorldName || planet.name || "World");
         const worldType = formatWorldTypeLabel(currentWorld);
         const habitability = formatWorldHabitability(currentWorld);
-        const seaLevel = typeof waterLevel === "number" ? Math.round(waterLevel * 100) : null;
+        const seaLevel = typeof worldConfig.waterLevel === "number" ? Math.round(worldConfig.waterLevel * 100) : null;
         const profile = getWorldClimateProfile(currentWorld);
         const summary = getWorldSummaryStats();
         const climateDesc = summary ? getClimateDescription(summary.avgTemp, summary.avgMoisture) : null;
@@ -6581,8 +6736,8 @@
     }
 
     function getChunkDimensions() {
-        const width = typeof planetWidth === "number" && typeof chunkSize === "number" ? Math.floor(planetWidth / chunkSize) : null;
-        const height = typeof planetHeight === "number" && typeof chunkSize === "number" ? Math.floor(planetHeight / chunkSize) : null;
+        const width = typeof worldConfig.width === "number" && typeof worldConfig.chunkSize === "number" ? Math.floor(worldConfig.width / worldConfig.chunkSize) : null;
+        const height = typeof worldConfig.height === "number" && typeof worldConfig.chunkSize === "number" ? Math.floor(worldConfig.height / worldConfig.chunkSize) : null;
         return { width, height };
     }
 
@@ -6633,7 +6788,7 @@
         const travel = town.influences?.travel || 0;
         const center = town.center ? chunkAt(town.center[0], town.center[1]) : null;
         const elevation = center ? getChunkElevation(center) : 0;
-        const elevationBonus = Math.max(0, (elevation - (typeof waterLevel === "number" ? waterLevel : 0.3)) * FOG_CONFIG.elevationSight);
+        const elevationBonus = Math.max(0, (elevation - (typeof worldConfig.waterLevel === "number" ? worldConfig.waterLevel : 0.3)) * FOG_CONFIG.elevationSight);
         const sizeBonus = Math.sqrt(Math.max(1, size)) * FOG_CONFIG.sizeSight;
         const travelBonus = Math.max(0, travel) * FOG_CONFIG.travelSight;
         const radius = base + sizeBonus + travelBonus + elevationBonus;
@@ -6644,7 +6799,7 @@
         if (radius <= 0) return 0;
         const ratio = clampValue(distance / radius, 0, 1);
         let strength = 1 - Math.pow(ratio, FOG_CONFIG.falloffPower);
-        const elevBoost = Math.max(0, observerElev - (typeof waterLevel === "number" ? waterLevel : 0.3));
+        const elevBoost = Math.max(0, observerElev - (typeof worldConfig.waterLevel === "number" ? worldConfig.waterLevel : 0.3));
         strength *= 1 + elevBoost * 0.15;
         if (typeof targetElev === "number") {
             strength *= 0.85 + Math.min(0.3, targetElev * 0.3);
@@ -6943,7 +7098,7 @@
             return;
         }
         if (!planet || !planet.chunks) return;
-        if (typeof chunkSize === "undefined") return;
+        if (typeof worldConfig.chunkSize === "undefined") return;
         if (!planet._paultendoDiscoveryReady) {
             try { ensureDiscoveryReadyForFog(); } catch {}
         }
@@ -6962,7 +7117,7 @@
             if (!chunk || !chunk.v) continue;
             if (chunk.v.g && !isLandmassDiscovered(chunk.v.g) && !chunk.v.s && !isMountainChunk(chunk)) {
                 ctx.fillStyle = `rgba(8, 10, 14, ${opaqueAlpha})`;
-                ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
+                ctx.fillRect(chunk.x * worldConfig.chunkSize, chunk.y * worldConfig.chunkSize, worldConfig.chunkSize, worldConfig.chunkSize);
                 continue;
             }
 
@@ -6976,7 +7131,7 @@
                     opaqueAlpha
                 );
                 ctx.fillStyle = `rgba(8, 10, 14, ${rumorAlpha})`;
-                ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
+                ctx.fillRect(chunk.x * worldConfig.chunkSize, chunk.y * worldConfig.chunkSize, worldConfig.chunkSize, worldConfig.chunkSize);
                 continue;
             }
 
@@ -6984,7 +7139,7 @@
             const alpha = visibility > 0 ? shroudAlpha * (1 - visibility) : shroudAlpha;
             if (alpha > 0.02) {
                 ctx.fillStyle = `rgba(8, 10, 14, ${alpha})`;
-                ctx.fillRect(chunk.x * chunkSize, chunk.y * chunkSize, chunkSize, chunkSize);
+                ctx.fillRect(chunk.x * worldConfig.chunkSize, chunk.y * worldConfig.chunkSize, worldConfig.chunkSize, worldConfig.chunkSize);
             }
         }
         if (planet && planet._paultendoFog) {
@@ -7981,8 +8136,8 @@
     function drawCursorCrosshair() {
         if (!mousePos || typeof canvasLayersCtx === "undefined") return;
         const ctx = canvasLayersCtx.cursor;
-        if (!ctx || typeof chunkSize === "undefined") return;
-        const size = chunkSize;
+        if (!ctx || typeof worldConfig.chunkSize === "undefined") return;
+        const size = worldConfig.chunkSize;
         const x0 = mousePos.chunkX * size;
         const y0 = mousePos.chunkY * size;
         const midX = x0 + size / 2;
@@ -8010,11 +8165,22 @@
 
         generatePlanet = function(...args) {
             const scale = getWorldScaleSetting();
+            if (usesPlanetConfig) {
+                const config = { ...(args[0] || defaultPlanet().config) };
+                if (!args[0] && scale && scale !== 1) {
+                    config.width = Math.round(config.width * scale);
+                    config.height = Math.round(config.height * scale);
+                }
+                updateMarkerResolutionForScale(scale);
+                const generated = baseGeneratePlanet.call(this, config);
+                try { ensureMapControls(); } catch {}
+                return generated;
+            }
             if (scale && scale !== 1) {
                 const scaledWidth = Math.round(baseWidth * scale);
                 const scaledHeight = Math.round(baseHeight * scale);
-                planetWidth = scaledWidth;
-                planetHeight = scaledHeight;
+                worldConfig.width = scaledWidth;
+                worldConfig.height = scaledHeight;
                 if (typeof $c !== "undefined") {
                     $c.defaultPlanetWidth = scaledWidth;
                     $c.defaultPlanetHeight = scaledHeight;
@@ -8028,8 +8194,8 @@
                     $c.defaultPlanetWidth = baseWidth;
                     $c.defaultPlanetHeight = baseHeight;
                 }
-                planetWidth = baseWidth;
-                planetHeight = baseHeight;
+                worldConfig.width = baseWidth;
+                worldConfig.height = baseHeight;
             }
             updateMarkerResolutionForScale(scale);
             const planet = baseGeneratePlanet.apply(this, args);
@@ -8050,10 +8216,10 @@
     applyWorldScale();
     function ensureMapCanvasSync() {
         if (typeof mapCanvas === "undefined" || !mapCanvas) return false;
-        if (typeof pixelSize === "undefined" || !pixelSize) return false;
-        if (!planetWidth || !planetHeight) return false;
-        const expectedW = planetWidth * pixelSize;
-        const expectedH = planetHeight * pixelSize;
+        if (typeof worldConfig.pixelSize === "undefined" || !worldConfig.pixelSize) return false;
+        if (!worldConfig.width || !worldConfig.height) return false;
+        const expectedW = worldConfig.width * worldConfig.pixelSize;
+        const expectedH = worldConfig.height * worldConfig.pixelSize;
         const mismatch = mapCanvas.width !== expectedW || mapCanvas.height !== expectedH;
         if (!mismatch) return false;
 
@@ -8717,10 +8883,10 @@
     function captureWorldState() {
         return {
             planet: planet,
-            planetWidth: planetWidth,
-            planetHeight: planetHeight,
-            chunkSize: chunkSize,
-            waterLevel: waterLevel
+            planetWidth: worldConfig.width,
+            planetHeight: worldConfig.height,
+            chunkSize: worldConfig.chunkSize,
+            waterLevel: worldConfig.waterLevel
         };
     }
 
@@ -8739,10 +8905,10 @@
         if (!state || !state.planet) return false;
         planet = state.planet;
         reg = planet.reg;
-        planetWidth = state.planetWidth;
-        planetHeight = state.planetHeight;
-        chunkSize = state.chunkSize;
-        waterLevel = state.waterLevel;
+        worldConfig.width = state.planetWidth;
+        worldConfig.height = state.planetHeight;
+        worldConfig.chunkSize = state.chunkSize;
+        worldConfig.waterLevel = state.waterLevel;
         if (world) applyWorldMetaToPlanet(world, state);
         if (typeof regGet === "function") {
             try { currentPlayer = regGet("player", 1) || currentPlayer; } catch {}
@@ -8758,10 +8924,10 @@
         const snapshot = {
             planet: planet,
             reg: reg,
-            planetWidth: planetWidth,
-            planetHeight: planetHeight,
-            chunkSize: chunkSize,
-            waterLevel: waterLevel,
+            planetWidth: worldConfig.width,
+            planetHeight: worldConfig.height,
+            chunkSize: worldConfig.chunkSize,
+            waterLevel: worldConfig.waterLevel,
             currentPlayer: currentPlayer
         };
         const baseLog = typeof logMessage === "function" ? logMessage : null;
@@ -8779,10 +8945,10 @@
             }
             planet = snapshot.planet;
             reg = snapshot.reg;
-            planetWidth = snapshot.planetWidth;
-            planetHeight = snapshot.planetHeight;
-            chunkSize = snapshot.chunkSize;
-            waterLevel = snapshot.waterLevel;
+            worldConfig.width = snapshot.planetWidth;
+            worldConfig.height = snapshot.planetHeight;
+            worldConfig.chunkSize = snapshot.chunkSize;
+            worldConfig.waterLevel = snapshot.waterLevel;
             currentPlayer = snapshot.currentPlayer;
         }
     }
@@ -8790,10 +8956,10 @@
     function ensureUniverseBase(universe) {
         if (!universe.baseDims) {
             universe.baseDims = {
-                width: planetWidth,
-                height: planetHeight,
-                chunkSize: chunkSize,
-                waterLevel: waterLevel
+                width: worldConfig.width,
+                height: worldConfig.height,
+                chunkSize: worldConfig.chunkSize,
+                waterLevel: worldConfig.waterLevel
             };
         }
     }
@@ -8858,9 +9024,9 @@
     }
 
     function resolveWorldDimensions(universe, world) {
-        const base = universe?.baseDims || { width: planetWidth, height: planetHeight, chunkSize: chunkSize, waterLevel: waterLevel };
+        const base = universe?.baseDims || { width: worldConfig.width, height: worldConfig.height, chunkSize: worldConfig.chunkSize, waterLevel: worldConfig.waterLevel };
         const scale = world?.sizeScale || 1;
-        const chunk = base.chunkSize || chunkSize || 4;
+        const chunk = base.chunkSize || worldConfig.chunkSize || 4;
         let width = Math.max(chunk * 4, Math.round((base.width || 200) * scale));
         let height = Math.max(chunk * 3, Math.round((base.height || 120) * scale));
         width -= (width % chunk);
@@ -8906,12 +9072,18 @@
         window._paultendoWorldScaleOverride = 1;
 
         try {
-            planetWidth = dims.width;
-            planetHeight = dims.height;
-            chunkSize = dims.chunk;
-            waterLevel = dims.waterLevel;
-
-            const newPlanet = generatePlanet();
+            let newPlanet;
+            if (usesPlanetConfig) {
+                newPlanet = generatePlanet({ ...defaultPlanet().config,
+                    width: dims.width, height: dims.height, chunkSize: dims.chunk,
+                    waterLevel: dims.waterLevel, seed: world.seed || Math.random() });
+            } else {
+                worldConfig.width = dims.width;
+                worldConfig.height = dims.height;
+                worldConfig.chunkSize = dims.chunk;
+                worldConfig.waterLevel = dims.waterLevel;
+                newPlanet = generatePlanet();
+            }
             planet = newPlanet;
             reg = planet.reg;
 
@@ -9510,10 +9682,19 @@
         const logDiv = document.getElementById("logMessages");
         if (!logDiv) return;
         if (planet._paultendoLogHTML !== undefined) {
-            if (options.merge) {
-                logDiv.innerHTML = (planet._paultendoLogHTML || "") + (logDiv.innerHTML || "");
-            } else {
-                logDiv.innerHTML = planet._paultendoLogHTML;
+            const template = document.createElement("template");
+            template.innerHTML = planet._paultendoLogHTML || "";
+            const liveIds = new Set(options.merge ? Array.from(logDiv.children, node => node.id) : []);
+            if (!options.merge) logDiv.replaceChildren();
+            for (const entry of template.content.querySelectorAll(".logMessage")) {
+                if (entry.id && liveIds.has(entry.id)) continue;
+                // Historical HTML cannot restore the event callback closures. Keep the story,
+                // and leave any still-live DOM decisions and their handlers untouched.
+                entry.querySelectorAll(".logAct").forEach(actions => actions.remove());
+                entry.setAttribute("done", "true");
+                entry.removeAttribute("new");
+                logDiv.appendChild(entry);
+                if (entry.id) liveIds.add(entry.id);
             }
             try { rebuildChronicleUiStateFromLog(); } catch {}
         }
@@ -10493,38 +10674,57 @@
         if (typeof nextDay !== "function" || nextDay._paultendoUniverse) return;
         const baseNextDay = nextDay;
         nextDay = function(...args) {
-            try { noteFastAdvancePress(); } catch {}
-            if (planet && (typeof planet.day !== "number" || !isFinite(planet.day))) {
-                planet.day = 1;
+            if (PAULTENDO_STATE.advancingDay) return;
+            const control = args[0]?.currentTarget;
+            if (control && (control.id === "nextDay" || control.id === "nextDayMobile")) {
+                stopAutoplay("manual");
+                args[0] = { target: control };
             }
+            try { noteFastAdvancePress(); } catch {}
+            if (planet && (typeof planet.day !== "number" || !isFinite(planet.day))) planet.day = 1;
             const dayBefore = (typeof planet !== "undefined") ? planet.day : undefined;
             let restoreTechBias = null;
-            try { restoreTechBias = applyTechWeightBias(); } catch {}
-            let result;
+            let completed = false;
+            PAULTENDO_STATE.advancingDay = true;
             try {
-                result = baseNextDay.apply(this, args);
+                try { restoreTechBias = applyTechWeightBias(); } catch {}
+                const result = baseNextDay.apply(this, args);
+                const dayAfter = (typeof planet !== "undefined") ? planet.day : undefined;
+                if (dayBefore !== dayAfter) {
+                    try { syncLogToPlanet(); } catch {}
+                    try { updateSpaceTech(); } catch {}
+                    try { updateSpaceDiscovery(); } catch {}
+                    try { maybeCreateSpaceRoute(); } catch {}
+                    try { maybeStartSpaceWar(); } catch {}
+                    try { tickInactiveWorlds(); } catch {}
+                    try { processSpaceRoutes(); } catch {}
+                    try { processSpaceWars(); } catch {}
+                    try { processFrontierCharters(); } catch {}
+                    if (isFastAdvanceActive() && typeof window !== "undefined") {
+                        window.setTimeout(() => {
+                            try { maybeReleaseNextDay(); } catch {}
+                        }, FAST_ADVANCE_CONFIG.nextDayReleaseMs);
+                    }
+                }
+                completed = true;
+                return result;
             } finally {
                 try { if (typeof restoreTechBias === "function") restoreTechBias(); } catch {}
+                PAULTENDO_STATE.advancingDay = false;
+                const savePending = PAULTENDO_STATE.autosavePending;
+                PAULTENDO_STATE.autosavePending = false;
+                if (completed && savePending && typeof autosave === "function") autosave();
             }
-            const dayAfter = (typeof planet !== "undefined") ? planet.day : undefined;
-            if (dayBefore === dayAfter) return result;
-            try { syncLogToPlanet(); } catch {}
-            try { updateSpaceTech(); } catch {}
-            try { updateSpaceDiscovery(); } catch {}
-            try { maybeCreateSpaceRoute(); } catch {}
-            try { maybeStartSpaceWar(); } catch {}
-            try { tickInactiveWorlds(); } catch {}
-            try { processSpaceRoutes(); } catch {}
-            try { processSpaceWars(); } catch {}
-            try { processFrontierCharters(); } catch {}
-            if (isFastAdvanceActive() && typeof window !== "undefined") {
-                window.setTimeout(() => {
-                    try { maybeReleaseNextDay(); } catch {}
-                }, FAST_ADVANCE_CONFIG.nextDayReleaseMs);
-            }
-            return result;
         };
         nextDay._paultendoUniverse = true;
+        if (typeof document !== "undefined") {
+            for (const id of ["nextDay", "nextDayMobile"]) {
+                const button = document.getElementById(id);
+                if (!button) continue;
+                button.removeEventListener("click", baseNextDay);
+                button.addEventListener("click", nextDay);
+            }
+        }
     }
 
     function wrapInitGameForUniverse() {
@@ -10550,6 +10750,20 @@
     }
 
     function wrapSaveLoadForUniverse() {
+        if (typeof autosave === "function" && !autosave._paultendoUniverse) {
+            const baseAutosave = autosave;
+            autosave = function(...args) {
+                if (PAULTENDO_STATE.advancingDay) {
+                    PAULTENDO_STATE.autosavePending = true;
+                    return;
+                }
+                const result = baseAutosave.apply(this, args);
+                updateAutoplayUI();
+                return result;
+            };
+            autosave._paultendoUniverse = true;
+        }
+
         if (typeof generateSave === "function" && !generateSave._paultendoUniverse) {
             const baseGenerateSave = generateSave;
             generateSave = function(...args) {
@@ -10569,6 +10783,7 @@
         if (typeof parseSave === "function" && !parseSave._paultendoUniverse) {
             const baseParseSave = parseSave;
             parseSave = function(json) {
+                stopAutoplay("manual");
                 baseParseSave(json);
                 try { deserializeUniverse(json, baseParseSave); } catch {}
             };
@@ -10709,10 +10924,10 @@
         const snapshot = {
             planet: planet,
             reg: reg,
-            planetWidth: planetWidth,
-            planetHeight: planetHeight,
-            chunkSize: chunkSize,
-            waterLevel: waterLevel,
+            planetWidth: worldConfig.width,
+            planetHeight: worldConfig.height,
+            chunkSize: worldConfig.chunkSize,
+            waterLevel: worldConfig.waterLevel,
             currentPlayer: currentPlayer,
             usedNames: typeof usedNames !== "undefined" ? JSON.parse(JSON.stringify(usedNames)) : null,
             userSettings: typeof userSettings !== "undefined" ? JSON.parse(JSON.stringify(userSettings)) : null
@@ -10766,10 +10981,10 @@
 
             planet = snapshot.planet;
             reg = snapshot.reg;
-            planetWidth = snapshot.planetWidth;
-            planetHeight = snapshot.planetHeight;
-            chunkSize = snapshot.chunkSize;
-            waterLevel = snapshot.waterLevel;
+            worldConfig.width = snapshot.planetWidth;
+            worldConfig.height = snapshot.planetHeight;
+            worldConfig.chunkSize = snapshot.chunkSize;
+            worldConfig.waterLevel = snapshot.waterLevel;
             currentPlayer = snapshot.currentPlayer;
             if (snapshot.usedNames && typeof usedNames !== "undefined") {
                 for (const key in usedNames) {
@@ -10827,6 +11042,14 @@
     });
 
     function initMultiWorldHooks() {
+        // Install before the engine's load handler calls autoload()/initGame().
+        // Full universe initialization still waits until a planet exists.
+        ensureSolarHooks();
+        wrapNextDayForUniverse();
+        wrapInitGameForUniverse();
+        wrapSaveLoadForUniverse();
+        if (PAULTENDO_STATE.multiWorldHooksBound) return;
+        PAULTENDO_STATE.multiWorldHooksBound = true;
         if (typeof window !== "undefined") {
             window.addEventListener("load", () => {
                 try { initMultiWorldSystem(); } catch {}
@@ -17933,7 +18156,7 @@
 
         const distance = getClosestEnemyDistance(town, enemies);
         if (distance !== null) {
-            const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+            const maxDist = Math.max(worldConfig.width || 0, worldConfig.height || 0) || 200;
             const proximity = 1 - Math.min(distance / (maxDist * 0.6), 1);
             score *= 0.7 + proximity * 0.6;
         }
@@ -18054,7 +18277,7 @@
         return weightedChoice(enemies, (enemy) => {
             if (!enemy || enemy.end) return 0;
             const dist = getTownDistance(attacker, enemy);
-            const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+            const maxDist = Math.max(worldConfig.width || 0, worldConfig.height || 0) || 200;
             const proximity = dist === null ? 0.5 : (1 - Math.min(dist / (maxDist * 0.7), 1));
             let weight = 1 + proximity * 2;
             const deterrence = getTownDeterrence(enemy);
@@ -18606,7 +18829,7 @@
 
         const distance = getTownDistance(town1, town2);
         if (distance !== null) {
-            const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+            const maxDist = Math.max(worldConfig.width || 0, worldConfig.height || 0) || 200;
             const proximity = 1 - Math.min(distance / (maxDist * 0.8), 1);
             delta += proximity * 2;
         }
@@ -18691,7 +18914,7 @@
 
         if (earlyEra) {
             const distance = getTownDistance(instigator, defender);
-            const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+            const maxDist = Math.max(worldConfig.width || 0, worldConfig.height || 0) || 200;
             const limit = Math.min(maxDist * 0.25, EARLY_WAR_CONFIG.raidDistance * 2);
             if (distance !== null && distance > limit) return false;
         }
@@ -18733,7 +18956,7 @@
             const picked = weightedChoice(candidates, (t) => {
                 const relation = getRelations(subject, t);
                 const distance = getTownDistance(subject, t);
-                const maxDist = Math.max(planetWidth || 0, planetHeight || 0) || 200;
+                const maxDist = Math.max(worldConfig.width || 0, worldConfig.height || 0) || 200;
                 const proximity = distance === null ? 0.5 : (1 - Math.min(distance / (maxDist * 0.8), 1));
                 let weight = 1 + proximity;
                 if (relation < 0) weight += Math.min(10, -relation) * 0.2;
@@ -19687,9 +19910,9 @@
     function renderEpidemicOverlay() {
         if (!ensureEpidemicLayer()) return;
         if (!canvasLayersCtx || !canvasLayersCtx.epidemic) return;
-        if (typeof chunkSize === "undefined") return;
+        if (typeof worldConfig.chunkSize === "undefined") return;
         const ctx = canvasLayersCtx.epidemic;
-        const size = chunkSize;
+        const size = worldConfig.chunkSize;
         const canvas = canvasLayers.epidemic;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -23547,7 +23770,7 @@
         weight: $c.COMMON,
         subject: { reg: "town", random: true },
         target: { reg: "town", random: true },
-        value: (subject, target) => {
+        value: (subject, target, args) => {
             if (subject.id === target.id) return false;
             if (subject.pop < 20) return false;
             if (subject._paultendoWarRefugeeDay && planet.day - subject._paultendoWarRefugeeDay < 18) return false;
@@ -26241,6 +26464,10 @@
             };
         }
         if (!Array.isArray(town.memory.events)) town.memory.events = [];
+        if (!town.memory.grudges || typeof town.memory.grudges !== "object") town.memory.grudges = {};
+        if (!town.memory.bonds || typeof town.memory.bonds !== "object") town.memory.bonds = {};
+        if (!Array.isArray(town.memory.betrayals)) town.memory.betrayals = [];
+        if (!Array.isArray(town.memory.honors)) town.memory.honors = [];
     }
 
     function getMemoryDistortion(town) {
@@ -27583,123 +27810,41 @@
             scheduleInitRetry("executiveOverrides", initExecutiveOverrides, 120);
             return;
         }
-        if (typeof initExecutive === "function" && !initExecutive._paultendoAnnals) {
-            const baseInitExecutive = initExecutive;
-            initExecutive = function(...args) {
-                const result = baseInitExecutive.apply(this, args);
-                try { addAnnalsButton(); } catch {}
-                try { addEconomyButton(); } catch {}
-                return result;
-            };
-            initExecutive._paultendoAnnals = true;
-        }
-
-        if (typeof initExecutive === "function" && !initExecutive._paultendoWorldStatus) {
-            const baseInitExecutive = initExecutive;
-            initExecutive = function(...args) {
-                const result = baseInitExecutive.apply(this, args);
-                try { addWorldStatusButton(); } catch {}
-                try { addEconomyButton(); } catch {}
-                return result;
-            };
-            initExecutive._paultendoWorldStatus = true;
-        }
-
-        if (typeof initExecutive === "function" && !initExecutive._paultendoChronicle) {
-            const baseInitExecutive = initExecutive;
-            initExecutive = function(...args) {
-                const result = baseInitExecutive.apply(this, args);
-                try { addChronicleButton(); } catch {}
-                try { addEconomyButton(); } catch {}
-                return result;
-            };
-            initExecutive._paultendoChronicle = true;
-        }
-
-        if (typeof initExecutive === "function" && !initExecutive._paultendoFestivals) {
-            const baseInitExecutive = initExecutive;
-            initExecutive = function(...args) {
-                const result = baseInitExecutive.apply(this, args);
-                try { addFestivalsButton(); } catch {}
-                try { addEconomyButton(); } catch {}
-                return result;
-            };
-            initExecutive._paultendoFestivals = true;
-        }
-
-        if (typeof initExecutive === "function" && !initExecutive._paultendoUnlocksOverride) {
-            const baseInitExecutive = initExecutive;
-            initExecutive = function(...args) {
-                const result = baseInitExecutive.apply(this, args);
-                try { overrideUnlocksPanel(); } catch {}
-                try { addEconomyButton(); } catch {}
-                return result;
-            };
-            initExecutive._paultendoUnlocksOverride = true;
-        }
-
-        if (typeof initExecutive === "function" && !initExecutive._paultendoAutoplay) {
-            const baseInitExecutive = initExecutive;
-            initExecutive = function(...args) {
-                const result = baseInitExecutive.apply(this, args);
-                try { addAutoplayButton(); } catch {}
-                try { addEconomyButton(); } catch {}
-                return result;
-            };
-            initExecutive._paultendoAutoplay = true;
-        }
-
-        if (typeof initExecutive === "function" && !initExecutive._paultendoDivineStance) {
-            const baseInitExecutive = initExecutive;
-            initExecutive = function(...args) {
-                const result = baseInitExecutive.apply(this, args);
-                try { addDivineStanceButton(); } catch {}
-                try { addEconomyButton(); } catch {}
-                return result;
-            };
-            initExecutive._paultendoDivineStance = true;
-        }
-
-        if (typeof window !== "undefined") {
-            window.addEventListener("load", () => {
-                try { addAnnalsButton(); } catch {}
-                try { addWorldStatusButton(); } catch {}
-                try { addChronicleButton(); } catch {}
-                try { addFestivalsButton(); } catch {}
-                try { addAutoplayButton(); } catch {}
-                try { addDivineStanceButton(); } catch {}
-                try { addEconomyButton(); } catch {}
-                try { overrideUnlocksPanel(); } catch {}
-                try { initAutoplaySettings(); } catch {}
-                try { ensureAutoplayControls(); } catch {}
-                try { wrapPromptHandlersForAutoplay(); } catch {}
+        const bootstrap = () => {
+            for (const add of [addAnnalsButton, addWorldStatusButton, addChronicleButton,
+                addFestivalsButton, addAutoplayButton, addDivineStanceButton, addEconomyButton,
+                overrideUnlocksPanel, initAutoplaySettings, ensureAutoplayControls, wrapPromptHandlersForAutoplay]) {
+                try { add(); } catch (error) { console.warn("[paultendo-mod] Control initialization failed:", error); }
+            }
+            if (typeof gameLoaded !== "undefined" && gameLoaded) {
                 try { updateSeasonState(); } catch {}
                 try { ensureGreatWorkForEra(planet.currentEra); } catch {}
-            });
-            if (typeof window.addEventListener === "function") {
-                window.addEventListener("tools-initialized", () => {
-                    try { addAnnalsButton(); } catch {}
-                    try { addWorldStatusButton(); } catch {}
-                    try { addChronicleButton(); } catch {}
-                    try { addFestivalsButton(); } catch {}
-                    try { addAutoplayButton(); } catch {}
-                    try { addDivineStanceButton(); } catch {}
-                    try { addEconomyButton(); } catch {}
-                    try { overrideUnlocksPanel(); } catch {}
-                    try { initAutoplaySettings(); } catch {}
-                    try { ensureAutoplayControls(); } catch {}
-                    try { wrapPromptHandlersForAutoplay(); } catch {}
-                    try { updateSeasonState(); } catch {}
-                    try { ensureGreatWorkForEra(planet.currentEra); } catch {}
-                });
             }
+        };
+        if (!initExecutive._paultendoExecutive) {
+            const baseInitExecutive = initExecutive;
+            initExecutive = function(...args) {
+                const result = baseInitExecutive.apply(this, args);
+                bootstrap();
+                return result;
+            };
+            initExecutive._paultendoExecutive = true;
         }
-
-        if (typeof document !== "undefined") {
-            if (document.readyState === "complete" || document.readyState === "interactive") {
-                try { updateSeasonState(); } catch {}
-            }
+        if (typeof updateStats === "function" && !updateStats._paultendoAutoplay) {
+            const baseUpdateStats = updateStats;
+            updateStats = function(...args) {
+                const result = baseUpdateStats.apply(this, args);
+                updateAutoplayUI();
+                return result;
+            };
+            updateStats._paultendoAutoplay = true;
         }
+        if (typeof window !== "undefined" && !PAULTENDO_STATE.executiveHooksBound) {
+            window.addEventListener("load", bootstrap);
+            window.addEventListener("tools-initialized", bootstrap);
+            PAULTENDO_STATE.executiveHooksBound = true;
+        }
+        if (typeof document !== "undefined" && document.readyState !== "loading") bootstrap();
     }
 
     // Create a notable figure
@@ -27810,18 +27955,6 @@
     // ----------------------------------------
     // HISTORICAL GRUDGES & BONDS
     // ----------------------------------------
-
-    // Initialize town memory
-    function initTownMemory(town) {
-        if (!town.memory) {
-            town.memory = {
-                grudges: {},   // townId -> { reason, severity, day }
-                bonds: {},     // townId -> { reason, strength, day }
-                betrayals: [], // Array of betrayal events
-                honors: []     // Array of honorable deeds received
-            };
-        }
-    }
 
     // Record a grudge against another town
     function recordGrudge(town, targetId, reason, severity) {
@@ -32625,8 +32758,8 @@
                 ctx.lineWidth = ROAD_CONFIG.widths[level] || 1;
                 ctx.lineCap = "round";
                 ctx.beginPath();
-                ctx.moveTo(chunk.x * chunkSize + chunkSize / 2, chunk.y * chunkSize + chunkSize / 2);
-                ctx.lineTo(neighbor.x * chunkSize + chunkSize / 2, neighbor.y * chunkSize + chunkSize / 2);
+                ctx.moveTo(chunk.x * worldConfig.chunkSize + worldConfig.chunkSize / 2, chunk.y * worldConfig.chunkSize + worldConfig.chunkSize / 2);
+                ctx.lineTo(neighbor.x * worldConfig.chunkSize + worldConfig.chunkSize / 2, neighbor.y * worldConfig.chunkSize + worldConfig.chunkSize / 2);
                 ctx.stroke();
             }
         }
@@ -32635,8 +32768,8 @@
             planet.roadNetwork.nodes
                 .filter(n => n.type === "crossroads")
                 .forEach(node => {
-                    const x = node.chunkX * chunkSize + chunkSize / 2;
-                    const y = node.chunkY * chunkSize + chunkSize / 2;
+                    const x = node.chunkX * worldConfig.chunkSize + worldConfig.chunkSize / 2;
+                    const y = node.chunkY * worldConfig.chunkSize + worldConfig.chunkSize / 2;
                     ctx.fillStyle = "rgba(200, 180, 100, 0.9)";
                     ctx.beginPath();
                     ctx.arc(x, y, 3, 0, Math.PI * 2);
@@ -33688,5 +33821,19 @@
             }
         }
     });
+
+    // Adding overlay canvases resizes (and clears) the engine's layers. A mod
+    // installed through Add Mod must redraw immediately; load won't fire again.
+    if (typeof gameLoaded !== "undefined" && gameLoaded) {
+        ensureMapCanvasSync();
+        ensureMapControls();
+        ensureFogLayer();
+        ensureEpidemicLayer();
+        rebuildFogVisibility();
+        renderMap();
+        if (typeof renderHighlight === "function") renderHighlight();
+        updateCanvas();
+    }
+    PAULTENDO_STATE.loadedVersion = MOD_VERSION;
 
 })();

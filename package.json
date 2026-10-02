@@ -1,0 +1,17 @@
+{
+  "name": "gentown-paultendo",
+  "version": "1.6.27",
+  "private": true,
+  "description": "Local GenTown playground with the paultendo overhaul",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check paultendo-mod.js && node --check hot-swap-mod.js && node --check scripts/serve.mjs && node --check app/boot.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "jsdom": "^27.0.0"
+  }
+}

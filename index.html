@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="description" content="Influence human civilization through prompts in this planet and town simulator.">
+    <meta name="keywords" content="R74n, R47n, gen town, town, city, simulation, game">
+    <meta name="author" content="R74n">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="twitter:image:alt" content="GenTown">
+    <meta name="twitter:image" content="/gentown/logo.png">
+    <title>GenTown · paultendo</title>
+    <link rel="stylesheet" type="text/css" href="vendor/gentown/normalize.css">
+    <link rel="stylesheet" type="text/css" href="vendor/gentown/stylesheet.css">
+    <meta name="msapplication-TileColor" content="#000000">
+    <meta name="theme-color" content="#000000">
+
+    <script src="vendor/gentown/load.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="vendor/gentown/gentown.css">
+    <script src="vendor/gentown/perlin.js"></script>
+    <script src="vendor/gentown/standalone.js"></script>
+    <script src="vendor/gentown/gentown-data.js"></script>
+    <script src="app/boot.js" defer></script>
+    <script src="vendor/gentown/gentown.js" defer></script>
+    <script src="paultendo-mod.js" defer></script>
+    <script src="app/ready.js" defer></script>
+    <link rel="stylesheet" href="app/play.css">
+    <script src="vendor/gentown/gentown-mass.js"></script>
+
+    <meta name="apple-mobile-web-app-title" content="GenTown" />
+    <script type="application/ld+json">{"@context": "https://schema.org","@type": "VideoGame","additionalType": "WebSite","name": "GenTown","description": "GenTown is a game about guiding civilization - indirectly, through a series of prompts. Inhabitants ask for your input, but have affairs of their own.","url": "https://R74n.com/gentown/","logo": "https://R74n.com/gentown/logo-small.png","contactPoint": {"@type": "ContactPoint","email": "contact@R74n.com","contactType": "customer service","availableLanguage": "en","url": "https://R74n.com/ufbs/","name": "Contact R74n"},"sameAs": ["https://R74n.com/gentown/","https://data.r74n.com/entity/Q3530"],"datePublished": "2025-11-04","author": {"@type": "Organization","name": "R74n","sameAs": "https://R74n.com/schema/R74n.json"}}</script>
+    <link href="../schema/GenTown.json" rel="alternate" type="application/ld+json">
+    <link href="changelog.txt" rel="help" type="text/plain">
+    <link href="vendor/gentown/LICENSE.txt" rel="license" type="text/plain">
+
+    <style>
+      @font-face {
+        font-family: 'VT323';
+        src: url('vendor/gentown/fonts/VT323-Regular.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'PublicPixel';
+        src: url('vendor/gentown/fonts/PublicPixel.ttf') format('truetype');
+      }
+      body {
+        font-family: 'VT323';
+        font-size: 25px
+      }
+      .font2 {
+        font-family: 'PublicPixel', 'VT323', monospace;
+        font-variant-emoji: text;
+        font-size: 14px;
+        direction: ltr;
+        overflow-wrap: anywhere;
+      }
+    </style>
+
+    <script>
+      gameVersion = "1.4";
+      saveVersion = "gt5";
+    </script>
+</head>
+
+<body>
+
+<!-- <a href="https://R74n.com" class="back">⦉</a> -->
+<!-- <h1 class="pagetitle">GenTown</h1> -->
+<main class="content">
+
+<noscript id="blurbAbout">GenTown is a game about guiding civilization - indirectly, through a series of prompts. Inhabitants ask for your input, but have affairs of their own.</noscript>
+
+<noscript>
+  JavaScript is required to play GenTown.
+</noscript>
+
+<div id="gameLoading" role="status">Loading GenTown…<span class="font2"></span></div>
+<div id="startupError" role="alert" hidden></div>
+
+<div id="gameDiv" style="display:none">
+  <div class="gameHalf" id="gameHalf1">
+    <div id="gameHalf1-1">
+      <div id="mapPanel">
+        <div id="mapDiv" class="gamePanel">
+          <canvas id="mapCanvas" class="pixelart">
+            Your browser doesn't support the canvas element.
+          </canvas>
+          <div id="mapOverlay"></div>
+        </div>
+        <div id="underMap" class="gameSubpanel">
+          <span id="planetName">Planet Name</span>
+          <span id="underMapControls" class="noSelect"><span id="viewButton" role="button"><span id="viewArrow" class="font2">⏷</span> <span id="viewName">Terrain</span></span></span>
+        </div>
+      </div>
+      <div class="gamePanel" id="statsPanel">
+        <div id="statsMain">
+          <div class="panelX font2" onclick="handleX(this); closePopups();">X</div>
+          <span class="panelTitle"><span id="dayNumber">123</span></span>
+          <div id="statsDiv">
+            <span class="panelSubtitle">[Global]</span>
+            <span>Population: 0</span>
+          </div>
+        </div>
+        <div id="underStats" class="gameSubpanel noSelect">
+            <span id="nextDay" class="nextDay" disabled="true" tabindex="0" role="button"><span>Next Day</span> <span class="font2">▶</span></span>
+            <span id="autoPlay" class="nextDay" disabled="true" tabindex="1" role="button"><span class="font2">⏩</span></span>
+          </div>
+      </div>
+    </div>
+    <div id="gameHalf1-2">
+      <div class="gamePanel mobileBar noSelect" id="mobileControlBar">
+        <div><span id="dayNumberMobile">123</span></div>
+        <div id="nextDayMobile" class="nextDay" disabled="true" tabindex="0" role="button"><span>Next Day</span> <span class="font2">▶</span></div>
+        <div id="autoPlayMobile" class="nextDay" disabled="true" tabindex="1" role="button"><span class="font2">⏩</span></div>
+      </div>
+      <div class="gamePanel" id="logPanel">
+        <span class="panelTitle">Chronicle</span>
+        <div id="logMessages"></div>
+      </div>
+      <div class="gamePanel mobileBar" id="mobileBelowBar">
+        <div onclick="openPopup('statsPanel')" role="button">Preview</div>
+        <div onclick="closeExecutive(); openPopup('gameHalf2')" role="button">More</div>
+      </div>
+    </div>
+  </div>
+  <div class="gameHalf" id="gameHalf2">
+    <div class="panelX font2" onclick="handleX(this)">X</div>
+    <div class="gamePanel" id="actionPanel">
+      <div class="actionSubpanel" id="actionMain">
+        <div id="actionMainList">
+          <span class="panelTitle">Executive</span>
+        </div>
+        <div>
+          <span class="actionItem clickable" id="actionSettings" role="button"><u>\</u> Settings</span>
+          <span class="actionItem clickable" id="actionSaves" role="button"><u>L</u> Saves</span>
+          <span class="actionItem clickable" id="actionInfo" role="button"><u>I</u> Info</span>
+          <span class="actionItem clickable" id="actionMore" role="button"><u>M</u> More games...</span>
+        </div>
+      </div>
+      <div class="actionSubpanel" id="actionSub" style="display:none">
+        <div id="actionSubList">
+          <span class="panelTitle">Subpanel</span>
+          <span class="actionItem">Subexample</span>
+          <span class="actionItem">Subexample</span>
+        </div>
+        <div>
+          <span class="actionItem clickable" id="actionSubpanelClose" role="button"><span class="font2">◀</span> Go Back</span>
+        </div>
+      </div>
+      <input type="file" id="saveUpload" style="display: none;" accept="application/vnd.R74n.gentown+json, application/vnd.R74n.gentown-entity+json, application/json, .planet, .entity">
+      <a id="screenshotter" style="display: none;">.</a>
+    </div>
+  </div>
+
+  <div class="gamePopupOverlay" id="gamePopupOverlay"></div>
+
+  <div class="gamePopup" id="promptPopup">
+    <div class="panelX font2" onclick="handleX(this)" role="button">X</div>
+    <div class="popupTitle" id="popupTitle">
+      Prompt title
+    </div>
+    <div class="popupContent" id="popupContent">
+      Prompt content
+    </div>
+    <div class="popupInput" id="popupInput">
+      <span class="popupButton" id="popupOk" onclick="handlePrompt(true)" role="button">OK</span>
+      <span class="popupButton" id="popupNo" onclick="handlePrompt(false)" role="button">No</span>
+      <span class="popupButton" id="popupYes" onclick="handlePrompt(true)" role="button">Yes</span>
+      <span class="popupButton noSelect" id="popupShuffle" onclick="shufflePrompt()" role="button" title="Randomize"><img class="pixelart" src="icons/shuffle.png"></span>
+      <input class="popupText" id="popupText" type="text" placeholder="Answer..." value="" autocomplete="off">
+      <span class="popupTextConfirm noSelect popupButton" id="popupTextConfirm"  onclick="handlePrompt(document.getElementById('popupText').value)">OK</span>
+      <div class="popupButton" id="popupChoices"></div>
+    </div>
+  </div>
+
+  <div class="gamePopup" id="regBrowser">
+    <div class="panelMore" onclick="handleMore(this)" role="button">•••</div>
+    <div class="panelX font2" onclick="handleX(this)" role="button">X</div>
+    <div class="popupContent" id="regContent">
+      <!-- Registry Browser content -->
+      <div class="regSection regTitle"><span class="regTitle">Picheutae</span></div>
+      <div class="regSection regSubTitle"><span class="regSubTitle">Town</span></div>
+      <div class="regSection">
+        <span class="regSectionTitle">Population</span>
+        <span class="regSectionValue">20</span>
+      </div>
+      <div class="regSection regSectionArray">
+        <span class="regSectionTitle">Color</span>
+        <span class="regSectionValue regArray">
+          <span class="regArrayItem">255</span>,
+          <span class="regArrayItem">51</span>,
+          <span class="regArrayItem">51</span>
+        </span>
+      </div>
+      <div class="regSection regSectionDict">
+        <span class="regSectionTitle">Resources</span>
+        <span class="regSectionValue regDict">
+          <span class="regDictItem"><span class="regDictKey">Crop</span> <span class="regDictValue">20</span></span>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+</main>
+
+
+</body>
+</html>

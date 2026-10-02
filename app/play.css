@@ -1,0 +1,30 @@
+/* Keep GenTown's pixel aesthetic; let the map and stories do the talking. */
+@font-face { font-family: VT323; src: url('../vendor/gentown/fonts/VT323-Regular.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: PublicPixel; src: url('../vendor/gentown/fonts/PublicPixel.ttf') format('truetype'); font-display: swap; }
+body { margin: 0; background: #10130f; font-family: VT323, monospace; }
+::selection { background: #d8e6ae; color: #10130f; }
+.gameHalf, .gamePanel { min-width: 0; min-height: 0; }
+.gamePanel { background: #10130f; border-color: #505748; }
+#gameDiv, .gameSubpanel { border-color: #505748; }
+.gameSubpanel { background: #191e16; }
+#underStats { flex-wrap: wrap; align-items: center; gap: 4px; padding-block: 6px; }
+#underStats > .nextDay { flex-grow: 0; }
+.paultendoAutoplayButton { color: inherit; font-family: inherit; background: transparent; cursor: pointer; border: 1px solid #707b5f; border-radius: 3px; }
+.paultendoAutoplayButton:hover { background: #303b26; }
+.paultendoAutoplayButton[aria-pressed="true"] { background: #d8e6ae; color: #10130f; }
+.paultendoAutoplayStatus { flex-basis: 100%; color: #c1cbb5; font-size: 0.8em; }
+[role="button"]:focus-visible, button:focus-visible, input:focus-visible, .actionItem:focus-visible { outline: 2px solid #d8e6ae; outline-offset: 3px; }
+button:disabled, [disabled="true"] { opacity: 0.5; cursor: default; }
+#startupError { position: fixed; inset: auto 16px 16px; z-index: 200; padding: 16px; background: #381f16; color: #ffdfc6; border: 1px solid #c28563; font: 20px/1.3 VT323, monospace; }
+#startupError[hidden] { display: none; }
+#logPanel { scroll-behavior: auto; }
+#paultendoChronicleHeader { position: sticky; top: -15px; z-index: 2; background: #10130f; }
+@media (max-width: 859px) {
+  #mobileControlBar { flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
+  #paultendoAutoplayControlsMobile { margin-inline-start: auto; }
+  .paultendoAutoplayButton { min-height: 36px; }
+  #mobileControlBar .paultendoAutoplayStatus { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
+}

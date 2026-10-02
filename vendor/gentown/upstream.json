@@ -1,0 +1,112 @@
+{
+  "normalize.css": {
+    "url": "https://r74n.com/normalize.css",
+    "sha256": "eb294cd14adaf657235f5e13d5ae71ef3b60b5b72bcf25b6ba003c3fa2834090"
+  },
+  "stylesheet.css": {
+    "url": "https://r74n.com/stylesheet.css",
+    "sha256": "346a2cbfb65d735eb018b4aeed3d24fb2238a78ea111a0c5cf475baec94f3fd5"
+  },
+  "load.js": {
+    "url": "https://r74n.com/load.js",
+    "sha256": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9"
+  },
+  "gentown.css": {
+    "url": "https://r74n.com/gentown/gentown.css",
+    "sha256": "f18d765240efed3ba07576b6351a4ff4d9fca37b9363a2cf9c5c663dc289a0b1"
+  },
+  "perlin.js": {
+    "url": "https://r74n.com/gentown/perlin.js",
+    "sha256": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c"
+  },
+  "standalone.js": {
+    "url": "https://r74n.com/textviewer/standalone.js",
+    "sha256": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431"
+  },
+  "gentown-data.js": {
+    "url": "https://r74n.com/gentown/gentown-data.js",
+    "sha256": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c"
+  },
+  "gentown.js": {
+    "url": "https://r74n.com/gentown/gentown.js",
+    "sha256": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a"
+  },
+  "gentown-mass.js": {
+    "url": "https://r74n.com/gentown/gentown-mass.js",
+    "sha256": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0"
+  },
+  "source": {
+    "url": "https://r74n.com/gentown/",
+    "gameVersion": "1.4",
+    "saveVersion": "gt5",
+    "verifiedDate": "2026-10-02"
+  },
+  "icons/crop.png": {
+    "url": "https://r74n.com/gentown/icons/crop.png",
+    "sha256": "2e8d9d25fcafcec6528d1d2d66bdf848290b8b60f08497e593231b12b26e4f83"
+  },
+  "icons/down-bad.png": {
+    "url": "https://r74n.com/gentown/icons/down-bad.png",
+    "sha256": "212568036db7e208a1f9f64fc5f9e148bfd88f0e0577bc8b74a6af043717ec85"
+  },
+  "icons/down-good.png": {
+    "url": "https://r74n.com/gentown/icons/down-good.png",
+    "sha256": "71588135f9403d83aba537f8d8615506a682c8573284ad063efbf45a66918613"
+  },
+  "icons/happy.png": {
+    "url": "https://r74n.com/gentown/icons/happy.png",
+    "sha256": "df9dfb2d142d067e399d6efde972aec6b10d1d911e80fbc417a4609a7fbaaf1b"
+  },
+  "icons/land.png": {
+    "url": "https://r74n.com/gentown/icons/land.png",
+    "sha256": "60e4b06005fdde582e56e994aa2c2cee42a2c705b0ce06ce796c906aa2e255a9"
+  },
+  "icons/livestock.png": {
+    "url": "https://r74n.com/gentown/icons/livestock.png",
+    "sha256": "3891eb1ac86dd64f556d6a23c74abce9dfb98a45fe1c2464e4479fb57849a25d"
+  },
+  "icons/lumber.png": {
+    "url": "https://r74n.com/gentown/icons/lumber.png",
+    "sha256": "006c3d1ea6bab942907fa5229d6e9555c9315a04ee4dff07bbb4239552132fce"
+  },
+  "icons/metal.png": {
+    "url": "https://r74n.com/gentown/icons/metal.png",
+    "sha256": "9483185252e4e29f1d271cbb69c13ab0722f27227ec86ceec3f6d4eb681a79e6"
+  },
+  "icons/neutral.png": {
+    "url": "https://r74n.com/gentown/icons/neutral.png",
+    "sha256": "72a1601de5f8820220aa26a9fa04bf231d69acfe53340f5908c14c819e970820"
+  },
+  "icons/rock.png": {
+    "url": "https://r74n.com/gentown/icons/rock.png",
+    "sha256": "b9cc7997e43772ef621a6c0c238adffb337984d1099410c4fc8ac91a72545b5d"
+  },
+  "icons/sad.png": {
+    "url": "https://r74n.com/gentown/icons/sad.png",
+    "sha256": "9b2c66e86b601307977247d752b23149c8eb3fe476d9dc39b5c6ef6c74ecec4b"
+  },
+  "icons/shuffle.png": {
+    "url": "https://r74n.com/gentown/icons/shuffle.png",
+    "sha256": "0a6bf437c4a31b6541edca6aa408c7bdff7aa2b4409ef79b6796826c51f80178"
+  },
+  "icons/sword.png": {
+    "url": "https://r74n.com/gentown/icons/sword.png",
+    "sha256": "12c8fff6eed039669c4ff6518a7ad704c754f6e9fca9f7752be45564b1054af6"
+  },
+  "icons/up-bad.png": {
+    "url": "https://r74n.com/gentown/icons/up-bad.png",
+    "sha256": "7b644b40b1969ac0ed9039ebcdc49e6df57a10678afbd853306020612bc5b69e"
+  },
+  "icons/up-good.png": {
+    "url": "https://r74n.com/gentown/icons/up-good.png",
+    "sha256": "1bc0fa7e8548d5af5b8442755b55f180194fef4a9cccfd53a64fd73e440d2cf6"
+  },
+  "fonts/PublicPixel.ttf": {
+    "url": "https://r74n.com/gentown/fonts/PublicPixel.ttf",
+    "sha256": "931eb4bf9ef25a6d4bb31783b8681712a42b7408988d53971a3070a2f7443ccf"
+  },
+  "fonts/VT323-Regular.ttf": {
+    "url": "https://r74n.com/gentown/fonts/VT323-Regular.ttf",
+    "sha256": "cee34b1d391e4b77b07b514f2c9c98fb2f60b49d4936fde107d212cceac5e012"
+  }
+}

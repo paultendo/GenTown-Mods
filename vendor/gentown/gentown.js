@@ -1,0 +1,7688 @@
+gameLoaded = false;
+
+// Text Viewer setup
+textParserConfig.escapeHTML = true;
+addParserCommand("c",function(args) {
+	return choose(args);
+})
+addParserCommand("color",function(args) {
+	if (args.length === 0) {return ""}
+	if (args.length === 1) {return args[0]}
+	return `<span style='color:${args[1]+ (args[2] && args[2] !== "true" ? ";background-color:"+args[2] : "")}'${ args[2] ? " class='font2'" : "" }>${args[0]}</span>`;
+})
+addParserCommand("colorsdown",function(args) {
+	if (args.length === 0) {return ""}
+	let string = "";
+	let colors = args.slice(2);
+	for (let i = 0; i < colors.length; i++) {
+		const color = colors[i];
+		string += color + " " + (i / colors.length) * 100 + "%,";
+		string += color + " " + ((i+1) / colors.length) * 100 + "%,";
+	}
+	let symbol = args[0].replace(/ /g, "&nbsp;");
+	let symbolColor = args[1].trim() || "#FFFFFF";
+	return `<span style="background:linear-gradient(to bottom,${string.slice(0,-1)})${symbol ? ";color:"+symbolColor : ""}" class="font2">${symbol || "&nbsp;&nbsp;&nbsp;"}</span>`;
+})
+addParserCommand("symbol",function(args) {
+	if (args.length === 0) {return ""}
+	return `<span class="font2"${ args[1] ? ` style="color:`+args[1]+`"` : "" }>${args[0]}</span>`;
+})
+addParserCommand("b",function(args) {
+	if (args.length === 0) {return ""}
+	return `<strong>${args[0]}</strong>`;
+})
+addParserCommand("i",function(args) {
+	if (args.length === 0) {return ""}
+	return `<em>${args[0]}</em>`;
+})
+addParserCommand("p",function(args) {
+	if (args.length === 0) {return ""}
+	return `<span class="previewPart" contenteditable="plaintext-only" data-original="args[0]">${args[0]}</span>`;
+})
+addParserCommand("title",function(args) {
+	if (args.length === 0) {return ""}
+	return titleCase(args[0]);
+})
+addParserCommand("num",function(args) {
+	if (args.length === 0) {return ""}
+	let n = parseFloat(args[0]);
+	if (args[1] === "K") {
+		let num = n;
+		let abs = Math.abs(num);
+		if (abs < 1000) return num.toString();
+		if (abs < 1000000) return Math.floor((num / 1000) * 10) / 10 + "K";
+		if (abs < 1000000000) return Math.floor((num / 1000000) * 10) / 10 + "M";
+		return Math.floor((abs / 1000000000) * 10) / 10 + "B";
+	}
+	let parts = args[0].toString().split(".");
+	parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+	let num = parts.join(".");
+	if (args[2] && n >= parseFloat(args[2])) {
+		return `{{color:${num}|#ffff8c}}`
+	}
+	return num;
+})
+addParserCommand("percent",function(args) {
+	if (args.length === 0) {return ""}
+	let n = parseFloat(args[0]);
+	n = Math.round(n * 100);
+	return `{{num:${n}}}%`;
+})
+addParserCommand("area",function(args) {
+	if (args.length === 0) {return ""}
+	let n = parseFloat(args[0]);
+
+	if (!userSettings.units || userSettings.units === "x") {
+		return `{{num:${n}}}{{icon:land}}`;
+	}
+	if (userSettings.units === "m") {
+		return `{{num:${n * (800 * 800)}}} km²`
+	}
+	if (userSettings.units === "i") {
+		return `{{num:${Math.round(n * (800 * 800) / 2.59)}}} mi²`
+	}
+	return `{{num:${n}}}`;
+})
+addParserCommand("length",function(args) {
+	if (args.length === 0) {return ""}
+	let n = parseFloat(args[0]);
+
+	if (!userSettings.units || userSettings.units === "x") {
+		return `{{num:${n}}}{{icon:land}}`;
+	}
+	if (userSettings.units === "m") {
+		return `{{num:${n * 800}}} km`
+	}
+	if (userSettings.units === "i") {
+		return `{{num:${Math.round(n * 800 / 1.609)}}} mi`
+	}
+	return `{{num:${n}}}`;
+})
+addParserCommand("volume",function(args) {
+	if (args.length === 0) {return ""}
+	let n = parseFloat(args[0]);
+	n = Math.round(n*10) / 10;
+
+	if (!userSettings.units || userSettings.units === "x") {
+		return `{{num:${n}}}{{icon:land}}`;
+	}
+	if (userSettings.units === "m") {
+		return `{{num:${Math.round(n * 944000000 / 1000000000000)}}} trillion km³`
+	}
+	if (userSettings.units === "i") {
+		return `{{num:${Math.round(n * 944000000 / 4.168 / 1000000000000)}}} trillion mi³`
+	}
+	return `{{num:${n}}}`;
+})
+addParserCommand("elevation",function(args) {
+	if (args.length === 0) {return ""}
+	let n = parseFloat(args[0]);
+
+	if (!userSettings.units || userSettings.units === "x") {
+		return `{{num:${Math.round(n*100)}}}%`;
+	}
+
+	let elevation = n*100;
+	let seaLevel = planet.config.waterLevel*100;
+	let seaLevelDiff = elevation - seaLevel;
+
+	if (args[1] === "d") seaLevelDiff = Math.abs(seaLevelDiff);
+
+	let text = "Invalid Elevation";
+	if (userSettings.units === "m") {
+		text = `{{num:${Math.round(seaLevelDiff / 10 * 1475)}}} m`
+	}
+	if (userSettings.units === "i") {
+		text = `{{num:${Math.round(seaLevelDiff / 10 * 1475 * 3.281)}}} ft`
+	}
+	if (args[1] === "l") {
+		if (seaLevelDiff === 0) text = "at sea level";
+		else text += (seaLevel > 0 ? " above" : "below") + " sea level";
+	}
+	return text;
+})
+addParserCommand("temperature",function(args) {
+	if (args.length === 0) {return ""}
+	let n = parseFloat(args[0]);
+
+	if (!userSettings.units || userSettings.units === "x") {
+		return `{{num:${Math.round(n * 100)}}}°`;
+	}
+
+	n = Math.round(n * 40 - 10);
+
+	if (userSettings.units === "m") {
+		return `{{num:${n}}}°C`;
+	}
+	if (userSettings.units === "i") {
+		return `{{num:${Math.round(n * 9/5) + 32}}}°F`
+	}
+	return `Invalid Temperature`;
+})
+addParserCommand("date",function(args) {
+	if (args.length === 0) {return ""}
+	let n = parseInt(args[0]);
+	if (isNaN(n)) return "Invalid Date";
+
+	if (!userSettings.dates || userSettings.dates === "x") {
+		if (args[1] === 's') return n.toString();
+		return `Day {{num:${n}}}`;
+	}
+	if (userSettings.dates === "g") {
+		let date = new Date("2023-01-01");
+		date.setTime(date.getTime() + 86400000 * (Math.max(1,n)-1));
+		if (args[1] === 's') {
+			const formatter = new Intl.DateTimeFormat(undefined, {
+				month: 'short',
+				day: 'numeric',
+				timeZone: "UTC"
+			});
+			return formatter.format(date);
+		}
+		const formatter = new Intl.DateTimeFormat(undefined, {
+			weekday: args[1] === 'l' ? 'short' : undefined,
+			month: 'short',
+			day: 'numeric',
+			timeZone: "UTC"
+		});
+		return formatter.format(date) + ", " + (date.getUTCFullYear() - 2023).toString().padStart(4, "0");
+	}
+	return `{{num:${n}}}`;
+})
+addParserCommand("duration",function(args) {
+	let n = parseFloat(args[0]);
+	if (isNaN(n)) return "Invalid Duration";
+	let unit = "day";
+	if (n && Math.abs(n) < 1) {
+		n *= 24;
+		unit = "hour";
+	}
+	return `{{num:${Math.round(n)}}} ${unit}${Math.abs(n) === 1 ? "" : "s"}`;
+})
+addParserCommand("check",function(args) {
+	return `{{color:${args[0] || "/"}|#00ff00|true}}`;
+})
+addParserCommand("x",function(args) {
+	return `{{color:${args[0] || "X"}|#ff0000|true}}`;
+})
+addParserCommand("wait",function(args) {
+	return `{{color:${args[0] || "»"}|#ffff00|true}}`;
+})
+// addParserCommand("town",function(args) {
+//   if (args.length === 0) {return ""}
+//   let town = regGet("town",parseInt(args[0]));
+//   if (!town) return `<span class='entityName' title='${parseInt(args[0])}'>Invalid Town</span>`;
+//   return `<span class='entityName' style='color:rgb(${town.color.join(",")})'>${town.name}</span>`;
+// })
+addParserCommand("icon",function(args) {
+	if (args.length === 0) {return ""}
+	return `<img src="icons/${args[0]}.png" class="inlineIcon pixelart" alt="${args[1]||titleCase(args[0])}" title="${args[1]||""}" draggable="false">`;
+})
+addParserCommand("resourcetotal",function(args) {
+	if (args.length < 2) {return ""}
+	let town = regGet("town",parseInt(args[0]));
+	let type = args[1];
+	if (!town.resources || !town.resources[type]) return 0;
+	let total = town.resources[type];
+	total = total.toString();
+	if (total >= $c.maxResource(town)) {
+		return `{{color:{{num:${total}|K}}|#ffff8c}}`
+	}
+	return `{{num:${total}|K}}`;
+})
+addParserCommand("diff",function(args) {
+	if (args.length === 0) {return ""}
+	let n = parseFloat(args[0]);
+	n = Math.round(n) / 100
+	if (n === 0) return '<span style="color:#ffff6e">0</span>';
+	let pos = n > 0;
+	return `<span style="color:${pos ? "#6eff6e" : "#ff6e6e"}">${(pos ? "+" : "") + parseText("{{num:"+args[0]+"|K}}")}</span>`;
+})
+addParserCommand("arrow",function(args) {
+	if (args.length < 2) {return ""}
+	return `<img src="icons/${parseInt(args[0]) ? 'up' : 'down'}-${parseInt(args[1]) ? 'good' : 'bad'}.png" class="inlineIcon pixelart" alt="${parseInt(args[0]) ? '↑' : '↓'}" draggable="false">`.repeat(parseInt(args[2]) || 1);
+})
+addParserCommand("regname",function(args) {
+	if (args.length < 2) {return ""}
+	// const id = parseInt(args[1]);
+	// if (isNaN(id)) return `<span class='entityName' title='${data.id}' data-reg='${args[0]}' data-id='${data.id}'>Invalid Thing</span>`;
+	const data = regGet(args[0],parseInt(args[1]));
+	if (!data) return `<span class='entityName' title='${args[1]}' data-reg='${args[0]}' data-id='${args[1]}'>Invalid Thing</span>`;
+	let name = data.name;
+	let color = data.color;
+	let icon;
+	if (regBrowserExtra[data._reg]) {
+		if (!name && regBrowserExtra[data._reg].name) {
+			name = regBrowserExtra[data._reg].name(data);
+		}
+		if (!color && regBrowserExtra[data._reg].color) {
+			color = regBrowserExtra[data._reg].color(data);
+		}
+		if (regBrowserExtra[data._reg].icon) {
+			icon = regBrowserExtra[data._reg].icon(data);
+		}
+	}
+	if (!name) name = data.subtype || data.type;
+	let secret = data.named === false && planet.mode !== $c.FREEPLAY;
+	if (secret && userSettings.hideNames !== false) name = name.replace(/./g, "?").slice(0,5);
+	if (args[2] && args[2] !== "-") {
+		name = args[2] === "?" ? (data.subtype || data.type || args[0]) : args[2];
+	}
+	color = color || [127,127,127];
+	let hsl = RGBtoHSL(color);
+	hsl[2] = Math.max(0.65, hsl[2]);
+	color = HSLtoRGB(hsl);
+	return (!args[2] && data.prefix ? "<span class='affix'>" + data.prefix + " </span>" : "") + `<span class='entityName${data.usurp ? " usurp" : ""}${secret ? " secret" : ""}' title='${titleCase(args[0])}' data-reg='${args[0]}' data-id='${data.id}' ${color ? `style="color:rgb(${Math.floor(color[0])},${Math.floor(color[1])},${Math.floor(color[2])})"` : ""} onmousedown="handleEntityMouseDown(this);" onclick="handleEntityClick(this); event.stopPropagation();" onmouseenter='handleEntityHover(this)' onmouseleave='handleEntityHoverOut(this)' role="link">${args[2] !== "-" ? (data.flag||data.symbol) ? parseText(data.flag||"{{symbol:"+data.symbol+"}}")+" " : "" : ""}${icon ? parseText("{{icon:"+icon+"}}")+" " : ""}${name}</span>` + (!args[2] && data.suffix ? "<span class='affix'> " + data.suffix + "</span>" : "");
+})
+addParserCommand("regoldest",function(args) {
+	if (args.length < 1) {return ""}
+	let data = regToArray(args[0])[0];
+	if (!data) return "a "+args[0];
+	return `{{regname:${args[0]}|${data.id}}}`;
+})
+addParserCommand("randreg",function(args) {
+	if (args.length < 1) {return ""}
+	let options;
+	if (args[1]) options = regFilter(args[0],(r) => r.type === args[1]);
+	else options = regToArray(args[0]);
+
+	if (options.length) return `{{regname:${args[0]}|${choose(options).id}}}`
+	
+	return ``;
+})
+addParserCommand("regadj",function(args) {
+	if (args.length < 2) {return ""}
+	const data = regGet(args[0],parseInt(args[1]));
+	if (!data) return `{{regname:${args[0]}|${args[1]}}}`;
+	return `{{regname:${args[0]}|${args[1]}${
+		data.adj ? "|"+data.adj : ""
+	}}}`
+})
+addParserCommand("currency",function(args) {
+	if (args.length < 1) {return ""}
+	const data = regGet("town",parseInt(args[0]));
+	if (!data) return `{{symbol:¤}}`;
+	let symbol = data.currencySign || "¤";
+	return `{{symbol:${symbol}|rgb(${data.color.join(",")})}}`;
+})
+addParserCommand("planet",function(args) {
+	return `<span class='entityName' onclick='regBrowsePlanet()' style="color:rgb(${(planet.color||biomes.water.color).join(",")})" title="Planet">${args[0] || planet.name}</span>`;
+})
+addParserCommand("biome",function(args) {
+	return `<span class='entityName' onclick='regBrowseBiome("${args[0]}")' style="color:rgb(${(biomes[args[0]].colorOverride || biomes[args[0]].color).join(",")})" title="Biome">${titleCase(args[1] || biomes[args[0]].name || args[0])}</span>`;
+})
+addParserCommand("people",function(args) {
+	if (planet.dems) return `{{planet|${planet.dems}}}`;
+	return "inhabitants of {{planet}}";
+})
+addParserCommand("residents",function(args) {
+	if (args.length === 0) return "residents";
+	let town = regGet("town",args[0]);
+	if (!town) return "{{c:residents|citizens}}";
+	if (town.dems) return `{{regname|town|${args[0]}|${town.dems}}}`;
+	if (args[1]) return `${args[1]} from {{regname|town|${args[0]}}}`;
+	return `{{c:residents|citizens}} of {{regname|town|${args[0]}}}`;
+})
+addParserCommand("resident",function(args) {
+	if (args.length === 0) return "resident";
+	let town = regGet("town",args[0]);
+	if (!town) return "{{c:resident|citizen}}";
+	if (town.dem) return `{{regname|town|${args[0]}|${town.dem}}}`;
+	if (args[1]) return `${args[1]} from {{regname|town|${args[0]}}}`;
+	return `{{c:resident|citizen}} {{c:from|of}} {{regname|town|${args[0]}}}`;
+})
+addParserCommand("face",function(args) {
+	if (args.length === 0) return "{{icon:neutral|Population}}";
+	let town = regGet("town", parseInt(args[0]));
+	if (!town) return "{{icon:neutral|Population}}";
+
+	let mood = town.influences.happy || 0;
+	let icon = "neutral";
+	if (mood >= 3) icon = "happy";
+	if (mood <= -2) icon = "sad";
+
+	return `{{icon:${icon}|${args[1]||"Population"}}}`;
+})
+addParserCommand("should",function(args) {
+	return "{{c:Should they|Do you approve|Good idea}}?";
+})
+addParserCommand("good",function(args) {
+	if (args.length === 0) {return ""}
+	return "<span class='good'>"+args[0]+"</span>";
+})
+addParserCommand("bad",function(args) {
+	if (args.length === 0) {return ""}
+	return "<span class='bad'>"+args[0]+"</span>";
+})
+addParserCommand("none",function(args) {
+	return `<span class='none'>None yet..</span>`;
+})
+addParserCommand("executive",function(args) {
+	let id = args[0];
+	let elem = document.getElementById("actionItem-"+id);
+	let title;
+	if (elem) {
+		let keybind = elem.querySelector("u");
+		if (keybind) keybind.style.visibility = "hidden";
+		title = elem.innerText.trim();
+		if (keybind) keybind.style.visibility = "";
+	}
+	else title = titleCase(id);
+	return `<span class='shortcut shortcutExecutive'>${escapeHTML(title)}</span>`;
+})
+addParserCommand("a",function(args) {
+	if (!args[0]) return "a";
+	args[0] = args[0].normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+	if (args[0].match(/^uni/)) return "a";
+	
+	return `a${args[0].match(/^[aeiou8]/) ? "n" : ""}`;
+})
+
+function blurber(text, ctx) {
+	if (typeof text === "object") {
+		if (text.text) text = text.text;
+	}
+	ctx = ctx || {};
+	let oldText = null;
+	let tries = 0;
+	let matched = false;
+	while (text !== oldText) {
+		tries ++;
+		if (tries > 1000) break;
+		oldText = text;
+		text = text.replace(/\[[^\[\]]+\]/g, (match) => {
+			matched = true;
+			match = match.slice(1,-1);
+
+			if (match.includes("/")) {
+				match = match.replace(/\/\/+/g, "/");
+				match = match.replace(/\/$/g, "");
+				match = match.replace(/^\//g, "");
+				match = "[" + choose(match.split("/")) + "]";
+			}
+
+			// console.log(match);
+			
+			if (subBlurbs[match] !== undefined) {
+				let result = subBlurbs[match];
+				try {
+					if (typeof result === "function") result = result(ctx);
+				}
+				catch {
+					return false;
+				}
+				if (Array.isArray(result)) result = choose(result);
+
+				let _result = result;
+
+				if (!result) return "[" + match + "]";
+				if (result === true) return "";
+				if (typeof result === "object" && result._reg && result.id) {
+					result = `{{regname:${result._reg}|${result.id}}}`;
+				}
+				if (result.toString) result = result.toString();
+
+				if (!ctx[match]) ctx[match] = [];
+				ctx[match].push(_result);
+
+				match = "[" + result + "]";
+			}
+
+			return match;
+		});
+	}
+	if (matched) {
+		text = text.replace(/=/g, "");
+		text = text.replace(/(^| )a [aeioué]/gi, (match) => {
+			return match.replace(/(a) /i, "$1n ");
+		})
+		if (!text.match(/[.!?]$/)) text += ".";
+		text = text.replace(/a someone/gi, "someone");
+	}
+
+	let fail = false;
+	text.replace(/\[[^\[\]]+\]/g, (match) => {
+		match = match.slice(1,-1);
+		if (subBlurbs[match] !== undefined) {
+			fail = true;
+			return;
+		}
+	});
+	if (fail) return false;
+
+	return text.replace(/[\[\]]/g,"");
+}
+addParserPre(blurber);
+
+// Commas in big numbers
+addParserPost(text => {
+	return text.replace(/[ (]\d{4,}[.!?,) ]/g, m => m[0] + parseText("{{num:"+m.slice(1,-1)+"}}") + m[m.length-1]);
+});
+
+userSettings = {};
+if (R74n.has("GenTownSettings")) {
+	userSettings = JSON.parse(R74n.get("GenTownSettings"));
+}
+if (!window.structuredClone) {
+	window.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
+}
+
+function escapeHTML(unsafe) {
+	return unsafe
+		.replace(/&#039;/g, "'")
+		.replace(/&quot;/g, '"')
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
+}
+function uuidv4() {
+	return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+		(+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16)
+	);
+}
+function titleCase(str) {
+	let prefix;
+	str = str.toString();
+	if (str.match(/^[a-z][A-Z]/)) {
+		prefix = str.slice(0,1);
+		str = str.slice(1);
+	}
+	str = str.replace(/_/g," ");
+	str = str.replace(/,(\S)/g,", $1");
+	str = str.replace( //Capitalize letters at start or after spaces/hyphens
+		/(?:^|[ \-–])[A-Za-zÀ-ÖØ-öø-ÿ]/g,
+		text => text.toUpperCase()
+	).replace( //Uncapitalize prepositions, etc.
+		/([ \-–](Of|And|Or|With|The|An?|N|To|From|By|At|In|Upon|Over|Under|On|Is|Bei|Am|An|De[rn]?|Du|Bij|L[ao]s?|El|Cum|Super|O['‘’]))+[ \-–]/g,
+		text => text.toLowerCase()
+	);
+	str = str.replace(/(^|\s)m(a?c)(\w)/gi, (m) => { //McDonald
+		return m[0].toUpperCase() + m.slice(1,-1) + m.slice(-1).toUpperCase()
+	});
+	if (prefix !== undefined) str = prefix + str;
+	return str;
+}
+function isFunction(obj) {
+	return !!(obj && obj.constructor && obj.call && obj.apply);
+};
+function chooseWeighted(items, weights) {
+	var i;
+
+	for (i = 1; i < weights.length; i++)
+		weights[i] += weights[i - 1];
+	
+	var random = Math.random() * weights[weights.length - 1];
+	
+	for (i = 0; i < weights.length; i++)
+		if (weights[i] > random)
+			break;
+	
+	return items[i];
+}
+function chooseDifferent(items, not) {
+	return choose(items.filter(i => i !== not));
+}
+function sumArray(array) {
+	return array.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
+}
+function sumValues(obj) {
+	let total = 0;
+	Object.values(obj).forEach((n) => {
+		total += n;
+	})
+	return total;
+}
+
+function coordsToChunk(x, y) {
+	return Math.trunc(x/planet.config.chunkSize)+","+Math.trunc(y/planet.config.chunkSize);
+}
+function chunkCoordsToCoords(cx, cy, x, y) {
+	return [cx*planet.config.chunkSize + x, cy*planet.config.chunkSize + y];
+}
+function chunkAt(x, y) {
+	return planet.chunks[x+","+y];
+}
+function pixelAt(x, y) {
+	const chunk = planet.chunks[coordsToChunk(x,y)];
+	if (chunk === undefined) return null;
+	x = Math.abs(x) % planet.config.chunkSize;
+	y = Math.abs(y) % planet.config.chunkSize;
+	return chunk.p[x][y];
+}
+
+function RGBtoHSL(rgb) {let r=rgb[0];let g=rgb[1];let b=rgb[2];r /= 255, g /= 255, b /= 255;var max = Math.max(r, g, b), min = Math.min(r, g, b);var h, s, l = (max + min) / 2;if (max == min) {h = s = 0;} else {var d = max - min;s = l > 0.5 ? d / (2 - max - min) : d / (max + min);switch (max) {case r: h = (g - b) / d + (g < b ? 6 : 0); break;case g: h = (b - r) / d + 2; break;case b: h = (r - g) / d + 4; break;}h /= 6;}return [ h, s, l ];}
+function HSLtoRGB(hsl) {let h=hsl[0];let s=hsl[1];let l=hsl[2];var r, g, b;if (s == 0) {r = g = b = l;} else {function hue2rgb(p, q, t) {if (t < 0) t += 1;if (t > 1) t -= 1;if (t < 1/6) return p + (q - p) * 6 * t;if (t < 1/2) return q;if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;return p;}var q = l < 0.5 ? l * (1 + s) : l + s - l * s;var p = 2 * l - q;r = hue2rgb(p, q, h + 1/3);g = hue2rgb(p, q, h);b = hue2rgb(p, q, h - 1/3);}return [ r * 255, g * 255, b * 255 ];}
+
+function hexToRGB(hex) {
+	var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+	return result ? [
+		parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16) ]
+	: null;
+}
+function RGBToHex(rgb) {
+  return "#" + (1 << 24 | rgb[0] << 16 | rgb[1] << 8 | rgb[2]).toString(16).slice(1);
+}
+
+colorCache = {};
+function colorBrightness(rgb, multiplier) {
+	const key = rgb.join(",")+":b"+multiplier;
+	// if (colorCache[key]) return colorCache[key];
+	let hsl = RGBtoHSL(rgb);
+	hsl[2] = Math.min(1, hsl[2] + multiplier-1);
+	hsl[0] = (hsl[0] * multiplier) % 1;
+	colorCache[key] = HSLtoRGB(hsl).map((n) => Math.round(n));
+	return colorCache[key];
+}
+function colorChange(rgb) {
+	let hsl = RGBtoHSL(rgb);
+	hsl[0] += randRange(2,5) / 10 * (Math.random() < 0.5 ? -1 : 1)
+	hsl[2] += (randRange(-2,2) / 10);
+	hsl[2] = Math.max(0.35, Math.min(0.8, hsl[2]));
+	return HSLtoRGB(hsl).map((n) => Math.round(n));
+}
+//colorChannelA and colorChannelB are ints ranging from 0 to 255
+function colorChannelMixer(colorChannelA, colorChannelB, amountToMix){
+    var channelA = colorChannelA*amountToMix;
+    var channelB = colorChannelB*(1-amountToMix);
+    return parseInt(channelA+channelB);
+}
+//rgbA and rgbB are arrays, amountToMix ranges from 0.0 to 1.0
+//example (red): rgbA = [255,0,0]
+function colorMix(rgbA, rgbB, amountToMix=0.5){
+    var r = colorChannelMixer(rgbA[0],rgbB[0],amountToMix);
+    var g = colorChannelMixer(rgbA[1],rgbB[1],amountToMix);
+    var b = colorChannelMixer(rgbA[2],rgbB[2],amountToMix);
+    return [r,g,b];
+}
+colorRecognitionList = [
+	[255,0,0,"red"],
+	[127,0,0,"red"],
+	[255,127,0,"orange"],
+	[127,63,0,"brown"],
+	[60,20,0,"brown"],
+	[255,255,0,"yellow"],
+	[127,127,0,"yellow"],
+	[127,255,0,"green"],
+	[63,127,0,"green"],
+	[0,255,0,"green"],
+	[0,127,0,"green"],
+	[0,255,127,"teal"],
+	[0,127,63,"teal"],
+	[0,255,255,"blue"],
+	[0,127,127,"blue"],
+	[0,0,255,"blue"],
+	[0,0,127,"blue"],
+	[63,0,127,"violet"],
+	[127,0,255,"purple"],
+	[127,0,127,"magenta"],
+	[255,0,255,"magenta"],
+	[255,127,127,"pink"],
+	[255,127,255,"pink"],
+	[127,255,127,"green"],
+	[127,255,255,"blue"],
+	[127,127,255,"blue"],
+	[255,255,127,"yellow"],
+	[255,200,127,"yellow"],
+	[0,0,0,"black"],
+	[255,255,255,"white"],
+	[200,200,200,"white"],
+	[127,127,127,"gray"],
+	[145,145,145,"gray"],
+	[63,63,63,"gray"],
+	[235,64,52,"red"],
+	[50,168,82,"green"],
+	[195,88,49,"orange"],
+	[66,70,50,"green"],
+	[63,0,0,"red"],
+	[63,27,0,"brown"],
+	[63,63,0,"yellow"],
+	[0,63,0,"green"],
+	[0,63,63,"teal"],
+	[0,0,63,"blue"],
+	[63,0,63,"purple"],
+	[63,0,35,"rose"],
+	[144,70,132,"purple"],
+	[138,77,34,"brown"],
+	[94,71,54,"brown"],
+	[94,54,54,"red"],
+	[94,86,54,"yellow"],
+	[54,94,87,"teal"],
+	[54,54,94,"blue"],
+	[94,54,94,"purple"],
+	[176,176,88,"golden"],
+	[191,164,65,"golden"],
+	[127,181,181,"blue"],
+];
+function colorRecognize(rgb) {
+	let mostSimilar = [1000,"gray"];
+	for (let i = 0; i < colorRecognitionList.length; i++) {
+		const color = colorRecognitionList[i];
+		const distance = Math.abs(color[0] - rgb[0])
+			+ Math.abs(color[1] - rgb[1])
+			+ Math.abs(color[2] - rgb[2]);
+		if (distance < mostSimilar[0]) {
+			mostSimilar[0] = distance;
+			mostSimilar[1] = color[3];
+			if (distance === 0) break;
+		}
+	}
+	return mostSimilar[1];
+}
+
+function generatePerlinNoise(x, y, octaves, persistence) {
+	let total = 0;
+	let frequency = 1;
+	let amplitude = 1;
+	let maxValue = 0;  // Used for normalizing the result
+
+	for (let i = 0; i < octaves; i++) {
+		total += noise.perlin2(x * frequency, y * frequency) * amplitude;
+		maxValue += amplitude; // Keep track of maximum possible value
+		amplitude *= persistence;
+		frequency *= 2;
+	}
+
+	return total / maxValue; // Normalize the result to stay within 0-1 range
+}
+
+mapCanvas = document.getElementById("mapCanvas");
+ctx = mapCanvas.getContext("2d");
+
+// planetWidth = $c.defaultPlanetWidth;
+// planetHeight = $c.defaultPlanetHeight;
+// pixelSize = $c.defaultPixelSize;
+// chunkSize = $c.defaultChunkSize;
+// waterLevel = $c.defaultWaterLevel;
+
+// // ensure chunks fit into planet
+// planetWidth -= (planetWidth % chunkSize);
+// planetHeight -= (planetHeight % chunkSize);
+
+// planetOld = [];
+
+function defaultSubregistry() {
+	return {
+		_id: 1
+	}
+}
+function defaultRegistry() {
+	let r = {
+		"town": defaultSubregistry(),
+		"resource": defaultSubregistry(),
+		"individual": defaultSubregistry(),
+		"player": defaultSubregistry(),
+		"registry": defaultSubregistry(),
+		"process": defaultSubregistry(),
+		"marker": defaultSubregistry(),
+		"nature": defaultSubregistry(),
+		"product": defaultSubregistry(),
+		"species": defaultSubregistry(),
+		"culture": defaultSubregistry(),
+		"body": defaultSubregistry(),
+		"system": defaultSubregistry()
+	}
+	for (let key in r) {
+		r.registry[key] = r.registry._id;
+		r.registry._id++;
+	}
+	return r;
+}
+function regCreate(subregistryName) {
+	reg[subregistryName] = defaultSubregistry();
+	reg.registry[[subregistryName]] = reg.registry._id;
+	reg.registry._id++;
+}
+function regDelete(subregistryName) {
+	delete reg[subregistryName];
+}
+function regAdd(subregistryName, object) {
+	// if (!reg[subregistryName]) regCreate(subregistryName);
+	object.id = reg[subregistryName]._id;
+	object._reg = subregistryName;
+	object.start = planet.day;
+	reg[subregistryName][reg[subregistryName]._id] = object;
+	reg[subregistryName]._id++;
+	return object;
+}
+function regRemove(subregistryName, id) {
+	reg[subregistryName][id].del = true;
+	delete reg[subregistryName][id];
+}
+function regGet(subregistryName, id) {
+	return reg[subregistryName][id];
+}
+// function regToArray(subregistryName) {
+//   return Object.values(reg[subregistryName]).filter((i) => isNaN(i));
+// }
+function regToArray(subregistryName, includeEnded=false) {
+	return regFilter(subregistryName, (i) => true, includeEnded);
+}
+function sortEntities(items, sortBy, inverse=false) {
+	items = [...items];
+
+	sortBy = sortBy.split(".");
+	let key = sortBy[0];
+	let subkey = sortBy[1];
+
+	if (subkey) {
+		items.sort((a, b) => (b[key]||{})[subkey] - (a[key]||{})[subkey] );
+	}
+	else {
+		items = items.filter((item) => item[key] !== undefined);
+
+		if (!items.length) return items;
+
+		if (typeof items[0][key] === "string") {
+			items.sort((a, b) => (a[key].toString ? a[key].toString() : "").localeCompare((b[key].toString ? b[key].toString() : ""), 'en', {'sensitivity': 'base'}));
+		}
+
+		else items.sort((a, b) => b[key] - a[key] );
+	}
+
+	if (inverse) items.reverse();
+
+	return items;
+}
+function regSorted(subregistryName, sortBy, inverse=false) {
+	let items = regToArray(subregistryName);
+
+	return sortEntities(items, sortBy, inverse);
+}
+function regCount(subregistryName) {
+	return regToArray(subregistryName).length;
+}
+function regFilter(subregistryName, check, includeEnded=false) {
+	let results = [];
+	for (let key in reg[subregistryName]) {
+		if (!isNaN(reg[subregistryName][key])) continue;
+		if (includeEnded === false && reg[subregistryName][key].end) continue;
+		if (check(reg[subregistryName][key])) results.push(reg[subregistryName][key]);
+	}
+	return results;
+}
+function regSingle(subregistryName, check) {
+	for (let key in reg[subregistryName]) {
+		if (!isNaN(reg[subregistryName][key])) continue;
+		if (reg[subregistryName][key].end) continue;
+		if (check(reg[subregistryName][key])) return reg[subregistryName][key];
+	}
+	return null;
+}
+function regExists(subregistryName, check) {
+	for (let key in reg[subregistryName]) {
+		if (!isNaN(reg[subregistryName][key])) continue;
+		if (reg[subregistryName][key].end) continue;
+		if (check(reg[subregistryName][key])) return true;
+	}
+	return false;
+}
+
+function defaultPlanet() {
+	return {
+		config: {
+			width: $c.defaultPlanetWidth,
+			height: $c.defaultPlanetHeight,
+			pixelSize: $c.defaultPixelSize,
+			chunkSize: $c.defaultChunkSize,
+			waterLevel: $c.defaultWaterLevel,
+			biomeSize: $c.defaultBiomeSize,
+			temp: $c.defaultPlanetTemp,
+			moisture: $c.defaultPlanetMoisture,
+			elevation: $c.defaultPlanetElevation,
+			detail: 5,
+			smooth: 0.5,
+			landmassSize: 40,
+			borderFalloff: 10,
+			landColor: $c.defaultLandColor,
+			waterColor: $c.defaultWaterColor
+		},
+		day: 1,
+		chunks: {},
+		reg: defaultRegistry(),
+		created: Date.now(),
+		color: biomes.water.color,
+		saved: null,
+		unlocks: {},
+		unlocksRejected: {},
+		oneTimeEvents: {},
+		nextDayMessages: [],
+		warnings: {},
+		recentBlurbs: {
+			ambient: [],
+			info: [],
+			decision: []
+		},
+		unlockedExecutive: {},
+		stats: {},
+		cooldownEvents: {},
+		settled: false,
+		mode: 1
+	};
+}
+
+townColors = [
+	[255, 87, 87],
+	[255, 116, 51],
+	[255, 164, 73],
+	[87, 87, 255],
+	[151, 87, 255],
+	[255, 25, 159],
+	[255, 87, 255]
+]
+extraColors = [
+	[87,255,87],
+	[38,38,38],
+	[224,224,224],
+	[38,38,38],
+	[224,224,224],
+]
+function defaultTown(doName=true) {
+	return {
+		// "name": doName ? generateWord($c.townSyllables,true,wordComponents.prefixes.TOWN) : undefined,
+		"name": doName ? generateWordEndings(wordComponents.townSuffixes, randRange(1,2), true, true, wordComponents.prefixes.TOWN) : undefined,
+		"pop": 20,
+		"color": choose(townColors),
+		"type": "town",
+		"level": 20, //town
+		"resources": {},
+		"size": 0,
+		"jobs": {},
+		"influences": {
+			"birth": 1,
+			// "happy": 0,
+			// "crime": 0,
+		},
+		"legal": {},
+		"issues": {},
+		"relations": {},
+		"research": {},
+		"wealth": 0,
+		"_reg": "town"
+	}
+}
+
+randomEvents = {};
+dailyEvents = {};
+metaEvents = {};
+function finalizeEvents() {
+	randomEvents = {};
+	dailyEvents = {};
+	for (let eventClass in gameEvents) {
+		let eventInfo = gameEvents[eventClass];
+		if (eventInfo.meta === true) {
+			metaEvents[eventClass] = eventInfo;
+		}
+		else if (eventInfo.daily === true) {
+			dailyEvents[eventClass] = eventInfo;
+		}
+		else { // random: true
+			randomEvents[eventClass] = eventInfo;
+		}
+	}
+}
+finalizeEvents();
+
+function happen(action, subject, target, args, targetClass=undefined) {
+	debugContext.happen = [
+		action,
+		subject ? subject._reg : null,
+		target ? target._reg : null,
+		args,
+		targetClass
+	];
+	if (!targetClass && target && target._reg) targetClass = target._reg;
+	if (actionables[targetClass] === undefined) return;
+	let actionFunc = actionables[targetClass].asTarget[action];
+	if (actionFunc === undefined) {
+		delete debugContext.happen;
+		return;
+	}
+	let r = actionFunc(subject,target,args||{});
+	delete debugContext.happen;
+	if (r === 0) return r;
+	if (r === undefined) return target;
+	return r;
+}
+
+function readyEvent(eventClass, subject=null, target=null) {
+	debugContext.trace.push("readyEvent");
+
+	if (!eventClass) return undefined;
+
+	let args = {};
+
+	const eventInfo = gameEvents[eventClass];
+
+	if (!subject && eventInfo.subject && eventInfo.subject.reg) {
+		let regname = eventInfo.subject.reg;
+		if (eventInfo.subject.random) {
+			subject = choose(regFilter(regname, (r) => !r.start || (planet.day - r.start > 1)));
+			if (!subject) return;
+		}
+		else if (eventInfo.subject.all) {
+			subject = regToArray(regname);
+			if (subject.length === 0) return;
+		}
+		else if (eventInfo.subject.filter) {
+			subject = regFilter(regname, eventInfo.subject.filter);
+			if (subject.length === 0) return;
+		}
+		else if (eventInfo.subject.single) {
+			subject = regSingle(regname, eventInfo.subject.single);
+			if (!subject) return;
+		}
+		else if (eventInfo.subject.id) {
+			subject = regGet(regname,eventInfo.subject.id);
+			if (!subject) return;
+		}
+	}
+
+	if (!target && eventInfo.target && eventInfo.target.reg) {
+		let regname = eventInfo.target.reg;
+		if (eventInfo.target.random) {
+			target = choose(regFilter(regname, (r) => !r.start || (planet.day - r.start > 1)));
+			if (!target) return;
+			if (subject == target) choose(regToArray(regname));
+			if (subject == target) return;
+		}
+		else if (eventInfo.target.all) {
+			target = regToArray(regname);
+			if (target.length === 0) return;
+		}
+		else if (eventInfo.target.filter) {
+			target = regFilter(regname, eventInfo.target.filter);
+			if (target.length === 0) return;
+		}
+		else if (eventInfo.target.single) {
+			target = regSingle(regname, eventInfo.target.single);
+			if (!target) return;
+		}
+		else if (eventInfo.target.id) {
+			target = regGet(regname,eventInfo.target.id)
+			if (!target) return;
+		}
+		else if (eventInfo.target.nearby && regname === "town" && subject && subject._reg === "town") {
+			let chunk = randomChunk((c) => c.v.s === subject.id);
+			if (!chunk) return;
+			target = nearbyTown(chunk.x, chunk.y, (t) => t.id !== subject.id, 5);
+			if (!target) return;
+		}
+	}
+
+	if (args.value === undefined && eventInfo.value !== undefined) {
+		if (isFunction(eventInfo.value)) {
+			args.value = eventInfo.value(subject,target,args);
+			if (args.value === false) return;
+		}
+		else if (typeof eventInfo.value === "object") {
+			if (eventInfo.value.random && Array.isArray(eventInfo.value.random)) {
+				args.value = choose(eventInfo.value.random);
+			}
+		}
+		else args.value = eventInfo.value;
+	}
+
+	let message = null;
+	if (isFunction(eventInfo.message)) {
+		message = eventInfo.message(subject,target,args);
+	}
+	else if (eventInfo.message) message = eventInfo.message
+
+	if (!subject && !target) return undefined;
+
+	args.eventID = uuidv4();
+
+	return {
+		subject: subject,
+		target: target,
+		args: args,
+		message: message,
+		eventID: args.eventID,
+		eventClass: eventClass
+	}
+}
+
+function doEvent(eventClass,eventCaller) {
+	debugContext.trace.push("doEvent");
+	const eventInfo = gameEvents[eventClass];
+
+	if (!eventCaller) eventCaller = readyEvent(eventClass);
+
+	let subjects = eventCaller.subject;
+	if (!Array.isArray(subjects)) subjects = [subjects];
+	let targets = eventCaller.target;
+	if (!Array.isArray(targets)) targets = [targets];
+
+	let r;
+	for (let i = 0; i < subjects.length; i++) {
+		const subject = subjects[i];
+		
+		for (let j = 0; j < targets.length; j++) {
+			const target = targets[j];
+			
+			if (eventInfo.chunkRate && eventInfo.subject && eventInfo.subject.reg === "town" && eventInfo.perChunk) {
+				let chunks = filterChunks((c) => c.v.s === subject.id);
+				for (let k = 0; k < chunks.length; k++) {
+					if (Math.random() > eventInfo.chunkRate) continue;
+					const chunk = chunks[k];
+					eventInfo.perChunk(subject,target,chunk,eventCaller.args);
+				}
+			}
+			if (eventInfo.func) {
+				r = eventInfo.func(subject, target, eventCaller.args);
+			}
+		}
+
+	}
+
+	// renderMap();
+	// renderHighlight();
+	// renderCursor();
+	// updateStats();
+	// updateCanvas();
+
+	if (isFunction(eventInfo.messageDone)) {
+		logChange(eventCaller.logID, eventInfo.messageDone(eventCaller.subject,eventCaller.target,eventCaller.args));
+	}
+	else if (eventInfo.messageDone) logChange(eventCaller.logID, eventInfo.messageDone);
+
+	return r || targets[targets.length-1];
+}
+
+function chooseEvent(step=0,influencingTown) {
+	let keys = Object.keys(randomEvents);
+	let influences = {};
+	if (influencingTown && influencingTown.influences) influences = influencingTown.influences;
+	let choice = chooseWeighted(
+		keys,
+		keys.map((i) => {
+			if (recentEvents.indexOf(i) !== -1) return 0;
+			if (randomEvents[i].cooldown) {
+				if (planet.cooldownEvents[i] && planet.day - planet.cooldownEvents[i] < randomEvents[i].cooldown) return 0;
+			}
+			i = randomEvents[i];
+			if (isNaN(i.weight)) return 1;
+			let weight = i.weight;
+			if (i.needsUnlock) {
+				for (let key in i.needsUnlock) {
+					if (planet.unlocks[key] === undefined || planet.unlocks[key] < i.needsUnlock[key]) return 0;
+				}
+			}
+			if (i.influencedBy) {
+				for (let influence in i.influencedBy) {
+					if (influences[influence] <= $c.minInfluence) return 0;
+					if (influences[influence]) weight = addInfluence(weight, influencingTown, influence);
+					// if (influences[influence]) weight *= (Math.sign(influences[influence]) + influences[influence]) * (Math.sign(i.influencedBy[influence]) + i.influencedBy[influence]);
+					// console.log(weight)
+				}
+			}
+			return weight;
+		})
+	);
+	if (!choice) {
+		if (step < 5) choice = chooseEvent(step+1,influencingTown);
+	}
+	return choice;
+}
+/*
+happen(
+	"Rename",
+	regGet("player",1),
+	regGet("town",1),
+	{value: "TestTown"}
+);
+
+let e = readyEvent("townRecolor");
+doEvent("townRecolor",e);
+*/
+
+function addInfluence(value, subject, influenceName) {
+	if (subject.influences !== undefined && subject.influences[influenceName] !== undefined) {
+		let influence = subject.influences[influenceName];
+		if (influence <= $c.minInfluence) return 0;
+		if (influence > 0) value *= (influence/10 + 1);
+		else value *= (1 - Math.abs(influence)/10)
+	}
+	return value;
+}
+function subtractInfluence(value, subject, influenceName) {
+	if (subject.influences !== undefined && subject.influences[influenceName] !== undefined) {
+		let influence = subject.influences[influenceName];
+		if (influence >= $c.maxInfluence) return 0;
+		if (influence > 0) value /= (influence/10 + 1);
+		else value /= (1 - Math.abs(influence)/10)
+	}
+	return value;
+}
+function chanceInfluence(chance, subject, influenceName) {
+	chance = addInfluence(chance, subject, influenceName);
+	return Math.random() < chance;
+}
+
+function generatePlanet(config) {
+	planet = defaultPlanet();
+	reg = planet.reg;
+	if (config) planet.config = config;
+	else config = planet.config;
+	validateConfig(config);
+	if (config.mode) planet.mode = config.mode;
+
+	if (!config.seed) config.seed = Math.random();
+	noise.seed(config.seed);
+
+	noiseMin = -0.3;
+	noiseMax = 0.42;
+	const width = config.width;
+	const height = config.height;
+	const chunkSize = config.chunkSize;
+	const waterLevel = planet.config.waterLevel;
+	const biomeSize = planet.config.biomeSize ?? 20;
+	const configTemp = planet.config.temp ?? 0;
+	const configMoisture = planet.config.moisture ?? 0;
+	const configElevation = planet.config.elevation ?? 0;
+	const detail = planet.config.detail ?? 5;
+	const smooth = 1 - (planet.config.smooth ?? 0.5);
+	const landmassSize = planet.config.landmassSize ?? 40;
+	const borderFalloff = 20 - (planet.config.borderFalloff ?? 10);
+	const tuneX = -(planet.config.tuneX ?? 0);
+	const tuneY = -(planet.config.tuneY ?? 0);
+	const tuneXChunk = tuneX / chunkSize;
+	const tuneYChunk = tuneY / chunkSize;
+	
+	for (let chunkX = 0; chunkX < width / chunkSize; chunkX++) {
+		for (let chunkY = 0; chunkY < height / chunkSize; chunkY++) {
+			let chunkKey = chunkX+","+chunkY;
+			let chunk = {
+				v: {},
+				x: chunkX,
+				y: chunkY
+			}
+
+			// chunk temperature
+			chunk.t = noise.perlin2((chunkX + tuneXChunk) / biomeSize, (chunkY + tuneYChunk) / biomeSize);
+			// console.log(chunk.t)
+			chunk.t = (chunk.t - -0.5) / (0.3 - -0.5) + configTemp;
+			chunk.t = Math.max(0,Math.min(chunk.t,1))
+			// lower resolution
+			chunk.t = Math.ceil(chunk.t * 10) / 10;
+
+			// chunk moisture
+			chunk.m = noise.perlin2((chunkX + 1000 + tuneXChunk) / biomeSize, (chunkY + 1000 + tuneYChunk) / biomeSize);
+			chunk.m = (chunk.m - -0.5) / (0.3 - -0.5) + configMoisture;
+			chunk.m = Math.max(0,Math.min(chunk.m,1))
+			// lower resolution
+			chunk.m = Math.ceil(chunk.m * 10) / 10;
+
+			let elevations = 0;
+			let isLand = false;
+
+			// chunk pixels
+			let chunkPixels = [];
+			for (let x0 = 0; x0 < chunkSize; x0++) {
+				chunkPixels.push([]);
+				for (let y0 = 0; y0 < chunkSize; y0++) {
+					let coords = chunkCoordsToCoords(chunkX, chunkY, x0, y0);
+					let x = coords[0];
+					let y = coords[1];
+					let value = generatePerlinNoise((x + tuneX) / landmassSize, (y + tuneY) / landmassSize, detail, smooth);
+					// value = Math.max(0,value);
+					// value = (value+1) / 2;
+	
+					// normalize to 0-1
+					value = (value - noiseMin) / (noiseMax - noiseMin);
+
+					value += configElevation;
+
+					value = Math.max(0,value);
+					value = Math.min(1,value);
+
+					// Calculate distance from the edge of the map
+					let distanceToEdge = Math.min(x+1, y+1, width - x, height - y);
+
+					// Apply a falloff function to make borders low elevation
+					let falloff = distanceToEdge / (Math.min(width, height) / borderFalloff);  // Distance-based falloff
+					falloff = Math.min(1, falloff);  // Ensure falloff is between 0 and 1
+	
+					// Blend the perlin noise with the falloff
+					value *= falloff
+	
+					// lower resolution
+					value = Math.ceil(value * 10) / 10;
+
+					// console.log(value);
+					chunkPixels[x0].push(value);
+					elevations += value;
+					if (value > waterLevel) isLand = true;
+				}
+			}
+			chunk.p = chunkPixels;
+			chunk.e = elevations/(chunkSize*chunkSize);
+			// lower resolution
+			chunk.e = Math.ceil(chunk.e * 10) / 10;
+			if (chunk.e <= waterLevel+0.05) chunk.m = 1;
+			if (!isLand) chunk.b = "water";
+			planet.chunks[chunkKey] = chunk;
+		}
+	}
+
+	// bounding pixels for testing
+	// planet.chunks["0,0"].p[0][0] = 0.99;
+	// planet.chunks[(planetWidth / chunkSize - 1)+","+(planetHeight / chunkSize - 1)].p[chunkSize-1][chunkSize-1] = 0.99;
+
+	generateStarSystem(true);
+
+	return planet;
+}
+
+farColors = [
+	[255, 92, 92],//red
+	[92, 255, 92],//green
+	[92, 92, 255],//blue
+	[255, 174, 92],//orange
+	[174, 92, 255],//purple
+	[92, 255, 255],//cyan
+	[255, 92, 255],//magenta
+	[255, 255, 92],//yellow
+]
+function calculateLandmasses() {
+	if (!reg.landmass) regCreate("landmass");
+
+	if (reg.landmass._id !== 1) {
+		reg.landmass = defaultSubregistry();
+		for (let chunkKey in planet.chunks) {
+			delete planet.chunks[chunkKey].v.g
+		}
+	}
+
+	// Pre-landmass (Mountains)
+	for (let chunkKey in planet.chunks) {
+		const chunk = planet.chunks[chunkKey];
+		debugContext.clChunk1 = chunk;
+		if (chunk.v.g === undefined && chunk.b === "mountain") {
+			const mountains = floodFill(chunk.x, chunk.y, (c) => c.b === "mountain");
+			const landmass = regAdd("landmass", {
+				name: "Mount "+generateWord(randRange(1,2), true),
+				color: biomes.mountain.color,
+				size: mountains.length,
+				type: "mountain"
+			});
+			mountains.forEach((c) => {
+				c.v.g = landmass.id;
+			})
+		}
+	}
+	delete debugContext.clChunk1;
+
+	const waterLevel = planet.config.waterLevel;
+
+	// Main landmasses
+	for (let chunkKey in planet.chunks) {
+		const chunk = planet.chunks[chunkKey];
+		debugContext.clChunk2 = chunk;
+		if (chunk.v.g === undefined && chunk.b !== "water") {
+			const parts = floodFill(chunk.x,chunk.y,(c) => c.b !== "water" && c.v.g === undefined, undefined, (c) => {
+				// console.log([].concat(...c.p).filter((p) => p <= waterLevel));
+				return [].concat(...c.p).filter((p) => p <= waterLevel).length > (planet.config.chunkSize*0.95);
+			});
+
+			if (parts.length < 6) continue;
+
+			let landmass = regAdd("landmass", {
+				name: generateWord(randRange(2,3), true),
+				size: 0
+			});
+			let id = landmass.id;
+			landmass.color = farColors[(id-1) % farColors.length];
+
+			landmass.boundLeft   = planet.config.width;
+			landmass.boundRight  = 0;
+			landmass.boundTop    = planet.config.height;
+			landmass.boundBottom = 0;
+
+			// console.log(parts);
+			parts.forEach((newChunk) => {
+				newChunk.v.g = id;
+				landmass.size++;
+				// if (newChunk.x < landmass.boundLeft) landmass.boundLeft = newChunk.x;
+				// if (newChunk.x > landmass.boundRight) landmass.boundRight = newChunk.x;
+				// if (newChunk.y < landmass.boundTop) landmass.boundTop = newChunk.y;
+				// if (newChunk.y > landmass.boundBottom) landmass.boundBottom = newChunk.y;
+			})
+
+			if (landmass.size < 40) landmass.type = "island";
+			else landmass.type = "continent";
+		}
+	}
+	delete debugContext.clChunk2;
+
+	// Post-landmass (Edges and islands)
+	for (let chunkKey in planet.chunks) {
+		const chunk = planet.chunks[chunkKey];
+		debugContext.clChunk3 = chunk;
+		if (chunk.v.g === undefined && chunk.b !== "water") {
+			const parts = floodFill(chunk.x,chunk.y,(c) => c.b !== "water" && c.v.g === undefined);
+			if (parts.length > 5) {
+				let landmass = regAdd("landmass", {
+					name: generateWord(randRange(2,3), true),
+					size: parts.length,
+					type: "island"
+				});
+				landmass.color = farColors[(landmass.id-1) % farColors.length];
+				parts.forEach((newChunk) => {
+					newChunk.v.g = landmass.id;
+				})
+			}
+			else {
+				let nearest = nearestChunk(chunk.x, chunk.y, (c) => c.v.g, (c) => c.b === "water");
+				if (nearest) {
+					parts.forEach((newChunk) => {
+						newChunk.v.g = nearest.v.g;
+					})
+				}
+				else {
+					let landmass = regAdd("landmass", {
+						name: generateWord(randRange(2,3), true),
+						size: parts.length,
+						type: "island"
+					});
+					landmass.color = farColors[(landmass.id-1) % farColors.length];
+					parts.forEach((newChunk) => {
+						newChunk.v.g = landmass.id;
+					})
+				}
+			}
+		}
+	}
+	delete debugContext.clChunk3;
+}
+function generateStarSystem(force=false) {
+	if (force) {
+		reg.body = defaultSubregistry();
+		reg.system = defaultSubregistry();
+	}
+	else if (reg.body._id !== 1) return; //already generated
+
+	const system = regAdd("system", {
+		name: (planet.name || generateWordEndings(wordComponents.starSuffixes, randRange(1,2), true)).split(" ")[0]
+	});
+	planet.system = system.id;
+
+	const starCount = choose([1,1,1,1,1,1,1,2]);
+	system.subtype = (starCount > 1 ? "binary" : "star") + " system";
+	let stars = [];
+	for (let i = 0; i < starCount; i++) {
+		const star = regAdd("body", {
+			name: system.name + " " + wordComponents.ORDINAL_ALPHA[i],
+			type: "star",
+			system: system.id
+		});
+		stars.push(star);
+
+		let magnitude = randRange(-10, 20);
+		let spectral = randRange(1,9);
+		let spectralT = (spectral - 1) / 8;
+		let lightness = 100-(Math.abs(spectralT - 0.5)*100);
+
+		let rgb = [
+			Math.round(145 + spectralT*(255 - 145) + lightness),
+			Math.round(182 + spectralT*(46 - 182) + lightness),
+			Math.round(255 - spectralT*255 + lightness),
+		]
+		star.color = rgb;
+
+		if (spectral <= 3) star.subtype = "blue";
+		else if (spectral <= 6) star.subtype = magnitude <= 0 ? "bright" : "white";
+		else star.subtype = magnitude <= 15 ? "red" : "brown";
+		
+		if (magnitude <= -5) star.subtype += " supergiant";
+		else if (magnitude <= -5) star.subtype += " supergiant";
+		else if (magnitude <= 0) star.subtype += " giant";
+		else if (magnitude <= 2) star.subtype += " subgiant";
+		else star.subtype += " dwarf";
+
+		star.magnitude = magnitude;
+		star.spectral = spectral;
+	}
+	system.color = stars[0].color;
+
+	const planetCount = randRange(3,9);
+	let homeIndex = randRange(Math.round(planetCount / 3), Math.round(planetCount / 2));
+	homeIndex = Math.max(homeIndex, 2);
+	for (let i = 0; i < planetCount; i++) {
+		let starName = system.name + " ";
+		let star = stars[0];
+		if (starCount > 1) {
+			star = choose(stars);
+			starName = star.name + " ";
+		}
+		const index = i + 1;
+
+		const newPlanet = regAdd("body", {
+			name: starName + wordComponents.ORDINAL_ALPHA[i].toLowerCase(),
+			type: "planet",
+			orbit: star.id,
+			pos:  Math.round((index <= homeIndex   ?   (index) / homeIndex   :   homeIndex ** ((index - homeIndex + 1) * 0.5)) * 100) / 100,
+		})
+		if (index === homeIndex) { //main planet
+			newPlanet.home = true;
+			newPlanet.color = planet.color;
+			star.home = true;
+			planet.name = newPlanet.name;
+			planet.body = newPlanet.id;
+		}
+		else {
+			newPlanet.color = HSLtoRGB([randRange(0,100) / 100, 1, 0.33]);
+			newPlanet.named = false;
+		}
+		const moonCount = randRange((index === homeIndex ? 1 : 0), 3);
+		let centerMoonIndex = randRange(Math.round(moonCount / 3), Math.round(moonCount / 2));
+		centerMoonIndex = Math.max(centerMoonIndex, 2);
+		for (let i = 0; i < moonCount; i++) {
+			const moonIndex = i + 1;
+			let moon = regAdd("body", {
+				name: newPlanet.name + " " + wordComponents.ORDINAL_ROMAN[i],
+				type: "moon",
+				color: HSLtoRGB([randRange(1,360) / 360, 0.21, 0.72]),
+				orbit: newPlanet.id,
+				pos:  Math.round((moonIndex <= centerMoonIndex   ?   (moonIndex) / centerMoonIndex   :   centerMoonIndex ** ((moonIndex - centerMoonIndex + 1) * 0.5)) * 100) / 100,
+			})
+			if (index !== homeIndex) moon.named = false;
+		}
+	}
+}
+
+planet = null;
+reg = null;
+usedNames = {};
+
+function updateBiomes() {
+	for (let chunkKey in planet.chunks) {
+		let chunk = planet.chunks[chunkKey];
+		debugContext.ubChunk = chunk;
+		let closestBiome = null;
+		let closestDiff = Infinity;
+
+		if (chunk.e <= planet.config.waterLevel) {
+			chunk.b = "water";
+		}
+
+		for (let biomeKey in biomes) {
+			let biome = biomes[biomeKey];
+			if (biome.noAuto) continue;
+			if (chunk.b !== undefined && biomes[chunk.b].noAuto) continue;
+
+			// Calculate the squared differences for each property
+			let diff = 0;
+			if (biome.elevation !== undefined && chunk.e !== undefined) {
+				diff += Math.pow(biome.elevation - chunk.e, 2);  // Squared difference for elevation
+			}
+			if (biome.temp !== undefined && chunk.t !== undefined) {
+				diff += Math.pow(biome.temp - chunk.t, 2);  // Squared difference for temperature
+			}
+			if (biome.moisture !== undefined && chunk.m !== undefined) {
+				diff += Math.pow(biome.moisture - chunk.m, 2);  // Squared difference for moisture
+			}
+
+			// Use Euclidean distance (square root of sum of squares)
+			let distance = Math.sqrt(diff);
+
+			if (distance < closestDiff) {
+				closestBiome = biomeKey;
+				closestDiff = distance;
+			}
+		}
+
+		if (chunk.e === 1) {
+			closestBiome = "mountain";
+			if (chunk.v.s) delete chunk.v.s;
+		}
+
+		if (closestBiome) {
+			chunk.b = closestBiome;
+		}
+	}
+	delete debugContext.ubChunk;
+}
+
+function statsAdd(key, number) {
+	const split = key.split(".");
+	key = split[0];
+	const subkey = split[1];
+	let sub;
+	if (subkey) {
+		if (!planet.stats[key]) planet.stats[key] = {};
+		sub = planet.stats[key];
+		key = subkey;
+	}
+	else sub = planet.stats;
+
+	if (sub[key] === undefined) sub[key] = number;
+	else sub[key] += number;
+}
+
+canvasLayers = {};
+canvasLayersCtx = {};
+canvasLayersOrder = [];
+function addCanvasLayer(name) {
+	let canvas = document.createElement("canvas");
+	let ctx = canvas.getContext("2d");
+	canvasLayers[name] = canvas;
+	canvasLayersCtx[name] = ctx;
+	canvasLayersOrder.push(name);
+}
+function clearCanvasLayers() {
+	resizeCanvases();
+}
+function resizeCanvases() {
+	mapCanvas.width = planet.config.width*planet.config.pixelSize;
+	mapCanvas.height = planet.config.height*planet.config.pixelSize;
+	ctx.webkitImageSmoothingEnabled = false;
+	ctx.mozImageSmoothingEnabled = false;
+	ctx.imageSmoothingEnabled = false;
+	ctx.textRendering = "geometricPrecision";
+	for (let key in canvasLayers) {
+		let ctx = canvasLayersCtx[key];
+		canvasLayers[key].width = planet.config.width * (key === "markers" ? planet.config.pixelSize*$c.markerResolution : 1);
+		canvasLayers[key].height = planet.config.height * (key === "markers" ? planet.config.pixelSize*$c.markerResolution : 1);
+		ctx.webkitImageSmoothingEnabled = false;
+		ctx.mozImageSmoothingEnabled = false;
+		ctx.imageSmoothingEnabled = false;
+		ctx.textRendering = "geometricPrecision";
+	}
+}
+addCanvasLayer("terrain");
+addCanvasLayer("highlight");
+addCanvasLayer("markers");
+addCanvasLayer("cursor");
+// resizeCanvases();
+
+function fitToScreen() {
+	let width = Math.min(700,window.innerWidth-planet.config.pixelSize);
+	width -= width % planet.config.pixelSize;
+	// mapCanvas.style.maxWidth = width+"px";
+	let mapPanel = document.getElementById("mapPanel");
+	mapPanel.style.height = "";
+	if (window.innerWidth >= 860) {
+		let gameHalf1_1 = document.getElementById("gameHalf1-1");
+		if (gameHalf1_1.clientHeight < mapPanel.clientHeight) {
+			mapPanel.style.height = gameHalf1_1.clientHeight + "px";
+		}
+		mapCanvas.style.aspectRatio = `auto ${mapCanvas.width} / ${mapCanvas.height}`;
+		let mapDiv = document.getElementById("mapDiv");
+		let underMap = document.getElementById("underMap");
+		let statsMain = document.getElementById("statsMain");
+		statsMain.style.height = mapDiv.clientHeight + "px";
+		// document.getElementById("statsPanel").style.height = (mapDiv.clientHeight + underMap.clientHeight) + "px";
+		document.getElementById("mapDiv").style.aspectRatio = `auto ${mapCanvas.width} / ${mapCanvas.height}`;
+		// document.getElementById("statsPanel").style.height = (document.getElementById("mapPanel").clientHeight + 4.45) + "px";
+		// setTimeout(() => {
+
+		// 	document.getElementById("statsPanel").style.height = mapPanel.clientHeight + "px";
+		// },10)
+		// document.getElementById("statsPanel").style.height = (Math.min(document.getElementById("gameHalf1-1").clientHeight+0.5, document.getElementById("mapPanel").clientHeight + 4.45)) + "px";
+	}
+}
+window.addEventListener("resize", () => {
+	fitToScreen();
+});
+// window.addEventListener("load", () => {
+// 	fitToScreen();
+// });
+// fitToScreen();
+
+function choose(array) {
+	return array[Math.floor(Math.random() * array.length)];
+}
+function randRange(min, max) {
+	min = Math.ceil(min);
+	max = Math.floor(max);
+	return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+function blendRGB(array) {
+	let r = 0; let g = 0; let b = 0;
+	for (let i = 0; i < array.length; i++) {
+		const rgb = array[i];
+		r += rgb[0];
+		g += rgb[1];
+		b += rgb[2];
+	}
+	r = Math.round(r / array.length);
+	g = Math.round(g / array.length);
+	b = Math.round(b / array.length);
+	return [r,g,b];
+}
+adjacentCoords = [
+	[0,-1],
+	[1,0],
+	[0,1],
+	[-1,0]
+]
+squareCoords = [
+	[-1,-1],
+	[0,-1],
+	[1,-1],
+	[-1,0],
+	[0,0],
+	[1,0],
+	[-1,1],
+	[0,1],
+	[1,1]
+]
+
+waterColors = [
+	[25, 73, 170],
+	[25, 73, 170],
+	[69, 115, 208],
+	[122, 155, 222],
+	[178, 202, 252]
+];
+waterColorsOld = waterColors;
+// v = 0.34;
+// c = l[Math.min(l.length-1,Math.floor(v*(l.length)))];
+
+function setView(view) {
+	if (!view) view = (reg.town._id === 1 && !planet.settled) ? "terrain" : "territory";
+	currentView = view;
+	document.getElementById("viewName").innerText = titleCase(view);
+	clearCanvasLayers();
+	renderMap();
+	renderHighlight();
+	updateCanvas();
+
+	userSettings.view = currentView;
+	saveSettings();
+}
+
+compareWater = {"water":true}
+function renderMap() {
+	let ctx = canvasLayersCtx.terrain;
+	const chunkSize = planet.config.chunkSize;
+	const waterLevel = planet.config.waterLevel;
+	for (let chunkKey in planet.chunks) {
+		let chunk = planet.chunks[chunkKey];
+		let biome = biomes[chunk.b];
+		// let biomeElevation = biome.elevation || 0.5;
+
+		let biomeColor = biome.colorOverride || biome.color;
+
+		// console.log(chunk.p)
+		// render chunk pixels
+		for (let x0 = 0; x0 < chunkSize; x0++) {
+			for (let y0 = 0; y0 < chunkSize; y0++) {
+
+				let coords = chunkCoordsToCoords(chunk.x, chunk.y, x0, y0);
+				let x = coords[0];
+				let y = coords[1];
+				let value = chunk.p[x0][y0];
+
+				if (viewData[currentView].showTerrain === true) {
+					// let pixelBiome = chunk.b;
+					let pixelColor = biomeColor;
+					let isWater = chunk.b === "water";
+
+					// pixel biome blending
+					if (y0 === chunkSize-1 && Math.sin((chunk.x+x0)*167) < 0.5) {
+						let adjacentChunk = planet.chunks[(chunk.x)+","+(chunk.y+1)];
+						if (adjacentChunk) {
+							pixelColor = biomes[adjacentChunk.b].colorOverride || biomes[adjacentChunk.b].color;
+							value = adjacentChunk.p[x0][0];
+							isWater = compareWater[adjacentChunk.b];
+						}
+					}
+					else if (x0 === chunkSize-1 && Math.sin((chunk.y+y0)*167) < 0.5) {
+						let adjacentChunk = planet.chunks[(chunk.x+1)+","+(chunk.y)];
+						if (adjacentChunk) {
+							pixelColor = biomes[adjacentChunk.b].colorOverride || biomes[adjacentChunk.b].color;
+							value = adjacentChunk.p[0][y0];
+							isWater = compareWater[adjacentChunk.b];
+						}
+					}
+
+					let color;
+					if (value <= waterLevel || (isWater && value === 0.5)) { // water colors
+						value += 1-waterLevel-0.1;
+						value = Math.max(value, 0);
+						color = waterColors[Math.min(waterColors.length-1,Math.floor(value*(waterColors.length)))];
+					}
+					else { // land colors
+
+						let percent = value - (waterLevel - $c.defaultWaterLevel);
+
+						// if (value )
+						
+						color = [pixelColor[0] * percent + 50, pixelColor[1] * percent + 50, pixelColor[2] * percent + 50];
+						
+						// if (chunk.b === "water") {
+						// 	console.log(chunk.b);
+						// }
+						// if (color[0]===63 && color[1]===88 && color[2]===135) {
+						// 	console.log(pixelColor)
+						// }
+						// rgb(63,88,135)
+						// rgb(63,88,135)
+
+						// 59,82,127)
+
+						// color = [255,255,255];
+
+
+					}
+					if (userSettings.desaturate) {
+						let hsl = RGBtoHSL(color);
+						// hsl[1] = Math.min(hsl[1], 0.5);
+						hsl[1] *= 0.7;
+						color = HSLtoRGB(hsl);
+					}
+					color = "rgb("+color.join(",")+")";
+					ctx.fillStyle = color;
+					ctx.fillRect(x, y, 1, 1);
+				}
+
+				if (viewData[currentView].pixelColor !== undefined) {
+					let color = viewData[currentView].pixelColor(value);
+					if (color) {
+						ctx.fillStyle = viewData[currentView].colorFunction + color.join(",") + ")";
+						ctx.fillRect(x, y, 1, 1);
+					}
+				}
+
+			}
+		}
+
+		if (viewData[currentView].chunkColor !== undefined) {
+			let color = viewData[currentView].chunkColor(chunk);
+			if (color) {
+				ctx.fillStyle = viewData[currentView].colorFunction + color.join(",") + ")";
+				ctx.fillRect(chunk.x*chunkSize, chunk.y*chunkSize, chunkSize, chunkSize);
+			}
+		}
+
+	}
+}
+
+mousePos = null;
+currentZoom = 1;
+controlState = {};
+selectedChunk = null;
+currentPlayer = null;
+currentEvents = {};
+recentEvents = [];
+currentPopup = null;
+promptState = null;
+currentView = "terrain";
+currentHighlight = null;
+currentExecutive = null;
+currentExecutiveButton = null;
+currentExecutiveSorter = null;
+currentEditing = null;
+autoPlaying = false;
+debugTemp = null;
+
+function handleEntityMouseDown(e) {
+	if (controlState.shift) {
+		if (window.getSelection) {window.getSelection().removeAllRanges();}
+		else if (document.selection) {document.selection.empty();}
+	}
+}
+function handleEntityClick(e) {
+	let reg = e.getAttribute("data-reg");
+	let id = parseInt(e.getAttribute("data-id"));
+	regBrowse(reg,id);
+}
+function handleEntityHover(e) {
+	currentHighlight = [e.getAttribute("data-reg"),parseInt(e.getAttribute("data-id"))];
+	renderHighlight()
+	updateCanvas();
+}
+function handleEntityHoverOut(e) {
+	currentHighlight = currentEditing || null;
+	renderHighlight()
+	updateCanvas();
+}
+function handleMessageClick(e) {
+	if (controlState.meta) {
+		e.parentNode.remove();
+		return;
+	}
+
+	let elem = e.parentNode;
+	let logText = elem.querySelector(".logText");
+	logText.querySelectorAll(".font2").forEach(el => el.style.visibility = "hidden");
+
+	let text = logText.innerText;
+	text = text.replace(/  +/, " ");
+
+	logText.querySelectorAll(".font2").forEach(el => el.style.visibility = "");
+
+	text = "**[" + e.innerText + "]** " + text;
+
+	if (elem.querySelector('.logAct span[type="no"][selected="true"]')) text += " [NO]";
+	if (elem.querySelector('.logAct span[type="yes"][selected="true"]')) text += " [YES]";
+
+	sharePrompt(text);
+}
+
+function renderCursor() {
+	let ctx = canvasLayersCtx.cursor;
+	ctx.clearRect(0, 0, canvasLayers.cursor.width, canvasLayers.cursor.height);
+	const chunkSize = planet.config.chunkSize;
+	if (mousePos) {
+		ctx.fillStyle = "rgba(240,240,240,0.5)";
+		//ctx.fillRect(mousePos.x, mousePos.y, 1, 1);
+		ctx.fillRect(mousePos.chunkX*chunkSize, mousePos.chunkY*chunkSize, chunkSize, chunkSize);
+	}
+	if (selectedChunk) {
+		ctx.fillStyle = "rgba(240,240,240,0.8)";
+		ctx.fillRect(selectedChunk.x*chunkSize, selectedChunk.y*chunkSize, chunkSize, chunkSize);
+	}
+}
+
+function updateCanvas() {
+	ctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+	for (let i = 0; i < canvasLayersOrder.length; i++) {
+		const canvas = canvasLayers[canvasLayersOrder[i]];
+		ctx.drawImage(canvas, 0, 0, mapCanvas.width, mapCanvas.height); 
+	}
+}
+
+function floodFill(chunkX,chunkY,check,limit,stopAt) {
+	let checked = {};
+	let toCheck = [chunkX+","+chunkY];
+	let results = [];
+	while (toCheck.length) {
+		let c = planet.chunks[toCheck[0]];
+		checked[toCheck[0]] = true;
+		if (c !== undefined && check(c)) {
+			results.push(c);
+			if (limit !== undefined && results.length >= limit) break;
+			// if (stopAt !== undefined && stopAt(c)) {
+			//   toCheck.shift();
+			//   continue;
+			// }
+			for (let i = 0; i < adjacentCoords.length; i++) {
+				const coords = adjacentCoords[i];
+				const chunkKey = (c.x+coords[0]) + "," + (c.y+coords[1]);
+				if (checked[chunkKey] !== undefined || planet.chunks[chunkKey] === undefined) continue;
+				if (toCheck.indexOf(chunkKey) !== -1) continue;
+				if (stopAt !== undefined && stopAt(planet.chunks[chunkKey])) {
+					if (check(planet.chunks[chunkKey])) results.push(planet.chunks[chunkKey]);
+					continue;
+				}
+				toCheck.push(chunkKey);
+			}
+		}
+		toCheck.shift();
+	}
+	return results;
+}
+function nearestChunk(chunkX,chunkY,check,stop) {
+	let checked = {};
+	let toCheck = [chunkX+","+chunkY];
+	while (toCheck.length) {
+		let c = planet.chunks[toCheck[0]];
+		checked[toCheck[0]] = true;
+		if (check(c) && (stop === undefined || !stop(c))) return c;
+		if (c !== undefined) {
+			for (let i = 0; i < adjacentCoords.length; i++) {
+				const coords = adjacentCoords[i];
+				const chunkKey = (c.x+coords[0]) + "," + (c.y+coords[1]);
+				if (checked[chunkKey] !== undefined || planet.chunks[chunkKey] === undefined) continue;
+				if (toCheck.indexOf(chunkKey) !== -1) continue;
+				if (stop === undefined || (stop === undefined || !stop(c))) {
+					toCheck.push(chunkKey);
+				}
+			}
+		}
+		toCheck.shift();
+	}
+	return null;
+}
+function randomChunk(check) {
+	return choose(filterChunks(check));
+}
+function randomChunks(check, count) {
+	let choices = filterChunks(check);
+	let chunks = [];
+	if (!choices.length) return chunks;
+	for (let i = 0; i < count; i++) {
+		chunks.push(choose(choices));
+	}
+	return chunks;
+}
+function filterChunks(check) {
+	let results = [];
+	for (let chunkKey in planet.chunks) {
+		let c = planet.chunks[chunkKey];
+		if (check(c)) results.push(c);
+	}
+	return results;
+}
+function chunkIsNearby(chunkX, chunkY, check, radius=5) {
+	const coords = circleCoords(chunkX, chunkY, radius);
+	for (let i = 0; i < coords.length; i++) {
+		const coord = coords[i];
+		const chunk = chunkAt(coord.x, coord.y);
+		if (chunk && check(chunk)) return chunk;
+	}
+	return false;
+}
+
+function nearbyTown(chunkX,chunkY,check,optionCount) {
+	let checked = {};
+	let options = [];
+	let chunk = nearestChunk(chunkX, chunkY, (c) => {
+		if (!c.v.s) return false;
+
+		if (checked[c.v.s]) return false;
+		checked[c.v.s] = true;
+		let town = regGet("town", c.v.s);
+		if (!town) return false;
+
+		if (!check || check(town)) {
+			if (optionCount) {
+				options.push(town);
+				if (options.length < optionCount) return false
+			}
+			return true;
+		}
+	})
+	if (optionCount && options.length) {
+		let weights = [];
+		for (let i = 0; i < options.length; i++) {
+			weights.push(options.length - i);
+		}
+		return chooseWeighted(options, weights);
+	}
+	if (!chunk) return null;
+	return regGet("town", chunk.v.s);
+}
+
+function distanceCoords(x1, y1, x2, y2) {
+	const a = x1 - x2;
+	const b = y1 - y2;
+
+	return Math.sqrt( a*a + b*b );
+}
+
+function circleCoords(chunkX,chunkY,radius) {
+	let coords = [];
+	for (let i = Math.max(0, chunkX - radius); i <= Math.min(planet.config.width, chunkX + radius); i++) {
+		for (let j = Math.max(0, chunkY - radius); j <= Math.min(planet.config.height, chunkY + radius); j++) {
+			if (Math.pow(i - chunkX, 2) + Math.pow(j - chunkY, 2) <= Math.pow(radius, 2)) {
+				coords.push({x: i,y: j});
+			}
+		}
+	}
+	return coords;
+}
+function circleChunks(chunkX,chunkY,radius,taper=false) {
+	const coords = circleCoords(chunkX,chunkY,radius);
+	let chunks = [];
+	coords.forEach((coord) => {
+		const chunk = chunkAt(coord.x, coord.y);
+		if (!chunk) return;
+		if (taper === true) {
+			const distance = distanceCoords(chunkX, chunkY, coord.x, coord.y);
+			if (distance/radius > 0.5 && Math.random() < distance/radius) return;
+		}
+		chunks.push(chunk);
+	})
+	return chunks;
+}
+
+
+
+
+wordComponents = {};
+wordComponents.C  = "B,C,D,F,G,H,J,K,L,M,N,P,QU,R,S,T,V,W,Y,Z";
+wordComponents.C2 = wordComponents.C + ",X,CK,NG,SS,'";
+wordComponents.V  = "A,A,A,E,E,É,I,I,I,O,O,O,U,U";
+wordComponents.V2 = wordComponents.V + "," + wordComponents.V + ",OU,AE,EE,IE,EA,EU,UI,OI,AI,OO,OW,OE,IA";
+
+wordComponents.C = wordComponents.C.toLowerCase().split(",");
+wordComponents.C2 = wordComponents.C2.toLowerCase().split(",");
+wordComponents.V = wordComponents.V.toLowerCase().split(",");
+wordComponents.V2 = wordComponents.V2.toLowerCase().split(",");
+
+wordComponents.C_ = {
+	b: "lr",
+	c: "hlr",
+	d: "rw",
+	f: "lr",
+	g: "hlnr",
+	k: "lr",
+	p: "hlr",
+	s: "hklmnptw",
+	t: "hrw",
+	v: "lr",
+	w: "hr",
+	z: "hl"
+}
+
+wordComponents._C = {
+	b: "lmsz",
+	c: "lr",
+	d: "lnrs",
+	f: "lrw",
+	g: "lnrw",
+	j: "dl",
+	k: "bfnrsw",
+	l: "rw",
+	m: "lr",
+	n: "lrw",
+	p: "lmrsw",
+	s: "bdgklmnprtvw",
+	t: "cflmnprvwz"
+}
+
+wordComponents.V_ = {
+	a: "lph,dge".split(","),
+	y: "mph".split(","),
+	e: "dge".split(","),
+	o: "dge".split(","),
+	u: "dge".split(","),
+}
+
+wordComponents.prefixes = {};
+
+wordComponents.prefixes.TOWN = [
+	["los ",1],
+	["las ",1],
+	["la ",1],
+]
+
+wordComponents.prefixes.NEW = [
+	["new ",1],
+	["nova ",2],
+]
+wordComponents.prefixes.MOUNTAINOUS = [
+	["monte",2],
+]
+wordComponents.prefixes.WATERFRONT = [
+	["cape ",2],
+]
+
+wordComponents.prefixes.NORTH = [
+	["north ",1],
+]
+wordComponents.prefixes.EAST = [
+	["east ",1],
+]
+wordComponents.prefixes.WEST = [
+	["west ",1],
+]
+wordComponents.prefixes.SOUTH = [
+	["south ",1],
+]
+
+wordComponents.flags = {};
+wordComponents.flags.TEMPLATE = [
+	" $ ","($)","/$\\","\\$/","/$/",")$(","⁆$⁅","»$«","«$»","−$−","‖$‖","→$←","←$→","░$░","▒$▒","⏴$⏵","⏵$⏴","▌$▐","▛$▟","▙$▜","≣$≣","⏵$―","+$―","$==","◣$◥","◤$◢","» $","$≣≣","⏸$⏸","█$█"
+];
+wordComponents.flags.EMBLEM = "A,A,A,@,¢,X,₸,₪,≈,―,§,†,‡,∑,®,¤,↕,☼,☻,☺,◦,●,Ξ,Ψ,Ω,ǃ,☮,Ϫ,Ͳ,⏶,⏻,🖤,👽,🥥,🌴,🏆,◆,𝕏,☗,☖,🏠,Ӂ,⏼,⏷".split(",");
+
+wordComponents.CURRENCY = {
+	a: "Δ,₳,Ѧ",
+	b: "ẞ,ß,Б,Ҕ,Ƀ,ƀ,฿,Ȣ",
+	c: "©,¢,₵,₠,Ͼ",
+	d: "δ,ԁ",
+	e: "£,€,≡,Ξ,ξ,₤,Ʃ",
+	f: "₣,ƒ,Ϝ,៛",
+	g: "Ǥ",
+	h: "Ҥ",
+	i: "I,Í",
+	j: "₺",
+	k: "Ҡ,₭",
+	l: "₺",
+	m: "М",
+	n: "₪,Й,П,א,Ͷ,ỻ",
+	o: "@,Ø,Ф,Ω,Ө",
+	p: "₽,₱,⁋",
+	q: "Q",
+	r: "®,Я,₹,֏",
+	s: "$,☼",
+	t: "₸,Ͳ,✛",
+	u: "μ,Ů,Ʉ,Ʋ",
+	v: "V,Ỵ",
+	w: "Щ,Ψ,ʬ,Ѡ,₩",
+	x: "Ж,※,𝕏",
+	y: "Ψ,Ұ,Ҹ",
+	z: "Z",
+	_: "¤"
+}
+
+wordComponents.ORDINAL_ALPHA = "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z".split(",");
+wordComponents.ORDINAL_ROMAN = "I,II,III,IV,V,VI,VII,VIII,IX,X,XI,XII,XIII,XIV,XV,XVI,XVII,XVIII,XIX,XX,XXI,XXII,XXIII,XXVI,XXV".split(",");
+wordComponents.ORDINAL_GREEK = "Α,Β,Γ,Δ,Ε,Ζ,Η,Θ,Ι,Κ,Λ,Μ,Ν,Ξ,Ο,Π,Ρ,Σ Σ,Τ,Υ,Φ,Χ,Ψ,Ω".split(",");
+wordComponents.ORDINAL_ENGLISH = "1st,2nd,3rd,4th,5th,6th,7th,8th,9th,10th,11th,12th,13th,14th,15th".split(",");
+
+badWords = window.atob('ZnVjLGZ1ayxzaGl0LG5pZ2csbmlnZSxmYWcsY29jLGNvayxib29iLGN1bSxreWtlLGtpa2Usc2V4LGFzcyxkaWMsZGlrLHBlbmlzLHZhZ2kscGVkbyxwb3Ju').split(",");
+
+function generateWord(syllableCount, titled=false, prefixes=null) {
+	let word = "";
+	let syllableCount0 = syllableCount;
+
+	syllableCount = syllableCount || randRange(2,3);
+
+	if (prefixes && Math.random() < Math.min(12,prefixes.length)/13) {
+		const prefix = choose(prefixes);
+		word += prefix[0];
+		syllableCount -= prefix[1];
+	}
+
+	let type = Math.random() < 0.5;
+	// if (type === false && syllableCount === 1) syllableCount++;
+
+	let lastLetter = "";
+	for (let i = 0; i < syllableCount; i++) {
+		let letter;
+		// console.log(lastLetter.length);
+		if (type === true) {
+			if (wordComponents.V_[lastLetter] && Math.random() < 1/26) {
+				letter = choose(wordComponents.V_[lastLetter]);
+				if (letter.slice(-1).match(/[aeiou]/)) {
+					syllableCount--;
+					type = !type;
+				}
+			}
+			else letter = choose(i === 0 ? wordComponents.C : wordComponents.C2);
+			syllableCount++;
+		}
+		else letter = choose(lastLetter.length > 1 ? wordComponents.V : wordComponents.V2);
+		if (wordComponents.C_[letter] !== undefined && Math.random() < 1/26) {
+			letter += choose(wordComponents.C_[letter]);
+		}
+		if (i && wordComponents._C[letter] !== undefined && Math.random() < 1/26) {
+			letter = choose(wordComponents._C[letter]) + letter;
+		}
+		word += letter;
+		type = !type;
+		lastLetter = letter;
+	}
+
+	word = word.replace(/'$/, "");
+
+	if (type === true && (Math.random() < 0.5 || word.length === 1) && word.slice(-1).match(/[aeiou]/)) {
+		word += choose(Math.random() < 0.5 ? wordComponents.C : wordComponents.C2);
+		if (word.slice(-1).match(/[aeiou]/)) {
+			word = word.slice(0,-1);
+		}
+	}
+
+	for (let i = 0; i < badWords.length; i++) {
+		const badWord = badWords[i];
+		if (word.indexOf(badWord) !== -1) {
+			word = generateWord(syllableCount0, false, prefixes);
+			break;
+		}
+	}
+	if (usedNames[word]) word = generateWord(syllableCount0, false, prefixes);
+
+	if (titled) {
+		if (prefixes) word = titleCase(word);
+		else word = word[0].toUpperCase() + word.substring(1);
+	}
+
+	return word;
+}
+
+wordComponents.nameSuffixes = {
+	b: "bbie,bby,be,ben,bert,beth,bus,bber,berg,borne,belle",
+	c: "cas,cia,cis,cisca,cisco,colas,cy,cie,city",
+	d: "dan,den,der,do,don,dra,dre,driel,dro,dyn,drew,dder,doc,ddy,dyne,drey",
+	f: "fer,ffany,ffin,fia,ffer,ford",
+	g: "ga,go,gore,gorn,gton,gard",
+	h: "ham,hard,heus,him,hine,his,hua,hyr,hew,hien,hart,han,hon",
+	j: "jah,jamin",
+	k: "ke,kie,ky,ker,kiel",
+	l: "lar,lifa,lina,lius,lix,lot,lyn,lynn,lon,ler,loch,liver,loe,llow,lay,lia,lotte,llie,lee,lle,laire,laide,lla,lie,line,let,lett",
+	m: "mael,mas,mena,miah,mina,mine,mis,mith,mmed,man,mmer,mann,mma,mille,mily",
+	n: "na,nald,ne,niel,nix,nna,nny,nner,nior,nor,nry",
+	p: "patra,peare,per,pher,pian,pton,peng,pper,phia",
+	q: "que,queline,quie,quin,quín",
+	r: "rael,ran,rdo,rett,ria,rie,riet,rion,rles,rra,rris,rtin,rump,ry,rew,rik,rick,rol,rose,riah,rey,rine",
+	s: "sa,se,sef,sha,shi,smith,son,stair,stein,sus,san,sama,sten,sil,stok",
+	t: "tein,tima,tma,ton,tor,totle,tus,tan,ten,tter,thorne,thon,than,tok",
+	v: "van,ver,verie,very,vid,ven,via",
+	w: "win,wen,wan,wson,wyer,well",
+	x: "xander,xel,xon,xson,xton,xy",
+	y: "yah,yra,yatt,ylon,yan,ymer,yr",
+	z: "zel,zo,zie,ziel,za,zah,zon"
+};
+
+wordComponents.starSuffixes = {
+	b: "bali,bula",
+	c: "cer,cis,cri,cium,corn",
+	d: "dani,dah,dra",
+	f: "",
+	g: "gnus",
+	h: "hiba",
+	j: "jor,joris",
+	k: "",
+	l: "leo,los,lum,lae",
+	m: "meda,mini,medae",
+	n: "nus,nis,nor,ns,ni,noris,nix",
+	p: "peia,pius,peiae,pii,pens",
+	q: "",
+	r: "rux,rus,rii,rius,ra,rami,rina,ris,rion,rona",
+	s: "san,si,sus,sol",
+	t: "ter,terra",
+	v: "vus",
+	w: "",
+	x: "x",
+	y: "ynx,lyra",
+	z: ""
+};
+
+wordComponents.townSuffixes = {
+	b: "burg,burn,burgh,bia,bourg,bury,borough",
+	c: "cisco,chita",
+	d: "desh,dia,dover,dard",
+	f: "ford,field",
+	g: "gton,gham,guay,gal",
+	h: "haven,hill",
+	j: "",
+	k: "",
+	l: "land",
+	m: "mouth,mark,mala",
+	n: "nia,nesia,nce,nee",
+	p: "polis,phia,pines",
+	q: "",
+	r: "ria,rus",
+	s: "ster,side,stan,stein,sia,son,sing",
+	t: "topia,ton,tia,tania",
+	v: "ville,ver",
+	w: "wick,worth",
+	x: "",
+	y: "",
+	z: ""
+};
+
+[wordComponents.nameSuffixes, wordComponents.starSuffixes, wordComponents.townSuffixes].forEach((suffixes) => {
+	for (let key in suffixes) {
+		if (!suffixes[key]) {
+			delete suffixes[key];
+			continue;
+		}
+		suffixes[key] = suffixes[key].split(",");
+	}
+})
+
+function generateWordEndings(endings, syllables, titled=false, vowelEndings=true, prefixes=null) {
+	syllables = syllables || randRange(1,2);
+	let word = generateWord(syllables, false, prefixes);
+	word = word.replace(/[aeioué]+$/i, "");
+	if (!word.length) return generateWordEndings(syllables, endings, titled);
+
+	let letter = word.slice(-1);
+	if (!endings[letter]) return generateWordEndings(syllables, endings, titled);
+	word = word.slice(0,-1) + choose(endings[letter]);
+	if (!vowelEndings) word = word.replace(/[aeioué]+$/i, "");
+	word = word.replace(/^(..)/g, (match) => 
+		match[0] === match[1] ? match[0] : match
+	)
+
+	if (word.length < 2) return generateWordEndings(syllables, endings, titled);
+
+	for (let i = 0; i < badWords.length; i++) {
+		const badWord = badWords[i];
+		if (word.indexOf(badWord) !== -1) {
+			word = generateWordEndings(syllables, endings);
+			break;
+		}
+	}
+
+	return titled ? titleCase(word) : word;
+}
+function generateHumanName() {
+	return generateWordEndings(wordComponents.nameSuffixes, randRange(1,2), true, false);
+}
+function generateFullName() {
+	let name = generateHumanName();
+	if (Math.random() < 0.05) name += " " + generateWord(1, true)[0] + ".";
+	name += " " + generateHumanName();
+	if (Math.random() < 0.05) name += " " + choose(["Jr.", "Sr.", "Jr.", "Sr.", "II", "III", "IV"]);
+
+	if (Math.random() < 0.01) name = "Dr. " + name;
+
+	return name;
+}
+
+function wordPlural(word) {
+	let suffix = "s";
+	
+	if (word.endsWith("ese")) suffix = "";
+	else if (word.endsWith("ai")) suffix = "";
+	else if (word.endsWith("ois")) suffix = "";
+
+	else if (word.match(/[^aeiou]y$/)) {
+		word = word.substring(0, word.length-1);
+		suffix = "ies";
+	}
+	else if (word.endsWith("man") && word.length > 5) {
+		word = word.substring(0, word.length-3);
+		suffix = "men";
+	}
+	else if (word.endsWith("person")) {
+		word = word.substring(0, word.length-6);
+		suffix = "people";
+	}
+
+	else if (word.match(/[shxz]$/g)) suffix = "es";
+	
+	if (suffix) word += suffix;
+	return word;
+}
+function wordAdjective(word) {
+	let suffix = "";
+	if (word.endsWith("er")) {
+		word = word.substring(0, word.length-2);
+		suffix = "ic";
+	}
+	else if (word.endsWith("man") && word.length > 5) {
+		word = word.substring(0, word.length-3);
+		suffix = "";
+	}
+	else if (word.endsWith("ling")) {
+		word = word.substring(0, word.length-4);
+		suffix = "";
+	}
+	else if (word.endsWith("ing")) {
+		word = word.substring(0, word.length-3);
+		suffix = "";
+	}
+	else if (word.endsWith("ism")) {
+		word = word.substring(0, word.length-1);
+		suffix = "t";
+	}
+	else if (word.endsWith("chy")) {
+		word = word.substring(0, word.length-1);
+		suffix = "ic";
+	}
+	else if (word.endsWith("acy")) {
+		word = word.substring(0, word.length-2);
+		suffix = "tic";
+	}
+	else if (word.endsWith("ship")) {
+		word = word.substring(0, word.length-4);
+		suffix = "ial";
+	}
+	else if (word.endsWith("ublic")) {
+		suffix = "";
+	}
+	else if (word.endsWith("ville")) {
+		word = word.substring(0, word.length-1);
+		suffix = "ian";
+	}
+	else if (word.endsWith("vill")) {
+		suffix = "ian";
+	}
+	else if (word.match(/(b[eé]c|ourg|euill|ég|quis)$/i)) {
+		suffix = "ois";
+	}
+
+	if (suffix) word += suffix;
+	return word;
+}
+
+function commaList(array) {
+	if (!array.length) return "";
+	if (array.length === 1) return array[0]+"";
+	if (array.length === 2) return array[0] + " and " + array[1];
+	return array.slice(0,-1).join(", ") + ", and " + array.slice(-1);
+}
+
+
+
+
+function splitChunks(array, center, groupCount=2) {
+	let chunks = {};
+	let done = {};
+	array.forEach((c) => {
+		chunks[c.x + "," + c.y] = c;
+	})
+
+	let cursors = {};
+	for (let n = 1; n < groupCount+1; n++) {
+		cursors[n] = [...center]
+	}
+	
+	for (let n = 0; n < 100; n++) {
+
+		for (let cursor in cursors) {
+			const pos = cursors[cursor];
+
+			let diff = choose(squareCoords);
+			let newX = pos[0] + diff[0];
+			let newY = pos[1] + diff[1];
+
+			let chunkKey = newX + "," + newY;
+			if (!chunks[chunkKey] || done[chunkKey] !== undefined) continue;
+
+			pos[0] = newX;
+			pos[1] = newY;
+			cursor = parseInt(cursor);
+			done[chunkKey] = cursor;
+			chunks[chunkKey].v.tempsplit = cursor;
+		}
+		
+	}
+
+	let groups = {};
+	for (let cursor in cursors) {
+		groups[cursor] = [];
+	}
+
+	array.forEach((c) => {
+		let cursor = nearestChunk(c.x, c.y, (c2) => c2.v.tempsplit);
+		if (cursor) cursor = cursor.v.tempsplit;
+		if (!groups[cursor]) return;
+		groups[cursor].push(c);
+	})
+
+	array.forEach((c) => {
+		delete c.v.tempsplit;
+	})
+
+	return groups;
+}
+// let chunks = splitChunks(filterChunks((c) => c.v.s === 1), regGet("town", 1).center);
+
+
+
+
+tempHover = {};
+
+function renderHighlight() {
+	if (!viewData[currentView].showHighlight) return;
+	tempHover = {};
+
+	let ctx = canvasLayersCtx.highlight;
+	ctx.clearRect(0, 0, canvasLayers.highlight.width, canvasLayers.highlight.height);
+
+	let chunks = filterChunks((c) => c.v.s !== undefined);
+	const chunkSize = planet.config.chunkSize;
+	const waterLevel = planet.config.waterLevel;
+	for (let i = 0; i < chunks.length; i++) {
+		const chunk = chunks[i];
+		const town = regGet("town",chunk.v.s);
+		let color = town.color;
+		let opacity = userSettings.opacity || 0.5;
+		if (currentHighlight && currentHighlight[1] === chunk.v.s && currentHighlight[0] === "town") {
+			// color = color.map((x) => Math.floor(Math.min(255, x+30)))
+			color = colorBrightness(color, 1.15);
+			opacity *= 1.5;
+		}
+		if (town.usurp) {
+			color = [...color];
+			let i = (color[0] + color[1] + color[2]) / 3;
+			let dr = i - color[0];
+			let dg = i - color[1];
+			let db = i - color[2];
+			color[0] = color[0] + dr * 0.75;
+			color[1] = color[1] + dg * 0.75;
+			color[2] = color[2] + db * 0.75;
+		}
+		color = color.join(",");
+		ctx.fillStyle = "rgba("+color+"," + opacity + ")";
+		
+		ctx.fillRect(chunk.x*chunkSize, chunk.y*chunkSize, chunkSize, chunkSize);
+
+		ctx.fillStyle = "rgb("+color+")";
+		for (let i = 0; i < adjacentCoords.length; i++) {
+			const coords = adjacentCoords[i];
+			const adjacentChunk = planet.chunks[(chunk.x+coords[0]) + "," + (chunk.y+coords[1])];
+			if (adjacentChunk !== undefined && adjacentChunk.v.s !== chunk.v.s) {
+				if (coords[0] === -1) {
+					ctx.fillRect(chunk.x*chunkSize, chunk.y*chunkSize, 1, chunkSize);
+				}
+				else if (coords[0] === 1) {
+					ctx.fillRect(chunk.x*chunkSize+chunkSize-1, chunk.y*chunkSize, 1, chunkSize);
+				}
+				else if (coords[1] === -1) {
+					ctx.fillRect(chunk.x*chunkSize, chunk.y*chunkSize, chunkSize, 1);
+				}
+				else if (coords[1] === 1) {
+					ctx.fillRect(chunk.x*chunkSize, chunk.y*chunkSize+chunkSize-1, chunkSize, 1);
+				}
+			}
+		}
+
+		if (userSettings.carve) {
+			for (let x = 0; x < chunk.p.length; x++) {
+				for (let y = 0; y < chunk.p[x].length; y++) {
+					let adjacent = false;
+	
+					let absX = chunkSize * chunk.x + x;
+					let absY = chunkSize * chunk.y + y;
+	
+					for (let i = 0; i < adjacentCoords.length; i++) {
+						const coords = adjacentCoords[i];
+						let adjacentPixel = pixelAt(absX + coords[0], absY + coords[1]);
+						// console.log(adjacentPixel)
+						if (adjacentPixel <= waterLevel) {
+							adjacent = true;
+							break;
+						}
+					}
+	
+					if (chunk.p[x][y] <= waterLevel) {
+						ctx.clearRect(chunk.x*chunkSize + x, chunk.y*chunkSize + y, 1, 1);
+					}
+					else if (adjacent === true) {
+						ctx.fillRect(absX, absY, 1, 1);
+					}
+				}
+			}
+		}
+		// ctx.fillStyle = ((chunk.x * chunk.y) % 2) ? "rgb(255, 55, 55)" : "rgb(255, 255, 55)";
+	}
+
+	if (currentHighlight && currentHighlight[0] === "landmass") {
+		chunks = filterChunks((c) => true);
+		for (let i = 0; i < chunks.length; i++) {
+			const chunk = chunks[i];
+			if (currentHighlight[1] === chunk.v.g) {
+				ctx.fillStyle = "rgba(255,255,255,0.75)";
+				ctx.fillRect(chunk.x*chunkSize, chunk.y*chunkSize, chunkSize, chunkSize);
+			}
+		}
+	}
+
+	const disasters = regFilter("process", (p) => p.done === undefined && p.type === "disaster");
+	for (let i = 0; i < disasters.length; i++) {
+		const disaster = disasters[i];
+		let color = disaster.color || [255,0,0];
+		if (currentHighlight && currentHighlight[1] === disaster.id && currentHighlight[0] === "process") {
+			color = colorBrightness(color, 1.15);
+		}
+		if (Array.isArray(disaster.chunks)) {
+			let chunks = {};
+			disaster.chunks.forEach((coords) => {
+				chunks[coords[0] + "," + coords[1]] = true;
+				tempHover[coords[0] + "," + coords[1]] = disaster;
+			})
+			disaster.chunks.forEach((chunkCoords) => {
+				const x = chunkCoords[0];
+				const y = chunkCoords[1];
+				ctx.fillStyle = "rgba("+color.join(",")+", 0.66)";
+				ctx.fillRect(x*chunkSize, y*chunkSize, chunkSize, chunkSize);
+
+				ctx.fillStyle = "rgba(0, 0, 0, 0.66)";
+				for (let i = 0; i < adjacentCoords.length; i++) {
+					const coords = adjacentCoords[i];
+					const hasAdjacent = chunks[(x+coords[0]) + "," + (y+coords[1])];
+					if (hasAdjacent === undefined) {
+						if (coords[0] === -1) {
+							ctx.fillRect(x*chunkSize, y*chunkSize, 1, chunkSize);
+						}
+						else if (coords[0] === 1) {
+							ctx.fillRect(x*chunkSize+chunkSize-1, y*chunkSize, 1, chunkSize);
+						}
+						else if (coords[1] === -1) {
+							ctx.fillRect(x*chunkSize, y*chunkSize, chunkSize, 1);
+						}
+						else if (coords[1] === 1) {
+							ctx.fillRect(x*chunkSize, y*chunkSize+chunkSize-1, chunkSize, 1);
+						}
+					}
+				}
+			})
+
+		}
+	}
+
+	// const groups = splitChunks(filterChunks((c) => c.v.s === 3), regGet("town", 3).center, 3);
+	// for (let group in groups) {
+	// 	let chunks = groups[group];
+	// 	group = parseInt(group);
+	// 	chunks.forEach((c) => {
+	// 		ctx.fillStyle = group === 1 ? "#ff0000" : group === 2 ? "#00ff00" : "#0000ff";
+	// 		ctx.fillRect(c.x*chunkSize, c.y*chunkSize, chunkSize, chunkSize);
+	// 	})
+	// }
+
+	renderMarkers();
+}
+
+function renderMarkers() {
+	if (!viewData[currentView].showMarkers) return;
+
+	let ctx = canvasLayersCtx.markers;
+	ctx.clearRect(0, 0, canvasLayers.markers.width, canvasLayers.markers.height);
+	const _chunkSize = planet.config.chunkSize * planet.config.pixelSize * $c.markerResolution;
+
+	if (ctx.textAlign !== "center") {
+		ctx.textBaseline = "middle";
+		ctx.textAlign = "center";
+	}
+	ctx.font = (_chunkSize)+"px PublicPixel";
+
+	let markers = regToArray("marker");
+	if (userSettings.markers === false) markers = [];
+	for (let i = 0; i < markers.length; i++) {
+		const marker = markers[i];
+		const x = marker.x;
+		const y = marker.y;
+		const symbol = marker.symbol || "⏺";
+		let color = marker.color || [176, 176, 153];
+		if (x === undefined || y === undefined) continue;
+
+		let highlight = currentHighlight && currentHighlight[1] === marker.id && currentHighlight[0] === "marker";
+		if (highlight) {
+			color = colorBrightness(color, 1.2);
+			ctx.font = (_chunkSize*1.5)+"px PublicPixel";
+		}
+
+		ctx.strokeStyle = "rgb("+colorBrightness(color, 0.8)+")";
+		ctx.lineWidth = planet.config.pixelSize*2;
+		ctx.strokeText(symbol, x*_chunkSize + _chunkSize/2 + planet.config.pixelSize/1.5, y*_chunkSize + _chunkSize/2 - planet.config.pixelSize/1.5);
+
+		ctx.fillStyle = "rgb("+color.join(",")+")";
+		ctx.fillText(symbol, x*_chunkSize + _chunkSize/2 + planet.config.pixelSize/1.5, y*_chunkSize + _chunkSize/2 - planet.config.pixelSize/1.5);
+
+		if (highlight) ctx.font = (_chunkSize)+"px PublicPixel";
+	}
+
+	ctx.strokeStyle = "rgb(0,0,0)";
+	regToArray("town").forEach((town) => {
+		if (!town.center) happen("UpdateCenter", null, town);
+		let hasIssue = Object.values(town.issues).length;
+
+		let x = town.center[0];
+		let y = town.center[1];
+
+		if ((userSettings.townNames && !controlState.shift) || (controlState.shift && !userSettings.townNames)) {
+			let name = town.name;
+
+			if (hasIssue) {
+				ctx.strokeStyle = "rgb(255, 0, 0)";
+				ctx.fillStyle = "rgb(255, 255, 0)";
+			}
+			else {
+				ctx.strokeStyle = "rgb(0,0,0)";
+				ctx.fillStyle = "rgb("+town.color.join(",")+")";
+			}
+			
+			ctx.font = (town.usurp ? "italic " : "") + Math.max(64, Math.round(Math.min(town.size,100)/100 * 96))+"px VT323";
+
+			ctx.lineWidth = planet.config.pixelSize*2.5;
+			ctx.strokeText(name, x*_chunkSize + _chunkSize/2 + planet.config.pixelSize/1.5, y*_chunkSize + _chunkSize/2 - planet.config.pixelSize/1.5);
+			ctx.fillText(name, x*_chunkSize + _chunkSize/2 + planet.config.pixelSize/1.5, y*_chunkSize + _chunkSize/2 - planet.config.pixelSize/1.5);
+			
+			
+		}
+		
+		else if (hasIssue && userSettings.markers !== false) {
+			ctx.lineWidth = planet.config.pixelSize*3;
+			
+			ctx.strokeStyle = "rgb(255, 0, 0)";
+			ctx.fillStyle = "rgb(255, 255, 0)";
+
+			ctx.font = (town.usurp ? "italic " : "") + Math.max(112, Math.round(Math.min(town.size,128)/100 * 96))+"px VT323";
+			ctx.strokeText("!".repeat(hasIssue), x*_chunkSize + _chunkSize/2 + planet.config.pixelSize/1.5, y*_chunkSize + _chunkSize/2 - planet.config.pixelSize/1.5);
+			ctx.fillText("!".repeat(hasIssue), x*_chunkSize + _chunkSize/2 + planet.config.pixelSize/1.5, y*_chunkSize + _chunkSize/2 - planet.config.pixelSize/1.5);
+		}
+	})
+}
+
+onMapClick = null;
+onMapClickMsg = null;
+function handleCursor(e) {
+	const rect = mapCanvas.getBoundingClientRect();
+	let x = e.clientX - rect.left;
+	let y = e.clientY - rect.top;
+	
+	let zoom = parseFloat(mapCanvas.style.scale) || 1;
+	
+	x = Math.floor((x / mapCanvas.clientWidth) * planet.config.width / zoom);
+	y = Math.floor((y / mapCanvas.clientHeight) * planet.config.height / zoom);
+	let chunkX = Math.floor(x / planet.config.chunkSize);
+	let chunkY = Math.floor(y / planet.config.chunkSize);
+
+	let oldChunkX;
+	let oldChunkY;
+	if (mousePos) {
+		oldChunkX = mousePos.chunkX;
+		oldChunkY = mousePos.chunkY;
+	}
+
+	mousePos = {
+		x: x,
+		y: y,
+		chunkX: chunkX,
+		chunkY: chunkY
+	}
+
+	let hovered = false;
+	let highlight = null;
+	if (mousePos && planet.chunks[mousePos.chunkX+","+mousePos.chunkY]) {
+		let chunkKey = mousePos.chunkX+","+mousePos.chunkY;
+		let chunk = planet.chunks[chunkKey];
+		if (viewData[currentView].hover) {
+			hovered = !!viewData[currentView].hover(chunk);
+		}
+		else if (tempHover[chunkKey]) {
+			hovered = true;
+			highlight = ["process",tempHover[chunkKey].id];
+		}
+		else if (chunk.v.s) {
+			hovered = true;
+			highlight = ["town",chunk.v.s];
+		}
+
+		if (chunk.v.m) {
+			highlight = ["marker",chunk.v.m];
+		}
+	}
+	
+	if (hovered) {
+		if (!mapCanvas.style.cursor) mapCanvas.style.cursor = "pointer";
+	}
+	else if (mapCanvas.style.cursor) {
+		mapCanvas.style.cursor = "";
+	}
+
+	if (!currentHighlight || !highlight || (highlight[0] !== currentHighlight[0] || highlight[1] !== currentHighlight[1])) {
+		currentHighlight = highlight;
+		renderHighlight();
+		updateCanvas();
+	}
+
+	if (oldChunkX !== chunkX || oldChunkY !==  chunkY) {
+		renderCursor();
+		updateCanvas();
+		updateStats();
+	}
+}
+mapCanvas.addEventListener("mousemove", (e) => {
+	handleCursor(e);
+})
+// mapCanvas.addEventListener("wheel", (e) => {
+// 	const rect = document.getElementById("mapDiv").getBoundingClientRect();
+	
+// 	if (e.deltaY < 0)
+// 	{
+// 		setZoom(0.1);
+// 	}
+// 	else if (e.deltaY > 0)
+// 	{
+// 		setZoom(-0.1);
+// 	}
+// 	e.preventDefault();
+// });
+lastDrag = null;
+dragPosition = [0,0];
+// mapCanvas.addEventListener("mousemove",(e) => {
+// 	if (controlState.mouse && currentZoom > 1) {
+// 		if (lastDrag) {
+// 			let diffX = e.clientX - lastDrag[0];
+// 			let diffY = e.clientY - lastDrag[1];
+// 			console.log(diffX,diffY);
+// 			dragPosition[0] += diffX;
+// 			dragPosition[1] += diffY;
+// 			mapCanvas.style.translate = `${dragPosition[0]}px ${dragPosition[1]}px`;
+// 		}
+// 		lastDrag = [e.clientX, e.clientY];
+// 	}
+// })
+function setZoom(zoom, x, y) {
+	// console.log(x, y)
+	const mapDiv = document.getElementById("mapDiv");
+	currentZoom += zoom;
+	if (currentZoom > 2) currentZoom = 2;
+	if (currentZoom < 1) currentZoom = 1;
+	mapCanvas.style.scale = currentZoom.toString();
+	if (currentZoom === 1) {
+		mapCanvas.classList.remove("zoomed");
+		mapCanvas.style.translate = "";
+	}
+	else mapCanvas.classList.add("zoomed");
+}
+
+function deselectChunk() {
+	selectedChunk = null;
+	document.querySelector("#statsPanel .panelX").style.display = "none";
+}
+function handleMouseUp(e) {
+	handleCursor(e);
+
+	if (lastDrag) {
+		lastDrag = null;
+		return;
+	}
+	
+	let chunkKey = mousePos.chunkX+","+mousePos.chunkY;
+
+	if (e.button == 0 || e.force !== undefined) { //left click
+		if (onMapClick) {
+			onMapClick(e);
+		}
+		else if (selectedChunk) {
+			deselectChunk();
+		}
+		else if (tempHover[chunkKey]) {
+			let entity = tempHover[chunkKey];
+			regBrowse(entity._reg, entity.id);
+		}
+		else {
+			let chunk = planet.chunks[chunkKey];
+			if (chunk) {
+				if (viewData[currentView].click) viewData[currentView].click(chunk);
+				else if (chunk.v.m) regBrowse("marker",chunk.v.m);
+				else if (chunk.v.s) regBrowse("town",chunk.v.s);
+			}
+		}
+	}
+	else if (e.button == 2) { //right click
+		if (selectedChunk) {
+			deselectChunk();
+		}
+		else if (mousePos) {
+			selectedChunk = planet.chunks[mousePos.chunkX+","+mousePos.chunkY];
+			document.querySelector("#statsPanel .panelX").style.display = "flex";
+		}
+	}
+	
+	
+	updateStats();
+	renderCursor();
+	updateCanvas();
+	
+	// console.log(mousePos.chunkX+","+mousePos.chunkY)
+	// let chunk = planet.chunks[mousePos.chunkX+","+mousePos.chunkY];
+	// if (chunk) {
+	//   if (e.button == 0) {
+	//     for (let i = 0; i < 5; i++) {
+	//       let newChunk = nearestChunk(chunk.x, chunk.y, (c) => c.b !== "water" && !c.v.s);
+	//       // if (newChunk) newChunk.b = "desert";
+	//       if (newChunk) newChunk.v.s = 1;
+	//     }
+	//     renderHighlight();
+	//   }
+	//   else if (e.button == 2 && chunk.b !== "water") {
+	//     let chunks = floodFill(chunk.x, chunk.y, (c) => c.b === chunk.b);
+	//     chunks.forEach((c) => {
+	//       c.b = "desert";
+	//     })
+	//   }
+	//   renderMap();
+	//   updateCanvas();
+	//   // console.log(chunks);
+	// }
+}
+mapCanvas.addEventListener("mouseup", handleMouseUp)
+mapCanvas.addEventListener("mouseout", (e) => {
+	mousePos = null;
+	currentHighlight = currentEditing || null;
+	updateStats();
+	renderCursor();
+	renderHighlight();
+	updateCanvas();
+})
+mapCanvas.oncontextmenu = () => { return false; }
+
+mapCanvas.addEventListener("touchstart", (e) => {
+	selectedChunk = null;
+	const touch = e.changedTouches[0];
+	document.getElementById("statsPanel").classList.add("preview");
+	handleCursor(touch);
+	e.preventDefault();
+},false)
+mapCanvas.addEventListener("touchmove", (e) => {
+	const touch = e.changedTouches[0];
+	document.getElementById("statsPanel").classList.add("preview");
+	handleCursor(touch);
+	e.preventDefault();
+},false)
+mapCanvas.addEventListener("touchend", (e) => {
+	const touch = e.changedTouches[0];
+	document.getElementById("statsPanel").classList.remove("preview");
+	handleMouseUp(touch);
+	mousePos = null;
+	updateStats();
+	renderCursor();
+	updateCanvas();
+})
+
+keybinds = {
+	"shift": () => {
+		logTip("shiftNames", "Hold shift to show town names, or enable them in Settings!")
+		renderMarkers();
+		updateCanvas();
+	},
+	"enter": (e) => {
+		if (autoPlaying) {
+			autoPlay();
+			return;
+		}
+		let btn = document.getElementById("nextDay");
+		if (!btn.getAttribute("disabled")) {
+			btn.click();
+		}
+		e.preventDefault();
+		e.stopPropagation();
+	},
+	" ": (e) => keybinds["enter"](e),
+	"backspace": () => {
+		if (currentExecutive) closeExecutive();
+	},
+	"p": () => {
+		if (mousePos) {
+			selectedChunk = planet.chunks[mousePos.chunkX+","+mousePos.chunkY];
+			document.querySelector("#statsPanel .panelX").style.display = "flex";
+			renderCursor();
+			updateCanvas();
+		}
+	},
+	"0": () => setView(),
+	"`": () => keybinds["0"](),
+	"v": () => {
+		document.getElementById("viewButton").click();
+	},
+	"\\": () => {
+		if (currentExecutive === "settings") closeExecutive();
+		else document.getElementById("actionSettings").click();
+	},
+	"l": () => {
+		if (currentExecutive === "saves") closeExecutive();
+		else document.getElementById("actionSaves").click();
+	},
+	"i": () => {
+		if (currentExecutive === "info") closeExecutive();
+		else document.getElementById("actionInfo").click();
+	},
+	"m": () => {
+		document.getElementById("actionMore").click();
+	},
+	"?": () => {
+		populateExecutive([
+		{
+			text: "Symbols",
+			func: ()=>{
+				doPrompt({ type: "text", message: "Loading..." })
+
+				fetch("https://r74n.com/gentown/fonts/Glyphs.txt")
+				.then((r) => r.text())
+				.then((text) => {
+				doPrompt({
+					type: "text",
+					message: "{{symbol:"+text+"}}",
+					pre: true
+				})})
+			}
+		},
+		{
+			text: "Share",
+			func: ()=>{
+				sharePrompt(`My GenTown planet, ${generateWord(randRange(2,3), true)}, lasted ${randRange(101,342)} days before societal collapse!`)
+			}
+		},
+		{
+			text: "Promo executive",
+			func: () => {
+				let gameDiv = document.getElementById("gameDiv");
+				gameDiv.setAttribute("data-promo", "executive");
+				fitToScreen();
+				closeExecutive();
+			}
+		}
+		], "Debug")
+	},
+	"y": (e) => {
+		let button = document.querySelector('#logMessages .logMessage[new="true"] .logAct span[type="yes"]');
+		if (button) {
+			button.click();
+			return;
+		}
+		button = document.querySelector('#logMessages .logMessage[new="true"] .logAct span[type="act"]');
+		e.stopPropagation();
+		if (button) button.click();
+		setTimeout(() => {
+			document.getElementById("popupText").value = "";
+		}, 100)
+	},
+	"n": () => {
+		let button = document.querySelector('#logMessages .logMessage[new="true"] .logAct span[type="no"]');
+		if (button) button.click();
+	},
+	"c": () => {
+		let link = document.getElementById("screenshotter");
+		link.setAttribute("download",(planet.name||"GenTown")+"-"+planet.day+".png");
+		var dt = mapCanvas.toDataURL('image/png');
+		link.href = dt;
+		link.click();
+	}
+}
+
+window.addEventListener("keydown",(e) => {
+	const key = e.key.toLowerCase();
+	let meta = e.metaKey || e.ctrlKey;
+
+	if (meta) {
+		controlState.meta = true;
+		if (key === "s") {
+			saveFile();
+			e.preventDefault();
+		}
+		else if (key === "o") {
+			loadFile();
+			e.preventDefault();
+		}
+		return;
+	}
+	else controlState.meta = false;
+
+	if (key === "escape") {
+		if (currentPopup) {
+			closePopups();
+			document.getElementById("gameDiv").focus();
+		}
+		else if (onCancel) {
+			onCancel();
+			onCancel = null;
+		}
+		else if (currentExecutive) {
+			closeExecutive();
+		}
+		else if (selectedChunk) {
+			deselectChunk();
+			updateStats();
+			renderCursor();
+			updateCanvas();
+		}
+	}
+
+	if (currentPopup) return;
+	if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") return;
+
+	controlState[key] = true;
+
+	const button = document.querySelector('#actionPanel span[data-keybind="'+key+'"]');
+	if (button) {
+		if (button.style.display === "none") return;
+		if (button == currentExecutiveButton) closeExecutive();
+		else button.click();
+	}
+	else if (keybinds[key]) {
+		keybinds[key](e);
+		e.stopPropagation();
+	}
+	else if (parseInt(key)) {
+		let newView = Object.keys(viewData)[key - 1];
+		if (newView) {
+			setView(newView);
+		}
+	}
+})
+window.addEventListener("keyup",(e) => {
+	const key = e.key.toLowerCase();
+
+	controlState.meta = false;
+	controlState[key] = false;
+	
+	if (key === "shift") {
+		renderMarkers();
+		updateCanvas();
+	}
+})
+window.addEventListener("blur",(e) => {
+	controlState = {};
+})
+window.addEventListener("focus",(e) => {
+	controlState = {};
+	renderMarkers();
+	updateCanvas();
+})
+window.addEventListener("mousedown",(e) => {
+	controlState.mouse = {
+		0: "left",
+		1: "middle",
+		2: "right"
+	}[e.button] || "other";
+})
+window.addEventListener("mouseup",(e) => {
+	controlState.mouse = false;
+	lastDrag = null;
+})
+
+
+
+
+function updateStats() {
+	let date = parseText("{{date:"+planet.day+"|l}}");
+	document.getElementById("dayNumber").innerText = date;
+	document.getElementById("dayNumberMobile").innerText = date;
+	let statsDiv = document.getElementById("statsDiv");
+	let html = "";
+	
+	if (!mousePos && !selectedChunk) {
+		html += `<span class="panelSubtitle">Towns of ${ parseText("{{planet}}") }</span>`;
+		// html += `<span>Towns: <br>&nbsp;${
+		//   parseText(regToArray("town").reduce((l, {id}) => {l.push("{{regname|town|"+id+"}}"); return l}, []).join("<br>&nbsp;")
+		//   || "{{none}}")}</span>`;
+		html += `<span><table>`;
+		regSorted("town","pop").forEach((town) => {
+			html += `<tr>`;
+			html += `<td>` + parseText("{{regname:town|"+town.id+"}}") + `</td>`;
+			html += `<td>` + parseText(`{{face:${town.id}}}{{num:${town.pop}|K}}`) + `</td>`;
+			html += `<td>` + parseText(`{{icon:land}}{{num:${town.size}|K}}`) + `</td>`;
+			html += `<td>` + "" + `</td>`;
+			html += `</tr>`;
+			// html += `<br>`;
+		});
+		html += `<tr class="total">`;
+		html += `<td>Total</td>`;
+		html += `<td>` + parseText("{{face}}{{num:" + regToArray("town").reduce((n, {pop}) => n + pop, 0)+"|K}}") + `</td>`;
+		html += `<td>` + "" + `</td>`;
+		html += `</tr>`;
+		html += `</table></span>`;
+	}
+	else {
+		let chunkKey;
+		if (mousePos) chunkKey = mousePos.chunkX+","+mousePos.chunkY;
+		else if (selectedChunk) chunkKey = selectedChunk.x+","+selectedChunk.y;
+		let chunk = selectedChunk || planet.chunks[chunkKey];
+		if (chunk) {
+			if (tempHover[chunkKey]) {
+				let entity = tempHover[chunkKey];
+				html += `<span class="panelSubtitle">${parseText("{{regname:"+entity._reg+"|"+entity.id+"}}")}</span><br>`;
+			}
+			if (chunk.v.m) {
+				let marker = regGet("marker",chunk.v.m);
+				html += `<span class="panelSubtitle">${parseText("{{regname:marker|"+marker.id+"}}")}</span><br>`;
+			}
+			if (chunk.v.s) {
+				let town = regGet("town",chunk.v.s);
+				if (town) {
+					html += `<span class="panelSubtitle">${parseText("{{regname:town|"+town.id+"}}")}</span>`;
+					html += `<span style="text-align:center">${
+						parseText(` {{num:${town.pop}|K|${$c.maxPopulation(town)}}}{{face:${town.id}|Population}}`) +
+						parseText(` {{resourcetotal:${town.id}|crop}}{{icon:crop|Crops}}`) +
+						parseText(` {{resourcetotal:${town.id}|lumber}}{{icon:lumber|Lumber}}`) +
+						parseText(` {{resourcetotal:${town.id}|rock}}{{icon:rock|Rock}}`) +
+						parseText(` {{resourcetotal:${town.id}|livestock}}{{icon:livestock|Livestock}}`)
+					}</span>`;
+					// html += `<span>Population: ${town.pop}</span>`;
+
+					if (Object.values(town.issues).length) {
+						html += `<span style="text-align:center">${
+							Object.values(town.issues).map(id => 
+								"<span class='warningSign'>{!}</span> " + parseText("{{regname:process|"+id+"}}")
+							).join("<br>")
+						}</span><br>`;
+					}
+					else html += "<br>";
+				}
+			}
+			let localName = "Local";
+			if (chunk.b === "water") {
+				let waters = floodFill(chunk.x, chunk.y, (c) => c.b === "water", 60);
+				let land = nearestChunk(chunk.x, chunk.y, (c) => c.v.g !== undefined)
+				if (land && regGet("landmass",land.v.g).type === "island") localName = "bay";
+				else if (waters.length < 20) localName = "lake";
+				else if (waters.length < 50) localName = "sea";
+				else if (chunk.e <= 0.1) localName = "trench";
+				else localName = "ocean";
+				localName = "{{biome:water|"+localName+"}}";
+				if (land) {
+					localName += " of ";
+					localName += "{{regname:landmass|"+land.v.g+"}}";
+				}
+			}
+			else if (chunk.b === "mountain" && chunk.v.g) {
+				localName = `{{regname:landmass|${chunk.v.g}}}`;
+			}
+			else {
+				localName = "{{biome:"+chunk.b+"}}";
+				if (chunk.v.g) localName += ` of {{regname:landmass|${chunk.v.g}}}`;
+			}
+			let lat = - Math.round((chunk.y * planet.config.chunkSize / planet.config.height) * 180 - 90);
+			let long = Math.round((chunk.x * planet.config.chunkSize / planet.config.width) * 360 - 180);
+			let latlong = Math.abs(lat) + "°" + (lat > 0 ? "N" : "S")  +", "+  Math.abs(long) + "°" + (long > 0 ? "E" : "W");
+			html += `<span class="panelSubtitle">${parseText(localName)}</span>`;
+			html += `<div class="localStats">`;
+			html += `<span>Temperature: ${
+				parseText("{{color|{{temperature:"+ chunk.t + "}}|" +
+				`rgb(${255*chunk.t},100,${255*(1-chunk.t)})`  + "}}")
+			}</span>`;
+			html += `<span>Moisture: ${
+				parseText("{{color|"+ Math.round(chunk.m*100) + "%|" +
+				`rgb(0,${255*(chunk.m+0.2)},${255*(chunk.m+0.2)})`  + "}}")
+			}</span>`;
+			html += `<span>${chunk.e <= planet.config.waterLevel ? "Depth" : "Elevation"}: ${
+				parseText("{{color|{{elevation:"+ chunk.e + "|d}}|" +
+				`rgb(${255*chunk.e},${255*(chunk.e+0.5)},${255*chunk.e})`  + "}}")
+			}</span>`;
+			if (chunk.b !== "water") {
+				let fertility = happen("Fertility",null,chunk,null,"chunk");
+				html += `<span>Fertility: ${
+					parseText("{{color|"+ Math.round(fertility*100) + "%|" +
+					`rgb(${255*(1-fertility)},${255*fertility},100)`  + "}}")
+				}</span>`;
+			}
+			html += `<span>${latlong}</span>`;
+			html += `</div>`;
+
+		}
+	}
+
+	statsDiv.innerHTML = html;
+}
+function handleX(elem) {
+	if (elem.parentNode.style.display) {
+		elem.parentNode.style.display = "";
+	}
+	elem.style.display = "none";
+	if (promptState) {
+		if (promptState.onCancel) promptState.onCancel();
+		promptState = null;
+	}
+	elem.parentNode.classList.remove("popupShown");
+	if (currentPopup === elem.parentNode.id) closePopups();
+	else selectedChunk = null;
+	document.getElementById("gamePopupOverlay").classList.remove("overlayShown");
+	document.getElementById("gameDiv").focus();
+	updateStats();
+	renderCursor();
+	updateCanvas();
+}
+function openPopup(id) {
+	if (currentPopup) closePopups();
+	let elem = document.getElementById(id);
+	let X = elem.querySelector(".panelX");
+	if (X) X.style.display = "flex";
+	elem.style.display = "flex";
+	elem.classList.add("popupShown");
+	document.getElementById("gamePopupOverlay").classList.add("overlayShown");
+	currentPopup = id;
+}
+function doPrompt(obj) {
+	if (obj) promptState = obj;
+	else if (!promptState) return;
+	if (!obj) obj = promptState;
+	let type = promptState.type || "text";
+	let message = promptState.message;
+	let popupInput = document.getElementById("popupInput");
+	popupInput.childNodes.forEach((e) => {
+		if (e.style) e.style.display = "none";
+	})
+	openPopup("promptPopup");
+	let promptPopup = document.getElementById("promptPopup");
+	promptPopup.setAttribute("data-type",type);
+	promptPopup.classList.remove("noContent");
+	if (type === "text") {
+		if (message !== null) message = message || "Something happened.";
+		document.getElementById("popupOk").style.display = "";
+	}
+	else if (type === "confirm") {
+		if (message !== null) message = message || "Are you sure?";
+		document.getElementById("popupYes").style.display = "";
+		if (obj.danger) document.getElementById("popupYes").classList.add("danger");
+		else document.getElementById("popupYes").classList.remove("danger");
+		document.getElementById("popupNo").style.display = "";
+	}
+	else if (type === "ask") {
+		if (message !== null) message = message || "Enter a value.";
+		if (obj.shuffle !== false) document.getElementById("popupShuffle").style.display = "";
+		let popupText = document.getElementById("popupText");
+		popupText.value = promptState.default || "";
+		popupText.setAttribute("placeholder",(promptState.placeholder || "Answer")+"...");
+		popupText.style.display = "";
+		document.getElementById("popupTextConfirm").style.display = "";
+		popupText.focus();
+		popupText.select();
+		setTimeout(() => {popupText.focus()}, 100);
+	}
+	else if (type === "choose") {
+		let popupChoices = document.getElementById("popupChoices");
+		popupChoices.innerHTML = "";
+		if (message !== null) message = message || "Choose one.";
+		if (!promptState.choices) promptState.choices = ["A","B"];
+		if (promptState.choices.length >= 6) {
+			promptPopup.classList.add("promptLong");
+		}
+		promptState.choices.forEach((choice) => {
+			let button = document.createElement("span");
+			button.className = "popupButton";
+			button.addEventListener("click", () => {
+				handlePrompt(choice);
+			})
+			button.setAttribute("role","button");
+			button.innerHTML = titleCase(parseText(choice));
+			popupChoices.appendChild(button);
+		})
+		popupChoices.style.display = "";
+	}
+	let popupTitle = document.getElementById("popupTitle");
+	if (promptState.title) {
+		popupTitle.innerHTML = parseText(promptState.title);
+		popupTitle.style.display = "block";
+	}
+	else {
+		popupTitle.style.display = "";
+	}
+	let popupContent = document.getElementById("popupContent");
+	if (message === null) {
+		popupContent.style.display = "none";
+		popupContent.innerHTML = "";
+		popupTitle.style.flexGrow = "0";
+		popupTitle.style.paddingBottom = "0.25em";
+		popupInput.style.flexGrow = "1";
+	}
+	else {
+		message = parseText(message);
+		message = message.replace(/^[a-z]/, (match) => match.toUpperCase());
+		popupContent.innerHTML = message.replace(/\n/g, "<br>");
+		popupContent.style.display = "";
+		popupTitle.style.paddingBottom = "0em";
+		popupInput.style.flexGrow = "";
+		if (promptState.title) popupContent.style.paddingTop = "1em";
+		else popupContent.style.paddingTop = "";
+		if (promptState.pre) popupContent.style.whiteSpace = "pre-wrap";
+		else popupContent.style.whiteSpace = "";
+		if (message.length > 1000) popupContent.style.fontSize = "1em";
+		else popupContent.style.fontSize = "";
+	}
+	if (!message && !promptState.title) {
+		promptPopup.classList.add("noContent");
+	}
+	if (obj.danger) promptPopup.classList.add("danger");
+	else promptPopup.classList.remove("danger");
+	if (obj.subtype) promptPopup.setAttribute("data-subtype", obj.subtype);
+	else promptPopup.removeAttribute("data-subtype");
+}
+defaultPromptLimit = 32;
+function handlePrompt(result) {
+	if (!promptState) return;
+	const _promptState = promptState;
+	if (promptState.choiceValues) result = promptState.choiceValues[promptState.choices.indexOf(result)];
+	if (promptState.map && promptState.map[result]) result = promptState.map[result];
+	let fail = false;
+	if (typeof result === "string") {
+		result = result.replace(/[{<]/g, "[");
+		result = result.replace(/[}>]/g, "]");
+		result = result.replace(/\|/g, "l");
+		result = result.substr(0,(promptState.limit || defaultPromptLimit))
+		result = result.trim();
+		if (!result) fail = true;
+	}
+	handleX(document.querySelector("#promptPopup .panelX"));
+	if (_promptState.func) {
+		if (!fail) _promptState.func(result);
+	}
+	else promptState = null;
+}
+function previewPrompt() {
+	let popupText = document.getElementById("popupText");
+	if (promptState.preview) {
+		let preview = document.querySelector("#popupContent .popupPreview");
+		if (!preview) {
+			if (popupText.value.trim().length === 0) return;
+			preview = document.createElement("span");
+			preview.className = "popupPreview";
+			document.getElementById("popupContent").appendChild(preview);
+		}
+		if (popupText.value.trim().length === 0) preview.remove();
+		else {
+			preview.innerHTML = parseText(promptState.preview(popupText.value, promptState.subject, promptState.target));
+			preview.querySelectorAll(".previewPart").forEach(e => {
+				e.addEventListener("keypress", handlePreviewPart);
+			})
+		}
+	}
+}
+function handlePreviewPart(e) {
+	if (e.key === "Enter") {
+
+		if (e.target.nextElementSibling && e.target.nextElementSibling.classList.contains("previewPart")) {
+			e.target.nextElementSibling.focus();
+			window.setTimeout(function() {
+				var sel, range;
+				if (window.getSelection && document.createRange) {
+					range = document.createRange();
+					range.selectNodeContents(e.target.nextElementSibling);
+					sel = window.getSelection();
+					sel.removeAllRanges();
+					sel.addRange(range);
+				} else if (document.body.createTextRange) {
+					range = document.body.createTextRange();
+					range.moveToElementText(e.target.nextElementSibling);
+					range.select();
+				}
+			}, 1);
+		}
+		else {
+			document.getElementById("popupTextConfirm").click();
+		}
+
+		e.preventDefault();
+		return false;
+	}
+
+	if (e.target.innerText.match(/\n/)) {
+		e.target.innerText = e.target.innerText.replace(/\n/g, " ");
+	}
+	if (e.target.innerText.length > (promptState.limit || defaultPromptLimit)) {
+		e.target.innerText = e.target.innerText.substr(0,(promptState.limit || defaultPromptLimit));
+	}
+}
+function shufflePrompt() {
+	let popupText = document.getElementById("popupText");
+	let syllables = randRange(1, promptState.syllables || 3);
+	let basis = promptState.basis;
+	if (Array.isArray(basis)) basis = choose(basis);
+	if (basis) syllables = 1;
+	let word = generateWord(syllables);
+	if (basis) word = basis + word;
+	word = titleCase(word);
+	if (typeof promptState.shuffle === "function") {
+		word = promptState.shuffle(promptState.subject, promptState.target, promptState.eventArgs);
+	}
+	if (promptState.suggested) delete promptState.suggested;
+	if (promptState.suggest) {
+		let choice = choose(promptState.suggest);
+		let entity = regGet(choice[0], choice[1]);
+		if (entity.name) {
+			word = entity.name;
+			promptState.suggested = entity;
+		}
+	}
+	popupText.value = word;
+	previewPrompt();
+	popupText.focus();
+}
+function closePopups() {
+	document.getElementById("gamePopupOverlay").classList.remove("overlayShown");
+	let popups = document.getElementsByClassName("gamePopup");
+	if (popups) {
+		for (let i = 0; i < popups.length; i++) {
+			popups[i].classList.remove("popupShown");
+		}
+	};
+	if (currentPopup) {
+		let popup = document.getElementById(currentPopup);
+		popup.classList.remove("popupShown");
+		if (popup.style.display) popup.style.display = "";
+	}
+	currentPopup = null;
+}
+document.getElementById("popupText").addEventListener("keydown",(e) => {
+	if(e.key === "Enter") handlePrompt(document.getElementById("popupText").value.replace(/[\{\}]/g,""));
+})
+document.getElementById("popupText").addEventListener("input",(e) => {
+	let sanitized = e.target.value.replace(/[{<]/g, "[").replace(/[}>]/g, "]");
+	if (sanitized !== e.target.value) e.target.value = sanitized;
+
+	if (e.target.value.length > (promptState.limit || defaultPromptLimit)) {
+		e.target.value = e.target.value.substr(0,(promptState.limit || defaultPromptLimit));
+	}
+
+	if (promptState.suggested) {
+		if (!e.target.value.toLowerCase().includes(promptState.suggested.name.toLowerCase())) {
+			delete promptState.suggested;
+		}
+	}
+
+	previewPrompt();
+})
+document.getElementById("popupText").addEventListener("keyup",(e) => {
+	if (!e.target.value.trim()) previewPrompt();
+})
+document.getElementById("gamePopupOverlay").addEventListener("click",(e) => {
+	closePopups();
+	document.getElementById("gameDiv").focus();
+})
+
+function regBrowse(subregistryName, id) {
+	let data = regGet(subregistryName, id);
+	if (data === undefined) return;
+	if (controlState.shift) {
+		handleMore(null, data);
+		if (window.getSelection) {window.getSelection().removeAllRanges();}
+		else if (document.selection) {document.selection.empty();}
+		return;
+	}
+	if (controlState.meta) {
+		let temp = userSettings.debug;
+		userSettings.debug = true;
+		handleMore(null, data);
+		document.getElementById("actionItem-copyID").click();
+		userSettings.debug = temp;
+		return;
+	}
+	openRegBrowser(data, subregistryName);
+}
+function openRegBrowser(obj,regName) {
+	let regContent = document.getElementById("regContent")
+	regContent.innerHTML = "";
+	let regBrowser = document.getElementById("regBrowser");
+	regBrowser.scrollTop = 0;
+	let panelMore = document.querySelector("#regBrowser .panelMore");
+
+	let title = obj.name;
+	if (!title && regBrowserExtra[regName] && regBrowserExtra[regName].name) {
+		title = regBrowserExtra[regName].name(obj);
+	}
+	if (!title && obj.named === false) title = "?????";
+	if (title) {
+		if (regName && obj.id) title = `{{regname:${regName}|${obj.id}}}`;
+		else if (obj.color) title = `{{color:${title}|rgb(${obj.color.join(",")})}}`;
+	}
+	if (title) {
+		let nameSection = document.createElement("div");
+		nameSection.className = "regSection regTitle";
+		let regTitle = document.createElement("span");
+		regTitle.className = "regTitle";
+		regTitle.innerHTML = parseText(title);
+		nameSection.appendChild(regTitle);
+		regContent.appendChild(nameSection);
+	}
+	let subtitle;
+	panelMore.style.display = "none";
+	regBrowser.removeAttribute("data-reg");
+	regBrowser.removeAttribute("data-id");
+	if (regName && obj.id) {
+		regBrowser.setAttribute("data-reg", regName);
+		regBrowser.setAttribute("data-id", obj.id);
+		panelMore.style.display = "flex";
+
+		subtitle = titleCase(obj.subtype || obj.type || regName);
+		// if (obj.type && obj.type !== regName) subtitle += " ("+titleCase(obj.type)+")";
+	}
+	else if (obj.type) subtitle = titleCase(obj.type);
+	if (obj.dems) subtitle += " of the "+obj.dems;
+	if (obj.gov) subtitle = titleCase(wordAdjective(obj.gov)) + " " + subtitle;
+	if (obj.usurp) subtitle = "Autonomous " + subtitle;
+	if (subtitle) {
+		let subtitleSection = document.createElement("div");
+		subtitleSection.className = "regSection regSubTitle";
+		let regSubTitle = document.createElement("span");
+		regSubTitle.className = "regSubTitle";
+		regSubTitle.innerHTML = subtitle;
+		subtitleSection.appendChild(regSubTitle);
+		regContent.appendChild(subtitleSection);
+	}
+
+	if (obj.desc) {
+		let descSection = document.createElement("div");
+		descSection.className = "regSection regDesc";
+		descSection.innerHTML = parseText(obj.desc).replace(/\n/g, "<br>");
+		regContent.appendChild(descSection);
+	}
+
+	for (let key in regBrowserKeys) {
+		let rkey = key;
+		let split = null;
+		let value = obj[key];
+		if (value === undefined) {
+			if (regName && regBrowserExtra[regName] && regBrowserExtra[regName][key]) {
+				if (typeof regBrowserExtra[regName][key] === "function") value = regBrowserExtra[regName][key](obj);
+				else value = regBrowserExtra[regName][key];
+			}
+			else {
+				split = key.split(".");
+				if (split.length < 2) continue;
+				if (split[0] === regName || split[0] === obj.type) {
+					key = split[1];
+				}
+				else continue;
+				if (obj[key] === undefined) continue;
+				value = obj[key];
+			}
+		}
+		if (value === undefined) continue;
+
+		let section = document.createElement("div");
+		section.className = "regSection";
+		let sectionTitle = document.createElement("span");
+		sectionTitle.className = "regSectionTitle";
+		sectionTitle.innerHTML = parseText(regBrowserKeys[rkey]);
+		section.appendChild(sectionTitle);
+
+		let sectionValue = document.createElement("span");
+		sectionValue.className = "regSectionValue";
+		
+		if (Array.isArray(value)) {
+			section.classList.add("regSectionArray");
+			sectionValue.classList.add("regArray");
+			let values = value;
+			for (let i = 0; i < values.length; i++) {
+				if (i !== 0) sectionValue.insertAdjacentText("beforeend",", ");
+				let value = values[i];
+				if (regBrowserValues[key]) {
+					value = regBrowserValues[key](value, obj);
+				}
+				let itemSpan = document.createElement("span");
+				itemSpan.className = "regArrayItem";
+				itemSpan.innerHTML = parseText(value.toString());
+				sectionValue.appendChild(itemSpan);
+			}
+		}
+		else if (typeof value === "object") {
+			section.classList.add("regSectionDict");
+			sectionValue.classList.add("regDict");
+			let subkeys = Object.keys(value);
+			if (typeof value[subkeys[0]] === "number") subkeys.sort((a,b) => value[b] - value[a]);
+
+			for (let j = 0; j < subkeys.length; j++) {
+				const subkey = subkeys[j];
+				
+				let itemSpan = document.createElement("span");
+				itemSpan.className = "regDictItem";
+				let keySpan = document.createElement("span");
+				keySpan.className = "regDictKey";
+				let valueSpan = document.createElement("span");
+				valueSpan.className = "regDictValue";
+
+				let name = subkey;
+				if (regBrowserKeys[name]) name = regBrowserKeys[name];
+				else name = titleCase(name);
+				keySpan.innerHTML = parseText(name);
+
+				let value2 = value[subkey];
+				if (typeof value2 === "number") {
+					value2 = Math.round(value2*100)/100;
+				}
+				if (regBrowserValues[subkey] === null) continue;
+				else if (influenceModality[subkey] !== undefined && typeof value2 === "number") {
+					let h = 60;
+					h += Math.round((influenceModality[subkey] ? 1 : -1) * (60*value2));
+					h = Math.min(120,h);
+					h = Math.max(0,h);
+
+					let color = "hsl("+h+",80%,50%)";
+
+					value2 = parseText("{{color:"+value2+"|"+color+"}}");
+
+				}
+				else if (regBrowserValues[subkey]) {
+					value2 = regBrowserValues[subkey](value2, obj);
+				}
+				else if (regBrowserValues[regName + "." + subkey]) {
+					value2 = regBrowserValues[regName + "." + subkey](value2, obj);
+				}
+				// console.log()
+				if (value2 === undefined || value2 === null) continue;
+				valueSpan.innerHTML = parseText(value2.toString());
+
+				itemSpan.appendChild(keySpan);
+				itemSpan.appendChild(valueSpan);
+				sectionValue.appendChild(itemSpan);
+			}
+		}
+		else {
+			if (typeof value === "number") {
+				value = Math.round(value*100)/100;
+			}
+			if (regBrowserValues[rkey]) {
+				value = regBrowserValues[rkey](value, obj);
+			}
+			else if (regBrowserValues[key]) {
+				value = regBrowserValues[key](value, obj);
+			}
+			else if (regBrowserValues[regName + "." + key]) {
+				value = regBrowserValues[regName + "." + key](value, obj);
+			}
+			if (value === undefined || value === null) continue;
+			sectionValue.innerHTML = parseText(value.toString());
+		}
+		
+		if (sectionValue.innerHTML.length === 0) {
+			if (!obj.end) {
+				sectionValue.innerHTML = parseText("{{none}}");
+				sectionValue.classList.add("none");
+			}
+			else continue;
+		}
+		section.appendChild(sectionValue);
+		regContent.appendChild(section);
+	}
+	openPopup("regBrowser");
+}
+
+function regBrowsePlanet() {
+	let body = regGet("body", planet.body);
+	openRegBrowser({
+		name: planet.name,
+		color: planet.color,
+		type: planet.dems ? "planet" : (!regToArray("town").length ? "uninhabited" : planet.usurp ? "autonomous" : "inhabited") +" planet",
+		orbit: body.orbit,
+		orbited: regFilter("body", b => b.orbit === body.id).map(b => `{{regname:body|${b.id}}}`),
+		pos: body.pos,
+		body: body.id,
+		start: 0,
+		age: planet.day,
+		land: filterChunks((c) => c.b !== "water").length,
+		size: Math.floor((planet.config.height / planet.config.chunkSize) * (planet.config.width / planet.config.chunkSize)),
+		circumference: planet.config.width / planet.config.chunkSize,
+		continents: regFilter("landmass", (l) => l.size >= 40).map((l) => `{{regname:landmass|${l.id}}}`),
+		dems: planet.dems
+	}, "planet")
+}
+function regBrowseBiome(biome) {
+	let data = biomes[biome];
+
+	let crops = regFilter("species", (r) => r.type === "plant" && r.biome === biome);
+	crops = crops.map((r) => "{{regname:species|"+r.id+"}}");
+	if (!crops.length) crops = undefined;
+	let livestocks = regFilter("species", (r) => r.type === "animal" && r.biome === biome);
+	livestocks = livestocks.map((r) => "{{regname:species|"+r.id+"}}");
+	if (!livestocks.length) livestocks = undefined;
+	
+	openRegBrowser({
+		name: titleCase(data.name || biome),
+		color: data.color,
+		type: "biome",
+		crops: crops,
+		livestocks: livestocks
+	})
+}
+
+function handleMore(elem, entity) {
+	let regName
+	let id
+
+	if (elem) {
+		let regBrowser = elem.parentNode;
+	
+		regName = regBrowser.getAttribute("data-reg");
+		id = regBrowser.getAttribute("data-id");
+	
+		if (!regName || !id) {
+			elem.style.display = "none";
+			return;
+		};
+	}
+	else if (entity) {
+		regName = entity._reg;
+		id = entity.id;
+	}
+
+	let items = [];
+	let obj = regGet(regName, id);
+	let type = obj.subtype || obj.type || regName;
+	let name = obj.name;
+	if (regBrowserExtra[regName] && regBrowserExtra[regName].name) {
+		name = regBrowserExtra[regName].name(obj) || name;
+		console.log(name);
+	}
+
+	if (planet.mode === $c.FREEPLAY) {
+		const template = entityTemplates[obj.subtype] || entityTemplates[obj.type] || entityTemplates[obj._reg];
+		if (template) {
+			items.push({
+				text: "{{symbol:📊}} Edit",
+				func: () => {
+					handleEdit(obj);
+				}
+			});
+		}
+	
+		if (actionables[regName] && actionables[regName].asTarget) {
+			if (actionables[regName].asTarget.End || actionables[regName].asTarget.Finish) {
+				items.push({
+					text: "{{symbol:⌧}} Delete",
+					func: () => {
+						doPrompt({
+							type: "confirm",
+							message: `Are you sure you want to delete {{regname:${obj._reg}|${obj.id}}}?`,
+							danger: true,
+							func: (r) => {
+								if (!r) return;
+								happen(actionables[regName].asTarget.Finish ? "Finish" : "End", currentPlayer, obj);
+								renderHighlight();
+								renderMarkers();
+								updateCanvas();
+								autosave();
+								closeExecutive();
+							}
+						})
+					}
+				});
+			}
+		}
+
+		items.push({spacer:true});
+	}
+
+	if (actionables[regName] && actionables[regName].asTarget && actionables[regName].asTarget.Share) {
+		items.push({
+			text: "{{symbol:📤}} Share",
+			func: () => {
+				sharePrompt(actionables[regName].asTarget.Share(currentPlayer,obj));
+			}
+		})
+	}
+	else {
+		items.push({
+			text: "{{symbol:📤}} Share",
+			func: () => {
+				let extra;
+				let end = obj.done || obj.end;
+				if (end) extra = `It lasted ${end - obj.start} day${end - obj.start === 1 ? "" : "s"}.`;
+
+				let shareName = name;
+				if (shareName && shareName.toString().toLowerCase() == type) shareName = undefined;
+
+				sharePrompt(`Check out my ${type} in GenTown${shareName ? " called "+shareName : ""}!${extra ? " "+extra : ""}`);
+			}
+		})
+	}
+
+	items.push({
+		text: "{{symbol:📥}} Download",
+		func: () => {
+			downloadJSON(obj, name+".entity", "application/vnd.R74n.gentown-entity+json");
+			logTip("downloadImport", "Some entities can be imported in Free Play mode.")
+		}
+	})
+
+	if (userSettings.debug) {
+		items.push({
+			text: "{{symbol:📄}} Copy ID",
+			id: "copyID",
+			func: () => {
+				navigator.clipboard.writeText(`regGet("${obj._reg}", ${obj.id})`);
+				debugTemp = regGet(obj._reg, obj.id);
+				console.log(debugTemp);
+				logMessage(`Copied ${obj._reg} ID: ${obj.id}`);
+				closeExecutive();
+			}
+		})
+	}
+
+	if (!items.length) {
+		elem.style.display = "none";
+		return;
+	}
+
+	closePopups();
+	populateExecutive(items, `{{regname:${regName}|${id}}}`);
+	openExecutive();
+}
+
+function handleCreate(key, context={}) {
+	const template = entityTemplates[key];
+	if (!template) return;
+	const regName = template.reg;
+	const data = template.data || {};
+	if (!regName) return;
+	const name = template.name || titleCase(key);
+
+	for (const dataKey in data) {
+		context[dataKey] = data[dataKey];
+	}
+
+	if (!actionables[regName] || !actionables[regName].asTarget || !actionables[regName].asTarget["Create"]) return;
+
+	let entity = happen("Create", currentPlayer, null, context, regName);
+
+	// console.log(entity);
+	if (!entity) {
+		if (context.x !== undefined) logMessage(`${name} could not be placed here.`, "error");
+		else logMessage(`${name} could not be created.`, "error");
+		closeExecutive();
+		return false;
+	}
+
+	if (template.validate) template.validate(entity);
+
+	if (context.x !== undefined && template.placeMessage) {
+		const chunk = chunkAt(context.x, context.y);
+		if (template.placeMessage && !importingEntity) {
+			logMessage(template.placeMessage(entity, chunk));
+		}
+	}
+
+	// for (const dataKey in data) {
+	// 	entity[dataKey] = data[dataKey];
+	// }
+
+	logTip("createEdit", `Use the ${name.toLowerCase()}'s Executive menu (•••) to edit its properties.`);
+
+	renderHighlight();
+	updateCanvas();
+	updateStats();
+	handleEdit(entity);
+	autosave();
+
+	return entity;
+}
+function handleEdit(entity) { //Edit Tab
+	const template = entityTemplates[entity.subtype] || entityTemplates[entity.type] || entityTemplates[entity._reg];
+	if (!template) return;
+	if (entity.end) {
+		closeExecutive();
+		return;
+	}
+	const regName = template.reg;
+	const data = template.data;
+	const edit = template.edit;
+	if (!regName || !edit || regName !== entity._reg) return;
+	let items = [];
+
+	renderHighlight();
+	updateCanvas();
+	updateStats();
+
+	for (const editKey in edit) {
+		const editArgs = typeof edit[editKey] === "function" ? edit[editKey]() : edit[editKey];
+
+		let name = regBrowserKeys[regName+"."+editKey] || regBrowserKeys[editKey] || titleCase(editArgs.name || editKey);
+
+		const dataType = editArgs.type;
+
+		let currentValue = entity[editKey];
+		if (editArgs.value) currentValue = editArgs.value(entity);
+		let valueDisplay;
+		if (currentValue === undefined || currentValue === null) valueDisplay = "Unset";
+		else if (dataType === "number") valueDisplay = parseText(`{{num:${Math.round(currentValue * 100) / 100}}}`);
+		else if (dataType === "color") {
+			let color = RGBToHex(currentValue);
+			valueDisplay = parseText(`{{color:${color}|${color}}}`);
+		}
+		else valueDisplay = titleCase(currentValue);
+
+		const finish = (r) => {
+			if (!r) return;
+
+			if (dataType === "number") r = parseInt(r);
+
+			if (editArgs.min !== undefined) r = Math.max(r, editArgs.min);
+			if (editArgs.max !== undefined) r = Math.min(editArgs.max, r);
+
+			if (editArgs.action) {
+				happen(editArgs.action, currentPlayer, entity, {value: r});
+			}
+			else if (editArgs.func) {
+				editArgs.func(entity, r);
+			}
+			else entity[editKey] = r;
+			// else if (!editArgs.noSet) entity[editKey] = r;
+			
+			if (template.validate) template.validate(entity, r);
+
+			if (!editArgs.slider) logMessage(`Set {{regname:${entity._reg}|${entity.id}}}'s ${name.toLowerCase()}${dataType === "color" ? "" : " to " + escapeHTML(r.toString())}.`);
+
+			renderHighlight();
+			updateCanvas();
+			updateStats();
+			if (!editArgs.slider) handleEdit(entity);
+			autosave();
+		};
+
+		// {
+		// 	text: "Territory opacity",
+		// 	slider: "opacity",
+		// 	default: 0.5,
+		// 	value: userSettings.opacity,
+		// 	min: 0,
+		// 	step: 0.01,
+		// 	max: 1,
+		// 	formatter: (value) => `{{percent:${value}}}`,
+		// 	func: (key, value) => { if (!value) return; userSettings.opacity = value; renderHighlight(); updateCanvas(); saveSettings() }
+		// },
+		
+		if (editArgs.slider) {
+			items.push({
+				text: `${name}`,
+				slider: editKey,
+				default: currentValue,
+				value: currentValue,
+				min: editArgs.min || 0,
+				step: editArgs.step || 1,
+				max: editArgs.max || 100,
+				formatter: (value) => `${value}`,
+				func: (key, value) => finish(value)
+			})
+		}
+
+		else items.push({
+			text: `${name}: <span class="settingValue">${valueDisplay}</span>`,
+			func: () => {
+				
+				let prompt = {};
+				let choices = editArgs.choose;
+				if (typeof choices === "function") choices = choices(entity);
+				if (choices) {
+					prompt.type = "choose";
+					prompt.message = `Choose {{a:${name}}} ${name.toLowerCase()} for {{regname:${entity._reg}|${entity.id}}}.`;
+					prompt.choices = choices.map(i => titleCase(i));
+					prompt.choiceValues = choices;
+					prompt.func = (r) => {
+						if (!r) return;
+						finish(r);
+					}
+					doPrompt(prompt);
+					return;
+				}
+				else if (dataType === "color") {
+					prompt.type = "choose";
+					prompt.message = `Choose a ${name.toLowerCase()} for {{regname:${entity._reg}|${entity.id}}}.`;
+					prompt.choices = [...Object.keys(entityTemplateColors).map(i => `{{color:${titleCase(i)}|rgb(${entityTemplateColors[i].join(",")})}}`), "custom..."];
+					prompt.choiceValues = [...Object.values(entityTemplateColors), "custom"];
+					prompt.func = (r) => {
+						if (!r) return;
+						if (r === "custom") {
+							doPrompt({
+								type: "ask",
+								message: `Enter a hexadecimal color code for {{regname:${entity._reg}|${entity.id}}}.`,
+								func: (r) => {
+									if (!r) return;
+									if (!r.match(/^#/)) r = "#"+r;
+									r = hexToRGB(r);
+									if (!r) return;
+									r[0] = Math.max(0,Math.min(r[0], 255));
+									r[1] = Math.max(0,Math.min(r[1], 255));
+									r[2] = Math.max(0,Math.min(r[2], 255));
+									finish(r);
+								}
+							})
+							return;
+						}
+						// r = entityTemplateColors[r];
+						finish(r);
+					}
+					doPrompt(prompt);
+					return;
+				}
+				else if (dataType) {
+					prompt.type = "ask";
+					prompt.shuffle = dataType === "string";
+					prompt.default = entity[editKey];
+				}
+				else return;
+
+				prompt.message = "Enter a ";
+				if (dataType === "number") {
+					prompt.message += "number";
+					if (editArgs.min !== undefined && editArgs.max !== undefined) prompt.message += " from "+editArgs.min+" to "+editArgs.max;
+					else if (editArgs.min !== undefined) prompt.message += " greater than "+editArgs.min;
+					else if (editArgs.max !== undefined) prompt.message += " less than "+editArgs.max;
+				}
+				else {
+					prompt.message += "string";
+				}
+				prompt.message += ` for {{regname:${entity._reg}|${entity.id}}}'s ${name.toLowerCase()}`;
+				prompt.message += ".";
+
+				prompt.func = finish;
+
+				doPrompt(prompt);
+			}
+		})
+	}
+
+	if (items.length) populateExecutive(items, `Edit {{regname:${entity._reg}|${entity.id}}}`);
+}
+
+function unhideEntity(entity) {
+	if (!entity || !entity.name) return;
+	delete entity.named;
+	let secrets = document.querySelectorAll(`.entityName.secret[${entity._reg}="${entity.id}"]`);
+	if (secrets) secrets.forEach(span => {
+		span.innerText = entity.name;
+	})
+}
+
+
+
+function logMessage(text, type, args) {
+
+	if (sunsetting && type !== "sunset" && type !== "error") {
+		logTomorrow(text, type, args);
+		return;
+	}
+	if (text === false) return;
+	text = parseText(escapeHTML(text));
+	debugContext.trace.push("logMessage "+text.slice(0,10));
+	text = text.replace(/^[a-z]/, (match) => match.toUpperCase());
+	text = text.replace(/[!\.\?] [a-z]/, (match) => match.toUpperCase());
+	let uuid = uuidv4();
+	let html = `<span class="logMessage${type ? ' log'+titleCase(type) : ' logNormal'}" id="logMessage-${uuid}" new="true">
+	<span class="logDay" data-day="${type === "tip" ? "" : planet.day}" title="${type ? titleCase(type) : ""}" onclick="handleMessageClick(this)">${type === "tip" ? "?" : parseText("{{date:"+planet.day+"|s}}")}</span><span class="logText">${text}</span>
+</span>`
+	// <span class="logAct"><span>Yes</span><span>No</span></span>
+	let logMessages = document.getElementById("logMessages");
+	logMessages.insertAdjacentHTML("afterbegin",html);
+	let logText = logMessages.querySelector("#logMessage-"+uuid+" .logText");
+	if (logText.childNodes[0].className === "affix") {
+		logText.childNodes[0].innerText = logText.childNodes[0].innerText.replace(/^[a-z]/, (match) => match.toUpperCase());
+	}
+	if (logMessages.childNodes.length > 100) {
+		logMessages.removeChild(logMessages.lastChild);
+	}
+	if (args) {
+		if (args.buttons && args.buttons.length) {
+			let messageElement = document.getElementById("logMessage-"+uuid);
+			let logAct = document.createElement("span");
+			logAct.className = "logAct";
+			args.buttons.forEach(item => {
+				let logAsk = document.createElement("span");
+				logAsk.setAttribute("type",item.type || "act");
+				logAsk.setAttribute("role","button");
+				if (item.data) logAsk.setAttribute("data",item.data);
+				if (item.tip) logAsk.setAttribute("title", item.tip);
+				logAsk.innerText = item.name || "Act";
+				logAsk.addEventListener("click",item.func)
+				logAct.appendChild(logAsk);
+			})
+			messageElement.appendChild(logAct);
+		}
+		if (args.influences) {
+			reportInfluences(uuid, args.influences[0], args.influences[1]);
+		}
+	}
+	if (logPanel.scrollTop) logPanel.scrollTop = 0;
+	return uuid;
+}
+function fadeMessage(uuid) {
+	let elem = document.getElementById("logMessage-"+uuid);
+	if (elem) {
+		elem.classList.add("faded");
+		elem.setAttribute("done","true");
+		elem.removeAttribute("new");
+	}
+	return uuid;
+}
+function logChange(uuid,text) {
+	let elem = document.getElementById("logMessage-"+uuid);
+	if (elem) {
+		elem.setAttribute("changed","true");
+		text = parseText(escapeHTML(text));
+		text = text.replace(/^[a-z]/, (match) => match.toUpperCase());
+		elem.querySelector(".logText").innerHTML = text;
+		let logText = elem.querySelector(".logText");
+		if (logText.childNodes[0].className === "affix") {
+			logText.childNodes[0].innerText = logText.childNodes[0].innerText.replace(/^[a-z]/, (match) => match.toUpperCase());
+		}
+	}
+	return uuid;
+}
+function logSub(uuid,text) {
+	let elem = document.getElementById("logMessage-"+uuid);
+	if (elem) {
+		let html = `<span class="logSub">${parseText(escapeHTML(text))}</span>`
+		elem.insertAdjacentHTML("beforeend", html);
+		let act = elem.querySelector(".logAct");
+		if (act && !act.innerHTML.length) act.style.display = "none";
+	}
+	return uuid;
+}
+function clearLog() {
+	document.getElementById("logMessages").innerHTML = "";
+}
+function logTomorrow(text, type, args) {
+	planet.nextDayMessages.push([text,type,args]);
+}
+function logWarning(type, text) {
+	if (planet.warnings[type] && planet.day - planet.warnings[type] < $c.warningCooldown) return false;
+	planet.warnings[type] = planet.day;
+	(sunsetting ? logTomorrow : logMessage)(text, "warning");
+}
+function logTip(type, text) {
+	if (!planet.settled) return;
+	if (!userSettings.shownTips) userSettings.shownTips = [];
+	if (userSettings.shownTips.includes(type)) return false;
+	(sunsetting ? logTomorrow : logMessage)(text, "tip");
+	userSettings.shownTips.push(type);
+	saveSettings();
+}
+debugContext = null;
+function resetDebugContext() {
+	debugContext = { trace:[] }
+}
+resetDebugContext();
+function logException(error, context) {
+	if (context) debugContext.break = context;
+	if (debugContext.eventArgs) delete debugContext.eventArgs.eventID;
+	let _context = JSON.stringify(debugContext).replace(/[\{\}"]/g,"").replace(/\[/g,"(").replace(/\]/g,")");
+	let message = `${error.name}: ${error.message}; ${_context}`;
+	console.log("An error occurred. "+message);
+	logMessage(`An error occurred.`, "error", {buttons:[
+		{
+			name: "Copy",
+			func: async () => {
+				await navigator.clipboard.writeText(message);
+				logMessage("Error copied!", "tip");
+			}
+		},
+		{
+			name: "Report",
+			func: () => {
+				doPrompt({
+					type: "text",
+					message: `Send us this error message via our feedback form with as much info as possible.\n\n${escapeHTML(message)}`
+				})
+				document.getElementById("popupContent").innerHTML = document.getElementById("popupContent").innerHTML.replace("feedback form", `<a href="https://docs.google.com/forms/d/e/1FAIpQLSeq2TMoKAxJRKXlCmBLeONYLTMCc1j6lYcY5nxBr4lwaRWTpA/viewform?usp=pp_url&entry.391765687=Report+an+issue&entry.26107565=Steps%20to%20reproduce:%20%0A%0AError:%20${encodeURIComponent(message)}" target="_blank">feedback form</a>`);
+			}
+		}
+	]})
+}
+
+function reportInfluences(uuid, oldInfluences, newInfluences) {
+	let text = "";
+	let diffs = [];
+
+	for (let key in newInfluences) {
+		let diff = newInfluences[key] - oldInfluences[key];
+		if (oldInfluences[key] === undefined) diff = newInfluences[key];
+		diffs.push([key,diff]);
+	}
+
+	diffs.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+	diffs = diffs.slice(0,5);
+
+	for (let i = 0; i < diffs.length; i++) {
+		const key = diffs[i][0];
+		const diff = diffs[i][1];
+		
+		if (Math.abs(diff) > 0.01) {
+			let abs = Math.abs(diff);
+			let modality = influenceModality[key];
+			if (modality === undefined) modality = 1;
+			if (modality === 0 && diff < 0) modality = 1;
+			else if (modality === 0 && diff > 0) modality = 0;
+			else if (diff < 0) modality = 0;
+
+			text += "{{"+(modality ? "good" : "bad")+":";
+			text += regBrowserKeys[key] ? regBrowserKeys[key] : titleCase(key);
+			text += "}}";
+			text += "{{arrow|";
+			text += diff > 0 ? 1 : 0;
+			text += "|";
+			text += modality;
+			text += "|";
+			text += abs >= 1 ? 3 : abs >= 0.5 ? 2 : 1;
+			text += "}} ";
+		}
+	}
+
+	if (text) logSub(uuid, text);
+}
+
+isIOS = ['iPad Simulator','iPhone Simulator','iPod Simulator','iPad','iPhone','iPod'].includes(navigator.platform) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
+
+shareOptions = {
+	"Copy Text": {
+		func: async (text,title,url) => {
+			text += "\n\nPlay: "+url;
+			await navigator.clipboard.writeText(text);
+			logMessage("Message copied!", "tip");
+		},
+		main: true
+	},
+	"Twitter": {
+		template: "https://x.com/intent/post?text=TEXT",
+		useHashtag: true,
+		addLink: true,
+		main: true
+	},
+	"Reddit": {
+		template: "https://reddit.com/submit?url=URL&title=TEXT",
+		oneLine: true,
+		main: true
+	},
+	"Email": {
+		template: "mailto:?subject=TITLE&body=TEXT",
+		main: true,
+		addLink: true,
+	},
+	"More...": {
+		func: (text) => {
+			sharePrompt(text, true);
+		},
+		main: true
+	},
+
+	"Threads": {
+		template: "https://threads.net/intent/post?text=TEXT",
+		useHashtag: true,
+		addLink: true
+	},
+	"Bluesky": {
+		template: "https://bsky.app/intent/compose?text=TEXT",
+		useHashtag: true,
+		addLink: true
+	},
+	"Tumblr": {
+		template: "https://www.tumblr.com/widgets/share/tool?canonicalUrl=URL&title=TITLE&caption=TEXT&tags=HASHTAG"
+	},
+	"WhatsApp": {
+		template: "https://api.whatsapp.com/send?text=TEXT",
+		addLink: true
+	},
+}
+shareOptions[isIOS ? "iMessage" : "SMS"] = {
+	template: "sms:{phone_number}?body={url}{text}",
+	addLink: true
+}
+if (navigator.share) {
+	shareOptions["Share to..."] = {
+		func: async (text,title,url) => {
+			const shareData = {
+				title: title,
+				text: text,
+				url: url,
+			};
+			if (!navigator.canShare(shareData)) {
+				logMessage("Could not share!","tip");
+				delete shareOptions["Share to..."];
+				return;
+			}
+			await navigator.share(shareData);
+		}
+	}
+}
+function sharePrompt(text, more) {
+	let title = "GenTown";
+	let hashtag = "GenTown";
+	let url = "https://r74n.com/gentown/?utm_medium=social";
+
+	doPrompt({
+		type: "choose",
+		message: more ? null : text,
+		title: more ? "More..." : null,
+		choices: Object.keys(shareOptions).filter((key) => more ? !shareOptions[key].main : shareOptions[key].main),
+		subtype: "share",
+		func: (r) => {
+			if (!r) return;
+			let share = shareOptions[r];
+			if (share.func) share.func(text, title, url);
+			if (share.template) {
+				let link = share.template;
+				if (share.oneLine) text = text.replace(/\n/g, " ");
+				if (share.useHashtag) {
+					if (text.includes(hashtag)) text = text.replace(hashtag, "#"+hashtag);
+					else if (!share.addLink) text += " #"+hashtag;
+				}
+				if (share.addLink) {
+					text += "\n\nPlay";
+					if (share.useHashtag && !text.includes(hashtag)) text += " #"+hashtag;
+					text += ": "+url;
+				}
+				link = link.replace(/TEXT/g, encodeURIComponent(text));
+				link = link.replace(/TITLE/g, encodeURIComponent(title));
+				link = link.replace(/HASHTAG/g, encodeURIComponent(hashtag));
+				link = link.replace(/URL/g, encodeURIComponent(url));
+				window.open(link, '_blank').focus();
+			}
+		}
+	})
+}
+function shareProgress() {
+	let msg = `My GenTown planet, ${planet.name}, `;
+
+	if (planet.dead) {
+		msg += `${planet.dead < 50 ? "only " : ""}lasted ${parseText("{{num:"+planet.dead+"}}")} days before societal collapse`;
+	}
+	else if (planet.usurp) {
+		msg += `${planet.usurp < 50 ? "only " : ""}lasted ${parseText("{{num:"+planet.usurp+"}}")} days before they lost faith in me`;
+	}
+	else {
+		if (planet.day === 1) msg += `was just formed`;
+		else msg += `has lasted ${parseText("{{num:"+planet.day+"}}")} days`;
+		msg += ` and has `;
+		let towns = regCount("town");
+		let residents = regToArray("town").reduce((n, {pop}) => n + pop, 0);
+		msg += choose([
+			parseText("{{num:"+towns+"}}") + " town" + (towns === 1 ? "" : "s"),
+			parseText("{{num:"+residents+"|K}}") + " resident" + (residents === 1 ? "" : "s"),
+		])
+	}
+
+	msg += "!";
+
+	let emojis = "";
+	for (let type in unlockTree) {
+		let levels = unlockTree[type].levels;
+		let currentLevel = planet.unlocks[type] || 0;
+		for (let i = 0; i < levels.length; i++) {
+			const levelData = levels[i];
+			if (levelData.level <= currentLevel && levelData.emoji) {
+				emojis += levelData.emoji;
+			}
+			else break;
+		}
+	}
+	if (emojis) msg += "\n\n"+emojis;
+
+	sharePrompt(msg);
+}
+
+planetDeathMessage = null;
+function killPlanet() {
+	if (!planet.dead || planet.dead === true) planet.dead = planet.day;
+	if (planet.mode === $c.FREEPLAY) return;
+	planetDeathMessage = logMessage("There are no more settlements on Planet {{planet}}." + (planet.stats.score ? " Your final score was {{percent:"+planet.stats.score+"}}." : ""), undefined, {
+	buttons: [
+	{
+		name: "Start Over",
+		func: () => resetPlanetPrompt()
+	},
+	{
+		name: "Share",
+		func: () => shareProgress()
+	}
+	]
+	});
+	document.getElementById("actionSaves").classList.add("notify");
+}
+function revivePlanet() {
+	if (!planet.dead) return;
+	planet.dead = false;
+	document.getElementById("actionSaves").classList.remove("notify");
+	if (planetDeathMessage) fadeMessage(planetDeathMessage);
+}
+function lockPlanet() {
+	planet.locked = true;
+	document.getElementById("nextDay").setAttribute("disabled", "true");
+	document.getElementById("nextDayMobile").setAttribute("disabled", "true");
+	if (planet.mode === $c.FREEPLAY) {
+		document.getElementById("autoPlay").setAttribute("disabled", "true");
+		document.getElementById("autoPlayMobile").setAttribute("disabled", "true");
+	}
+}
+function unlockPlanet() {
+	planet.locked = false;
+	document.getElementById("nextDay").removeAttribute("disabled");
+	document.getElementById("nextDayMobile").removeAttribute("disabled");
+	if (planet.mode === $c.FREEPLAY) {
+		document.getElementById("autoPlay").removeAttribute("disabled");
+		document.getElementById("autoPlayMobile").removeAttribute("disabled");
+	}
+}
+
+function resetPlanetPrompt() {
+	doPrompt({
+		type: "confirm",
+		message: regCount("town") ?
+			"{{people}} look up dreadfully at the sky.\n\nAre you sure you want to DELETE them permanently?" :
+			"Are you sure you want to DELETE Planet {{planet}} permanently?",
+		title: "Reset Progress",
+		func: (r) => {
+			if (r) {
+				R74n.del("GenTownSave");
+				delete userSettings.view;
+				saveSettings();
+				location.reload();
+			}
+		},
+		danger: true
+	});
+}
+
+function updateTitle() {
+	newTitle = "GenTown";
+	if (planet.day > 1) newTitle += ": Day " + parseText("{{num:"+planet.day+"}}");
+	document.title = document.title.replace(/GenTown.+- /, newTitle +" - ")
+}
+
+townsBefore = null;
+sunsetting = false;
+onNextDay = null;
+
+function nextDay(e) {
+	resetDebugContext();
+	
+	try {
+
+	if (e) {
+		let btn = e.target;
+
+		if (!btn.classList.contains("nextDay")) btn = btn.parentNode;
+
+		if (btn.getAttribute("disabled") === "true") {
+			if (planet.letter) logTip("letter", "There is an urgent letter you must read before continuing.");
+			return;
+		}
+
+		if (planet.mode !== $c.FREEPLAY) {
+			btn.setAttribute("disabled","true");
+			setTimeout(()=>{
+				if (!planet.locked) { btn.removeAttribute("disabled"); }
+			}, 1000)
+		}
+	}
+
+	if (onNextDay) onNextDay();
+
+	if (recentEvents.length >= 3) recentEvents.shift();
+	// recentEvents.shift();
+
+	let oldMessages = document.querySelectorAll('.logMessage[new="true"], .logMessage[changed="true"]');
+	oldMessages.forEach((elem) => {
+		elem.removeAttribute("new");
+		elem.removeAttribute("changed");
+		elem.classList.add("passed");
+	})
+	for (let eventID in currentEvents) {
+		let eventCaller = currentEvents[eventID];
+		if (!eventCaller.done) {
+			debugContext.eventClass = eventCaller.eventClass;
+			debugContext.eventArgs = eventCaller.args;
+			if (eventCaller.logID) {
+				fadeMessage(eventCaller.logID);
+			}
+			if (eventCaller.needsInput) { //skipped
+				let eventInfo = gameEvents[eventCaller.eventClass];
+
+				if (planet.stats.promptstreak <= 0) statsAdd("promptstreak",-1);
+				else planet.stats.promptstreak = 0;
+
+				if (eventInfo.skip) {
+					gameEvents[eventCaller.eventClass].skip(eventCaller.subject, eventCaller.target, eventCaller.args, gameEvents[eventCaller.eventClass].func)
+				}
+
+				else if (eventInfo.value && eventInfo.value.skip) {
+					let oldStats = JSON.parse(JSON.stringify(planet.stats));
+
+					let value;
+
+					if (eventInfo.value.related && eventInfo.func) {
+						let related = happen("Related", eventCaller.subject, eventCaller.target);
+						if (related) {
+							let choice = choose(related);
+							let entity = regGet(choice[0], choice[1]);
+							if (entity && entity.name) {
+								value = titleCase(entity.name);
+								eventCaller.args.namer = [entity._reg, entity.id];
+							}
+						}
+					}
+					else if (eventInfo.value.default && eventInfo.func) {
+						value = eventInfo.value.default(eventCaller.subject, eventCaller.target, eventCaller.args);
+					}
+					
+					if (value) {
+						if (eventInfo.value.preview) {
+							let pseudo = document.createElement("span");
+							document.body.appendChild(pseudo);
+							pseudo.innerHTML = parseText(eventInfo.value.preview(value, eventCaller.subject, eventCaller.target));
+							let previewParts = pseudo.querySelectorAll(".previewPart");
+							eventCaller.args.previewParts = [...previewParts].map(e => e.textContent || e.getAttribute("data-original"));
+							pseudo.remove();
+						}
+						eventCaller.args.value = value;
+						doEvent(eventCaller.eventClass, eventCaller);
+					}
+
+					planet.stats = oldStats;
+				}
+			}
+		}
+		delete currentEvents[eventID];
+	}
+	debugContext.eventClass = "";
+	debugContext.eventArgs = "";
+
+	let towns = regToArray("town");
+
+	sunsetting = true;
+
+	for (let eventClass in dailyEvents) {
+		debugContext.eventClass = eventClass;
+		let eventCaller = readyEvent(eventClass);
+		debugContext.trace.pop();
+		if (!eventCaller) continue;
+		debugContext.eventArgs = eventCaller.args;
+		if (dailyEvents[eventClass].check && !dailyEvents[eventClass].check(eventCaller.subject, eventCaller.target, eventCaller.args)) continue;
+		doEvent(eventClass,eventCaller);
+		debugContext.trace.pop();
+	}
+	delete debugContext.eventClass;
+	delete debugContext.eventArgs;
+
+	debugContext.trace.push("townsBefore");
+	let sunsetMsg = "The Sun sets... ";
+	// log daily recap of town changes
+	if (townsBefore) {
+		let minChange = 0;
+		for (let i = 0; i < towns.length; i++) {
+			if (!towns[i].end) minChange++;
+		}
+		for (let i = 0; i < towns.length; i++) {
+			const town = towns[i];
+			if (town.end) continue;
+			const townBefore = townsBefore[town.id];
+			if (!townBefore) continue;
+
+			let msg = "";
+
+			const changes = {};
+
+			try {changes.pop = town.pop - townBefore.pop;} catch{}
+			if (Math.abs(changes.pop) >= minChange) msg += `{{diff:${changes.pop}}}{{icon:neutral|Population}} `;
+
+			try {changes.size = town.size - townBefore.size;} catch{}
+			if (Math.abs(changes.size) >= minChange) msg += `{{diff:${changes.size}}}{{icon:land|Size}} `;
+
+			try {changes.crop = (town.resources.crop||0) - (townBefore.resources.crop||0)} catch{}
+			if (Math.abs(changes.crop) >= minChange) msg += `{{diff:${changes.crop}}}{{icon:crop|Crops}} `;
+
+			try {changes.lumber = (town.resources.lumber||0) - (townBefore.resources.lumber||0)} catch{}
+			if (Math.abs(changes.lumber) >= minChange) msg += `{{diff:${changes.lumber}}}{{icon:lumber|Lumber}} `;
+
+			try {changes.rock = (town.resources.rock||0) - (townBefore.resources.rock||0)} catch{}
+			if (Math.abs(changes.rock) >= minChange) msg += `{{diff:${changes.rock}}}{{icon:rock|Rock}} `;
+			
+			try {changes.metal = (town.resources.metal||0) - (townBefore.resources.metal||0)} catch{}
+			if (Math.abs(changes.metal) >= minChange) msg += `{{diff:${changes.metal}}}{{icon:metal|Metal}} `;
+
+			try {changes.livestock = (town.resources.livestock||0) - (townBefore.resources.livestock||0)} catch{}
+			if (Math.abs(changes.livestock) >= minChange) msg += `{{diff:${changes.livestock}}}{{icon:livestock|Livestock}} `;
+
+			try {changes.cash = (town.resources.cash||0) - (townBefore.resources.cash||0)} catch{}
+			if (Math.abs(changes.cash) >= minChange) msg += `{{currency:${town.id}}}{{diff:${Math.round(changes.cash)}}} `;
+
+			if (msg) {
+				sunsetMsg += `{{regname:town|${town.id}|-}} (` + msg.trim() + ") ";
+			}
+		}
+	}
+	debugContext.trace.pop();
+	logMessage(sunsetMsg, "sunset");
+	// store previous town values
+	townsBefore = JSON.parse(JSON.stringify(reg.town));
+	planet.day ++;
+	sunsetting = false;
+
+	let eventCaller;
+
+	if (planet.nextDayMessages.length) {
+		planet.nextDayMessages.forEach((m) => {
+			logMessage(m[0], m[1], m[2]);
+		})
+		planet.nextDayMessages = [];
+	}
+
+	const townCount = regCount("town");
+	if (!townCount) {
+		if (!planet.dead) killPlanet();
+	}
+	else if (planet.dead) revivePlanet();
+
+	// skip events when failing additional checks
+	debugContext.trace.push("choosingEvents");
+	for (let tries = 0; tries < $c.dailyEventTries; tries++) { //random events
+		let influencingTown = choose(regToArray("town"));
+		let chosenEvent = chooseEvent(undefined,influencingTown);
+		if (!chosenEvent) continue;
+		let chosenSubject;
+		let chosenTarget;
+		debugContext.eventClass = chosenEvent;
+		if (gameEvents[chosenEvent].subject && gameEvents[chosenEvent].subject.reg === "town") chosenSubject = influencingTown;
+		else if (gameEvents[chosenEvent].target && gameEvents[chosenEvent].target.reg === "town" && !gameEvents[chosenEvent].target.random) chosenTarget = influencingTown;
+		eventCaller = readyEvent(chosenEvent, chosenSubject, chosenTarget);
+		if (eventCaller) debugContext.eventArgs = eventCaller.args;
+		if (eventCaller && eventCaller.eventClass && randomEvents[eventCaller.eventClass].check && !randomEvents[eventCaller.eventClass].check(eventCaller.subject, eventCaller.target, eventCaller.args)) {
+			// recentEvents.push(eventCaller.eventClass);
+			// console.log(randomEvents[eventCaller.eventClass].check(eventCaller.subject, eventCaller.target, eventCaller.args))
+			eventCaller = undefined;
+		}
+		if (eventCaller && planet.dead && !(eventCaller.subject && eventCaller.subject._reg === "nature")) eventCaller = undefined;
+		if (eventCaller && !eventCaller.target && randomEvents[eventCaller.eventClass].target) eventCaller = undefined;
+		if (eventCaller && gameEvents[chosenEvent].value && gameEvents[chosenEvent].value.ask &&
+			((eventCaller.target && eventCaller.target.usurp) || planet.usurp) && 
+			eventCaller.subject && eventCaller.subject._reg === "player") eventCaller = undefined;
+
+		if (eventCaller !== undefined) break;
+	}
+	debugContext.trace.pop();
+
+	if (eventCaller) {
+		debugContext.trace.push("randomEvent");
+		let eventID = eventCaller.eventID;
+		let eventClass = eventCaller.eventClass;
+		let eventInfo = randomEvents[eventClass];
+		debugContext.eventClass = eventClass;
+		debugContext.eventArgs = eventCaller.args;
+		currentEvents[eventID] = eventCaller;
+		let oldInfluences;
+		let influencedTown;
+		let buttons = [];
+
+		if (eventInfo.check && isFunction(eventInfo.message)) {
+			eventCaller.message = eventInfo.message(eventCaller.subject,eventCaller.target,eventCaller.args);
+		}
+
+		if (eventInfo.auto) {
+			if (eventInfo.target && eventInfo.target.reg === "town") influencedTown = eventCaller.target;
+			else if (eventInfo.subject && eventInfo.subject.reg === "town") influencedTown = eventCaller.subject;
+
+			if (influencedTown) {
+				oldInfluences = structuredClone(influencedTown.influences);
+			}
+
+			let r = doEvent(eventClass, currentEvents[eventID]);
+			if (!eventCaller.message) {
+				if (isFunction(eventInfo.message)) {
+					eventCaller.message = eventInfo.message(eventCaller.subject,eventCaller.target,eventCaller.args);
+				}
+				else if (eventInfo.message) eventCaller.message = eventInfo.message
+			}
+			eventCaller.done = true;
+		}
+
+		let isYesNo = false;
+
+		// logChoices
+		if (eventInfo.value && eventInfo.value.choose) {
+			eventCaller.needsInput = true;
+			eventInfo.value.choose.forEach((r) => {
+				buttons.push({ name: titleCase(r), type:"choice", data:r,
+				func: (e) => {
+					debugContext.eventClass = eventClass;
+					if (messageElement.getAttribute("done")) return;
+					let r = e.target.getAttribute("data");
+
+					let influencedTown;
+					if (eventInfo.target && eventInfo.target.reg === "town") influencedTown = eventCaller.target;
+					else if (eventInfo.subject && eventInfo.subject.reg === "town") influencedTown = eventCaller.subject;
+
+					let oldInfluences;
+					if (influencedTown) {
+						oldInfluences = structuredClone(influencedTown.influences);
+					}
+
+					eventCaller.args.value = r;
+					debugContext.eventClass = eventClass;
+					debugContext.eventArgs = eventCaller.args;
+					doEvent(eventClass, currentEvents[eventID]);
+
+					if (oldInfluences) {
+						let newInfluences = influencedTown.influences;
+						reportInfluences(eventCaller.logID, oldInfluences, newInfluences);
+					}
+
+					messageElement.removeAttribute("new");
+					messageElement.setAttribute("done","true");
+					e.target.setAttribute("selected","true");
+					eventCaller.done = true;
+					statsAdd("prompt",1);
+					if (planet.stats.promptstreak < 0) planet.stats.promptstreak = 0;
+					statsAdd("promptstreak",1);
+					updateStats();
+					refreshExecutive();
+					renderMap();
+					renderHighlight();
+					updateCanvas();
+					autosave();
+				}});
+			})
+		}
+
+		// logAct / logAsk
+		else if (eventInfo.value && eventInfo.value.ask) {
+			eventCaller.needsInput = true;
+			buttons.push({ name: titleCase(eventInfo.button || "Act"),
+			func: (e) => {
+				debugContext.eventClass = eventClass;
+				if (messageElement.getAttribute("done")) return;
+				let _promptState;
+				doPrompt({
+					type: "ask",
+					shuffle: eventInfo.value.shuffle,
+					basis: eventInfo.value.basis ? eventInfo.value.basis(eventCaller.subject, eventCaller.target, eventCaller.args) : undefined,
+					suggest: eventInfo.value.related ? happen("Related", eventCaller.subject, eventCaller.target) : undefined,
+					message: eventInfo.value.message ? eventInfo.value.message(eventCaller.subject, eventCaller.target, eventCaller.args) : eventCaller.message,
+					func: (r) => {
+						try {
+						
+						if (!r) return;
+
+						let previewParts = document.querySelectorAll("#popupContent .popupPreview .previewPart");
+						eventCaller.args.previewParts = [...previewParts].map(e => e.textContent || e.getAttribute("data-original"));
+
+						let influencedTown;
+						if (eventInfo.target && eventInfo.target.reg === "town") influencedTown = eventCaller.target;
+						else if (eventInfo.subject && eventInfo.subject.reg === "town") influencedTown = eventCaller.subject;
+
+						let oldInfluences;
+						if (influencedTown) {
+							oldInfluences = structuredClone(influencedTown.influences);
+						}
+
+						if (_promptState.suggested) eventCaller.args.namer = [_promptState.suggested._reg, _promptState.suggested.id];
+
+						eventCaller.args.value = r;
+						debugContext.eventClass = eventClass;
+						debugContext.eventArgs = eventCaller.args;
+						doEvent(eventClass, currentEvents[eventID]);
+
+						if (oldInfluences) {
+							let newInfluences = influencedTown.influences;
+							reportInfluences(eventCaller.logID, oldInfluences, newInfluences);
+						}
+
+						messageElement.removeAttribute("new");
+						messageElement.setAttribute("done","true");
+						e.target.setAttribute("selected","true");
+						eventCaller.done = true;
+						statsAdd("prompt",1);
+						if (planet.stats.promptstreak < 0) planet.stats.promptstreak = 0;
+						statsAdd("promptstreak",1);
+						updateStats();
+						refreshExecutive();
+						renderMap();
+						renderHighlight();
+						updateCanvas();
+						autosave();
+
+						}
+						catch (error) {
+							logException(error, "logAsk");
+							throw error
+						}
+					},
+					preview: eventInfo.value.preview,
+					default: eventInfo.value.default ? eventInfo.value.default(eventCaller.subject, eventCaller.target, eventCaller.args) : undefined,
+					subject: eventCaller.subject,
+					target: eventCaller.target,
+					eventArgs: eventCaller.args
+				});
+				_promptState = promptState;
+			}})
+		}
+
+		// logYes and logNo
+		else if ((eventInfo.func || eventInfo.influences || eventInfo.influencesNo || eventInfo.messageNo) && !eventInfo.auto) {
+			eventCaller.needsInput = true;
+			isYesNo = true;
+			if (eventCaller.target && eventCaller.target.usurp && !eventInfo.noUsurp) {
+				eventCaller.needsInput = false;
+			}
+			if (planet.usurp) eventCaller.needsInput = false;
+
+			// logNo
+			buttons.push({ name: titleCase(eventCaller.args.buttonNo || eventInfo.buttonNo || "No"), type:"no",
+			func: (e) => {
+				debugContext.eventClass = eventClass;
+				debugContext.eventArgs = eventCaller.args;
+
+				try {
+
+				if (messageElement.getAttribute("done")) return;
+
+				let influencedTown;
+				if (eventInfo.target && eventInfo.target.reg === "town") influencedTown = eventCaller.target;
+				else if (eventInfo.subject && eventInfo.subject.reg === "town") influencedTown = eventCaller.subject;
+
+				let oldInfluences;
+				if (influencedTown) {
+					oldInfluences = structuredClone(influencedTown.influences);
+				}
+
+				if (eventInfo.funcNo) {
+					eventInfo.funcNo(eventCaller.subject,eventCaller.target,eventCaller.args);
+				}
+				if (eventInfo.influencesNo) {
+					happen("Influence", null, influencedTown, eventInfo.influencesNo);
+				}
+
+				if (oldInfluences) {
+					let newInfluences = influencedTown.influences;
+					reportInfluences(eventCaller.logID, oldInfluences, newInfluences);
+				}
+
+				messageElement.removeAttribute("new");
+				messageElement.setAttribute("done","true");
+				e.target.setAttribute("selected","true");
+				if (isFunction(eventInfo.messageNo)) {
+					let messageNo = eventInfo.messageNo(eventCaller.subject,eventCaller.target,eventCaller.args);
+					if (messageNo) logChange(eventCaller.logID, messageNo);
+				}
+				else if (eventInfo.messageNo) logChange(eventCaller.logID, eventInfo.messageNo);
+				eventCaller.done = true;
+				if (eventCaller.needsInput) {
+					statsAdd("prompt",1);
+					if (planet.stats.promptstreak < 0) planet.stats.promptstreak = 0;
+					statsAdd("promptstreak",1);
+				}
+				updateStats();
+				refreshExecutive();
+				renderHighlight();
+				updateCanvas();
+				autosave();
+
+				}
+				catch (error) {
+					logException(error, "logNo");
+					throw error
+				}
+			}})
+
+			// logYes
+			buttons.push({ name: titleCase(eventCaller.args.buttonYes || eventInfo.button || eventInfo.buttonYes || "Yes"), type:"yes",
+			func: (e) => {
+				debugContext.eventClass = eventClass;
+				debugContext.eventArgs = eventCaller.args;
+
+				try {
+				
+				if (messageElement.getAttribute("done")) return;
+
+				let influencedTown;
+				if (eventInfo.target && eventInfo.target.reg === "town") influencedTown = eventCaller.target;
+				else if (eventInfo.subject && eventInfo.subject.reg === "town") influencedTown = eventCaller.subject;
+				
+				let oldInfluences;
+				if (influencedTown) {
+					oldInfluences = structuredClone(influencedTown.influences);
+				}
+
+				doEvent(eventClass, currentEvents[eventID]);
+				if (eventInfo.influences) {
+					happen("Influence", null, influencedTown, eventInfo.influences);
+				}
+
+				if (oldInfluences) {
+					let newInfluences = influencedTown.influences;
+					reportInfluences(eventCaller.logID, oldInfluences, newInfluences);
+				}
+
+				messageElement.removeAttribute("new");
+				messageElement.setAttribute("done","true");
+				e.target.setAttribute("selected","true");
+				eventCaller.done = true;
+				if (eventCaller.needsInput) {
+					statsAdd("prompt",1);
+					if (planet.stats.promptstreak < 0) planet.stats.promptstreak = 0;
+					statsAdd("promptstreak",1);
+				}
+				updateStats();
+				refreshExecutive();
+				renderHighlight();
+				updateCanvas();
+				autosave();
+
+				}
+				catch (error) {
+					logException(error, "logYes");
+					throw error
+				}
+			}})
+		}
+
+		if (eventCaller.message) {
+			eventCaller.logID = logMessage(eventCaller.message, eventInfo.messageType, {buttons: buttons});
+			if (eventCaller.args.oldInfluences && (eventCaller.args.influencedTown || influencedTown)) {
+				let town = eventCaller.args.influencedTown || influencedTown;
+				reportInfluences(eventCaller.logID,eventCaller.args.oldInfluences, town.influences);
+				delete eventCaller.args.oldInfluences;
+			}
+		}
+		let messageElement = document.getElementById("logMessage-"+eventCaller.logID);
+		recentEvents.push(eventClass);
+		if (eventInfo.cooldown) {
+			planet.cooldownEvents[eventClass] = planet.day;
+		}
+		if (messageElement) {
+			messageElement.setAttribute("data-eventid",eventID)
+			messageElement.setAttribute("data-eventclass",eventClass)
+		}
+		if (eventInfo.auto) {
+			if (messageElement) messageElement.setAttribute("done","true");
+
+			if (oldInfluences && influencedTown) reportInfluences(eventCaller.logID, oldInfluences, influencedTown.influences)
+		}
+
+		if (isYesNo && (!eventCaller.needsInput || ( // usurp
+			planet.mode === $c.FREEPLAY && userSettings.freeplayDecisions !== true //Free Play
+		))) {
+			setTimeout(() => {
+				debugContext.trace.push("usurpAutoClick");
+				choose(messageElement.querySelectorAll(".logAct span")).click();
+				if (eventCaller.target.usurp || planet.usurp) messageElement.querySelector(".logAct").addEventListener("click", () => {
+					logMessage(`{{regname:${eventCaller.target._reg}|${eventCaller.target.id}}} has chosen to be run independently.`, "tip");
+				});
+			}, 10);
+			if (messageElement) messageElement.classList.add("usurp");
+		}
+
+		delete debugContext.eventClass;
+		delete debugContext.eventArgs;
+	}
+	else if (!planet.dead) {
+		logMessage("An uneventful day.");
+	}
+
+	debugContext.trace.push("nextDayOthers");
+	updateStats();
+	refreshExecutive();
+	// renderMap();
+	renderHighlight();
+	updateCanvas();
+
+	autosave();
+	updateTitle();
+
+	}
+	catch (error) {
+		logException(error, "nextDay");
+		throw error
+	}
+}
+
+autoPlayInterval = null;
+function autoPlay(skipFirst) {
+	let nextDayButton = document.getElementById("nextDay");
+	if (nextDayButton.getAttribute("disabled") === "true") return;
+
+	let btn = document.getElementById("autoPlay");
+	let btnMobile = document.getElementById("autoPlayMobile");
+	
+	if (autoPlaying) {
+		btn.removeAttribute("selected");
+		btnMobile.removeAttribute("selected");
+		autoPlaying = false;
+		clearInterval(autoPlayInterval);
+	}
+	else {
+		btn.setAttribute("selected", "true");
+		btnMobile.setAttribute("selected", "true");
+		autoPlaying = true;
+		if (skipFirst !== true) nextDay();
+		autoPlayInterval = setInterval(nextDay, userSettings.autoPlaySpeed || 2000);
+	}
+}
+
+document.getElementById("nextDay").addEventListener("click",nextDay);
+document.getElementById("nextDayMobile").addEventListener("click",nextDay);
+document.getElementById("autoPlay").addEventListener("click",autoPlay);
+document.getElementById("autoPlayMobile").addEventListener("click",autoPlay);
+
+function customizePlanet() {
+	let config = planet.config || {};
+	let onchange = (key, value) => {
+		resetDebugContext();
+		debugContext.trace.push("customizeChange");
+
+		try {
+			if (key) {
+				if (typeof key === "string") config[key] = value;
+				else {
+					value = key.getAttribute("data-value");
+					key = key.getAttribute("data-setting");
+					console.log(key,value);
+					if (key === "mode") {
+						config.mode = parseInt(value);
+						if (window.afterModeSelect) window.afterModeSelect(config.mode);
+						delete userSettings.mode;
+						saveSettings();
+					}
+				}
+			}
+
+			debugContext.customizeKey = key;
+			debugContext.customizeValue = value;
+	
+			config.width -= (config.width % config.chunkSize);
+			config.height -= (config.height % config.chunkSize);
+	
+			let tempName = planet.name;
+			let tempSystems = reg.system;
+			let tempBodies = reg.body;
+			let tempBody = planet.body;
+			planet = generatePlanet(config);
+			planet.name = tempName;
+			planet.reg.system = tempSystems;
+			planet.reg.body = tempBodies;
+			planet.body = tempBody;
+			updateBiomes();
+			initGame(true);
+			reg = planet.reg;
+			generateStarSystem();
+			calculateLandmasses();
+			renderMap();
+			updateCanvas();
+			fitToScreen();
+		}
+		catch (error) {
+			logException(error, "customizePlanet");
+			throw error
+		}
+
+	};
+
+	populateExecutive([
+		{
+			text: "Mode",
+			setting: "mode",
+			options: { "1": "Strategy", "2": "Free Play" },
+			default: "1",
+			// formatter: (value) => `{{elevation:${value}}}`,
+			func: onchange
+		},
+		{
+			text: "Water level",
+			slider: "waterLevel",
+			default: $c.defaultWaterLevel,
+			value: config.waterLevel,
+			min: 0,
+			step: 0.1,
+			max: 1,
+			formatter: (value) => `{{elevation:${value}}}`,
+			func: onchange
+		},
+		{
+			text: "Temperature",
+			slider: "temp",
+			default: $c.defaultPlanetTemp,
+			value: config.temp,
+			min: -1,
+			step: 0.1,
+			max: 1,
+			formatter: (value) => `{{percent:${value / 2 + 0.5}}}`,
+			func: onchange
+		},
+		{
+			text: "Moisture",
+			slider: "moisture",
+			default: $c.defaultPlanetMoisture,
+			value: config.moisture,
+			min: -1,
+			step: 0.1,
+			max: 1,
+			formatter: (value) => `{{percent:${value / 2 + 0.5}}}`,
+			func: onchange
+		},
+		{
+			text: "Elevation",
+			slider: "elevation",
+			default: $c.defaultPlanetElevation,
+			value: config.elevation,
+			min: -1,
+			step: 0.1,
+			max: 1,
+			formatter: (value) => `{{percent:${value / 2 + 0.5}}}`,
+			func: onchange
+		},
+		{
+			text: "Smoothness",
+			slider: "smooth",
+			default: 0.5,
+			value: config.smooth,
+			min: 0,
+			step: 0.1,
+			max: 1,
+			formatter: (value) => `{{percent:${(value)}}}`,
+			func: onchange
+		},
+		{
+			text: "Detail",
+			slider: "detail",
+			default: 5,
+			value: config.detail,
+			min: 1,
+			step: 1,
+			max: 10,
+			formatter: (value) => `{{percent:${(value - 1) / 9}}}`,
+			func: onchange
+		},
+		{
+			text: "Landmass size",
+			slider: "landmassSize",
+			default: 40,
+			value: config.landmassSize,
+			min: 5,
+			step: 5,
+			max: 80,
+			formatter: (value) => `{{percent:${(value - 5) / 75}}}`,
+			func: onchange
+		},
+		{
+			text: "Tune X",
+			slider: "tuneX",
+			default: 0,
+			value: config.tuneX,
+			min: -100,
+			step: 0.1,
+			max: 100,
+			formatter: (value) => `${Math.round(value)}`,
+			func: onchange
+		},
+		{
+			text: "Tune Y",
+			slider: "tuneY",
+			default: 0,
+			value: config.tuneY,
+			min: -100,
+			step: 0.1,
+			max: 100,
+			formatter: (value) => `${Math.round(value)}`,
+			func: onchange
+		},
+		{
+			text: "Border",
+			slider: "borderFalloff",
+			default: 10,
+			value: config.borderFalloff,
+			min: 0,
+			step: 1,
+			max: 18,
+			formatter: (value) => `{{percent:${value / 18}}}`,
+			func: onchange
+		},
+		{
+			text: "Land color",
+			slider: "landColor",
+			default: $c.defaultLandColor,
+			value: config.landColor,
+			min: 0,
+			step: 5,
+			max: 360,
+			formatter: (value) => `${Math.round(value)}°`,
+			func: onchange
+		},
+		{
+			text: "Water color",
+			slider: "waterColor",
+			default: $c.defaultWaterColor,
+			value: config.waterColor,
+			min: 0,
+			step: 5,
+			max: 360,
+			formatter: (value) => `${Math.round(value)}°`,
+			func: onchange
+		},
+		{
+			text: "Length",
+			slider: "height",
+			default: $c.defaultPlanetHeight,
+			value: config.height,
+			min: 20,
+			step: 20,
+			max: 300,
+			formatter: (value) => `{{length:${value}}}`,
+			func: onchange
+		},
+		{
+			text: "Width",
+			slider: "width",
+			default: $c.defaultPlanetWidth,
+			value: config.width,
+			min: 20,
+			step: 20,
+			max: 300,
+			formatter: (value) => `{{length:${value}}}`,
+			func: onchange
+		},
+		{
+			text: "Chunk size",
+			slider: "chunkSize",
+			default: $c.defaultChunkSize,
+			value: config.chunkSize,
+			min: 1,
+			step: 1,
+			max: 8,
+			formatter: (value) => `{{length:${value}}}`,
+			func: onchange
+		},
+		{
+			text: "Biome size",
+			slider: "biomeSize",
+			default: $c.defaultBiomeSize,
+			value: config.biomeSize,
+			min: 2,
+			step: 1,
+			max: 40,
+			formatter: (value) => `{{length:${value-1}}}`,
+			func: onchange
+		},
+
+		{ spacer:true },
+		{
+			text: "Reset defaults",
+			func: () => {
+				let seed = planet.config.seed;
+				planet.config = defaultPlanet().config;
+				planet.config.seed = seed;
+				config = planet.config;
+				onchange();
+				closeExecutive();
+				customizePlanet();
+			}
+		},
+	], "Customize");
+	openExecutive();
+}
+
+
+
+let tempReg;
+preButtons = ["customize","customizeSpacer"];
+function initGame(noReset=false) {
+	resizeCanvases();
+	fitToScreen();
+
+	try {
+
+	if (!planet.reg) planet.reg = defaultRegistry();
+	if (tempReg && noReset) {
+		planet.reg = tempReg;
+	}
+	else tempReg = planet.reg;
+	reg = planet.reg;
+	gameLoaded = true;
+
+	if (planet.config.landColor !== $c.defaultLandColor) {
+		let hue = (planet.config.landColor - $c.defaultLandColor) / 360;
+		for (let biome in biomes) {
+			let hsl = RGBtoHSL(biomes[biome].color);
+			hsl[0] += hue;
+			biomes[biome].colorOverride = HSLtoRGB(hsl);
+		}
+	}
+	else {
+		for (let biome in biomes) {
+			delete biomes[biome].colorOverride;
+		}
+	}
+	if (planet.config.waterColor !== $c.defaultWaterColor) {
+		let hue = ($c.defaultWaterColor - planet.config.waterColor) / 360;
+		let hsl = RGBtoHSL(biomes.water.color);
+		hsl[0] += hue;
+		biomes.water.colorOverride = HSLtoRGB(hsl);
+
+		waterColors = [...waterColorsOld];
+		for (let i = 0; i < waterColors.length; i++) {
+			let hsl = RGBtoHSL(waterColors[i]);
+			hsl[0] += hue;
+			waterColors[i] = HSLtoRGB(hsl);
+		}
+	}
+	else waterColors = waterColorsOld;
+	
+	if (parseInt(planet.day) !== planet.day) planet.day = 1;
+	
+	if (!planet.name) planet.name = generateWord(undefined,true);
+	document.getElementById("planetName").innerHTML = parseText("{{planet}}");
+
+	if (!noReset) {
+		clearLog();
+		closeExecutive();
+
+		initExecutive();
+	}
+
+	currentPlayer = regGet("player", 1);
+	if (!currentPlayer) {
+		currentPlayer = happen("Create", null, null, null, "player");
+	}
+	if (planet.reg.nature._id === 1) {
+		regAdd("nature", {
+			name: choose(["Mother","Father"]) + " " + planet.name
+		})
+	}
+
+	if (!noReset) {
+		// remove any existing resources from biomes
+		regToArray("resource").forEach((r) => {
+			if (r.biome) {
+				delete biomes[r.biome][r.type];
+			}
+		})
+	}
+	
+	if (noReset) {}
+	else if (reg.resource._id === 1) {
+		happen("Create",null,null,{ type:"raw", name:"lumber", color:[114, 73, 30] },"resource").id;
+		happen("Create",null,null,{ type:"raw", name:"rock", color:[173, 166, 160] },"resource").id;
+		happen("Create",null,null,{ type:"raw", name:"metal", color:[106, 96, 84] },"resource").id;
+		for (let biome in biomes) {
+			for (let i = 0; i < 2; i++) {
+				if (biomes[biome].plant !== null) happen("Create",null,null,{ type:"plant", biome:biome, named:false },"species");
+				if (biomes[biome].animal !== null) happen("Create",null,null,{ type:"animal", biome:biome, named:false },"species");
+			}
+		}
+	}
+	else {
+		// regToArray("resource").forEach((r) => {
+		// 	if (r.biome) {
+		// 		if (!biomes[r.biome][r.type]) biomes[r.biome][r.type] = [];
+		// 		biomes[r.biome][r.type].push(r.id);
+		// 	}
+		// })
+		regToArray("species").forEach((r) => {
+			if (r.biome) {
+				if (!biomes[r.biome][r.type]) biomes[r.biome][r.type] = [];
+				biomes[r.biome][r.type].push(r.id);
+			}
+		})
+	}
+	// Move all crops and livestock to .species (plants and animals)
+	// Create "crop" and "livestock" resource
+	// Rock/Lumber/Metal subtypes will go in their own registries (.rock .lumber .metal)
+
+	if (noReset) {}
+	// create first town prompt
+	else if (reg.town._id === 1 && planet.day === 1 && !planet.settled) {
+		let modeSelected = false;
+		window.afterModeSelect = (mode) => {
+			// if (modeSelected) return;
+			clearLog();
+			modeSelected = mode;
+			planet.mode = mode;
+			// fadeMessage(modeSelectMessage);
+			let finished = false;
+			let finish = () => {
+				if (finished) return;
+				finished = true;
+				onMapClick = null;
+				if (onMapClickMsg) fadeMessage(onMapClickMsg);
+				onMapClickMsg = null;
+				onNextDay = null;
+
+				planet.settled = planet.day;
+				planet.mode = modeSelected;
+				unlockPlanet();
+
+				preButtons.forEach((id) => {
+					let btn = document.getElementById("actionItem-"+id);
+					btn.style.display = "none";
+				})
+				
+				closeExecutive();
+				setView("territory");
+				autosave();
+			}
+
+			let startMessage = logMessage(
+				mode === $c.FREEPLAY ? "Use the {{executive:Create}} tab to settle your town(s)." : "Tap on the map to settle your town.",
+			"tip", {buttons:[
+				{
+					name: "Regenerate",
+					func: () => {
+						if (planet.settled || planet.day !== 1) return;
+						delete planet.config.seed;
+						planet = generatePlanet(planet.config);
+						reg = planet.reg;
+						updateBiomes();
+						initGame(true);
+						generateStarSystem(true);
+						calculateLandmasses();
+						renderMap();
+						updateCanvas();
+					}
+				}
+			]});
+
+			if (mode === $c.DEFAULT) {
+				executiveListeners = {};
+				onNextDay = null;
+				setView("terrain");
+				onMapClickMsg = startMessage;
+				onMapClick = function(e) {
+					let chunk = planet.chunks[mousePos.chunkX+","+mousePos.chunkY];
+					if (chunk) {
+	
+						if (chunk.b !== "water" && chunk.b !== "mountain") {
+							let town = happen("Create",currentPlayer,null,{x:chunk.x, y:chunk.y},"town");
+	
+							logMessage(`The small ${town.type||"town"} of {{regname|town|${town.id}}} is founded in the {{biome:${chunk.b}}} of {{regname:landmass|${chunk.v.g}}}.`)
+							if (!planet.locked) {
+								document.getElementById("nextDay").removeAttribute("disabled");
+								document.getElementById("nextDayMobile").removeAttribute("disabled");
+							}
+							townsBefore = JSON.parse(JSON.stringify(reg.town));
+							finish();
+						}
+					}
+	
+				}
+				document.getElementById("autoPlay").style.display = "none";
+				document.getElementById("autoPlayMobile").style.display = "none";
+				lockPlanet();
+				document.getElementById("actionItem-create").style.display = "none";
+				document.getElementById("actionItem-import").style.display = "none";
+			}
+			if (mode === $c.FREEPLAY) {
+				onMapClickMsg = null;
+				onMapClick = null;
+				unlockPlanet();
+				unlockExecutive("create");
+				unlockExecutive("import");
+				setView("territory");
+				executiveListeners["create"] = () => {
+					planet.settled = true;
+					fadeMessage(startMessage);
+					finish();
+				};
+				executiveListeners["import"] = () => {
+					planet.settled = true;
+					fadeMessage(startMessage);
+					finish();
+				};
+				onNextDay = finish;
+				document.getElementById("autoPlay").style.display = "flex";
+				document.getElementById("autoPlayMobile").style.display = "flex";
+				document.getElementById("nextDay").removeAttribute("disabled");
+				document.getElementById("nextDayMobile").removeAttribute("disabled");
+				document.getElementById("autoPlay").removeAttribute("disabled");
+				document.getElementById("autoPlayMobile").removeAttribute("disabled");
+			}
+
+		}
+		// let modeSelectMessage = logMessage("Select a play mode.", undefined, {buttons:[
+		// 	{
+		// 		name: "Strategy",
+		// 		func: () => afterModeSelect($c.DEFAULT),
+		// 		tip: "Answer prompts from your residents to keep them happy"
+		// 	},
+		// 	{
+		// 		name: "Free Play",
+		// 		func: () => afterModeSelect($c.FREEPLAY),
+		// 		tip: "Design a scenario and see what happens"
+		// 	},
+		// 	{
+		// 		name: "?",
+		// 		func: () => doPrompt({
+		// 			type: "text",
+		// 			message: "Strategy: Answer prompts from your residents to keep them happy\n\nFree Play: Design a scenario and see what happens"
+		// 		}),
+		// 		tip: "Mode info"
+		// 	}
+		// ]});
+		afterModeSelect(1);
+	}
+	else { // enable "Next Day" buttons if town already exists
+		onMapClick = null;
+		onMapClickMsg = null;
+		if (!planet.locked) {
+			document.getElementById("nextDay").removeAttribute("disabled");
+			document.getElementById("nextDayMobile").removeAttribute("disabled");
+		}
+		townsBefore = JSON.parse(JSON.stringify(reg.town));
+		if (!planet.settled) {
+			planet.settled = 1;
+		}
+		if (planet.mode === $c.FREEPLAY) {
+			document.getElementById("autoPlay").style.display = "flex";
+			document.getElementById("autoPlayMobile").style.display = "flex";
+			document.getElementById("autoPlay").removeAttribute("disabled");
+			document.getElementById("autoPlayMobile").removeAttribute("disabled");
+			unlockExecutive("create");
+			unlockExecutive("import");
+		}
+		else {
+			document.getElementById("autoPlay").style.display = "none";
+			document.getElementById("autoPlayMobile").style.display = "none";
+			document.getElementById("autoPlay").setAttribute("disabled","true");
+			document.getElementById("autoPlayMobile").setAttribute("disabled","true");
+		}
+	}
+
+	let gameDiv = document.getElementById("gameDiv");
+	if (planet.letter) {
+		happen("Letter", null, currentPlayer);
+	}
+	if (planet.usurp) gameDiv.classList.add("usurp");
+	else gameDiv.classList.remove("usurp");
+
+	if (userSettings.overlay === false) document.getElementById("mapOverlay").style.display = "none";
+
+	if (!noReset) {
+		preButtons.forEach((id) => {
+			let btn = document.getElementById("actionItem-"+id);
+			if (planet.settled) btn.style.display = "none";
+			else btn.style.display = "";
+		})
+	}
+
+	updateStats();
+	if (!noReset) renderMap();
+	renderHighlight();
+	updateCanvas();
+
+	fitToScreen();
+	updateTitle();
+
+	}
+	catch (error) {
+		logException(error, "initGame");
+		throw error
+	}
+}
+
+
+// Views
+viewData = {
+	territory: {
+		showTerrain: true,
+		showHighlight: true,
+		showMarkers: true
+	},
+	terrain: {
+		showTerrain: true,
+		// showHighlight: true,
+		// colorFunction: "rgba(",
+		// pixelColor: (value) => {
+		//   return [255,0,0,0.5]
+		// }
+		// chunkColor: (chunk) => {
+		//   return [255,0,0,0.5]
+		// }
+		hover: (chunk) => {
+			return chunk.b !== undefined;
+		},
+		click: (chunk) => {
+			regBrowseBiome(chunk.b);
+		}
+	},
+	temperature: {
+		showTerrain: true,
+		colorFunction: "rgba(",
+		chunkColor: (chunk) => {
+			// 0 to 1, mid 0.5
+			let temp = chunk.t - 0.5;
+
+			if (temp < 0) return [0,0,255,Math.abs(temp)*1.2];
+			return [255,0,0,Math.abs(temp)*1.2];
+		}
+	},
+	landmass: {
+		showTerrain: true,
+		colorFunction: "rgba(",
+		chunkColor: (chunk) => {
+			if (chunk.v.g !== undefined) {
+				let color = reg.landmass[chunk.v.g].color;
+				return [color[0],color[1],color[2],0.75]
+			}
+		},
+		hover: (chunk) => {
+			return chunk.v.g !== undefined;
+		},
+		click: (chunk) => {
+			if (chunk.v.g) regBrowse("landmass", chunk.v.g);
+		}
+	},
+	plates: {
+		showTerrain: true,
+		colorFunction: "rgba(",
+		chunkColor: (chunk) => {
+			if (chunk.v.g === undefined) {
+				chunk = nearestChunk(chunk.x, chunk.y, (c) => c.v.g !== undefined);
+			}
+			let color = reg.landmass[chunk.v.g].color;
+			return [color[0],color[1],color[2],0.75]
+		}
+	},
+	elevation: {
+		colorFunction: "hsl(",
+		pixelColor: (value) => {
+			let hue = value;
+			hue = 1 - hue;
+			return [hue*250, 0.6*100+"%", 0.5*100+"%"];
+		}
+	}
+};
+
+window.addEventListener("load", () => {
+	document.getElementById("viewButton").addEventListener("click", () => {
+		doPrompt({
+			type: "choose",
+			choices: Object.keys(viewData),
+			message: null,
+			title: "Select View",
+			func: (r) => { if (r) setView(r) }
+		})
+	});
+	document.getElementById("viewName").innerText = "Terrain";
+});
+
+function saveSettings() {
+	R74n.set("GenTownSettings",JSON.stringify(userSettings));
+}
+
+function unlockExecutive(executiveID) {
+	if (planet.unlockedExecutive === undefined) planet.unlockedExecutive = {};
+	else if (planet.unlockedExecutive[executiveID]) return;
+	planet.unlockedExecutive[executiveID] = true;
+	let button = document.getElementById("actionItem-"+executiveID)
+	if (button) {
+		let mode = button.getAttribute("data-mode");
+		if (mode && planet.mode !== parseInt(mode)) {
+			return;
+		}
+		if (userSettings.notify !== false) button.classList.add("notify");
+		button.style.display = "";
+	}
+}
+
+function getUnlockLevel(type) {
+	let levels = unlockTree[type].levels;
+	let currentLevel = planet.unlocks[type] || 0;
+	let highest = null;
+	for (let i = 0; i < levels.length; i++) {
+		const levelData = levels[i];
+		if (levelData.level <= currentLevel) {
+			highest = levelData;
+		}
+		else break;
+	}
+	return highest;
+}
+
+
+biomes = {
+	"grass": {
+		color: [0,255,0],
+		elevation: 0.5,
+		moisture: 0.5,
+		temp: 0.5,
+		hasLumber: true,
+		name: "grassland"
+	},
+	"mountain": {
+		color: [150,150,150],
+		elevation: 1.4,
+		temp: 0.1,
+		moisture: 0.6,
+		plant: null,
+		animal: null,
+		name: "mountains",
+		adj: ["mountain"]
+	},
+	"snow": {
+		color: [255,255,255],
+		elevation: 0.6,
+		temp: 0.1,
+		moisture: 0.6,
+		plant: null,
+		hasLumber: true,
+		name: "snowscape",
+		adj: ["snowy","arctic","polar"]
+	},
+	"desert": {
+		color: [255,255,0],
+		moisture: 0.3,
+		elevation: 0.4,
+		temp: 0.8,
+		name: "desert",
+		adj: ["desert","warm"]
+	},
+	"badlands": {
+		color: [191, 159, 61],
+		moisture: 0.5,
+		elevation: 0.5,
+		temp: 0.8,
+		plant: null,
+		infertile: true,
+		name: "badlands",
+		adj: ["yellow","brown"]
+	},
+	"tundra": {
+		color: [0, 209, 98],
+		elevation: 0.5,
+		temp: 0.3,
+		moisture: 0.3,
+		hasLumber: true,
+		name: "tundra",
+		adj: ["tundra"]
+	},
+	"wetland": {
+		color: [145, 255, 0],
+		moisture: 0.9,
+		temp: 0.8,
+		elevation: 0.5,
+		hasLumber: true,
+		name: "wetland",
+		adj: ["common"]
+	},
+	"water": {
+		noAuto: true,
+		color: [178,202,252], //#b2cafc
+		elevation: $c.defaultWaterLevel,
+		moisture: 1,
+		temp: 0.5,
+		infertile: true,
+		name: "waters",
+		water: true
+	},
+}
+
+
+// Mods
+Mod = {};
+Mod.event = function(id, data) {
+	gameEvents[id] = data;
+	if (data.meta === true) {
+		metaEvents[id] = data;
+	}
+	else if (data.daily === true) {
+		dailyEvents[id] = data;
+	}
+	else { // random: true
+		randomEvents[id] = data;
+	}
+}
+Mod.action = function(className, func) {
+	if (!actionables[className]) actionables[className] = {};
+	if (!actionables[className].asTarget) actionables[className].asTarget = {};
+	actionables[className].asTarget = func;
+}
+Mod.afterLoadList = [];
+Mod.afterLoad = function(func) {
+	Mod.afterLoadList.push(func);
+}
+
+function addModPrompt() {
+	doPrompt({
+		type: "ask",
+		title: "Add Mod",
+		message: "Enter a mod name (example_mod.js) or full URL below. Only add mods that you trust!",
+		placeholder: ".JS or URL",
+		limit: 1000,
+		func: (url) => {
+			if (!url) return;
+			let r = addMod(url);
+			if (r === true) r = `${url} was enabled. It may need a page refresh to take effect.`;
+			else r = `${url} was unable to be added: ${r||"Unknown error"}.`;
+
+			logMessage(r,"tip");
+		}
+	})
+}
+function normalizeMod(url) {
+	url = url || "";
+	url = url.trim();
+	url = url.replace(/\/$/g,"");
+	url = url.replace(/ /g,"_");
+	url = url.toLowerCase();
+	return url;
+}
+// https://r74ncom.github.io/GenTown-Mods/example_mod.js
+function modToURL(url) {
+	if (url.match(/^https?:\/\//)) return url;
+	else if (url.match(/\.[a-z.]+\//i)) return "https://"+url;
+	return "https://r74ncom.github.io/GenTown-Mods/" + url;
+}
+function modToName(url) {
+	return url.match(/[^\/]+$/)[0]
+}
+function addMod(url) {
+	url = normalizeMod(url);
+	if (!url) return "Mod not specified";
+	if (!userSettings.mods) userSettings.mods = [];
+	if (userSettings.mods.includes(url)) return "Mod already enabled";
+	if (!url.match(/\.js$/)) return "Not a .JS file"
+	userSettings.mods.push(url);
+	saveSettings();
+	let btn = document.getElementById("actionItem-enabledMods");
+	if (btn) btn.style.display = "";
+	runMod(url);
+	return true;
+}
+function removeMod(url) {
+	if (!userSettings.mods) return;
+	userSettings.mods = userSettings.mods.filter((u) => u !== url);
+	if (!userSettings.mods.length) {
+		let btn = document.getElementById("actionItem-enabledMods");
+		if (btn) btn.style.display = "none";
+	}
+	saveSettings();
+}
+function showMods() {
+	if (!userSettings.mods) return;
+	doPrompt({
+		type: "choose",
+		message: "Choose a mod to manage.",
+		choices: userSettings.mods,
+		func: (url) => {
+			manageMod(url);
+		}
+	})
+}
+function manageMod(url) {
+	doPrompt({
+		type: "choose",
+		title: modToName(url),
+		message: null,
+		choices: [
+			"view",
+			"remove"
+		],
+		func: (r) => {
+			if (r === "view") window.open(modToURL(url), '_blank').focus();
+			if (r === "remove") {
+				removeMod(url);
+				logMessage(modToName(url) + " has been removed. Refresh to apply changes.","tip");
+			}
+		}
+	})
+}
+function runMod(url) {
+	url = modToURL(url);
+	let script = document.createElement("script");
+	script.src = url;
+	document.body.appendChild(script);
+}
+if (userSettings.mods) {
+	for (let i = 0; i < userSettings.mods.length; i++) {
+		const url = userSettings.mods[i];
+		runMod(url);
+	}
+}
+
+
+// Saves
+function autosave() {
+	let json = generateSave();
+	R74n.set("GenTownSave",JSON.stringify(json));
+}
+function autoload() {
+	let json = R74n.get("GenTownSave");
+	json = json.replace(/</g, "[");
+	json = json.replace(/>/g, "]");
+	json = JSON.parse(json);
+	parseSave(json);
+}
+function downloadJSON(json, fileName, fileType) {
+	fileName = fileName || json.name || "Unnamed";
+
+	var a = document.createElement("a");
+
+	var file = new Blob([JSON.stringify(json)], {type: fileType || "application/json"});
+    a.href = URL.createObjectURL(file);
+    a.download = fileName;
+    a.click();
+}
+function saveFile(btn) {
+	if (btn && btn.getAttribute("disabled")) return;
+
+	let json = generateSave();
+	let fileName = (planet.name||"Planet") + "-" + (planet.day||1);
+
+    downloadJSON(json, fileName+".planet", "application/vnd.R74n.gentown+json");
+
+	if (btn) btn.setAttribute("disabled","true");
+}
+function loadFile() {
+	let input = document.getElementById("saveUpload");
+
+	input.click();
+}
+
+if (isIOS) {
+	document.getElementById("saveUpload").removeAttribute("accept");
+}
+document.getElementById("saveUpload").addEventListener("change", (e) => {
+	const file = e.target.files[0];
+	if (file) {
+		console.log('File selected:', file.name);
+		var reader = new FileReader();
+		reader.readAsText(file, "UTF-8");
+		console.log(file)
+		reader.onload = function (evt) {
+			let json = evt.target.result;
+			json = json.replace(/</g, "[");
+			json = json.replace(/>/g, "]");
+			json = JSON.parse(json);
+			if (json.meta && json.planet) {
+				parseSave(json);
+			}
+			else if (json._reg) {
+				importEntity(json);
+			}
+		}
+		reader.onerror = function (evt) {
+			alert("File '"+file.name+"' could not be read");
+		}
+		e.target.value = "";
+	}
+})
+
+function validateConfig(config) {
+	const defaultConfig = defaultPlanet().config;
+
+	for (const key in config) {
+		const value = defaultConfig[key];
+		if (config[key] === undefined) {
+			config[key] = value;
+		}
+	}
+}
+function validatePlanet() {
+
+	// Updating planet with default data
+	const _defaultPlanet = defaultPlanet();
+	for (const key in _defaultPlanet) {
+		const value = _defaultPlanet[key];
+		if (planet[key] === undefined) {
+			planet[key] = value;
+		}
+		else if (Array.isArray(value) && Array.isArray(planet[key])) {
+			if (key.match(/color/gi)) continue;
+			value.forEach((item) => {
+				if (!planet[key].includes(item)) {
+					planet[key].push(item);
+				}
+			})
+		}
+		else if (typeof value === "object" && typeof planet[key] === "object") {
+			for (const key2 in value) {
+				if (planet[key][key2] === undefined) {
+					planet[key][key2] = value[key2];
+				}
+			}
+		}
+	}
+
+	for (const key in planet.reg) {
+		// Subregistry validation
+		if (planet.reg.registry[key] === undefined) {
+			planet.reg.registry[key] = planet.reg.registry._id;
+			planet.reg.registry._id++;
+		}
+
+		// Entity validation
+		for (const key2 in planet.reg[key]) {
+			let data = planet.reg[key][key2];
+			if (!isNaN(data)) continue;
+
+			if (isNaN(data.start)) data.start = planet.day;
+		}
+	}
+
+	// Chunk validation
+	for (let chunkKey in planet.chunks) {
+		let chunk = planet.chunks[chunkKey];
+		if (!biomes[chunk.b]) chunk.b = "water";
+		if (!chunk.v) chunk.v = {};
+		if (chunk.v.s && !reg.town[chunk.v.s]) delete chunk.v.s;
+	}
+
+	regToArray("town", true).forEach((town) => {
+		let _defaultTown = defaultTown(false);
+		for (const key in _defaultTown) {
+			if (town[key] === undefined) town[key] = _defaultTown[key];
+		}
+	})
+
+	if (!regSingle("resource", (r) => r.name === "cash")) {
+		happen("Create",null,null,{ type:"raw", name:"cash", color:[136, 189, 107] },"resource").id;
+	}
+	if (!regSingle("resource", (r) => r.name === "livestock")) {
+		happen("Create",null,null,{ type:"raw", name:"livestock", color:[184,162,109] },"resource").id;
+	}
+	if (!regSingle("resource", (r) => r.name === "crop")) {
+		happen("Create",null,null,{ type:"raw", name:"crop", color:[179,241,73] },"resource").id;
+	}
+
+	// Resource->Species compatibility for old saves
+	regFilter("resource", r => r.type === "livestock" || r.type === "crop").forEach(r => {
+		let s = regAdd("species", structuredClone(r));
+		s.type = r.type === "livestock" ? "animal" : "plant";
+		regRemove("resource", r.id);
+	})
+
+	generateStarSystem();
+
+	if (planet.saveVersion < 5) {
+		regFilter("species", s => !s.domesticated).forEach(s => {
+			s.named = false;
+		})
+	}
+}
+
+unicodeSkips = {
+	0: 65, // null -> A
+	58: 65, // : -> A
+	91: 192, // [ -> À
+	215: 216, // × -> Ø
+	247: 248, // ÷ -> ø
+	688: 880,
+	884: 886,
+	888: 891,
+	894: 895,
+	896: 902,
+	903: 904,
+	907: 908,
+	909: 910,
+	930: 931,
+	1155: 1162,
+	1328: 1329,
+	1367: 1376,
+	1417: 1488,
+	1514: 12448,
+	12544: 13312
+};
+function compressChunkData(string) {
+	return string.replace(/(.)\1{3,8}/g, (r) => {
+		// if (r.length > 9) console.log(r.length)
+		return r[0] + "*" + r.length;
+	});
+}
+function decompressChunkData(string) {
+	return string.replace(/.\*[4-9]/g, (r) => {
+		let char = r[0];
+		let num = parseInt(r[2]);
+		return char.repeat(num);
+	});
+}
+function generateSave() {
+	let json = {
+		meta: {
+			saveVersion: saveVersion,
+			gameVersion: gameVersion,
+			created: planet.created || Date.now(),
+			saved: planet.saved || Date.now(),
+		},
+		planet: JSON.parse(JSON.stringify(planet)),
+		// planetWidth: planetWidth,
+		// planetHeight: planetHeight,
+		// chunkSize: chunkSize,
+		// waterLevel: waterLevel
+	};
+
+	delete json.planet.chunks;
+	delete json.planet.created;
+	delete json.planet.saved;
+	delete json.planet.saveVersion;
+
+	for (const regname in json.planet.reg) {
+		for (const id in json.planet.reg[regname]) {
+			const data = json.planet.reg[regname][id];
+			if (!isNaN(data)) continue;
+			delete json.planet.reg[regname][id]._reg;
+		}
+	}
+
+	let chunkData = {};
+	let codes = {};
+	let codesReverse = {};
+	let codeN = 65;
+
+	chunkData.p = "";
+	chunkData.t = "";
+	chunkData.e = "";
+	chunkData.m = "";
+	chunkData.b = "";
+	chunkData.v = "";
+
+	/* chunk.p:
+	0: (4) [0.1, 0.1, 0.1, 0.1]
+	1: (4) [0.1, 0.1, 0.1, 0.1]
+	2: (4) [0.1, 0.1, 0.1, 0.1]
+	3: (4) [0.1, 0.1, 0.1, 0.1]
+	*/
+
+	for (let chunkX = 0; chunkX < planet.config.width / planet.config.chunkSize; chunkX++) {
+		for (let chunkY = 0; chunkY < planet.config.height / planet.config.chunkSize; chunkY++) {
+			let chunkKey = chunkX+","+chunkY;
+			let chunk = planet.chunks[chunkKey];
+			if (!chunk) {
+				console.log("Missing chunk: "+chunkKey);
+				return;
+			}
+
+			chunk.p.forEach((row) => {
+				row.forEach((p) => {
+					chunkData.p += p >= 1 ? "M" : Math.trunc(p*10);
+				})
+			})
+
+			chunkData.t += chunk.t >= 1 ? "M" : Math.trunc(chunk.t*10);
+			chunkData.e += chunk.e >= 1 ? "M" : Math.trunc(chunk.e*10);
+			chunkData.m += chunk.m >= 1 ? "M" : Math.trunc(chunk.m*10);
+
+			if (!codes[chunk.b]) {
+				let char = String.fromCharCode(codeN);
+				codes[chunk.b] = char;
+				codesReverse[char] = chunk.b;
+				codeN++;
+				if (unicodeSkips[codeN]) codeN = unicodeSkips[codeN];
+			}
+			chunkData.b += codes[chunk.b];
+			
+			chunkData.v += JSON.stringify(chunk.v) + "\t";
+		}
+	}
+
+	chunkData.p = compressChunkData(chunkData.p);
+	chunkData.t = compressChunkData(chunkData.t);
+	chunkData.e = compressChunkData(chunkData.e);
+	chunkData.m = compressChunkData(chunkData.m);
+	chunkData.b = compressChunkData(chunkData.b);
+	chunkData.v = chunkData.v.slice(0, -1).replace(/\{\}\t/g,"§").replace(/§§§§§§/g,"¦");
+
+	for (const regname in json.planet.reg) {
+		for (const id in json.planet.reg[regname]) {
+			const data = json.planet.reg[regname][id];
+			if (data.delete) {
+				delete json.planet.reg[regname][id];
+				continue;
+			}
+			const keys = Object.keys(data);
+			keys.forEach((key) => {
+				if (!codes[key]) {
+					let char = String.fromCharCode(codeN);
+					codes[key] = char;
+					codesReverse[char] = key;
+					codeN++;
+					if (unicodeSkips[codeN]) codeN = unicodeSkips[codeN];
+				}
+				data[codes[key]] = data[key];
+				delete data[key];
+			})
+		}
+	}
+
+	json.codes = codesReverse;
+	json.chunkData = chunkData;
+
+	return json;
+}
+
+function parseSave(json) {
+	planet = json.planet;
+
+	if (json.planetHeight !== undefined) {
+		planet.config = {};
+		planet.config.height = json.planetHeight;
+		planet.config.width = json.planetWidth;
+		planet.config.chunkSize = json.chunkSize;
+		planet.config.waterLevel = json.waterLevel;
+	}
+
+	planet.created = json.meta.created || json.meta.saved || Date.now();
+	planet.saved = json.meta.saved || json.meta.created || Date.now();
+	
+	let saveVer = parseInt(json.meta.saveVersion.split("gt")[1]);
+	planet.saveVersion = saveVer;
+
+	let codes = json.codes;
+	let chunkData = json.chunkData;
+
+	chunkData.p = decompressChunkData(chunkData.p);
+	chunkData.t = decompressChunkData(chunkData.t);
+	chunkData.e = decompressChunkData(chunkData.e);
+	chunkData.m = decompressChunkData(chunkData.m);
+	chunkData.b = decompressChunkData(chunkData.b);
+
+	let chunks = {};
+
+	let chunkArea = Math.pow(planet.config.chunkSize, 2);
+
+	let p = [];
+	chunkData.p.match(new RegExp(".{"+chunkArea+"}","g")).forEach(area => {
+		let values = area.match(new RegExp(".{"+planet.config.chunkSize+"}","g"));
+		values = values.map(r => [...r].map(v => v === "M" ? 1 : parseInt(v)/10));
+		p.push(values);
+	});
+	chunkData.p = p;
+
+	chunkData.t = [...chunkData.t].map(v => v === "M" ? 1 : parseInt(v)/10);
+	chunkData.e = [...chunkData.e].map(v => v === "M" ? 1 : parseInt(v)/10);
+	chunkData.m = [...chunkData.m].map(v => v === "M" ? 1 : parseInt(v)/10);
+	
+	chunkData.b = [...chunkData.b].map(v => codes[v]);
+
+	chunkData.v = chunkData.v.replace(/¦/g,"§§§§§§").replace(/§/g,"{}\t").split("\t").map(v => JSON.parse(v));
+
+	let chunkIndex = 0;
+	for (let chunkX = 0; chunkX < planet.config.width / planet.config.chunkSize; chunkX++) {
+		for (let chunkY = 0; chunkY < planet.config.height / planet.config.chunkSize; chunkY++) {
+			let chunk = {
+				x: chunkX,
+				y: chunkY,
+				p: chunkData.p[chunkIndex],
+				t: chunkData.t[chunkIndex],
+				e: chunkData.e[chunkIndex],
+				m: chunkData.m[chunkIndex],
+				b: biomes[chunkData.b[chunkIndex]] ? chunkData.b[chunkIndex] : "water",
+				v: chunkData.v[chunkIndex]
+			};
+			let chunkKey = chunkX + "," + chunkY;
+			chunks[chunkKey] = chunk;
+			
+			chunkIndex++;
+		}
+	}
+
+	planet.chunks = chunks;
+
+	if (saveVer >= 2) {
+		for (const regname in json.planet.reg) {
+			for (const id in json.planet.reg[regname]) {
+				const data = json.planet.reg[regname][id];
+				const keys = Object.keys(data);
+				keys.forEach((key) => {
+					if (codes[key]) {
+						data[codes[key]] = data[key];
+						delete data[key];
+					}
+				})
+			}
+		}
+	}
+
+	reg = json.planet.reg;
+
+	usedNames = {};
+	for (const regname in reg) {
+		for (const id in reg[regname]) {
+			const data = reg[regname][id];
+			if (!isNaN(data)) continue;
+
+			if (data.name) usedNames[data.name.toLowerCase()] = true;
+
+			reg[regname][id]._reg = regname;
+		}
+	}
+
+	validatePlanet();
+
+	initGame();
+	setView();
+
+	if (currentPlayer.name) {
+		userSettings.playerName = currentPlayer.name;
+		delete currentPlayer.name;
+		saveSettings();
+	}
+
+	let sunriseMsg = "The Sun rises on Planet {{planet}}...";
+	
+	if (planet.day > 1 && !planet.dead) {
+		let currentIssues = regFilter("process", (p) => (p.type === "disaster" || p.type === "revolution" || p.type === "war") && !p.done);
+		if (currentIssues.length) {
+			sunriseMsg += " Inhabitants are {{c:concerned|worried|irked|anxious}} about "+commaList(currentIssues.map((p) => `{{regname:process|${p.id}}}`))+".";
+		}
+	}
+
+	logMessage(sunriseMsg);
+
+	if (planet.dead) killPlanet();
+}
+function doPlaceTemplate(key, context={}) {
+	resetDebugContext();
+	debugContext.templateKey = key;
+	debugContext.v = gameVersion;
+	let template = entityTemplates[key];
+	const name = template.name || titleCase(key);
+	closePopups();
+	onCancel = () => {
+		if (onMapClickMsg) fadeMessage(onMapClickMsg);
+		onMapClick = null;
+		onMapClickMsg = null;
+		const selected = document.querySelector(".actionItem.selected");
+		if (currentExecutive === "create" && selected) selected.classList.remove("selected");
+	}
+	onMapClickMsg = logMessage(`Tap on the map to place {{a:${name}}} ${name.toLowerCase()}.`, "tip")
+	onMapClick = () => {
+		try {
+			fadeMessage(onMapClickMsg);
+			onCancel = null;
+			onMapClick = null;
+			onMapClickMsg = null;
+			let x = mousePos.chunkX;
+			let y = mousePos.chunkY;
+			if (template.place !== "any" && template.place !== true) {
+				let chunk = nearestChunk(x, y, (c) => c.b !== "mountain" && ((template.place === "land" && c.b !== "water") || (template.place === "water" && c.b === "water")));
+				if (!chunk) return false;
+				x = chunk.x;
+				y = chunk.y;
+			}
+			context.x = x;
+			context.y = y;
+			return handleCreate(key, context);
+		}
+		catch (error) {
+			logException(error, "load");
+			throw error
+		}
+	}
+}
+importingEntity = false;
+function importEntity(obj) {
+	let regName = obj._reg;
+	if (!regName) {
+		// error corrupted entity
+		return;
+	}
+	delete obj.id;
+	delete obj.end;
+	delete obj.done;
+
+	let key;
+	if (entityTemplates[obj.subtype]) key = obj.subtype;
+	else if (entityTemplates[obj.type]) key = obj.type;
+	else key = obj._reg;
+	const template = entityTemplates[key];
+
+	if (template) {
+		let entity;
+		let finish = () => {
+			if (!entity) {
+				logMessage(`${key} could not be imported.`, "error");
+				return false;
+			}
+			let x = entity.x;
+			let y = entity.y;
+			for (let key in entity) {
+				if (key !== "start" && key !== "id") {
+					delete entity[key];
+				}
+			}
+			for (let key in obj) {
+				if (key !== "start") {
+					entity[key] = obj[key];
+				}
+			};
+			if (x !== undefined) {
+				entity.x = x;
+				entity.y = y;
+			}
+			if (entity.size && entity._reg === "town") {
+				happen("UpdateCenter",null,entity);
+				let size = entity.size;
+				filterChunks(c => c.v.s === entity.id).forEach(c => delete c.v.s);
+				let todo = size;
+				for (let i = 0; i < todo; i++) {
+					let chunk = nearestChunk(entity.center[0], entity.center[1], c => c.b !== "water" && c.b !== "mountain" && !c.v.s, c => c.b === "water");
+					if (chunk) {
+						chunk.v.s = entity.id;
+						size --;
+					}
+					else break;
+				}
+				todo = size;
+				for (let i = 0; i < todo; i++) {
+					let chunk = nearestChunk(entity.center[0], entity.center[1], c => c.b !== "water" && c.b !== "mountain" && !c.v.s);
+					if (chunk) {
+						chunk.v.s = entity.id;
+						size --;
+					}
+					else break;
+				}
+				entity.size -= size;
+			}
+			else if (entity.chunks) {
+				let size = entity.chunks.length;
+				entity.chunks = [];
+				let chunks = {};
+				let todo = size;
+				if (entity.x === undefined) {
+					logMessage(`${key} could not be placed.`, "error");
+				}
+				else {
+					for (let i = 0; i < todo; i++) {
+						let chunk = nearestChunk(entity.x, entity.y, c => !chunks[c.x+","+c.y]);
+						if (chunk) {
+							entity.chunks.push([chunk.x, chunk.y]);
+							chunks[chunk.x+","+chunk.y] = true;
+							size --;
+						}
+						else break;
+					}
+				}
+			}
+			if (template.validateImport) {
+				template.validateImport(entity);
+			}
+			renderHighlight();
+			updateCanvas();
+			autosave();
+			closeExecutive();
+		}
+		if (template.place) {
+			doPlaceTemplate(key);
+			let onMapClickOld = onMapClick;
+			onMapClick = () => {
+				importingEntity = true;
+				entity = onMapClickOld();
+				finish();
+				if (!entity) return false;
+				logMessage(`Imported and placed {{regname:${entity._reg}|${entity.id}}}.`);
+				importingEntity = false;
+			}
+		}
+		else {
+			entity = handleCreate(key, obj);
+			finish();
+			if (!entity) return false;
+			logMessage(`Imported {{regname:${entity._reg}|${entity.id}}}.`);
+		}
+	}
+	else if (obj.x !== undefined || obj.y !== undefined || obj.chunks !== undefined || obj.size !== undefined) {
+		logMessage(`${key} could not be placed.`, "error");
+	}
+	else {
+		regAdd(regName, obj);
+	}
+}
+
+
+// Executive Panel
+function populateExecutive(items, title, main=false) {
+	if (title) {
+		currentExecutive = title.toLowerCase();
+		if (executiveListeners[currentExecutive]) executiveListeners[currentExecutive]();
+	}
+
+	if (!main) document.getElementById("actionMain").style.display = "none";
+
+	let subpanel = document.getElementById(main ? "actionMain" : "actionSub");
+	
+	let subpanelList = document.getElementById(main ? "actionMainList" : "actionSubList");
+	if (!main) {
+
+		subpanelList.innerHTML = "";
+
+		let panelTitle = document.createElement("span");
+		panelTitle.className = "panelTitle";
+		panelTitle.innerHTML = title ? parseText(title) : "Options";
+		subpanelList.appendChild(panelTitle);
+	}
+
+	let sortButton = null;
+
+	if (!items) items = [];
+	if (items.length === 1 && items[0].sorter) items = [];
+	if (items.length === 0) items.push({
+		text: "{{none}}"
+	})
+
+	let fallbackID = 1;
+
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i];
+
+		let actionItem = document.createElement("span");
+		actionItem.classList.add("actionItem");
+		actionItem.classList.add("item");
+
+		if (item.mode) {
+			actionItem.setAttribute("data-mode", item.mode);
+			if (planet.mode !== item.mode) {
+				item.hide = true;
+			}
+		};
+
+		let text = "";
+		if (typeof item === "string") text = item;
+		else text = item.text || "Option #"+i;
+
+		if (item.id) actionItem.id = "actionItem-"+item.id;
+		if (item.indent) actionItem.style.marginLeft = item.indent + "em";
+		if (item.opacity) actionItem.style.opacity = item.opacity;
+		if (item.hide && ((!item.id || !planet.unlockedExecutive || !planet.unlockedExecutive[item.id]) || item.spacer)) actionItem.style.display = "none";
+		if (item.notify && userSettings.notify !== false) actionItem.classList.add("notify");
+		if (item.danger) actionItem.classList.add("danger");
+		if (item.tip) actionItem.setAttribute("title", item.tip);
+		if (item.heading) {
+			actionItem.style.paddingTop = "1em";
+			actionItem.style.textAlign = "center";
+			actionItem.style.color = "yellow";
+		}
+		if (item.spacer) {
+			text = item.text || "&nbsp;";
+			if (item.text) {
+				actionItem.style.paddingBottom = "1em";
+				actionItem.style.fontStyle = "italic";
+				if (!item.opacity) actionItem.style.opacity = "0.8";
+			}
+			actionItem.style.borderBottom = "none";
+		}
+
+		actionItem.innerHTML = parseText(text);
+
+		if (item.sorter) {
+			actionItem.classList.add("actionSort");
+			actionItem.classList.add("clickable");
+			actionItem.classList.remove("item");
+			if (!item.text) actionItem.innerText = "Default";
+			actionItem.addEventListener("click", sortExecutive);
+			currentExecutiveSorter = item.sorter;
+			// actionItem.setAttribute("data-sortIndex", 0);
+			sortButton = actionItem;
+			actionItem.addEventListener("contextmenu", (e) => {
+				let regname = actionItem.parentNode.querySelector(".actionItem.item[data-reg]").getAttribute("data-reg");
+				doPrompt({
+					type: "choose",
+					message: null,
+					choices: item.sorter.map((sorter) => sorterName(sorter,regname)),
+					choiceValues: [...item.sorter.keys()],
+					func: (index) => {
+						sortButton.setAttribute("data-sortIndex", index - 1);
+						sortButton.click();
+					}
+				})
+				e.preventDefault();
+				return false;
+			})
+		}
+		if (item.entity) {
+			if (item.entity._reg) {
+				actionItem.setAttribute("data-reg", item.entity._reg);
+			}
+			else {
+				item.entity.id = fallbackID;
+				fallbackID ++;
+				actionItem.setAttribute("data-reg", "none");
+				actionItem.setAttribute("data-entity", JSON.stringify(item.entity));
+			}
+			actionItem.setAttribute("data-id", item.entity.id);
+		}
+		if (item.setting) {
+			actionItem.classList.add("actionSetting");
+			actionItem.classList.add("clickable");
+			actionItem.addEventListener("click", settingExecutive);
+			actionItem.addEventListener("contextmenu", (e) => {
+				settingExecutive(e, true);
+				e.preventDefault();
+				return false;
+			})
+
+			let value = userSettings[item.setting];
+			if (value === undefined) value = item.default || item.options[0];
+			if (value === null) value = "null";
+			else if (value.toString) value = value.toString();
+			if (value === item.default) actionItem.classList.add("default");
+			else if (value === "true") actionItem.classList.add("on");
+			else if (value === "false") actionItem.classList.add("off");
+
+			actionItem.insertAdjacentHTML("beforeend",`: <span class='settingValue'>${parseText(item.options[value])}</span>`);
+
+			actionItem.setAttribute("data-setting", item.setting);
+			actionItem.setAttribute("data-value", value);
+			actionItem.setAttribute("data-default", item.default);
+			actionItem.setAttribute("data-values", Object.keys(item.options).join(";;"));
+			actionItem.setAttribute("data-labels", Object.values(item.options).join(";;"));
+		}
+
+		actionItem.addEventListener("click", (e) => {
+			e.target.classList.remove("notify");
+		})
+
+		if (item.func) {
+			actionItem.addEventListener("click", () => {
+				let tempExecutive = currentExecutive;
+				item.func(actionItem);
+				if (tempExecutive !== currentExecutive) {
+					currentExecutiveButton = actionItem
+				}
+			});
+			actionItem.classList.add("clickable");
+			actionItem.setAttribute("role","button");
+		}
+		if (item.url) {
+			actionItem.addEventListener("click", () => {
+				if (item.url.toLowerCase().includes("r74n.com")) location.href = item.url;
+				else window.open(item.url, '_blank').focus();
+			});
+			actionItem.classList.add("clickable");
+			actionItem.setAttribute("role","link");
+			actionItem.insertAdjacentHTML("beforeend", " <span class='font2'>▶</span>");
+		}
+		if (item.keybind) {
+			actionItem.setAttribute("data-keybind", item.keybind.toLowerCase());
+			// actionItem.innerHTML = actionItem.innerHTML.replace(new RegExp(item.keybind, "i"), (k) => "<u>"+k+"</u>")
+			actionItem.insertAdjacentHTML("afterbegin", "<u>"+item.keybind.toUpperCase()+"</u> ");
+		}
+		if (item.slider) {
+			let value = item.value || item.default || 0;
+			let valueText = item.formatter ? parseText(item.formatter(value)) : value;
+			actionItem.classList.add("actionSetting");
+			actionItem.classList.add("actionSlider");
+			if (value === item.default) actionItem.classList.add("default");
+			if (item.min === undefined) item.min = 0;
+			if (item.max === undefined) item.max = 1;
+			if (item.step === undefined) item.step = 0.1;
+			actionItem.insertAdjacentHTML("beforeend",`: <span class='settingValue'>${valueText}</span>`);
+			actionItem.setAttribute("data-value", value);
+			actionItem.setAttribute("data-default", item.default);
+			actionItem.setAttribute("data-step", item.step);
+			actionItem.setAttribute("data-min", item.min);
+			actionItem.setAttribute("data-max", item.max);
+			let valueSpan = actionItem.querySelector(".settingValue");
+
+			let timeout;
+
+			let onchange = (initial) => {
+				let value = parseFloat(actionItem.getAttribute("data-value"));
+
+				let percent = (value - item.min) / (item.max - item.min);
+				actionItem.style.background = `linear-gradient(to right, rgba(255, 255, 255, 0.2) ${percent * 100}%, transparent ${percent * 100}%)`;
+
+				if (item.func && !initial) {
+					if (timeout) clearTimeout(timeout);
+					timeout = setTimeout(() => {
+						item.func(item.slider, value);
+					}, 10)
+				}
+
+				let valueText = item.formatter ? parseText(item.formatter(value)) : value;
+				valueSpan.innerHTML = valueText;
+
+				if (value === item.default) actionItem.classList.add("default");
+				else actionItem.classList.remove("default");
+			}
+			onchange(true);
+
+			let mousemove = (e) => {
+				// console.log(e.clientX);
+
+				let oldValue = parseFloat(actionItem.getAttribute("data-value"));
+
+				const leftmost = actionItem.offsetLeft;
+				const rightmost = actionItem.offsetLeft + actionItem.clientWidth;
+
+				let mouseX = e.clientX - leftmost;
+				let percent = mouseX / (rightmost - leftmost);
+				percent = Math.min(percent, 1);
+				percent = Math.max(percent, 0);
+
+				let value = percent * (item.max - item.min) + (item.min);
+				value = Math.round((Math.round((value) / item.step ) * item.step) * 100) / 100
+				value = Math.round(value * 100) / 100;
+
+				value = Math.min(value, item.max);
+				value = Math.max(value, item.min);
+
+				if (value !== oldValue) {
+					actionItem.setAttribute("data-value", value);
+					onchange();
+				}
+			}
+			let mouseup = () => {
+				actionItem.setAttribute("data-changing","false");
+				window.removeEventListener("mouseup", mouseup);
+				window.removeEventListener("touchend", mouseup);
+				window.removeEventListener("mousemove", mousemove);
+			}
+			let mousedown = (e) => {
+				mousemove(e);
+				actionItem.setAttribute("data-changing","true");
+				window.addEventListener("mouseup", mouseup);
+				window.addEventListener("touchend", mouseup);
+				window.addEventListener("mousemove",mousemove)
+			}
+			actionItem.addEventListener("mousedown", mousedown);
+			actionItem.addEventListener("touchstart", (e) => {
+				mousedown(e.touches[0]);
+			});
+			actionItem.addEventListener("dblclick", () => {
+				actionItem.setAttribute("data-value", item.default);
+				onchange();
+			})
+		}
+
+		subpanelList.appendChild(actionItem);
+	}
+
+	if (sortButton) sortButton.click();
+
+	subpanel.style.display = "flex";
+}
+
+function closeExecutive() {
+	currentExecutive = null;
+	currentExecutiveButton = null;
+	currentExecutiveSorter = null;
+	if (onCancel) {
+		onCancel();
+		onCancel = null;
+	}
+	document.getElementById("actionMain").style.display = "flex";
+	document.getElementById("actionSub").style.display = "none";
+	document.getElementById("actionSubList").innerHTML = "";
+}
+function openExecutive() {
+	let gameHalf2 = document.getElementById("gameHalf2");
+	if (gameHalf2.offsetParent === null) {
+		openPopup("gameHalf2");
+	}
+}
+function refreshExecutive() {
+	if (!currentExecutiveButton) return;
+	let e = currentExecutiveButton;
+	if (e) {
+		closeExecutive();
+		e.click();
+	}
+}
+executiveListeners = {};
+onCancel = null;
+
+function sorterName(sorter, reg) {
+	let sortBy = sorter[0];
+	let name = sorter[2] || regBrowserKeys[sortBy];
+
+	let split = sortBy.split(".");
+	let subkey = split[split.length - 1];
+	if (!name && regBrowserKeys[subkey]) name = regBrowserKeys[subkey];
+	if (!name && regBrowserKeys[reg+"."+subkey]) name = regBrowserKeys[reg+"."+subkey];
+	if (!name) name = titleCase(sortBy);
+
+	return name;
+}
+function sortExecutive(e) {
+	const sortButton = e.target;
+	const sorters = currentExecutiveSorter;
+	if (!sorters) return;
+	
+	let sortIndex = parseInt(sortButton.getAttribute("data-sortIndex") || -1);
+	sortIndex = (sortIndex + 1) % sorters.length;
+	sortButton.setAttribute("data-sortIndex", sortIndex);
+
+	let buttons = sortButton.parentNode.querySelectorAll(".actionItem.item");
+
+	let entities = [];
+	buttons.forEach((button) => {
+		let reg = button.getAttribute("data-reg");
+		let id = button.getAttribute("data-id");
+		if (reg && reg !== "none" && id) entities.push(regGet(reg, id));
+		else if (button.getAttribute("data-entity")) entities.push(JSON.parse(button.getAttribute("data-entity")))
+	})
+
+	if (!entities.length) return;
+
+	const sorter = sorters[sortIndex];
+	let sortBy = sorter[0];
+	let inverse = sorter[1];
+
+	let name = sorterName(sorter, entities[0]._reg);
+	sortButton.innerText = name;
+
+	entities = sortEntities(entities, sortBy, inverse);
+	entities.reverse();
+
+	entities.forEach((entity) => {
+		let reg = entity._reg || "none";
+		let id = entity.id;
+		let button = e.target.parentNode.querySelector(`.actionItem[data-reg="${reg}"][data-id="${id}"]`)
+		if (button) {
+			sortButton.insertAdjacentElement("afterend", button);
+		}
+	})
+}
+function settingExecutive(e, backward) {
+	let button = e.target;
+	if (button.className === "settingValue") button = button.parentNode;
+	let setting = button.getAttribute("data-setting");
+	let value = button.getAttribute("data-value");
+	let defaultValue = button.getAttribute("data-default");
+	let values = button.getAttribute("data-values").split(";;");
+	let labels = button.getAttribute("data-labels").split(";;");
+	let index = values.indexOf(value);
+
+	if (index === -1) index = -1;
+	
+	let newIndex = (index + (backward ? 1 : -1)) % (values.length)
+	if (newIndex < 0) newIndex = values.length-1;
+
+	let newOption = values[newIndex];
+	let isDefault = newOption === defaultValue;
+	if (!isNaN(newOption)) {
+		newOption = parseFloat(newOption);
+		if (newOption === parseInt(newOption)) newOption = parseInt(newOption);
+	}
+	else if (newOption === "true") {
+		newOption = true;
+		button.classList.remove("off");
+		button.classList.add("on");
+	}
+	else if (newOption === "false") {
+		newOption = false;
+		button.classList.remove("on");
+		button.classList.add("off");
+	}
+	else if (newOption === "null") newOption = null;
+	let newLabel = parseText(labels[newIndex]);
+
+	if (isDefault) {
+		delete userSettings[setting];
+		button.classList.add("default");
+	}
+	else {
+		userSettings[setting] = newOption;
+		button.classList.remove("default");
+	}
+	saveSettings();
+	
+	let labelElement = button.querySelector(".settingValue");
+	labelElement.innerHTML = newLabel;
+
+	button.setAttribute("data-value", newOption);
+}
+document.getElementById("actionSubpanelClose").addEventListener("click",closeExecutive)
+
+
+function checkHash() {
+	if (this.location.hash) {
+		let id = location.hash.substring(1);
+
+		if (id === "changelog" || id === "about" || id === "feedback") {
+			this.document.getElementById("actionInfo").click();
+		}
+
+		let button = this.document.getElementById("actionItem-"+id);
+		if (button) button.click();
+
+		button = this.document.getElementById("action"+titleCase(id));
+		if (button) button.click();
+	}
+	else if (currentExecutive) {
+		closeExecutive();
+	}
+}
+window.addEventListener("hashchange", checkHash);
+
+function initExecutive() {
+	document.querySelectorAll("#actionMainList .actionItem").forEach((e) => {
+		e.remove();
+	})
+	populateExecutive([
+	{
+		text: "Customize",
+		id: "customize",
+		hide: true,
+		keybind: "w",
+		func: () => {
+			if (planet.settled) return;
+			customizePlanet();
+		}
+	},
+	{
+		spacer: true,
+		id: "customizeSpacer",
+		hide: true,
+	},
+
+	{ //Create Tab
+		text: "Create",
+		mode: $c.FREEPLAY,
+		id: "create",
+		keybind: "=",
+		hide: true,
+		func: () => {
+			let items = [];
+
+			for (const key in entityTemplates) {
+				const template = entityTemplates[key];
+				if (template.create === false) continue;
+				const regName = template.reg;
+				const data = template.data || {};
+				if (!regName) continue;
+
+				const name = template.name || titleCase(key);
+
+				items.push({
+					text: name,
+					id: "create-"+key,
+					func: () => {
+						if (onMapClickMsg) fadeMessage(onMapClickMsg);
+
+						const selected = document.querySelector(".actionItem.selected");
+						if (selected) selected.classList.remove("selected");
+
+						let finish = (context) => {
+							if (template.place) {
+								const btn = document.getElementById("actionItem-create-"+key);
+								if (btn) btn.classList.add("selected");
+								doPlaceTemplate(key, context);
+							}
+							else handleCreate(key, context);
+						}
+
+						if (template.required) {
+							onCancel = null;
+							onMapClickMsg = null;
+							onMapClick = null;
+							let required = Object.keys(template.required);
+							let context = {};
+							let prompts = [];
+							for (let i = 0; i < required.length; i++) {
+								const j = i;
+								const editKey = required[i];
+								let editValue = template.required[editKey];
+								if (typeof editValue === "function") editValue = editValue();
+								let choices = Array.isArray(editValue) ? editValue : null;
+								prompts.push({
+									type: choices ? "choose" : "ask",
+									message: `${choices ? "Choose" : "Enter"} a ${editKey} for your ${key}.`,
+									choices: choices,
+									choiceValues: choices,
+									func: (r) => {
+										if (!r) return;
+										context[editKey] = r;
+										if (j === required.length-1) {
+											finish(context);
+										}
+										else {
+											doPrompt(prompts[j + 1]);
+										}
+									}
+								})
+							}
+							doPrompt(prompts[0]);
+						}
+						else finish();
+					}
+				})
+			}
+
+			if (items.length) populateExecutive(items, "Create");
+		}
+	},
+	{
+		text: "Import",
+		mode: $c.FREEPLAY,
+		id: "import",
+		keybind: "o",
+		hide: true,
+		func: () => {
+			loadFile();
+		}
+	},
+	{
+		spacer: true,
+		mode: $c.FREEPLAY
+	},
+
+	{
+		text: "Towns",
+		id: "towns",
+		hide: true,
+		keybind: "t",
+		func: () => {
+			let items = [];
+			items.push({
+				sorter: [
+					// [key, invert?, name?]
+					["pop", false],
+					["size", false],
+					["start", true],
+					["name", false],
+					["influences.happy", false],
+				]
+			})
+			regToArray("town").forEach((town) => {
+				items.push({
+					text: `{{regname:town|${town.id}}}`,
+					func: () => regBrowse("town", town.id),
+					entity: town
+				});
+			})
+			populateExecutive(items, "Towns ("+(items.length - 1)+")");
+		}
+	},
+	{
+		text: "Unlocks",
+		id: "unlocks",
+		hide: true,
+		keybind: "u",
+		func: () => {
+			let total = 0;
+			for (let type in unlockTree) {
+				total += unlockTree[type].levels.length;
+			}
+
+			let items = [];
+			let unlocked = 0;
+			for (let type in unlockTree) {
+				if (!planet.unlocks[type]) continue;
+				let levels = unlockTree[type].levels;
+				for (let i = 0; i < levels.length; i++) {
+					const levelData = levels[i];
+					if (planet.unlocks[type] >= levelData.level) {
+						items.push({
+							text: levelData.name,
+							indent: i
+						});
+						unlocked ++;
+					}
+					else {
+						items.push({
+							text: levelData.name.replace(/\w/g,"?"),
+							indent: i,
+							opacity: 0.5
+						});
+						break;
+					};
+				}
+			}
+			if (!items.length) items.push("No unlocks yet..");
+			populateExecutive(items, "Unlocks");
+			populateExecutive(items, "Unlocks ("+Math.round(unlocked / total * 100)+"%)");
+		}
+	},
+	{
+		text: "Almanac",
+		id: "almanac",
+		hide: true,
+		keybind: "r",
+		func: () => {
+			let items = [];
+			items.push({
+				sorter: [
+					// [key, invert?, name?]
+					["rate", false],
+					["biome", false],
+					["domesticated", false],
+					["name", false],
+				]
+			})
+			regSorted("species", "rate").forEach((species) => {
+				if (species.type !== "plant" && species.type !== "animal") return;
+				if ((species.rate === 1 || species.rate === undefined) && species.named === false) return;
+				items.push({
+					text: `{{regname:species|${species.id}}}` + (species.rate > 1 ? ` (${species.rate}x)` : ""),
+					func: () => regBrowse("species", species.id),
+					entity: species
+				});
+			})
+			populateExecutive(items, "Almanac ("+(items.length-1)+")");
+		}
+	},
+	{
+		text: "Projects",
+		id: "projects",
+		hide: true,
+		keybind: "j",
+		func: () => {
+			let items = [];
+			regFilter("process", (p) => 
+				p.type === "project" && !p.done
+			).forEach((process) => {
+				items.push({
+					text: `${process.done ? "{{check" : "{{wait"}${process.symbol ? "|"+process.symbol : ""}}} {{regname:process|${process.id}|-}} ({{regname:town|${process.town}}})`,
+					func: () => regBrowse("process", process.id),
+					entity: process
+				});
+			})
+			populateExecutive(items, "Projects ("+items.length+")");
+		}
+	},
+	{
+		text: "Stats",
+		id: "stats",
+		hide: true,
+		keybind: "/",
+		func: () => {
+			let items = [];
+			items.push({
+				sorter: [
+					// [key, invert?, name?]
+					["value", false, "Highest"],
+					["value", true, "Lowest"],
+					["name", false, "Name"]
+				]
+			})
+			for (let key in planet.stats) {
+				const statsKey = "stats."+key;
+				if (!regBrowserKeys[statsKey]) continue;
+
+				let name = regBrowserKeys[statsKey];
+
+				let value = planet.stats[key];
+				let valueText = value;
+				if (regBrowserValues[statsKey]) valueText = regBrowserValues[statsKey](value);
+				if (!isNaN(valueText)) {
+					valueText = "{{num:"+valueText+"}}";
+					value = parseFloat(value);
+				}
+
+				items.push({
+					text: `{{i:${name}:}} ${valueText}`,
+					entity: {name:name, value:value}
+				})
+			}
+			for (let key in regBrowserExtra.stats) {
+				const statsKey = "stats."+key;
+				let name = regBrowserKeys[statsKey];
+				let value = regBrowserExtra.stats[key]();
+				let valueText = value;
+				if (!isNaN(value)) {
+					valueText = "{{num:"+valueText+"}}";
+					value = parseFloat(value);
+				}
+				items.push({
+					text: `{{i:${name}:}} ${valueText}`,
+					entity: {name:name, value:value}
+				})
+			}
+			populateExecutive(items, "Stats");
+		}
+	},
+	{
+		text: "Timeline",
+		id: "timeline",
+		hide: true,
+		keybind: "h",
+		func: () => {
+			let items = [];
+			// items.push({
+			// 	sorter: [
+			// 		// [key, invert?, name?]
+			// 		["start", false, "Newest"],
+			// 		["start", true, "Oldest"]
+			// 	]
+			// })
+			if (planet.dead) items.push({
+				text: `{{color:[{{date:${planet.dead}|s}}]|rgba(255,255,0,0.75)}} {{planet}} becomes uninhabited`,
+				func: () => regBrowsePlanet,
+				_day: planet.dead
+			});
+			regToArray("town",true).forEach((town) => {
+				items.push({
+					text: `{{color:[{{date:${town.start}|s}}]|rgba(255,255,0,0.75)}} {{regname:town|${town.id}}} is founded`,
+					func: () => regBrowse("town", town.id),
+					entity: town,
+					_day: town.start
+				});
+				if (town.end) {
+					items.push({
+						text: `{{color:[{{date:${town.end}|s}}]|rgba(255,255,0,0.75)}} {{regname:town|${town.id}}} falls`,
+						func: () => regBrowse("town", town.id),
+						entity: town,
+						_day: town.end
+					});
+				}
+				if (town.usurp && !isNaN(town.usurp) && town.usurp !== town.start && town.usurp !== planet.usurp) {
+					items.push({
+						text: `{{color:[{{date:${town.usurp}|s}}]|rgba(255,255,0,0.75)}} {{regname:town|${town.id}}} becomes independent`,
+						func: () => regBrowse("town", town.id),
+						entity: town,
+						_day: town.usurp
+					});
+				}
+			})
+			regToArray("process").forEach((process) => {
+				let text = `{{color:[{{date:${process.start}|s}}${process.done ? "–{{date:"+process.done+"|s}}" : ""}]|rgba(255,255,0,0.75)}} `;
+				if (process.type === "project") text += `${process.marker ? "{{regname:marker|"+process.marker+"}}" : "{{regname:process|"+process.id+"}}"} constructed in {{regname:town|${process.town}}}`;
+				// else if (process.type === "disaster") text += 
+				else if (process.type === "usurp") text += "{{planet}} becomes independent"
+				else if (process.type === "unusurp") text += "{{planet}} regains faith"
+				else {
+					text += `{{regname:process|${process.id}}}`;
+				}
+				if (process.deaths) text += " kills "+process.deaths;
+				else if (process.type === "disaster" && !process.injuries) return;
+				items.push({
+					text: text,
+					func: () => regBrowse("process", process.id),
+					entity: process,
+					_day: process.start
+				});
+			})
+			items.sort((a, b) => b._day - a._day);
+			populateExecutive(items, "Timeline");
+		}
+	}
+	], "Executive", true)
+}
+
+window.addEventListener("load", function(){ //onload
+
+	try {
+
+	if (Mod.afterLoadList.length) {
+		for (let i = 0; i < Mod.afterLoadList.length; i++) {
+			Mod.afterLoadList[i]();
+		}
+	}
+
+	document.getElementById("gameLoading").style.display = "none";
+	document.getElementById("gameDiv").style.display = "flex";
+
+	// for (let key in entityTemplates) {
+	// 	entityTemplates[key]._key = key;
+	// }
+	for (let key in influenceModality) {
+		allInfluences[key] = true;
+	}
+	for (let key in influenceEffects) {
+		allInfluences[key] = true;
+		for (let key2 in influenceEffects[key]) {
+			allInfluences[key2] = true;
+		}
+	}
+	for (let key in jobInfluences) {
+		allInfluences[jobInfluences[key]] = true;
+	}
+	delete allInfluences["null"];
+	
+	if (R74n.has("GenTownSave")) {
+		autoload();
+	}
+	else {
+		planet = generatePlanet();
+		reg = planet.reg;
+		updateBiomes();
+		calculateLandmasses();
+		initGame();
+	}
+
+	if (userSettings.lastVersion !== undefined && userSettings.lastVersionCheck !== gameVersion) {
+		document.getElementById("actionInfo").classList.add("notify");
+		logTip("newUpdate"+gameVersion, "There's a new update! Maybe try starting a new planet?")
+	}
+	else {
+		userSettings.lastVersionCheck = gameVersion;
+	}
+	userSettings.lastVersion = gameVersion;
+	saveSettings();
+
+	if (userSettings.view) setView(userSettings.view);
+
+	document.querySelector("#gameHalf2 .panelX").addEventListener("click", closeExecutive);
+
+	document.getElementById("actionSettings").addEventListener("click",() => {
+	populateExecutive([
+		{
+			text: "Units",
+			setting: "units",
+			options: { "x": "Simple", "i": "Imperial", "m": "Metric" },
+			default: "x",
+			tip: "Displays in entity info and preview",
+			func: () => {
+				updateStats();
+			}
+		},
+		{
+			text: "Dates",
+			setting: "dates",
+			options: { "x": "Simple", "g": "Gregorian" },
+			default: "x",
+			tip: "Displays in entity info and preview",
+			func: () => {
+				updateStats();
+				document.querySelectorAll(".logDay").forEach(elem => {
+					let day = elem.getAttribute("data-day");
+					if (day) elem.innerText = parseText("{{date:"+day+"|s}}");
+				})
+			}
+		},
+		{
+			text: "Tab notifications",
+			setting: "notify",
+			options: { "true": "ON", "false": "OFF" },
+			default: "true",
+			tip: "Determines if tabs flash red to notify",
+			func: () => {
+				document.querySelectorAll(".actionItem.notify").forEach(e => {
+					e.classList.remove("notify");
+				})
+			}
+		},
+		{
+			text: "Hide undiscovered",
+			setting: "hideNames",
+			options: { "true": "ON", "false": "OFF" },
+			default: "true",
+			func: () => {
+				let secrets = this.document.querySelectorAll(".entityName.secret");
+				if (secrets) secrets.forEach(span => {
+					let reg = span.getAttribute("data-reg");
+					let id = span.getAttribute("data-id");
+					if (!reg || !id) return;
+					let entity = regGet(reg, parseInt(id));
+					if (!entity || !entity.name) return;
+					if (userSettings.hideNames === false) {
+						span.innerText = entity.name;
+					}
+					else {
+						span.innerText = entity.name.replace(/./g, "?").slice(0,5);
+					}
+				})
+			}
+		},
+		{
+			text: "Free Play decisions",
+			setting: "freeplayDecisions",
+			options: { "true": "ON", "false": "OFF" },
+			default: "false",
+			tip: "Determines if you are given decisions in Free Play mode"
+		},
+		{
+			text: "Auto Play speed",
+			slider: "autoPlaySpeed",
+			default: 2000,
+			value: userSettings.autoPlaySpeed,
+			min: 100,
+			step: 100,
+			max: 10000,
+			formatter: (value) => `${Math.round(value / 100) / 10}s`,
+			func: (key, value) => {
+				userSettings[key] = value;
+				if (autoPlaying) {
+					autoPlay(true);
+					autoPlay(true);
+				}
+				saveSettings();
+			}
+		},
+		{ text:"Map", heading:true },
+		{
+			text: "Town names",
+			setting: "townNames",
+			options: { "true": "ON", "false": "OFF" },
+			default: "false",
+			func: () => { renderMarkers(); updateCanvas(); }
+		},
+		{
+			text: "Carve borders",
+			setting: "carve",
+			options: { "true": "ON", "false": "OFF" },
+			default: "false",
+			tip: "Removes square borders along the coastline",
+			func: () => { renderHighlight(); updateCanvas(); }
+		},
+		{
+			text: "Markers",
+			setting: "markers",
+			options: { "true": "ON", "false": "OFF" },
+			default: "true",
+			func: () => { renderMarkers(); updateCanvas(); }
+		},
+		{
+			text: "Overlay",
+			setting: "overlay",
+			options: { "true": "ON", "false": "OFF" },
+			default: "true",
+			func: () => { document.getElementById("mapOverlay").style.display = userSettings.overlay === false ? "none" : "block"; }
+		},
+		{
+			text: "Desaturate biomes",
+			setting: "desaturate",
+			options: { "true": "ON", "false": "OFF" },
+			default: "false",
+			func: () => { renderMap(); updateCanvas(); }
+		},
+		{
+			text: "Territory opacity",
+			slider: "opacity",
+			default: 0.5,
+			value: userSettings.opacity,
+			min: 0,
+			step: 0.01,
+			max: 1,
+			formatter: (value) => `{{percent:${value}}}`,
+			func: (key, value) => { if (!value) return; userSettings.opacity = value; renderHighlight(); updateCanvas(); saveSettings() }
+		},
+		{ text:"Technical", heading:true },
+		{
+			text: "Enabled mods",
+			id: "enabledMods",
+			hide: !(userSettings.mods || []).length,
+			func: () => { showMods(); }
+		},
+		{
+			text: "Add mod",
+			func: () => { addModPrompt(); }
+		},
+		{
+			text: "Mod list",
+			url: "https://github.com/R74nCom/GenTown-Mods/"
+		},
+		{
+			text: "Debug mode",
+			setting: "debug",
+			options: { "true": "ON", "false": "OFF" },
+			default: "false",
+			func: () => { updateStats(); }
+		},
+		{ spacer:true },
+		{
+			text: "Reset to defaults",
+			danger: true,
+			func: () => {
+				doPrompt({
+					type: "confirm",
+					title: "Reset Settings",
+					message: "Are you sure you want to reset to default settings? This will not affect your save.",
+					func: (r) => {
+						if (!r) return;
+						document.querySelectorAll("#actionSubList .actionSetting").forEach((button) => {
+							let setting = button.getAttribute("data-setting");
+							delete userSettings[setting];
+						})
+						saveSettings();
+						closeExecutive();
+						renderMap();
+						renderHighlight();
+						updateStats();
+					},
+					danger: true
+				})
+			}
+		},
+		{
+			text: "Erase data & saves",
+			danger: true,
+			func: () => {
+				doPrompt({
+					type: "confirm",
+					title: "Erase EVERYTHING",
+					message: "Are you sure you want to delete ALL GenTown DATA, including your SAVES? This cannot be undone.",
+					func: (r) => {
+						if (!r) return;
+						R74n.del("GenTownSave");
+						R74n.del("GenTownSettings");
+						this.location.reload();
+					},
+					danger: true
+				})
+			}
+		},
+	], "Settings");
+	currentExecutive = "settings";
+	})
+
+	document.getElementById("actionSaves").addEventListener("click",() => {
+	populateExecutive([
+		// {
+		// 	text: "Your current planet is automatically saved.",
+		// 	spacer: true
+		// },
+		{
+			text: "{{symbol:📥}} Save to file",
+			func: saveFile,
+			id: "saveFile"
+		},
+		{
+			text: "{{symbol:📂}} Load from file",
+			func: loadFile,
+			id: "loadFile"
+		},
+		{ spacer: true },
+		{
+			text: "Make frequent backups!",
+			spacer: true
+		},
+		{
+			text: "{{symbol:☄}} Start new planet",
+			func: () => {
+				resetPlanetPrompt();
+			},
+			notify: planet.dead,
+			danger: true
+		}
+	], "Save Options");
+	currentExecutive = "saves";
+	})
+	
+	document.getElementById("actionInfo").addEventListener("click",(e) => {
+	populateExecutive([
+		{ text: "{{symbol:�}} About", func: ()=> {
+			doPrompt({ type:"text", message:document.getElementById("blurbAbout").innerText });
+		}, id:"about" },
+		{ text: "{{symbol:⏻}} Controls", func: ()=>{
+			doPrompt({ type: "text", message: "Loading..." })
+
+			fetch("https://r74n.com/gentown/controls.txt")
+			.then((r) => r.text())
+			.then((text) => {
+				doPrompt({
+					type: "text",
+					message: text,
+					title: "Controls",
+					pre: true
+				})
+			})
+			.catch((error) => {
+				alert(error);
+			})
+		}, id:"controls"},
+		{ text: "{{symbol:🏆}} Changelog", func: ()=>{
+			doPrompt({ type: "text", message: "Loading..." })
+
+			fetch("https://r74n.com/gentown/changelog.txt")
+			.then((r) => r.text())
+			.then((text) => {
+				text = text.replace(/(^|\n)(\[.+\])/g, "$1{{b:$2}}");
+				text = text.replace(/((?:^|\n) +)(\+)/g, "$1{{color:$2|#00ff00}}");
+				text = text.replace(/((?:^|\n) +)(~)/g, "$1{{color:$2|#ffff00}}");
+				text = text.replace(/((?:^|\n) +)(-)/g, "$1{{color:$2|#ff0000}}");
+				doPrompt({
+					type: "text",
+					message: text,
+					title: "Changelog",
+					pre: true
+				})
+
+				document.getElementById("actionItem-changelog").classList.remove("notify");
+				document.getElementById("actionInfo").classList.remove("notify");
+
+				if (userSettings.lastVersionCheck !== gameVersion) {
+					userSettings.lastVersionCheck = gameVersion;
+					saveSettings();
+				}
+			})
+			.catch((error) => {
+				alert(error);
+			})
+		}, id:"changelog", notify: userSettings.lastVersionCheck && userSettings.lastVersionCheck !== gameVersion },
+		{ text: "{{symbol:📤}} Share", func:shareProgress, id:"share" },
+		{ text: "{{symbol:🗩}} Feedback", url: "https://docs.google.com/forms/d/e/1FAIpQLSeq2TMoKAxJRKXlCmBLeONYLTMCc1j6lYcY5nxBr4lwaRWTpA/viewform", id:"feedback" },
+
+		{ spacer: true },
+		{ text: "{{symbol:🤖}} Developed by {{color:R74n|#00ffff}}", url:"https://r74n.com/" },
+		// { text: "{{symbol:!}} {{color:GRAND CENSUS|#ff0000}} BEGINS", url:"https://docs.google.com/forms/d/e/1FAIpQLSdRmDyCkYCg3xjiEyj0E07Js9we1cBSep2EbioNZeNX6JWRDg/viewform?usp=dialog" },
+		{ text: "{{symbol:👻}} {{color:More games...|#ffff00}}", func:() => R74n.more() },
+		{ spacer: true },
+		{ text: "{{symbol:©}} Copyright 2026.", url:"https://r74n.com/license.txt" }
+	], "GenTown v"+gameVersion);
+	currentExecutive = "info";
+	});
+
+	document.getElementById("actionMore").addEventListener("click",(e) => {
+		R74n.more();
+	});
+
+	checkHash();
+
+	}
+	catch (error) {
+		logException(error, "load");
+		throw error
+	}
+
+})

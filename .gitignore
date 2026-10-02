@@ -1,3 +1,7 @@
 GenTown/
 .DS_Store
 .claude/
+node_modules/
+!README.md
+!vendor/gentown/
+!vendor/gentown/**
