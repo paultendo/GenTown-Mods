@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.43**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
+Version **1.6.44**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.43/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.44/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.43)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.44)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -53,6 +53,8 @@ Replies arrive after two game days. Making an object normally takes six to ten d
 
 Communities can now begin practices without a whisper. Actual repeated harvests and spare food can rally farmers, sustained short rations can breed dissent, and an emerging scholar can share lessons from the academy. Established practices resist replacement and the same daily work cannot continually renew its bonus. A successful caravan or an actual food gift can carry a practice into another town. The listener may refuse it or change its meaning according to their occupation and outlook. Local work takes time before words can travel again, and influence weakens across repeated handoffs. The history records where an idea began and how it changed, with no Traveler credit for an autonomous beginning. These lives continue beyond the explored map while their undiscovered names remain hidden. Caravan difficulty now uses town centres and the actual terrain path rather than legacy coordinates.
 
+Grain, livestock, stone, timber and metal now share actual exchange journeys. Meals and unfinished work create demand. Communities may give, bargain, barter or refuse according to their means, values, faith and remembered help. Supplies and payment remain with carriers until arrival, including through blocked routes and reloads. Construction and craft reserve their materials, and stone and timber can substitute in native building work. Imported goods keep records of their actual use in meals, buildings and created instruments. Caravans no longer invent cargo or profit, market purchases no longer buy abstract luxury or tool bonuses, and public cashflow reports actual receipts and spending. Taxes and upkeep move divisible cash between public stores and native private wealth. Sustained hunger and refused supplies can deepen war pressure where rule, soldiers and beliefs permit it. This is a shared commodity foundation. Settlement-specific material knowledge, experimental techniques and further production chains remain work ahead.
+
 Story descriptions now use smaller, softer text, with clearer actions and fewer dividing lines. Opening a story returns its scroll position to the heading.
 
 Live decisions have a warm highlight and working buttons. Unanswered entries recede into the Chronicle without explanatory text. Advancing the day preserves GenTown's rules: most proposals lapse, while some events have a fallback, such as generating a discovery name. Autoplay pauses for decisions unless Auto-decide is enabled. GenTown does not save pending event callbacks across a reload.
@@ -62,7 +64,7 @@ npm run check
 npm test
 ```
 
-The 107 regression tests cover startup, late installation and redraw, overlay creation, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, background reports, unlock details and notifications, discovery menus, species naming, mod management, autoplay and decisions, settlement activity and lore, choice provenance and Chronicle story navigation, removal of unsupported causal guesses, species encounters and local uses, individual whispers and their reception, autonomous practices and short-ration protests, real caravan transmission and local reinterpretation, fog-independent community life, actual food transfers and exploration, persistent destination histories and return journeys, ownership changes and hostile claims, the Traveler opening, finite artifacts and their provenance, finder-dependent uses, sharing and hoarding, custody and rediscovery, player-inspired work and naming, material costs and interrupted work, inheritance through the actual beginning, empty packs and revisiting a saved history, unrest and war pressure, adoption and construction follow-ups, fields and visibility, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
+The 135 regression tests cover startup, late installation and redraw, overlay creation, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, background reports, unlock details and notifications, discovery menus, species naming, mod management, autoplay and decisions, settlement activity and lore, choice provenance and Chronicle story navigation, removal of unsupported causal guesses, species encounters and local uses, individual whispers and their reception, autonomous practices and short-ration protests, real caravan transmission and local reinterpretation, fog-independent community life, actual food transfers and exploration, persistent destination histories and return journeys, ownership changes and hostile claims, the Traveler opening, finite artifacts and their provenance, finder-dependent uses, sharing and hoarding, custody and rediscovery, player-inspired work and naming, material costs and interrupted work, inheritance through the actual beginning, empty packs and revisiting a saved history, unrest and war pressure, adoption and construction follow-ups, fields and visibility, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
 
 ## Credits
 

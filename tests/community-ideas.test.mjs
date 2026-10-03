@@ -27,8 +27,25 @@ function route(w,a,b) {
   assert.ok(route?.active); return route;
 }
 function caravan(w,town,route,success = true) {
-  const random = w.Math.random; w.Math.random = () => success ? 0 : 0.999;
-  try { w.gameEvents.caravanDeparts.func(town,null,{value:route}); } finally { w.Math.random = random; }
+  const partner=w.regGet('town',route.town1===town.id?route.town2:route.town1);
+  let record=(w.planet._paultendoLife.exchanges || []).find(r=>r.seller===town.id&&r.buyer===partner.id&&!r.resolved);
+  if(!record) {
+    town.resources.lumber=100;partner.resources.lumber=0;partner.resources.rock=0;partner.resources.cash=1000;
+    town.values.openness=-6; // Closed stores require a real commercial exchange.
+    w.happen('Create',partner,null,{type:'project',subtype:'school',cost:20},'process');
+    w.gameEvents.caravanDeparts.func(town,null,{value:route});
+    record=w.planet._paultendoLife.exchanges.find(r=>r.seller===town.id&&r.buyer===partner.id&&!r.resolved);
+    assert.ok(record,'The caravan must have useful physical cargo');
+    w.planet.day=record.due-1;next(w);
+    assert.equal(record.status,'carrying');assert.ok(record.cargo>0);
+  }
+  if(!success) {
+    w.planet.embargoes=[{fromId:town.id,toId:partner.id,start:w.planet.day}];
+    w.planet.day=record.due-1;next(w);assert.equal(record.status,'waiting');return record;
+  }
+  w.planet.embargoes=[];
+  for(let n=0;n<12&&!record.resolved;n++){w.planet.day=record.due-1;next(w);}
+  assert.equal(record.status,'arrived');return record;
 }
 function scholar(w,town) {
   w.gameEvents.scholarEmerges.func(town);
@@ -83,13 +100,13 @@ test('short rations build dissent through actual meals, while well fed towns and
   }
   assert.equal(ideas(w).length,0);
   for(let day=8;day<=11;day++) {
-    w.planet.day=day;town.resources={crop:10};w.gameEvents.townEat.func(town);
+    w.planet.day=day;town.resources={crop:1};w.gameEvents.townEat.func(town);
   }
   const root=ideas(w)[0];assert.ok(root);
   assert.equal(root.origin.cause.type,'hunger');assert.equal(root.origin.cause.days,4);
   assert.equal(root.topic,'defy');assert.ok(root.changes.law<0 && root.changes.happy<0);
   assert.equal(w.planet._paultendoLife.whispers.length,0);
-  w.planet.day++;town.resources={crop:10};w.gameEvents.townEat.func(town);
+  w.planet.day++;town.resources={crop:1};w.gameEvents.townEat.func(town);
   assert.equal(ideas(w).length,1,'A single shortage does not spawn daily protests');
   assert.deepEqual(game.errors,[]);
 });
@@ -102,12 +119,12 @@ test('a scholar’s real work can travel by successful caravan, change meaning a
   assert.ok(road.distance>0 && Number.isFinite(road.travelTime));
   caravan(w,source,road);assert.equal(ideas(w).length,1,'Words need time before they can leave');
   w.planet.day=root.readyDay;
-  caravan(w,source,road,false);assert.equal(ideas(w).length,1,'A lost caravan carries no words');
+  caravan(w,source,road,false);assert.equal(ideas(w).length,1,'A blocked caravan carries no words before arriving');
   caravan(w,source,road);
   const heard=ideas(w).find(r=>r.town===target.id);assert.ok(heard);assert.equal(heard.resolved,false);
   assert.equal(heard.contact.route,road.id);assert.ok(heard.contact.pathLength>0);
-  const arrival=[...w.document.querySelectorAll('.logText')].find(e=>e.textContent.includes('Merchants bring words'));
-  assert.ok(arrival);assert.doesNotMatch(arrival.textContent,/because of|thanks to|buoyed by/,'Observed journeys must not gain unrelated causal claims');
+  const arrival=[...w.document.querySelectorAll('.logMessage')].find(e=>e.dataset.storyId===heard.id);
+  assert.ok(arrival);assert.match(heard.steps[0].text,/Merchants bring words|Along with the timber, words/);assert.doesNotMatch(heard.steps[0].text,/because of|thanks to|buoyed by/,'Observed journeys must not gain unrelated causal claims');
   assert.equal(heard.role,'soldier');heard.roll=0;
   const trust=target.guidanceTrust;
   const save=JSON.parse(JSON.stringify(w.generateSave()));
@@ -122,7 +139,7 @@ test('a scholar’s real work can travel by successful caravan, change meaning a
   assert.equal(record.chain[0].words,root.words);assert.equal(record.strength,root.strength*0.65);
   assert.ok(record.readyDay>record.responseDay);
   openWords(rw,rt);click(rw,record.title);
-  assert.match(panel(rw).textContent,/academy.*merchants.*soldiers/is);
+  assert.match(panel(rw).textContent,/academy.*(?:merchants|timber).*soldiers/is);
   assert.doesNotMatch(panel(rw).textContent,/You whispered|your words/);
   click(rw,'Visit '+record.name);assert.match(panel(rw).textContent,/Soldier of/);
   assert.match(panel(rw).textContent,/Words that reached them/);

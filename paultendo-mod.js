@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.43/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.44/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.43";
+    const MOD_VERSION = "1.6.44";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -3048,7 +3048,22 @@
                 try { softenFaithLoss(args, target); } catch {}
             }
             const speciesRate = action === 'Boost' && target?._reg === 'species' ? (target.rate || 1) : null;
-            const result = baseHappen(action, subject, target, args, targetClass);
+            const stockBefore=['AddResource','RemoveResource'].includes(action)&&target?.resources&&args?.type?target.resources[args.type] || 0:null;
+            let result;
+            // Zero means zero. Native RemoveResource otherwise treats it as one,
+            // including construction inputs which were not actually used.
+            if(action==='RemoveResource'&&Number.isFinite(args?.count)&&args.count<=0)result=target;
+            else if(action==='RemoveResource'&&args?.type==='cash'&&Number.isFinite(args.count)&&target?.resources) {
+                const paid=Math.min(Math.max(0,stockBefore),args.count);
+                target.resources.cash=Math.max(0,stockBefore-paid);result=target;
+                // Native spending pays for work within this settlement.
+                target.wealth=(target.wealth || 0)+paid;
+            } else result = baseHappen(action, subject, target, args, targetClass);
+            if(PAULTENDO_STATE.commoditiesReady&&stockBefore!==null) {
+                const after=target.resources[args.type] || 0,delta=after-stockBefore;
+                if(args.type==='cash'&&delta)recordCashFlow(target,delta,PAULTENDO_STATE.cashSource || 'other');
+                else if(action==='RemoveResource'&&delta<0)consumeCommodityLots(target,args.type,stockBefore,after);
+            }
             if (speciesRate !== null && target.rate > speciesRate) {
                 try { recordLivingSpeciesUse(target, subject, target.type === 'plant' ? 'cultivation' : 'breeding'); } catch {}
             }
@@ -4503,9 +4518,13 @@
     function resolveChronicleStory(ref) {
         const state = planet?._paultendoLife;
         if (!state || !ref) return null;
-        const lists = {teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
+        const lists = {exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
         const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
         if (!record) return null;
+        if (ref.kind === 'food' || ref.kind === 'exchange') {
+            if (![record.buyer,record.seller].map(id=>regGet('town',id)).some(livingTownKnown)) return null;
+            return {label:`Follow the ${COMMODITIES[record.type || 'crop']?.label || 'exchange'}`,open:()=>openCommodityJourney(record)};
+        }
         if (ref.kind === 'artifact') {
             if (!livingArtifactKnown(record)) return null;
             return {label:`Follow ${artifactTitle(record)}`, open:()=>openLivingArtifact(record)};
@@ -4522,13 +4541,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
+        if (!['exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['teaching','whisper','artifact','decision'].includes(ref.kind)) return;
+        if (!ref || !['exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -5214,16 +5233,23 @@
                 work.status='abandoned';text='The unfinished work is put aside. The hands, peace or materials it needed are no longer there.';
             } else {
                 const before={...town.resources};
-                for(const [type,count] of Object.entries(recipe.cost)) happen('RemoveResource',null,town,{type,count});
+                const oldLots=JSON.parse(JSON.stringify(town._paultendoCommodityLots || {})),inputs=[];
+                withCommodityUse({kind:'craft',id:work.id,name:work.kind,inputs},()=>{for(const [type,count] of Object.entries(recipe.cost))happen('RemoveResource',null,town,{type,count});});
                 const paid=Object.fromEntries(Object.keys(recipe.cost).map(k=>[k,(before[k]||0)-(town.resources[k]||0)]));
                 if(Object.entries(recipe.cost).some(([k,n])=>paid[k]!==n)) {
                     for(const [type,count] of Object.entries(paid)) if(count>0) happen('AddResource',null,town,{type,count});
+                    town._paultendoCommodityLots=oldLots;
                     work.status='abandoned';text='The materials could not be gathered. The work is put aside.';
                 } else {
                     const traveler=travelerState(),lineage=`made:${traveler.passage}:${getUniverse().currentWorldId}:${traveler.nextObject++}`;
                     const artifact={id:`artifact:${state.nextId++}`,kind:work.kind,title:`${person.name}’s ${LIVING_ARTIFACTS[work.kind].name.toLowerCase()}`,description:recipe.description,quality:0.6,lineage,place:ensureLivingPlace(chunkAt(...getTownCenter(town))).id,status:'carried',events:[],searches:0,uses:{},origin:{passage:traveler.passage,lineage,history:[],maker:{name:person.name,role:person.role,town:town.name,world:planet.name,day:planet.day,materials:paid},whisper:record?.words}};
                     if(parent){artifact.parent={lineage:parent.lineage || parent.origin.lineage,title:artifactTitle(parent),phrase:artifactPhrase(parent)};parent.crafted ||= {};parent.crafted[town.id]=artifact.lineage;}
                     state.artifacts.push(artifact);work.status='made';work.artifact=artifact.id;work.materials=paid;
+                    for(const input of inputs)rememberCommodityUse(town,input,{kind:'craft',id:work.id,name:work.kind});
+                    artifact.origin.materialSources=inputs.map(input=>{
+                        const exchange=commodityExchangeState().exchanges.find(r=>r.id===input.exchange),source=exchange&&regGet('town',input.from || exchange.seller);
+                        return {...input,world:getUniverse().currentWorldId,town:source?.id,townName:source?.name,known:!!exchange?.known?.[source?.id]||livingTownKnown(source)};
+                    });
                     text=`${person.name} finishes ${artifactTitle(artifact)} in ${town.name}. The rough edges show where their own hands took over.`;
                     carryLivingArtifact(artifact,town,person,text);
                     if(record) record.created=artifact.id;
@@ -5557,6 +5583,11 @@
         livingArtifactView={planet,id:artifact.id,lastEvent:artifact.events.at(-1),status:artifact.status};
         const def=LIVING_ARTIFACTS[artifact.kind],place=livingWorldState().places[artifact.place],town=regGet('town',artifact.town),person=town&&findLivingPerson(town,artifact.person);
         const items=[{text:'← Back to what you carried',func:()=>openLivingArtifactKit()},{text:escapeLivingText(artifactDescription(artifact))},{text:artifact.origin?.maker?`Made by ${escapeLivingText(artifact.origin.maker.name)} in ${escapeLivingText(artifact.origin.maker.town)}.`:'You cannot remember who made it.'}];
+        for(const source of artifact.origin?.materialSources || []) {
+            const goods=COMMODITIES[source.type]?.label || source.type;
+            items.push({text:`${source.count} ${escapeLivingText(goods)} came from ${source.known?escapeLivingText(source.townName):'another settlement'} before it was made.`});
+            if(source.world===getUniverse().currentWorldId&&resolveChronicleStory({kind:'exchange',id:source.exchange}))items.push({text:'Remember the exchange',func:()=>resolveChronicleStory({kind:'exchange',id:source.exchange})?.open()});
+        }
         items.push({text:artifact.status==='returned'?'You carry it now.':artifact.status==='waiting'?(artifact.cached?'It lies among the remains, waiting to be found again.':'It is still waiting where you left it.'):artifact.status==='broken'?'The object is broken. Its story remains.':livingTownKnown(town)?`${escapeLivingText(artifact.name)} keeps it in ${escapeLivingText(town.name)}.`:'Its bearer has passed beyond your notice.'});
         if(artifact.returnOffer&&livingTownKnown(town)&&person) items.push({text:`${escapeLivingText(person.name)} has promised it to you. ${escapeLivingText(livingArtifactReturnNeed(artifact,town,person) || 'They are not ready to part with it yet.')}`});
         if(artifact.origin?.maker&&!artifact.named) items.push({text:'Give it a name',func:()=>nameLivingArtifact(artifact)});
@@ -5783,6 +5814,7 @@
     function observeLivingCommunityHarvest(town,before) {
         const gained=(town?.resources?.crop || 0)-before;
         if(!town||town.end||gained<=0||!(town.jobs?.farmer>0)||town.legal?.farm===false) return;
+        observeFoodFlow(town,'harvest',gained);
         const work=town._paultendoCommunityWork ||= {};
         const harvest=work.harvest ||= {days:0,count:0,lastDay:null};
         harvest.count+=gained;
@@ -5793,23 +5825,427 @@
     }
     function observeLivingCommunityMeal(town,before) {
         if(!town||town.end||town.pop<=0) return;
+        observeFoodFlow(town,'meal',Math.max(0,before.food-mealStock(town)),before.wanted);
         const work=town._paultendoCommunityWork ||= {};
         const hunger=work.hunger ||= {days:0,lastDay:null,recovery:0,started:null};
         if(hunger.lastDay===planet.day) return;
         hunger.lastDay=planet.day;
         // The native meal checks these stores for every town. Shortage still
         // counts when unhappiness has reached its floor. Recovery needs food.
-        if(planet.day-town.start>1&&before.food<before.pop) {
+        if(planet.day-town.start>1&&before.food<before.wanted) {
             hunger.days++;hunger.recovery=0;hunger.started ||= planet.day;
-        } else if(before.food>=before.pop) {
-            if(++hunger.recovery>=2){hunger.days=0;hunger.started=null;hunger.spoke=false;}
+        } else if(before.food>=before.wanted) {
+            if(++hunger.recovery>=2){hunger.days=0;hunger.started=null;hunger.spoke=false;hunger.threatened=false;}
             return;
         } else return;
+        observeLivingFoodNeed(town,hunger);
         if(hunger.spoke||hunger.days<4||!(planet.unlocks.government>=10)||!town.gov||town.gov==='anarchy') return;
         const person=livingCommunityPerson(town,'resident');
         const teaching=beginLivingCommunityTeaching(town,person,'defy',{type:'hunger',days:hunger.days,since:hunger.started,text:`After ${hunger.days} days of short rations, ${person.name} starts asking why the rulers cannot keep people fed.`});
         if(teaching) hunger.spoke=true;
     }
+    // Goods are claimed by actual meals and unfinished work. Requests, supplies
+    // and payment travel separately, rather than purchasing abstract bonuses.
+    const EXCHANGE_PACE = {retryDays:8, chunksPerDay:8, reserveDays:2, flowDays:8, maxHistory:128};
+    const COMMODITIES = {
+        crop:{label:'grain',edible:true,role:'farmer'},
+        livestock:{label:'livestock',edible:true,role:'farmer'},
+        rock:{label:'stone',role:'miner'},
+        lumber:{label:'timber',role:'lumberer'},
+        metal:{label:'metal',role:'miner'}
+    };
+    const preparedExchangeStates=new WeakSet();
+    function commodityStock(town,type='crop') {const n=town?.resources?.[type];return Number.isFinite(n)?Math.max(0,n):0;}
+    function mealStock(town) {return commodityStock(town)+commodityStock(town,'livestock');}
+    function nativeMealNeed(town) {
+        const cost=Math.floor(addInfluence(town.pop*$c.baseEatRate,town,'hunger'));
+        return Math.max(1,cost || town.pop*$c.baseEatRate*0.05);
+    }
+    function observeFoodFlow(town,kind,count,wanted) {
+        const flow=town._paultendoFoodFlow ||= [];
+        let entry=flow.find(e=>e.day===planet.day);
+        if(!entry){entry={day:planet.day};flow.push(entry);}
+        if(kind==='meal'){entry.consumed=count;entry.wanted=wanted;entry.population=town.pop;}
+        else entry[kind]=(entry[kind] || 0)+count;
+        while(flow.length&&flow[0].day<planet.day-EXCHANGE_PACE.flowDays)flow.shift();
+    }
+    function foodFlow(town) {
+        const meals=(town._paultendoFoodFlow || []).filter(e=>e.day>=planet.day-EXCHANGE_PACE.flowDays&&e.wanted>0&&e.population>0);
+        const recentNeed=meals.length?meals.reduce((sum,e)=>sum+e.wanted/e.population,0)/meals.length*town.pop:0;
+        const consumption=Math.max(nativeMealNeed(town),recentNeed);
+        const harvests=(town._paultendoFoodFlow || []).filter(e=>e.day>=planet.day-EXCHANGE_PACE.flowDays);
+        const span=harvests.length?Math.max(1,planet.day-harvests[0].day+1):1;
+        // Observed yields are uncertain. Never spend the whole expected harvest,
+        // and never count farming that is now forbidden or has no workers.
+        const production=town.jobs?.farmer>0?harvests.reduce((sum,e)=>sum+(town.legal?.farm!==false?e.harvest || 0:0)+(town.legal?.farm!==false?e.herd || 0:0),0)/span*0.5:0;
+        return {consumption,production};
+    }
+    function foodBuffer(town,travelDays=0) {
+        const flow=foodFlow(town);
+        return Math.ceil(Math.max(flow.consumption*EXCHANGE_PACE.reserveDays,(flow.consumption-flow.production)*(travelDays+EXCHANGE_PACE.reserveDays)));
+    }
+    function commodityExchangeState() {
+        const state=livingWorldState();
+        if(!preparedExchangeStates.has(state)) {
+            state.exchanges ||= state.foodJourneys || [];
+            delete state.foodJourneys;
+            for(const record of state.exchanges)record.type ||= 'crop';
+            preparedExchangeStates.add(state);
+        }
+        return state;
+    }
+    function foodMemory(town,other) {return (town._paultendoFoodMemory ||= {})[other.id] ||= {given:0,received:0,traded:0,refused:0};}
+    function rememberFoodExchange(from,to,kind,count,id) {
+        if(!from||!to||count<=0) return;
+        const a=foodMemory(from,to),b=foodMemory(to,from);
+        if(kind==='aid'){a.given+=count;b.received+=count;} else {a.traded+=count;b.traded+=count;}
+        a.last=b.last={day:planet.day,kind,count,source:id || null};
+        if(kind==='aid')b.lastHelpReceived={...b.last};
+    }
+    function exchangeMemory(town,other) {
+        const old=town._paultendoFoodMemory?.[other.id];
+        return (town._paultendoExchangeMemory ||= {})[other.id] ||= {given:{crop:old?.given || 0},received:{crop:old?.received || 0},traded:{crop:old?.traded || 0},refused:old?.refused || 0,lastHelpReceived:old?.lastHelpReceived || null};
+    }
+    function rememberCommodityExchange(from,to,kind,type,count,id) {
+        if(count<=0)return;
+        const a=exchangeMemory(from,to),b=exchangeMemory(to,from);
+        if(kind==='aid'){a.given[type]=(a.given[type] || 0)+count;b.received[type]=(b.received[type] || 0)+count;}
+        else {a.traded[type]=(a.traded[type] || 0)+count;b.traded[type]=(b.traded[type] || 0)+count;}
+        a.last=b.last={day:planet.day,kind,type,count,source:id || null};
+        if(kind==='aid')b.lastHelpReceived={...b.last};
+        if(COMMODITIES[type]?.edible)rememberFoodExchange(from,to,kind,count,id);
+    }
+    function commodityPath(from,to) {
+        if(!from||!to||from.end||to.end||from.pop<=0||to.pop<=0||from.id===to.id||hasIssue(from,'war')||hasIssue(to,'war')||areAtWar(from,to)||hasEmbargo(from,to)||hasEmbargo(to,from)) return null;
+        if(happen('Legality',null,from,{law:'travel'})===false||happen('Legality',null,to,{law:'travel'})===false) return null;
+        const connected=!!getTradeRouteBetween(from,to)?.active;
+        // First contact can be local. Longer journeys need the actual established route.
+        if(!connected&&(getTownDistance(from,to)>6||!(planet.unlocks.trade>=10))) return null;
+        const path=getCachedPath(from,to,40);
+        if(path?.some(c=>c.b==='water')&&!(planet.unlocks.travel>=60)) return null;
+        return path?.length?path:null;
+    }
+    function commodityTravelDays(path) {return Math.max(1,Math.ceil((computePathTravelCost(path) || path.length)/EXCHANGE_PACE.chunksPerDay));}
+    function spareCrops(town,path) {return Math.max(0,Math.floor(commodityStock(town)-foodBuffer(town,path?commodityTravelDays(path)*2:0)));}
+    function foodDemand(town,path) {return Math.max(0,foodBuffer(town,commodityTravelDays(path)*2+EXCHANGE_PACE.retryDays)-mealStock(town));}
+    function foodCommodityValue(town,available,demand,travelDays) {
+        const flow=foodFlow(town),runway=available/Math.max(1,flow.consumption);
+        return Math.max(0.1,flow.consumption/Math.max(1,available)+demand/Math.max(1,available)+travelDays/Math.max(1,runway));
+    }
+    function commodityWorkClaims(town) {
+        const claims=[];
+        // Native construction spends two units of progress per rock or one per lumber.
+        for(const project of regToArray('process')) if(project.town===town.id&&project.type==='project'&&!project.done&&!project.end&&Number.isFinite(project.cost)) {
+            claims.push({kind:'construction',id:project.id,cost:Math.max(0,project.cost)});
+        }
+        for(const work of livingWorldState().artifactWork) if(work.town===town.id&&work.status==='working') {
+            const person=findLivingPerson(town,work.person),recipe=person&&livingArtifactRecipe(town,person,work.kind);
+            if(recipe)claims.push({kind:'craft',id:work.id,cost:recipe.cost});
+        }
+        return claims;
+    }
+    function commodityCommittedStock(town,type) {
+        const claims=commodityWorkClaims(town),craft={rock:0,lumber:0,metal:0};
+        let construction=0;
+        for(const claim of claims) {
+            if(claim.kind==='construction')construction+=claim.cost;
+            else for(const key of Object.keys(craft))craft[key]+=claim.cost[key] || 0;
+        }
+        // A supply can support only one claim. Reserve craft inputs before
+        // counting the remaining stone or timber as construction substitutes.
+        if(type==='rock')return craft.rock+Math.ceil(Math.max(0,construction-Math.max(0,commodityStock(town,'lumber')-craft.lumber))/2);
+        if(type==='lumber')return craft.lumber+Math.max(0,construction-Math.max(0,commodityStock(town,'rock')-craft.rock)*2);
+        return craft[type] || 0;
+    }
+    function commodityWorkDemand(town) {
+        return Object.fromEntries(['rock','lumber','metal'].map(type=>[type,Math.max(0,commodityCommittedStock(town,type)-commodityStock(town,type))]).filter(([,need])=>need>0));
+    }
+    function commoditySpare(town,type,path) {
+        const held=commodityStock(town,type);
+        const reserve=COMMODITIES[type]?.edible?Math.max(0,foodBuffer(town,path?commodityTravelDays(path)*2:0)-(mealStock(town)-held)):commodityCommittedStock(town,type);
+        return Math.max(0,Math.floor(held-reserve));
+    }
+    function commodityDemand(town,type,path) {
+        return COMMODITIES[type]?.edible?foodDemand(town,path):commodityWorkDemand(town)[type] || 0;
+    }
+    function commodityUnitValue(town,type,available,demand,path) {
+        if(COMMODITIES[type]?.edible)return foodCommodityValue(town,available,demand,commodityTravelDays(path));
+        const claims=commodityCommittedStock(town,type);
+        const productivity=type==='rock'&&commodityWorkClaims(town).some(c=>c.kind==='construction')?2:1;
+        return Math.max(0.1,(claims+demand)*productivity/Math.max(1,available)+commodityTravelDays(path)/Math.max(1,available));
+    }
+    function addCommodityLot(town,type,count,record,from) {
+        if(count<=0)return;
+        const lots=(town._paultendoCommodityLots ||= {})[type] ||= [];
+        const last=lots.at(-1);
+        if(last?.exchange===record.id)last.count+=count;
+        else lots.push({exchange:record.id,from:from?.id || record.seller,count});
+        if(lots.length>EXCHANGE_PACE.maxHistory)lots.splice(0,lots.length-EXCHANGE_PACE.maxHistory);
+    }
+    function withCommodityUse(context,fn) {
+        const previous=PAULTENDO_STATE.commodityUse;
+        PAULTENDO_STATE.commodityUse=context;
+        try{return fn();}finally{PAULTENDO_STATE.commodityUse=previous;}
+    }
+    function consumeCommodityLots(town,type,before,after) {
+        const lots=town._paultendoCommodityLots?.[type];if(!lots?.length)return;
+        let total=lots.reduce((sum,lot)=>sum+lot.count,0);
+        // A native split, destruction or ownership change can alter aggregate
+        // inventory outside RemoveResource. Do not credit those missing units.
+        let missing=Math.max(0,total-before);
+        for(const lot of lots){const n=Math.min(lot.count,missing);lot.count-=n;missing-=n;total-=n;}
+        let removed=Math.max(0,before-after-Math.max(0,before-total));
+        for(const lot of lots) {
+            const count=Math.min(lot.count,removed);if(count<=0)continue;
+            lot.count-=count;removed-=count;
+            const input={exchange:lot.exchange,from:lot.from,type,count,day:planet.day};
+            const context=PAULTENDO_STATE.commodityUse;
+            if(context?.inputs)context.inputs.push(input);
+            else if(context)rememberCommodityUse(town,input,context);
+        }
+        town._paultendoCommodityLots[type]=lots.filter(lot=>lot.count>0);
+    }
+    function rememberCommodityUse(town,input,context) {
+        const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(!record)return;
+        const uses=record.uses ||= [];
+        let use=uses.find(u=>u.type===input.type&&u.town===town.id&&u.kind===context.kind&&u.id===context.id);
+        if(!use){use={type:input.type,town:town.id,known:livingTownKnown(town),kind:context.kind,id:context.id,name:context.name,day:input.day,count:0};uses.push(use);}
+        use.count+=input.count;use.lastDay=input.day;
+        if(!use.reported){use.reported=true;noteExchangeStep(record,'used',{use:{...use}});}
+    }
+    function exchangeUseText(record,use) {
+        const town=exchangeTownLabel(record,use.town),goods=COMMODITIES[use.type].label;
+        if(!use.known&&!record.known?.[use.town]&&!livingTownKnown(regGet('town',use.town)))return `${town} puts ${goods} from this exchange to use.`;
+        if(use.kind==='meals')return `${goods[0].toUpperCase()+goods.slice(1)} from this exchange feeds people in ${town}.`;
+        if(use.kind==='construction')return `${town} uses ${goods} from this exchange to build a ${(use.name || 'building').replace(/_/g,' ')}.`;
+        if(use.kind==='craft')return `${town} uses ${goods} from this exchange to make a ${(LIVING_ARTIFACTS[use.name]?.name || 'new object').toLowerCase()}.`;
+        return '';
+    }
+    function commodityTerms(buyer,seller,person,path,type='crop') {
+        const demand=commodityDemand(buyer,type,path),spare=commoditySpare(seller,type,path);
+        const count=Math.floor(Math.min(spare,demand,Math.max(0,$c.maxResource(buyer)-commodityStock(buyer,type))));
+        if(count<=0) return {kind:'refuse',reason:'stores'};
+        const memory=exchangeMemory(seller,buyer),relation=getRelations(seller,buyer);
+        const practice=livingWorldState().teachings.some(t=>t.town===seller.id&&t.active&&['care','food'].includes(t.meaning));
+        const religion=getTownReligion(seller),faithful=(seller.influences.faith || 0)>4;
+        const insular=faithful&&religion?.tenets?.includes('insular')&&buyer.religion!==seller.religion;
+        const closed=insular||(seller.values?.openness || 0)<=-4;
+        const sharedFaith=faithful&&religion?.tenets?.includes('egalitarian')&&!insular;
+        const communal=(seller.values?.justice || 0)>=4&&(seller.values?.openness || 0)>=2;
+        const mercantile=faithful&&religion?.tenets?.includes('trade');
+        const helped=Object.values(memory.received).some(n=>n>0);
+        const reason=helped?'remembered':relation>=6?'welcome':!closed&&practice?'practice':!closed&&sharedFaith?'belief':!closed&&communal?'shared':!closed&&person?.outlook==='generous'?'generous':null;
+        const aid=relation>=-2&&reason?{kind:'aid',count,reason,previousHelp:memory?.lastHelpReceived || null}:null;
+        // A mercantile community tries an exchange first, but can still honour
+        // remembered help when the hungry neighbour has nothing it can use.
+        if(aid&&!mercantile)return aid;
+        if(planet.unlocks.trade>=30) {
+            const competition=commodityExchangeState().exchanges.filter(r=>r.seller===seller.id&&r.type===type&&!r.resolved&&r.status==='asking').reduce((sum,r)=>{const town=regGet('town',r.buyer),route=town&&commodityPath(town,seller);return sum+(route?commodityDemand(town,type,route):0);},0);
+            const pressure=commodityUnitValue(seller,type,spare,competition,path);
+            const useScale=COMMODITIES[type]?.edible?foodFlow(buyer).consumption:Math.max(1,commodityCommittedStock(buyer,type));
+            const unit=Math.max(1,Math.ceil(computeMarketPrice(buyer,seller,type,0)/useScale*pressure));
+            const affordable=Math.min(count,Math.floor(commodityStock(buyer,'cash')/unit));
+            if(affordable>0&&relation>=-4) return {kind:'trade',count:affordable,payment:{type:'cash',count:affordable*unit},quote:{unit,spare,demand,competition,travelDays:commodityTravelDays(path)}};
+        }
+        if(planet.unlocks.trade>=10&&relation>=-4) {
+            const wanted=Object.entries(COMMODITIES).filter(([other])=>other!==type).map(([other])=>[other,commodityDemand(seller,other,path)]).filter(([,need])=>need>0).sort((a,b)=>b[1]-a[1]);
+            for(const [other,need] of wanted) {
+                const capacity=Math.max(0,Math.floor($c.maxResource(seller)-commodityStock(seller,other)));
+                const offered=Math.min(commoditySpare(buyer,other,path),Math.ceil(need),capacity);
+                const paymentValue=commodityUnitValue(seller,other,commodityStock(seller,other)+offered,need,path);
+                const goodsValue=commodityUnitValue(seller,type,spare,demand,path);
+                const rate=Math.max(0.25,Math.min(8,paymentValue/goodsValue));
+                const goods=Math.min(count,Math.floor(offered*rate)),amount=Math.ceil(goods/rate);
+                if(goods>0&&amount>0)return {kind:'barter',count:goods,payment:{type:other,count:amount},quote:{goodsPerPayment:rate,cropsPerMaterial:COMMODITIES[type].edible?rate:undefined,spare,demand,paymentNeed:need,travelDays:commodityTravelDays(path)}};
+            }
+        }
+        return aid || {kind:'refuse',reason:relation<-4?'rivalry':closed?'outsiders':'terms'};
+    }
+    function exchangeTownLabel(record,id) {
+        const town=regGet('town',id);
+        return record.known?.[id]||livingTownKnown(town)?record.names[id]:'another settlement';
+    }
+    function exchangeStepText(record,step) {
+        const buyer=exchangeTownLabel(record,record.buyer),seller=exchangeTownLabel(record,record.seller);
+        const goods=COMMODITIES[record.type || 'crop'].label,payment=step.payment&&(COMMODITIES[step.payment.type]?.label || 'coin');
+        switch(step.kind) {
+            case 'ask':return `After ${record.shortDays} days of short rations, people of ${buyer} ask ${seller} for food.`;
+            case 'market':return `People of ${buyer} seek ${goods} from ${seller}.`;
+            case 'work':return `${buyer} seeks ${goods} from ${seller} for work already underway.`;
+            case 'caravan':return `Merchants seek ${goods} from ${seller} for ${buyer}.`;
+            case 'famine':return `${buyer} asks ${seller} for help through the famine.`;
+            case 'aid':return `${seller} sends ${step.count} ${goods} to ${buyer}.${step.reason==='remembered'?' They remember help that once came the other way.':step.reason==='practice'?' Helping neighbours has become a practice here.':step.reason==='belief'?' They put their belief in shared provision into practice.':step.reason==='shared'?' They share from the town’s stores.':''}`;
+            case 'trade':return `${seller} sends ${step.count} ${goods} to ${buyer} for ${step.payment.count} in payment.`;
+            case 'barter':return `${seller} sends ${step.count} ${goods} to ${buyer} in exchange for ${step.payment.count} ${payment}. Both supplies travel with the carriers.`;
+            case 'arrive':return `${step.count} ${goods} reach ${buyer}.${step.payment?` ${seller} receives ${step.payment.count} ${payment} in return.`:''} The towns remember the exchange.`;
+            case 'refuse':return step.reason==='stores'?`${seller} cannot spare ${goods} without leaving its own people or work short.`:step.reason==='rivalry'?`${seller} refuses the request from its rival.`:step.reason==='outsiders'?`${seller} keeps its stores for its own people.`:`${seller} asks for payment, but the towns cannot agree on an exchange.`;
+            case 'recovered':return `${buyer} no longer needs the ${goods}. The request is withdrawn.`;
+            case 'blocked':return `The journey between ${buyer} and ${seller} is blocked. The carriers wait with their cargo.`;
+            case 'closed':return `The journey between ${buyer} and ${seller} can no longer reach its destination.`;
+            case 'threat':return `${buyer} threatens ${seller} over the food it refused to send. Relations worsen and the risk of war grows.`;
+            case 'used':return exchangeUseText(record,step.use);
+        }
+        return '';
+    }
+    function noteExchangeStep(record,kind,details={}) {
+        const step={day:planet.day,kind,...details};record.steps.push(step);
+        if(record.steps.length>24) record.steps.splice(1,record.steps.length-24);
+        for(const id of [record.buyer,record.seller]) if(livingTownKnown(regGet('town',id))) record.known[id]=true;
+        const visibleTown=[record.buyer,record.seller].map(id=>regGet('town',id)).find(livingTownKnown);
+        if(visibleTown) modLog('memory',escapeLivingText(exchangeStepText(record,step)),kind==='threat'?'warning':null,{town:visibleTown,observedStory:true,story:{kind:'exchange',id:record.id}});
+    }
+    function newCommodityJourney(buyer,seller,path,source='need',type='crop') {
+        const state=commodityExchangeState();
+        if(!COMMODITIES[type]||!path?.length||state.exchanges.some(r=>r.buyer===buyer.id&&!r.resolved)||state.exchanges.length>=EXCHANGE_PACE.maxHistory&&state.exchanges.every(r=>!r.resolved)) return null;
+        const hunger=buyer._paultendoCommunityWork?.hunger;
+        const record={id:`exchange:${state.nextId++}`,type,buyer:buyer.id,seller:seller.id,names:{[buyer.id]:buyer.name,[seller.id]:seller.name},known:{},day:planet.day,shortDays:hunger?.days || 0,since:hunger?.started || null,source,purposes:COMMODITIES[type].edible?[{kind:'meals'}]:commodityWorkClaims(buyer),status:'asking',due:planet.day+commodityTravelDays(path),steps:[],resolved:false,cargo:0};
+        state.exchanges.push(record);
+        buyer._paultendoNextExchangeDay=planet.day+EXCHANGE_PACE.retryDays;
+        while(state.exchanges.length>EXCHANGE_PACE.maxHistory){const index=state.exchanges.findIndex(r=>r.resolved);if(index<0) break;state.exchanges.splice(index,1);}
+        noteExchangeStep(record,source==='need'?'ask':source);return record;
+    }
+    function findCommoditySupplier(buyer,types) {
+        const candidates=[];
+        for(const seller of regToArray('town')) {
+            if(seller.id===buyer.id||seller.end||seller.pop<=0)continue;
+            const path=commodityPath(buyer,seller);if(!path)continue;
+            for(const type of types) {
+                const wanted=commodityDemand(buyer,type,path),spare=commoditySpare(seller,type,path);
+                if(wanted<=0||spare<=0)continue;
+                const memory=exchangeMemory(buyer,seller);
+                const urgency=commodityUnitValue(buyer,type,commodityStock(buyer,type),wanted,path);
+                const score=urgency*(1+Math.min(wanted,spare)/wanted)+getRelations(buyer,seller)*0.2+(Object.values(memory.given).some(n=>n>0)?1:0)-path.length*0.15;
+                candidates.push({town:seller,path,type,score});
+            }
+        }
+        candidates.sort((a,b)=>b.score-a.score||a.town.id-b.town.id||a.type.localeCompare(b.type));
+        return candidates[0];
+    }
+    function observeLivingFoodNeed(town,hunger) {
+        if(hunger.days<2||hasIssue(town,'war')||planet.day-(hunger.lastFoodRequest || -999)<EXCHANGE_PACE.retryDays) return;
+        if(commodityExchangeState().exchanges.some(r=>r.buyer===town.id&&!r.resolved)) return;
+        const supplier=findCommoditySupplier(town,['crop','livestock']);
+        if(supplier&&newCommodityJourney(town,supplier.town,supplier.path,'need',supplier.type))hunger.lastFoodRequest=planet.day;
+    }
+    function observeCommodityNeeds() {
+        for(const town of regToArray('town')) {
+            if(town.end||town.pop<=0||planet.day-town.start<=1||planet.day<(town._paultendoNextExchangeDay || 0)||commodityExchangeState().exchanges.some(r=>r.buyer===town.id&&!r.resolved))continue;
+            const types=mealStock(town)<foodBuffer(town)?['crop','livestock']:Object.keys(commodityWorkDemand(town));
+            const supplier=findCommoditySupplier(town,types);
+            if(supplier)newCommodityJourney(town,supplier.town,supplier.path,COMMODITIES[supplier.type].edible?'market':'work',supplier.type);
+        }
+    }
+    function removeCommodityStock(town,type,count) {
+        const before=commodityStock(town,type);
+        // Native RemoveResource floors cash as well as physical goods. Preserve
+        // the fractional earnings already held by the buyer.
+        if(type==='cash'){applyTownCashDelta(town,-Math.min(before,count),'trade');return before-commodityStock(town,type);}
+        happen('RemoveResource',null,town,{type,count});return before-commodityStock(town,type);
+    }
+    function sendCommodityJourney(record,buyer,seller,path,terms) {
+        if(terms.payment&&commodityStock(buyer,terms.payment.type)<terms.payment.count) return false;
+        const stocks=[{town:seller,type:record.type},...(terms.payment?[{town:buyer,type:terms.payment.type}]:[])].map(item=>({...item,count:commodityStock(item.town,item.type),lots:structuredClone(item.town._paultendoCommodityLots?.[item.type] || []),cashFlow:structuredClone(item.town._paultendoCashFlow || null)}));
+        const rollback=()=>{
+            for(const saved of stocks){saved.town.resources[saved.type]=saved.count;if(saved.type==='cash'){saved.town._paultendoCashFlow=saved.cashFlow;delete saved.town._paultendoEconomy;}else if(saved.town._paultendoCommodityLots)saved.town._paultendoCommodityLots[saved.type]=saved.lots;}
+        };
+        const removed=removeCommodityStock(seller,record.type,terms.count);
+        if(removed!==terms.count){rollback();return false;}
+        if(terms.payment) {
+            const paid=removeCommodityStock(buyer,terms.payment.type,terms.payment.count);
+            if(paid!==terms.payment.count){rollback();return false;}
+            record.paymentCargo=paid;
+        }
+        record.cargo=removed;record.payment=terms.payment;record.quote=terms.quote;record.previousHelp=terms.previousHelp;record.kind=terms.kind;record.status='carrying';record.due=planet.day+commodityTravelDays(path);
+        recordTraffic(path,0.35);noteExchangeStep(record,terms.kind,{count:removed,payment:terms.payment,reason:terms.reason});return true;
+    }
+    function foodRefusalCanBecomeThreat(record,buyer,seller) {
+        const hunger=buyer._paultendoCommunityWork?.hunger;
+        if(!hunger||hunger.days<4||hunger.threatened||mealStock(buyer)>=nativeMealNeed(buyer)||!(planet.unlocks.military>=10)||!(buyer.jobs?.soldier>0)||!buyer.gov||buyer.gov==='anarchy') return false;
+        if((buyer.influences.faith || 0)>4&&getTownReligion(buyer)?.tenets?.includes('pacifism')) return false;
+        if((buyer.values?.order || 0)<4||getRelations(buyer,seller)>-2&&(buyer._paultendoFoodMemory?.[seller.id]?.refused || 0)<2) return false;
+        hunger.threatened=true;worsenRelations(buyer,seller,2);worsenRelations(seller,buyer,2);bumpWarPressure(buyer,seller,3);
+        happen('Influence',null,buyer,{happy:-0.2});record.threat=true;noteExchangeStep(record,'threat');return true;
+    }
+    function advanceCommodityJourneys() {
+        for(const record of commodityExchangeState().exchanges.filter(r=>!r.resolved&&r.due<=planet.day)) {
+            const buyer=regGet('town',record.buyer),seller=regGet('town',record.seller);
+            if(!buyer||buyer.end||buyer.pop<=0||!seller||seller.end||seller.pop<=0) {record.resolved=true;record.status='lost';record.lost={type:record.type,count:record.cargo,payment:record.paymentCargo || 0};record.cargo=0;record.paymentCargo=0;noteExchangeStep(record,'closed');continue;}
+            const path=commodityPath(buyer,seller);
+            if(record.status==='asking') {
+                if(!path){record.resolved=true;record.status='closed';noteExchangeStep(record,'closed');continue;}
+                if(commodityDemand(buyer,record.type,path)<=0){record.resolved=true;record.status='withdrawn';noteExchangeStep(record,'recovered');continue;}
+                const role=COMMODITIES[record.type].role;
+                const person=livingCommunityPerson(seller,seller.jobs?.[role]>0?role:seller.jobs?.priest>0?'priest':'resident');
+                const terms=commodityTerms(buyer,seller,person,path,record.type);
+                record.reply={day:planet.day,person:person?.id,name:person?.name,reason:terms.reason,values:{...seller.values},religion:seller.religion,faith:seller.influences.faith};
+                if(terms.kind!=='refuse'&&sendCommodityJourney(record,buyer,seller,path,terms)) continue;
+                record.resolved=true;record.status='refused';record.refusal=terms.reason || 'terms';
+                const memory=exchangeMemory(buyer,seller);memory.refused++;memory.lastRefused={day:planet.day,source:record.id,type:record.type};
+                if(COMMODITIES[record.type].edible){const food=foodMemory(buyer,seller);food.refused++;food.lastRefused={...memory.lastRefused};}
+                noteExchangeStep(record,'refuse',{reason:record.refusal});
+                if(COMMODITIES[record.type].edible)foodRefusalCanBecomeThreat(record,buyer,seller);continue;
+            }
+            if(!path){record.status='waiting';record.due=planet.day+1;if(record.steps.at(-1)?.kind!=='blocked')noteExchangeStep(record,'blocked');continue;}
+            if(record.cargo>0) {
+                const before=commodityStock(buyer,record.type);happen('AddResource',seller,buyer,{type:record.type,count:record.cargo});
+                const received=Math.max(0,commodityStock(buyer,record.type)-before);
+                record.cargo-=received;record.delivered=(record.delivered || 0)+received;
+                addCommodityLot(buyer,record.type,received,record);
+            }
+            if(record.paymentCargo>0) {
+                const before=commodityStock(seller,record.payment.type);
+                const source=PAULTENDO_STATE.cashSource;PAULTENDO_STATE.cashSource='trade';
+                try{happen('AddResource',buyer,seller,{type:record.payment.type,count:record.paymentCargo});}finally{PAULTENDO_STATE.cashSource=source;}
+                const received=Math.max(0,commodityStock(seller,record.payment.type)-before);
+                record.paymentCargo-=received;record.paid=(record.paid || 0)+received;
+                if(record.payment.type!=='cash')addCommodityLot(seller,record.payment.type,received,record,buyer);
+            }
+            if(record.cargo>0||record.paymentCargo>0){record.due=planet.day+1;continue;}
+            record.resolved=true;record.status='arrived';record.arrived=planet.day;
+            improveRelations(buyer,seller,1);improveRelations(seller,buyer,1);
+            rememberCommodityExchange(seller,buyer,record.kind==='aid'?'aid':'trade',record.type,record.delivered,record.id);
+            if(record.payment&&record.payment.type!=='cash')rememberCommodityExchange(buyer,seller,'trade',record.payment.type,record.paid,record.id);
+            const route=getTradeRouteBetween(buyer,seller);
+            if(route?.active){route.totalGoods=(route.totalGoods || 0)+record.delivered;route.caravans=(route.caravans || 0)+1;route.lastCaravanDay=planet.day;}
+            recordTraffic(path,0.5);noteLivingExchange(seller,buyer,path,{type:record.kind==='aid'?'gift':'caravan',route:route?.id,goods:record.type});
+            // Only real meals can calm hunger. A delivered supply can end a famine
+            // when it actually provides enough for the recipient's next meal.
+            if(buyer.famine&&!buyer.famine.ended&&mealStock(buyer)>=foodBuffer(buyer)) buyer.famine.ended=true;
+            noteExchangeStep(record,'arrive',{count:record.delivered,payment:record.payment});
+        }
+    }
+    function openCommodityJourney(record) {
+        const known=[record.buyer,record.seller].map(id=>regGet('town',id)).find(livingTownKnown);if(!known)return;
+        const items=[{text:'← Back to trade and neighbours',func:()=>openCommodityHistory(known)}];
+        for(const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(exchangeStepText(record,step))}`});
+        if(livingTownKnown(regGet('town',record.buyer)))for(const claim of record.purposes || []) {
+            if(claim.kind==='construction'){
+                const project=regGet('process',claim.id),marker=project?.marker&&regGet('marker',project.marker);
+                if(marker&&!marker.end&&isChunkExplored(marker.x,marker.y))items.push({text:`Visit ${escapeLivingText(marker.name)}`,func:()=>{closeExecutive();openRegBrowser(marker,'marker');}});
+                else if(project&&!project.end)items.push({text:`See the ${escapeLivingText(project.subtype.replace(/_/g,' '))}`,func:()=>{closeExecutive();openRegBrowser(project,'process');}});
+            }
+            if(claim.kind==='craft'){
+                const work=livingWorldState().artifactWork.find(w=>w.id===claim.id),artifact=work?.artifact&&livingWorldState().artifacts.find(a=>a.id===work.artifact);
+                if(artifact&&livingArtifactKnown(artifact))items.push({text:`Visit ${escapeLivingText(artifactTitle(artifact))}`,func:()=>openLivingArtifact(artifact)});
+            }
+        }
+        if(!record.resolved) items.push({text:record.cargo>0||record.paymentCargo>0?'The cargo is still with the carriers.':'The request is still on its way.'});
+        const previous=record.previousHelp;
+        if(previous?.source&&previous.source!==record.id) {
+            const root=commodityExchangeState().exchanges.find(r=>r.id===previous.source);if(root&&resolveChronicleStory({kind:'food',id:root.id}))items.push({text:'Remember the earlier help',func:()=>openCommodityJourney(root)});
+        }
+        for(const id of [record.buyer,record.seller]){const town=regGet('town',id);if(livingTownKnown(town))items.push({text:`Visit ${escapeLivingText(town.name)}`,func:()=>{closeExecutive();openRegBrowser(town,'town');}});}
+        populateExecutive(items,'Trade and neighbours');markLivingStoryControls();openExecutive();
+    }
+    function openCommodityHistory(town) {
+        if(!livingTownKnown(town))return;
+        const items=[{text:'← Back to the town',func:()=>{closeExecutive();openRegBrowser(town,'town');}}];
+        const hunger=town._paultendoCommunityWork?.hunger;
+        if(hunger?.days>0&&hunger.recovery<2)items.push({text:`The town has had ${hunger.days} days of short rations.`});
+        for(const record of commodityExchangeState().exchanges.filter(r=>r.buyer===town.id||r.seller===town.id).slice(-12).reverse())items.push({text:`Day ${record.day} · ${escapeLivingText(exchangeStepText(record,record.steps.at(-1)))}`,func:()=>openCommodityJourney(record)});
+        populateExecutive(items,'Trade and neighbours');markLivingStoryControls();openExecutive();
+    }
+
     function livingTeachingPerson(town,teaching) {
         const people=(town._paultendoPeople || []).filter(p=>livingTeachingPersonAvailable(p,town));
         const roles=teaching.topic==='learn'?['scholar','musician','soldier','priest','resident']:teaching.topic==='care'?['doctor','farmer','soldier','resident']:['soldier','priest','resident'];
@@ -5840,7 +6276,8 @@
         record.roll=mulberry32(fnv1a32(`${planet.config?.seed}:${record.id}:${to.id}:reception`))();
         state.teachings.push(record);(state.teachingSeen[parent.origin.id] ||= {})[to.id]=true;
         const fromName=livingTownKnown(from)?from.name:'another settlement';
-        const text=transport.type==='gift'?`Along with the food, words from ${fromName} reach ${person.name} in ${to.name}.`:`Merchants bring words from ${fromName} to ${person.name} in ${to.name}.`;
+        const gift=COMMODITIES[transport.goods]?.label || 'food';
+        const text=transport.type==='gift'?`Along with the ${gift}, words from ${fromName} reach ${person.name} in ${to.name}.`:`Merchants bring words from ${fromName} to ${person.name} in ${to.name}.`;
         record.steps.push({day:planet.day,text});
         if(livingTownKnown(to)) modLog('memory',escapeLivingText(text),null,{town:to,observedStory:true,story:{kind:"teaching",id:record.id}});
     }
@@ -6047,7 +6484,7 @@
         if ((town.resources?.crop || 0) <= town.pop || happen('Legality', null, town, {law:'travel'}) === false) return false;
         const partners = getTownTradePartners(town).filter(other => other&&!other.end&&(record.autonomous||record.origin||livingTownKnown(other)) && (town.relations?.[other.id] || 0) >= 0 && !hasIssue(other, 'war') && (other.resources?.crop || 0) + (other.resources?.livestock || 0) < other.pop * 0.2);
         for (const partner of partners) {
-            const path = getCachedPath(town, partner, 40);
+            const path = commodityPath(town, partner);
             if (!path?.length) continue;
             const count = Math.min(Math.floor(town.resources.crop - town.pop), Math.max(1, Math.floor(partner.pop * 0.1)), 12);
             const before = partner.resources.crop || 0;
@@ -6058,6 +6495,7 @@
             happen('AddRelation', town, partner, {amount:1});
             recordTraffic(path, 0.5);
             try {noteLivingExchange(town,partner,path,{type:'gift'});} catch(error) {console.warn('[paultendo-mod] Gift words failed:',error);}
+            rememberCommodityExchange(town,partner,'aid','crop',received,record.id);
             record.partner = partner.id;
             record.food = received;
             record.steps.push({day:planet.day,text:`${person.name} brought ${received} crops from ${town.name} to hungry neighbours in ${livingTownKnown(partner)?partner.name:'another settlement'}. The gift brought the towns closer.`});
@@ -6802,6 +7240,9 @@
         if(livingWorldState().teachings.some(t=>t.town===town.id)) {
             const words=document.createElement('button');words.textContent='Words passed on';words.addEventListener('click',()=>{closePopups();openLivingTownTeachings(town);});section.appendChild(words);
         }
+        if(commodityExchangeState().exchanges.some(r=>r.buyer===town.id||r.seller===town.id)) {
+            const food=document.createElement('button');food.textContent='Trade and neighbours';food.addEventListener('click',()=>{closePopups();openCommodityHistory(town);});section.appendChild(food);
+        }
         appendLivingTownSpecies(town, section);
         const places = livingPlaceItems(town);
         if (places.length) {
@@ -6898,7 +7339,7 @@
             info.func = function(subject, target, args) {
                 const before = subject?.resources?.[type] || 0;
                 const result = base.apply(this, arguments);
-                try { observeLivingProduction(subject, type, before); if(type==='crop') observeLivingCommunityHarvest(subject,before); } catch (error) { console.warn('[paultendo-mod] Harvest follow-up failed:', error); }
+                try { observeLivingProduction(subject, type, before); if(type==='crop') observeLivingCommunityHarvest(subject,before); else if(subject?.jobs?.farmer>0&&subject.legal?.farm!==false)observeFoodFlow(subject,'herd',Math.max(0,commodityStock(subject,type)-before)); } catch (error) { console.warn('[paultendo-mod] Harvest follow-up failed:', error); }
                 return result;
             };
             info.func._paultendoLife = true;
@@ -6907,13 +7348,36 @@
         if(meal?.func&&!meal.func._paultendoCommunity) {
             const base=meal.func;
             meal.func=function(subject) {
-                const before={food:(subject?.resources?.crop || 0)+(subject?.resources?.livestock || 0),pop:subject?.pop,happy:subject?.influences?.happy || 0};
-                const result=base.apply(this,arguments);
+                const before={food:(subject?.resources?.crop || 0)+(subject?.resources?.livestock || 0),pop:subject?.pop,wanted:subject?nativeMealNeed(subject):0,happy:subject?.influences?.happy || 0};
+                const result=withCommodityUse({kind:'meals'},()=>{
+                    const result=base.apply(this,arguments);
+                    // Native meals split the bill randomly even when only one
+                    // food exists. Let the actual remaining diet substitute.
+                    let missing=Math.max(0,Math.ceil(Math.min(before.food,before.wanted)-(before.food-mealStock(subject))));
+                    for(const type of ['crop','livestock']) {
+                        const count=Math.min(commodityStock(subject,type),missing);
+                        if(count>0){const stock=commodityStock(subject,type);happen('RemoveResource',null,subject,{type,count});missing-=stock-commodityStock(subject,type);}
+                    }
+                    return result;
+                });
                 try {observeLivingCommunityMeal(subject,before);} catch(error) {console.warn('[paultendo-mod] Community meal follow-up failed:',error);}
                 return result;
             };
             meal.func._paultendoCommunity=true;
         }
+        const project=metaEvents?.processProject || gameEvents.processProject;
+        if(project?.func&&!project.func._paultendoCommodity) {
+            const base=project.func;
+            project.func=function(subject){return withCommodityUse({kind:'construction',id:subject.id,name:subject.subtype},()=>base.apply(this,arguments));};
+            project.func._paultendoCommodity=true;
+        }
+        const tax=gameEvents.townTax;
+        if(tax?.func&&!tax.func._paultendoCommodity) {
+            const base=tax.func;
+            tax.func=function(){const previous=PAULTENDO_STATE.cashSource;PAULTENDO_STATE.cashSource='tax';try{return base.apply(this,arguments);}finally{PAULTENDO_STATE.cashSource=previous;}};
+            tax.func._paultendoCommodity=true;
+        }
+        PAULTENDO_STATE.commoditiesReady=true;
         ensureLivingWorldStyles();
         renderTravelerOpening();
         if (!PAULTENDO_STATE.livingDecisionBound && document.getElementById('logMessages')) {
@@ -8152,11 +8616,7 @@
         } else {
             marketNeeds.sort((a, b) => (b.need.severity || 0) - (a.need.severity || 0));
             marketNeeds.slice(0, 4).forEach(entry => {
-                const needLabel = entry.need.type === "food"
-                    ? "food"
-                    : entry.need.type === "luxury"
-                        ? "comforts"
-                        : "tools";
+                const needLabel = entry.need.type === "food" ? "food" : COMMODITIES[entry.need.type]?.label || entry.need.type;
                 items.push({
                     text: `${townRef(entry.town.id)} · seeking ${needLabel}`,
                     opacity: 0.9
@@ -12780,7 +13240,7 @@
                     try { updateSeasonState(); } catch {}
                     try { advanceLivingWhispers(); } catch (error) { console.warn("[paultendo-mod] Whisper follow-up failed:", error); }
                     try { advanceLivingArtifactWork(); advanceLivingArtifacts(); refreshLivingArtifactView(); } catch (error) { console.warn("[paultendo-mod] Artifact follow-up failed:", error); }
-                    try { advanceLivingTeachings(); } catch (error) { console.warn('[paultendo-mod] Words carried by the road failed:',error); }
+                    try { advanceCommodityJourneys(); observeCommodityNeeds(); advanceLivingTeachings(); } catch (error) { console.warn('[paultendo-mod] Words carried by the road failed:',error); }
                     try { observeLivingPlaces(); } catch (error) { console.warn("[paultendo-mod] Place follow-up failed:", error); }
                     try { observeLivingWorld(); } catch (error) { console.warn("[paultendo-mod] Settlement follow-up failed:", error); }
                     try { renderLivingFields(); updateCanvas(); } catch {}
@@ -15309,8 +15769,8 @@
             const amount = demand.amount || 0;
             const paid = Math.max(0, Math.min(cash, amount));
             if (paid > 0) {
-                happen("Resource", null, subject, { cash: -paid });
-                happen("Resource", null, overlord, { cash: paid });
+                applyTownCashDelta(subject, -paid);
+                applyTownCashDelta(overlord, paid);
             }
             if (paid < amount) {
                 adjustVassalResentment(rel, 1.2);
@@ -15477,13 +15937,6 @@
     }
 
     const ECONOMY_FLOW_CONFIG = {
-        baseIncome: 0.4,
-        popIncome: 0.012,
-        tradeIncome: 0.22,
-        educationIncome: 0.08,
-        routeBaseIncome: 0.4,
-        routeTradeIncome: 0.06,
-        roadIncome: 0.006,
         baseUpkeep: 0.35,
         popUpkeep: 0.01,
         sizeUpkeep: 0.06,
@@ -15496,12 +15949,8 @@
     };
 
     const MARKET_CONFIG = {
-        minCash: 18,
         basePrice: 8,
-        foodPrice: 6,
-        luxuryPrice: 8,
-        toolPrice: 10,
-        maxDistance: 140
+        exchangePrice: 6
     };
 
     const LAND_MARKET_CONFIG = {
@@ -15582,17 +16031,13 @@
         if (!town || !snapshot) return {};
         const drivers = [];
         const drags = [];
-        if (snapshot.routeIncome > 0.6) drivers.push("trade routes");
-        if (snapshot.trade > 5) drivers.push("market strength");
-        if (snapshot.roads > 35) drivers.push("roads");
-        if ((town.pop || 0) > 80) drivers.push("population");
-        if ((town.influences?.education || 0) > 5) drivers.push("learning");
-        initUnrest(town);
-        if ((town.unrest || 0) > 50) drags.push("unrest");
-        if (hasIssue(town, "war")) drags.push("war footing");
-        if (town.famine && !town.famine.ended) drags.push("famine");
-        if ((town._paultendoAdminStrain || 0) > 2) drags.push("administrative strain");
-        if (snapshot.expenses > snapshot.income + 0.8) drags.push("high upkeep");
+        const flow=town._paultendoCashFlow?.day===planet.day?town._paultendoCashFlow:null;
+        if(flow?.kinds?.tax?.received>0)drivers.push('tax collected');
+        if(flow?.trade>0)drivers.push('goods exchanged');
+        if((flow?.received || 0)>(flow?.trade || 0)+(flow?.kinds?.tax?.received || 0))drivers.push('other receipts');
+        if(flow?.kinds?.upkeep?.spent>0)drags.push('upkeep paid');
+        if(flow?.kinds?.trade?.spent>0)drags.push('goods purchased');
+        if((flow?.spent || 0)>(flow?.kinds?.upkeep?.spent || 0)+(flow?.kinds?.trade?.spent || 0))drags.push('other spending');
         return { drivers: drivers.slice(0, 2), drags: drags.slice(0, 2) };
     }
 
@@ -15624,39 +16069,20 @@
     function computeTownEconomySnapshot(town) {
         if (!town || town.end) return null;
         initTownEconomyState(town);
-        if (town._paultendoEconomy && town._paultendoEconomy.day === planet.day) {
+        if (town._paultendoEconomy?.version===MOD_VERSION && town._paultendoEconomy.day === planet.day) {
             return town._paultendoEconomy;
         }
 
         const trade = Math.max(0, town.influences?.trade || 0);
-        const education = Math.max(0, town.influences?.education || 0);
         const pop = Math.max(0, town.pop || 0);
         const size = Math.max(1, town.size || 1);
         const roads = getInfrastructureLevel(town, "roads");
         const buildings = getInfrastructureLevel(town, "buildings");
         const institutions = getInfrastructureLevel(town, "institutions");
 
-        let income = ECONOMY_FLOW_CONFIG.baseIncome;
-        income += pop * ECONOMY_FLOW_CONFIG.popIncome;
-        income += trade * ECONOMY_FLOW_CONFIG.tradeIncome;
-        income += education * ECONOMY_FLOW_CONFIG.educationIncome;
-        income += roads * ECONOMY_FLOW_CONFIG.roadIncome;
-
-        let routeIncome = 0;
+        const cashFlow=town._paultendoCashFlow?.day===planet.day?town._paultendoCashFlow:{received:0,spent:0,trade:0};
+        const income=cashFlow.received,routeIncome=cashFlow.trade || 0;
         const routes = getTownRoutes(town);
-        routes.forEach(route => {
-            if (!route || route.active === false) return;
-            const partner = getRoutePartner(route, town);
-            if (!partner || partner.end) return;
-            if (hasEmbargo(town, partner)) return;
-            const partnerTrade = Math.max(0, partner.influences?.trade || 0);
-            const tradeAvg = (trade + partnerTrade) / 2;
-            const condition = clampValue(route.condition ?? 1, 0, 1);
-            const difficulty = Math.max(0.7, route.difficulty || 1);
-            const base = ECONOMY_FLOW_CONFIG.routeBaseIncome + tradeAvg * ECONOMY_FLOW_CONFIG.routeTradeIncome;
-            routeIncome += (base * condition) / difficulty;
-        });
-        income += routeIncome;
 
         let expenses = ECONOMY_FLOW_CONFIG.baseUpkeep;
         expenses += pop * ECONOMY_FLOW_CONFIG.popUpkeep;
@@ -15668,11 +16094,13 @@
         if (hasIssue(town, "war")) expenses += ECONOMY_FLOW_CONFIG.warUpkeep;
         if (town.famine && !town.famine.ended) expenses += ECONOMY_FLOW_CONFIG.famineUpkeep;
 
-        const net = clampCashDelta(income - expenses);
+        const upkeep=clampCashDelta(expenses),net=income-cashFlow.spent;
         const snapshot = {
+            version:MOD_VERSION,
             day: planet.day,
             income,
-            expenses,
+            expenses:cashFlow.spent,
+            upkeep,
             net,
             routeIncome,
             trade,
@@ -15684,70 +16112,51 @@
         return snapshot;
     }
 
-    function applyTownCashDelta(town, delta) {
+    function recordCashFlow(town,delta,kind='other') {
+        if(!Number.isFinite(delta)||delta===0)return;
+        const flow=town._paultendoCashFlow?.day===planet.day?town._paultendoCashFlow:(town._paultendoCashFlow={day:planet.day,received:0,spent:0,trade:0});
+        if(delta>0){flow.received+=delta;if(kind==='trade')flow.trade+=delta;}
+        else flow.spent-=delta;
+        const entry=((flow.kinds ||= {})[kind] ||= {received:0,spent:0});
+        if(delta>0)entry.received+=delta;else entry.spent-=delta;
+        delete town._paultendoEconomy;
+    }
+    function applyTownCashDelta(town, delta,kind='other') {
         if (!town || town.end) return 0;
         initTownEconomyState(town);
         if (!delta || !Number.isFinite(delta)) return 0;
         const current = town.resources.cash || 0;
         let applied = delta;
         if (current + applied < 0) applied = -current;
-        if (Math.abs(applied) < 0.01) return 0;
-        happen("Resource", null, town, { cash: applied });
+        if (applied === 0) return 0;
+        // Resource was removed from the current engine. Cash is divisible,
+        // unlike the physical stocks floored by native RemoveResource.
+        town.resources.cash=current+applied;
+        recordCashFlow(town,applied,kind);
         return applied;
     }
 
     function transferCash(fromTown, toTown, amount) {
-        if (!fromTown || !toTown || fromTown.end || toTown.end) return 0;
+        if (!fromTown || !toTown || fromTown.end || toTown.end || !Number.isFinite(amount) || amount<=0) return 0;
         initTownEconomyState(fromTown);
         initTownEconomyState(toTown);
         const available = fromTown.resources?.cash || 0;
         const paid = Math.max(0, Math.min(available, amount));
         if (paid <= 0) return 0;
-        happen("Resource", null, fromTown, { cash: -paid });
-        happen("Resource", null, toTown, { cash: paid });
+        applyTownCashDelta(fromTown, -paid);
+        applyTownCashDelta(toTown, paid);
         return paid;
     }
 
     function getTownMarketNeed(town) {
-        if (!town || town.end) return null;
-        const hunger = town.influences?.hunger || 0;
-        const happy = town.influences?.happy || 0;
-        const trade = town.influences?.trade || 0;
-        const education = town.influences?.education || 0;
-        if (town.famine && !town.famine.ended) return { type: "food", severity: 2 + hunger * 0.3 };
-        if (hunger > 2) return { type: "food", severity: hunger };
-        if (happy < -0.5) return { type: "luxury", severity: Math.abs(happy) };
-        if (trade < 2 && education < 2) return { type: "tools", severity: 1.2 };
-        return null;
+        if(!town||town.end)return null;
+        const buffer=foodBuffer(town);
+        if(planet.day-town.start>1&&mealStock(town)<buffer)return {type:'food',severity:(buffer-mealStock(town))/Math.max(1,buffer)};
+        const needs=Object.entries(commodityWorkDemand(town)).sort((a,b)=>b[1]-a[1]);
+        return needs.length?{type:needs[0][0],severity:needs[0][1]/Math.max(1,commodityCommittedStock(town,needs[0][0]))}:null;
     }
-
-    function pickMarketSeller(buyer, type) {
-        if (!buyer) return null;
-        let candidates = getTownTradePartners(buyer);
-        if (!candidates.length) {
-            candidates = regFilter("town", t => t && !t.end && t.id !== buyer.id);
-        }
-        candidates = candidates.filter(t => !areAtWar(buyer, t) && !hasEmbargo(buyer, t));
-        candidates = candidates.filter(t => {
-            const dist = getTownDistance(buyer, t);
-            return dist === null || dist <= MARKET_CONFIG.maxDistance;
-        });
-
-        if (type === "food") {
-            candidates = candidates.filter(t => (t.influences?.farm || 0) >= 5);
-        } else if (type === "luxury") {
-            candidates = candidates.filter(t => (t.influences?.trade || 0) >= 5 || (t.influences?.happy || 0) >= 2);
-        } else if (type === "tools") {
-            candidates = candidates.filter(t => (t.influences?.education || 0) >= 5 || (t.influences?.trade || 0) >= 5);
-        }
-
-        if (!candidates.length) return null;
-        return weightedChoice(candidates, t => {
-            const relation = getRelations(buyer, t);
-            const trade = t.influences?.trade || 0;
-            const farm = t.influences?.farm || 0;
-            return 1 + Math.max(0, relation) * 0.1 + trade * 0.05 + farm * 0.04;
-        });
+    function pickMarketSeller(buyer,type) {
+        return findCommoditySupplier(buyer,type==='food'?['crop','livestock']:[type])?.town || null;
     }
 
     function computeMarketPrice(buyer, seller, type, severity) {
@@ -15755,9 +16164,7 @@
         const distanceFactor = Math.min(1.4, dist / 80);
         const relation = getRelations(buyer, seller);
         let base = MARKET_CONFIG.basePrice + distanceFactor * 4;
-        let typeBase = MARKET_CONFIG.foodPrice;
-        if (type === "luxury") typeBase = MARKET_CONFIG.luxuryPrice;
-        if (type === "tools") typeBase = MARKET_CONFIG.toolPrice;
+        const typeBase = MARKET_CONFIG.exchangePrice;
         const scarcity = Math.max(0, severity) * 2.2;
         let price = base + typeBase + scarcity;
         if (relation >= 4) price *= 0.9;
@@ -15765,22 +16172,12 @@
         return Math.max(6, Math.round(price));
     }
 
-    function applyMarketPurchase(buyer, seller, type, price) {
-        if (!buyer || !seller) return false;
-        const paid = transferCash(buyer, seller, price);
-        if (paid <= 0) return false;
-
-        if (type === "food") {
-            applyInfluenceSafe(null, buyer, { hunger: -0.6, happy: 0.2, farm: 0.2 }, { temp: true });
-        } else if (type === "luxury") {
-            applyInfluenceSafe(null, buyer, { happy: 0.6, trade: 0.2 }, { temp: true });
-        } else if (type === "tools") {
-            applyInfluenceSafe(null, buyer, { education: 0.4, trade: 0.2 }, { temp: true });
-        }
-
-        applyInfluenceSafe(null, seller, { trade: 0.15, happy: 0.1 }, { temp: true });
-        improveRelations(buyer, seller, 1);
-        return true;
+    function applyMarketPurchase(buyer,seller,type) {
+        if(!buyer||!seller||planet.day-buyer.start<=1)return null;
+        const path=commodityPath(buyer,seller);if(!path)return null;
+        if(type==='food')type=['crop','livestock'].filter(t=>commoditySpare(seller,t,path)>0).sort((a,b)=>commoditySpare(seller,b,path)-commoditySpare(seller,a,path))[0];
+        if(!COMMODITIES[type]||commodityDemand(buyer,type,path)<=0||commoditySpare(seller,type,path)<=0)return null;
+        return newCommodityJourney(buyer,seller,path,'market',type);
     }
 
     function getBorderChunksBetweenTowns(buyer, seller) {
@@ -15916,8 +16313,8 @@
         const payment = Math.min(loan.paymentPerTurn, borrowerCash, loan.remainingAmount);
 
         if (payment > 0) {
-            happen("Resource", null, borrower, { cash: -payment });
-            happen("Resource", null, lender, { cash: payment });
+            applyTownCashDelta(borrower, -payment);
+            applyTownCashDelta(lender, payment);
             loan.remainingAmount -= payment;
             loan.remainingPayments = Math.max(
                 0,
@@ -15987,67 +16384,37 @@
     // Economic Events - Autonomous town behavior
     // -------------------------------------------------------------------------
 
-    // Daily cashflow for towns (income - upkeep)
+    // Local upkeep pays from existing public cash into native private wealth.
     modEvent("townEconomyTick", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject) => {
-            if (!subject || subject.end) return false;
+            if (!subject || subject.end || !(planet.unlocks.trade>=30)) return false;
             return true;
         },
         func: (subject) => {
             const snapshot = computeTownEconomySnapshot(subject);
             if (!snapshot) return;
-            const delta = Math.round(snapshot.net * 10) / 10;
-            const applied = applyTownCashDelta(subject, delta);
-            snapshot.cash = (subject.resources?.cash || 0);
-            snapshot.applied = applied;
+            if(subject._paultendoUpkeepDay===planet.day)return;
+            subject._paultendoUpkeepDay=planet.day;
+            const applied=applyTownCashDelta(subject,-Math.round(snapshot.upkeep*10)/10,'upkeep');
+            subject.wealth=(subject.wealth || 0)-applied;
+            const after=computeTownEconomySnapshot(subject);
+            after.applied=applied;
         }
     });
 
-    // Towns buy goods from trade partners when under strain
+    // Markets use the same stores, claims, terms and journeys as other exchange.
     modEvent("townMarketPurchase", {
-        random: true,
-        auto: true,
-        weight: $c.UNCOMMON,
-        subject: { reg: "town", random: true },
-        value: (subject, target, args) => {
-            if (!subject || subject.end) return false;
-            const need = getTownMarketNeed(subject);
-            if (!need) return false;
-            const seller = pickMarketSeller(subject, need.type);
-            if (!seller) return false;
-            if (areAtWar(subject, seller)) return false;
-            if (hasEmbargo(subject, seller)) return false;
-            const price = computeMarketPrice(subject, seller, need.type, need.severity);
-            const cash = subject.resources?.cash || 0;
-            if (cash < Math.max(MARKET_CONFIG.minCash, price)) return false;
-
-            args.seller = seller;
-            args.goodsType = need.type;
-            args.severity = need.severity;
-            args.price = price;
-            return true;
+        random:true, auto:true, weight:$c.UNCOMMON, subject:{reg:"town",random:true},
+        value:(subject,_,args)=>{
+            const need=getTownMarketNeed(subject);if(!need)return false;
+            const supplier=findCommoditySupplier(subject,need.type==='food'?['crop','livestock']:[need.type]);
+            if(!supplier)return false;
+            args.seller=supplier.town;args.goodsType=supplier.type;
+            return !commodityExchangeState().exchanges.some(r=>r.buyer===subject.id&&!r.resolved);
         },
-        func: (subject, target, args) => {
-            if (!args.seller || !args.goodsType) return;
-            const ok = applyMarketPurchase(subject, args.seller, args.goodsType, args.price);
-            if (!ok) return;
-
-            if (args.price >= 25 || Math.random() < 0.12) {
-                const label = args.goodsType === "food"
-                    ? "grain shipments"
-                    : args.goodsType === "luxury"
-                        ? "luxury goods"
-                        : "artisan tools";
-                modLog(
-                    "trade",
-                    `Merchants in {{regname:town|${subject.id}}} purchase ${label} from {{regname:town|${args.seller.id}}}.`,
-                    null,
-                    { town: subject }
-                );
-            }
-        }
+        func:(subject,_,args)=>{if(args.seller&&args.goodsType)applyMarketPurchase(subject,args.seller,args.goodsType);}
     });
 
     // Towns request loans from wealthier towns
@@ -16087,12 +16454,11 @@
         },
         func: (subject, target, args) => {
             const relation = target.relations[args.lender.id] || 0;
-            const approved = relation >= 0 || Math.random() < 0.3;
+            const approved = (relation >= 0 || Math.random() < 0.3) && !args.lender.end && !target.end && commodityStock(args.lender,'cash')>=args.amount;
             args.approved = approved;
 
             if (approved) {
-                happen("Resource", null, args.lender, { cash: -args.amount });
-                happen("Resource", null, target, { cash: args.amount });
+                transferCash(args.lender,target,args.amount);
                 createLoan(args.lender, target, args.amount, args.repayment, args.turns);
                 happen("AddRelation", target, args.lender, { amount: 1 });
             }
@@ -16364,8 +16730,8 @@
             return `{{regname:town|${target.id}}} sees {{regname:town|${args.recipient.id}}} {{c:struggling|suffering|in hardship}}. They could send {{b:${args.amount}}} {{currency:${target.id}}} in aid.`;
         },
         func: (subject, target, args) => {
-            happen("Resource", null, target, { cash: -args.amount });
-            happen("Resource", null, args.recipient, { cash: args.amount });
+            args.amount=transferCash(target,args.recipient,args.amount);
+            if(args.amount<=0)return;
             happen("AddRelation", args.recipient, target, { amount: 3 });
         },
         messageDone: (subject, target, args) => {
@@ -16530,12 +16896,11 @@
 
             if (success) {
                 const relation = target.relations[args.lender.id] || 0;
-                const approved = relation >= -1 || Math.random() < 0.4;
+                const approved = (relation >= -1 || Math.random() < 0.4) && !args.lender.end && !target.end && commodityStock(args.lender,'cash')>=args.amount;
                 args.approved = approved;
 
                 if (approved) {
-                    happen("Resource", null, args.lender, { cash: -args.amount });
-                    happen("Resource", null, target, { cash: args.amount });
+                    transferCash(args.lender,target,args.amount);
                     createLoan(args.lender, target, args.amount, args.repayment, 10);
                     happen("AddRelation", target, args.lender, { amount: 1 });
                 }
@@ -16690,8 +17055,8 @@
             args.success = success;
 
             if (success) {
-                happen("Resource", null, target, { cash: -args.amount });
-                happen("Resource", null, args.recipient, { cash: args.amount });
+                args.amount=transferCash(target,args.recipient,args.amount);
+                if(args.amount<=0){args.success=false;return;}
                 happen("AddRelation", args.recipient, target, { amount: 3 });
                 happen("Influence", subject, args.recipient, { faith: 1 });
             } else {
@@ -24420,8 +24785,8 @@
             const repayment = Math.max(amount + 10, Math.floor(amount * (1 + interest)));
             const turns = 12 + Math.floor(Math.random() * 6);
 
-            happen("Resource", null, args.lender, { cash: -amount });
-            happen("Resource", null, subject, { cash: amount });
+            if(args.lender.end||subject.end||lenderCash<amount)return;
+            transferCash(args.lender,subject,amount);
             createLoan(args.lender, subject, amount, repayment, turns);
 
             // Loan helps recovery
@@ -25189,21 +25554,11 @@
             const isAlly = alliance && alliance.members.includes(target.id);
             const relations = getRelations(subject, target);
 
-            return isAlly || relations > 6;
+            return (isAlly || relations > 6) && spareCrops(target)>0 && !!commodityPath(subject,target) && !commodityExchangeState().exchanges.some(r=>r.buyer===subject.id&&!r.resolved);
         },
         func: (subject, target) => {
-            // Food aid arrives
-            happen("Influence", null, subject, { happy: 1, temp: true });
-
-            // Reduce famine deaths
-            if (Math.random() < 0.5 && subject.famine) {
-                subject.famine.ended = true;
-                logMessage(`Food aid from {{regname:town|${target.id}}} ends the famine in {{regname:town|${subject.id}}}.`, "milestone");
-            } else {
-                logMessage(`{{regname:town|${target.id}}} sends food aid to famine-struck {{regname:town|${subject.id}}}.`);
-            }
-
-            improveRelations(subject, target, 10);
+            const path=commodityPath(subject,target);
+            if(path&&spareCrops(target)>0)newCommodityJourney(subject,target,path,'famine');
         }
     });
 
@@ -33108,99 +33463,24 @@
         }
     });
 
-    // Caravans travel along trade routes
+    // A caravan offers actual stock to a partner with an actual use for it.
+    // Arrival, payment and contact happen through the shared exchange engine.
     modEvent("caravanDeparts", {
-        random: true,
-        weight: $c.COMMON,
-        subject: { reg: "town", random: true },
-        value: (subject) => {
-            const routes = getTownRoutes(subject);
-            if (routes.length === 0) return null;
-
-            // Pick a random active route
-            const route = choose(routes);
-            return route;
+        random:true, weight:$c.COMMON, subject:{reg:"town",random:true},
+        value:subject=>{
+            const routes=getTownRoutes(subject).filter(route=>{
+                const partner=getRoutePartner(route,subject),path=partner&&commodityPath(subject,partner);
+                return path&&Object.keys(COMMODITIES).some(type=>commodityDemand(partner,type,path)>0&&commoditySpare(subject,type,path)>0);
+            });
+            return routes.length?choose(routes):null;
         },
-        check: (subject, _, args) => {
-            if (!args.value) return false;
-
-            // Need resources to trade
-            if ((subject.influences?.trade || 0) < 3) return false;
-
-            return true;
-        },
-        func: (subject, _, args) => {
-            const route = args.value;
-            const partner = route && getRoutePartner(route, subject);
-            if (!route?.active||!partner||partner.end||subject.end||hasIssue(subject,'war')||hasIssue(partner,'war')) return;
-            const routeInfo=calculateRouteDifficulty(subject,partner);
-            if(!routeInfo.reachable) return;
-            Object.assign(route,{difficulty:routeInfo.difficulty,distance:routeInfo.distance,needsShips:routeInfo.needsShips});
-
-            route.caravans++;
-            route.lastCaravanDay = planet.day;
-            initRouteCondition(route);
-            const upkeep = 0.01 + Math.min(0.02, (subject.influences?.trade || 0) * 0.002);
-            route.condition = clampValue((route.condition || 1) + upkeep, 0, 1);
-            const path = getCachedPath(subject, partner);
-            if (path && path.length) {
-                route.currentPath = path;
-                route.pathLength = path.length;
-                const travelCost = computePathTravelCost(path);
-                if (travelCost !== null) {
-                    route.travelTime = Math.max(1, Math.ceil(travelCost));
-                }
-                recordTraffic(path, 1.2);
-            }
-
-            // Calculate goods based on route difficulty and town prosperity
-            const prosperity = (subject.influences?.trade || 0) + (subject.influences?.farm || 0);
-            const goods = Math.max(1, Math.floor(prosperity / route.difficulty));
-            route.totalGoods += goods;
-
-            // Climate affects caravan success
-            const climate = getTownClimate(subject);
-            let successChance = 0.85;
-
-            // Extreme temperatures reduce success
-            if (climate.temp < 0.25 || climate.temp > 0.75) {
-                successChance -= 0.1;
-            }
-
-            // Low moisture (desert crossing) is risky
-            if (climate.moisture < 0.3) {
-                successChance -= 0.1;
-            }
-
-            // Route difficulty
-            successChance -= (route.difficulty - 1) * 0.05;
-
-            if (Math.random() < successChance) {
-                // Successful trade
-                happen("Influence", null, subject, { trade: 0.2, temp: true });
-                happen("Influence", null, partner, { trade: 0.2, temp: true });
-                const cashGain = Math.max(1, Math.round(goods * 0.7));
-                applyTownCashDelta(subject, cashGain);
-                applyTownCashDelta(partner, Math.max(1, Math.round(cashGain * 0.7)));
-                if(route.active&&getRoutePartner(route,subject)?.id===partner.id) {
-                    try { noteLivingExchange(subject,partner,path,{type:'caravan',route:route.id}); } catch(error) {console.warn('[paultendo-mod] Caravan words failed:',error);}
-                }
-
-                // Occasional notable trade
-                if (Math.random() < 0.1) {
-                    modLog(
-                        "trade",
-                        `A prosperous caravan arrives in {{regname:town|${partner.id}}} from {{regname:town|${subject.id}}}.`,
-                        null,
-                        { town: subject }
-                    );
-                }
-            } else {
-                // Caravan lost or delayed
-                if (Math.random() < 0.3) {
-                    logMessage(`A caravan from {{regname:town|${subject.id}}} is lost in the ${getClimateDescription(climate.temp, climate.moisture).full} conditions.`, "warning");
-                }
-            }
+        check:(subject,_,args)=>!!args.value&&args.value.active,
+        func:(subject,_,args)=>{
+            const route=args.value,partner=route&&getRoutePartner(route,subject),path=partner&&commodityPath(subject,partner);
+            if(!route?.active||!path)return;
+            const types=Object.keys(COMMODITIES).filter(type=>commodityDemand(partner,type,path)>0&&commoditySpare(subject,type,path)>0);
+            types.sort((a,b)=>commodityUnitValue(partner,b,commodityStock(partner,b),commodityDemand(partner,b,path),path)-commodityUnitValue(partner,a,commodityStock(partner,a),commodityDemand(partner,a,path),path));
+            if(types.length){const record=newCommodityJourney(partner,subject,path,'caravan',types[0]);if(record)record.route=route.id;}
         }
     });
 
@@ -34915,7 +35195,7 @@
         const cash = town.resources?.cash || 0;
         if (cash < cost) return false;
 
-        happen("Resource", null, town, { cash: -cost });
+        applyTownCashDelta(town, -cost);
         let changed = false;
         roadChunks.forEach(chunk => {
             const repair = 0.1 * investmentLevel;
