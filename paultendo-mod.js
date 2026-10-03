@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.50/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.51/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.50";
+    const MOD_VERSION = "1.6.51";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -7510,7 +7510,7 @@
         const entry = button?.closest('.logMessage');
         const caller = entry && currentEvents[entry.dataset.eventid];
         if (!caller || caller.done || !caller.needsInput || livingDecisionCaptures.has(caller)) return;
-        livingDecisionCaptures.set(caller, { planet, entry, automated: !!PAULTENDO_STATE.autoChoosing, question: entry.querySelector('.logText')?.textContent || '', unlocks: {...planet.unlocks}, before: regToArray('town').filter(t => !t.end).map(livingTownSnapshot), processes: new Set(regToArray('process').map(p => p.id)) });
+        livingDecisionCaptures.set(caller, { planet, entry, automated: !!PAULTENDO_STATE.autoChoosing, question: entry.querySelector('.logText')?.textContent || '', need: caller.eventClass==='unlockLevel'&&caller.args?.value?.need?structuredClone(caller.args.value.need):null, unlocks: {...planet.unlocks}, before: regToArray('town').filter(t => !t.end).map(livingTownSnapshot), processes: new Set(regToArray('process').map(p => p.id)) });
     }
 
     function finishLivingDecisions() {
@@ -7540,6 +7540,7 @@
             const title = level?.name || (caller.eventClass === 'townLaw' ? `${titleCase(caller.args.name || livingLawName(caller.args.value))} law` : caller.eventClass === 'establishHealthcare' ? 'Care for the sick' : caller.eventClass === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : caller.eventClass === 'townProjectStart' ? `A new ${String(caller.args.value).replace(/_/g, ' ')}` : 'A choice for the town');
             const projects = regToArray('process').filter(p => p.type === 'project' && !capture.processes.has(p.id)).map(p => ({ id: p.id, town: p.town, subtype: p.subtype, reported: false }));
             const record = { id: state.nextId++, day: planet.day, title, question: capture.question, automated: capture.automated, outcome: (selected.innerText || selected.textContent).trim(), text: capture.entry.querySelector('.logText')?.textContent || capture.question, towns, changes, projects, traces, received: typeof caller.args?.success === 'boolean' ? caller.args.success : null, logId: caller.logID };
+            if(capture.need)record.need=capture.need;
             if (caller.eventClass === 'explorationExpeditionPrompt') {
                 record.title = 'Beyond the town';
                 if (caller.args?.success && caller.args.mission?.placeId) record.place = caller.args.mission.placeId;
@@ -7866,6 +7867,7 @@
     }
 
     function initLivingWorld() {
+        installNativeTechNeeds();
         seedLivingDiscoveries();
         const discoveryPrompt = gameEvents.speciesDiscover?.value;
         if (discoveryPrompt && !discoveryPrompt._paultendoFieldNotes) {
@@ -19216,6 +19218,84 @@
 
     const TECH_BIAS_LIMITS = { min: 0.75, max: 1.35 };
 
+    // A sample opens a question, not a free technique or an appetite for stock.
+    // Use the existing recipes and current purposes rather than a second tech tree.
+    function materialResearchInterests(town) {
+        if(!town||town.end||town.pop<=0||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town))return [];
+        const study=livingResearchPriority(town.research),interests=[];
+        for(const [type,recipe] of Object.entries(MATERIAL_RECIPES)) {
+            const actual=materialDirectNeed(town,type)>0;
+            if(type==='pottery'&&!actual)continue;
+            if(type==='steel'&&!actual&&study!=='education'&&!(study==='military'&&town.jobs?.soldier>0))continue;
+            if(town._paultendoMaterials?.[type]?.technique&&!actual)continue;
+            if(!recipe.roles.some(role=>town.jobs?.[role]>0)||commodityStock(town,recipe.sample)<=0)continue;
+            const curious=(town._paultendoPeople || []).some(person=>recipe.roles.includes(person.role)&&person.outlook==='curious'&&livingTeachingPersonAvailable(person,town));
+            const established=Object.entries(recipe.established).every(([key,level])=>(planet.unlocks[key] || 0)>=level);
+            if(!actual&&!curious&&!established&&!(type==='steel'&&study==='education'))continue;
+            interests.push({type,sample:recipe.sample,actual,needs:recipe.needs});
+        }
+        return interests;
+    }
+
+    // These weights are initial pacing calibration. Needs favour eligible
+    // proposals. Prerequisites, recent refusals and the native effects still apply.
+    function nativeTechNeeds(town) {
+        const needs={};if(!town||town.end||town.pop<=0)return needs;
+        const add=(key,pressure,text,details={})=>{if(pressure>0&&pressure>(needs[key]?.pressure || 0))needs[key]={pressure:Math.min(2,pressure),text,...details};};
+        const buffer=foodBuffer(town),short=Math.max(0,buffer-mealStock(town));
+        add('farm',short/Math.max(1,buffer),'Food is running short.',{food:mealStock(town),wanted:buffer});
+        const construction=materialConstructionNeed(town);
+        if(construction>0)add('smith',construction/Math.max(1,commodityWorkClaims(town).filter(c=>c.kind==='construction').reduce((n,c)=>n+c.cost,0)),'Building work is waiting for materials.',{construction});
+        for(const interest of materialResearchInterests(town)) {
+            for(const [key,level] of Object.entries(interest.needs)) {
+                if((planet.unlocks[key] || 0)>=level)continue;
+                // Controlling a workshop fire must not promote Firebombing,
+                // which is a separate moral choice in the native fire branch.
+                const through=key==='fire'?Math.min(20,level):level;
+                add(key,interest.actual?2:1,`There is ${COMMODITIES[interest.sample].label} in the stores to experiment with.`,{material:interest.sample,purpose:interest.type,through});
+            }
+        }
+        const visits=Object.values(livingWorldState().places).flatMap(p=>(p.visits || []).filter(v=>v.town===town.id&&planet.day-v.day<=30&&v.pathLength>=6));
+        if(visits.length)add('travel',Math.min(2,visits.length/2),'Scouts have been making long journeys.',{journeys:visits.slice(-4).map(v=>({day:v.day,length:v.pathLength}))});
+        if(town.jobs?.doctor>0&&(town.influences?.disease || 0)>0)add('education',(town.influences.disease || 0)/4,'The healers have sick people to care for.',{disease:town.influences.disease});
+        if(hasIssue(town,'war'))add('military',2,'The town is fighting a war.',{war:town.issues.war});
+        if(hasIssue(town,'revolution'))add('government',2,'The town is in revolt.',{revolution:town.issues.revolution});
+        const demand=commodityWorkDemand(town);
+        if(regToArray('town').some(other=>{
+            const path=commodityPath(town,other);if(!path)return false;
+            return Object.keys(COMMODITIES).some(type=>(COMMODITIES[type].edible?short>0:demand[type]>0)&&commoditySpare(other,type,path)>0);
+        }))add('trade',1,'Goods the town needs can be brought from neighbours.');
+        return needs;
+    }
+    function installNativeTechNeeds() {
+        const info=gameEvents.unlockLevel;if(!info?.value||info.value._paultendoNeeds)return;
+        const base=info.value,message=info.message;
+        info.value=function(subject,town) {
+            if(!town||town.end||town.pop<=0)return base.apply(this,arguments);
+            const needs=nativeTechNeeds(town),research=town.research || {},total=Object.values(research).reduce((n,v)=>n+Math.max(0,v),0);
+            if(!Object.keys(needs).length&&!total)return base.apply(this,arguments);
+            const choices=[];
+            for(const [type,branch] of Object.entries(unlockTree)) {
+                if(planet.unlocksRejected[type]&&planet.day-planet.unlocksRejected[type]<=10)continue;
+                const levelData=branch.levels.find(l=>l.level>(planet.unlocks[type] || -1));
+                if(!levelData||Object.entries(levelData.needsUnlock || {}).some(([key,level])=>!planet.unlocks[key]||planet.unlocks[key]<level)||levelData.check&&!levelData.check(subject,town))continue;
+                const study=Math.max(0,research[type] || 0)/Math.max(1,total),candidate=needs[type];
+                const need=candidate&&(!candidate.through||levelData.level<=candidate.through)?candidate:null;
+                choices.push({type,levelData,weight:1+(need?.pressure || 0)*3+study*2,...(need?{need:{...need,town:town.id,day:planet.day,known:livingTownKnown(town)}}:{})});
+            }
+            if(!choices.length)return false;
+            let roll=Math.random()*choices.reduce((n,c)=>n+c.weight,0);
+            for(const choice of choices){roll-=choice.weight;if(roll<0){const {weight,...value}=choice;return value;}}
+            const {weight,...value}=choices.at(-1);return value;
+        };
+        info.value._paultendoNeeds=true;
+        info.message=function(subject,town,args) {
+            const original=typeof message==='function'?message.apply(this,arguments):message;
+            const need=args.value?.need;
+            return need?.known&&livingTownKnown(town)?`${townRef(town.id)}: ${escapeLivingText(need.text)} ${original}`:original;
+        };
+    }
+
     function getTechPressureSignals() {
         const wars = (typeof regFilter === "function")
             ? regFilter("process", p => p && !p.done && p.type === "war").length
@@ -19229,7 +19309,10 @@
             : 0;
         const firings=(planet._paultendoLife?.materialWork || []).filter(w=>w.type==='brick'&&['made','failed'].includes(w.status)&&planet.day-w.finished<=90).length;
         const metalTrials=(planet._paultendoLife?.materialWork || []).filter(w=>w.type==='steel'&&['made','failed'].includes(w.status)&&planet.day-w.finished<=90).length;
-        return { wars, revolutions, epidemics, famines, firings, metalTrials };
+        const interests=regToArray('town').flatMap(town=>materialResearchInterests(town));
+        const kilns=interests.filter(i=>(i.needs.fire || 0)>=20).length;
+        const forges=interests.filter(i=>(i.needs.fire || 0)>=50).length;
+        return { wars, revolutions, epidemics, famines, firings, metalTrials, kilns, forges };
     }
 
     function techBiasMultiplier(eventId, domain, signals) {
@@ -19237,6 +19320,8 @@
         const s = signals || {};
         if(eventId==='unlockKilns'&&s.firings>0)mult+=Math.min(0.35,s.firings*0.12);
         if(eventId==='unlockSteel'&&s.metalTrials>0)mult+=Math.min(0.35,s.metalTrials*0.12);
+        if(eventId==='unlockKilns'&&s.kilns>0)mult+=Math.min(0.35,s.kilns*0.12);
+        if(eventId==='unlockForges'&&s.forges>0)mult+=Math.min(0.35,s.forges*0.12);
 
         if (s.wars > 0 && (domain === "military" || domain === "fire")) {
             mult += Math.min(0.35, s.wars * 0.15);
@@ -19503,7 +19588,12 @@
             if (planet.unlocks.fire < 50 && planet.unlocks.fire >= 40 && planet.unlocks.smith >= 30) return true;
             return false;
         },
-        message: () => "Smiths dream of furnaces hot enough to melt any metal. {{should}}",
+        message: (subject,target,args) => {
+            const town=regGet('town',args?._paultendoTechVariant?.originTownId);
+            const interest=livingTownKnown(town)&&materialResearchInterests(town).find(i=>i.needs.fire>=50);
+            if(interest)return `${townRef(town.id)} has ${COMMODITIES[interest.sample].label} to experiment with. Its workers want a furnace that can burn hotter. {{should}}`;
+            return "Smiths dream of furnaces hot enough to melt any metal. {{should}}";
+        },
         func: () => {
             planet.unlocks.fire = 50;
             happen("Influence", null, null, { military: 1, trade: 1 });

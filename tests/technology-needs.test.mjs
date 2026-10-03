@@ -1,0 +1,52 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {makeGame,settleGame} from './harness.mjs';
+const plain=x=>JSON.parse(JSON.stringify(x));
+function setup(g){const w=g.window,town=settleGame(g);w.planet.day=30;town.name='Claybank';town.pop=20;town.resources={crop:1000};town.jobs={miner:10,farmer:10};town.research={};Object.assign(w.planet.unlocks,{farm:10,smith:10,fire:10});return {w,town};}
+function samples(w,town){const counts={},values=[],random=w.Math.random;try{for(let n=0;n<300;n++){w.Math.random=()=> (n+.5)/300;const value=w.gameEvents.unlockLevel.value(w.regGet('player',1),town);if(value){counts[value.type]=(counts[value.type] || 0)+1;values.push(value);}}}finally{w.Math.random=random;}return {counts,values};}
+function add(w,town,type,count){w.happen('AddResource',null,town,{type,count});}
+function curious(w,town){w.openRegBrowser(town,'town');[...w.document.querySelectorAll('.paultendoTownLife button')].find(b=>b.textContent==='Meet the people').click();for(const person of town._paultendoPeople)person.outlook='curious';}
+function weights(w){let result;const choose=w.chooseEvent;w.chooseEvent=()=>{result=Object.fromEntries(['unlockKilns','unlockForges','unlockSteel'].map(id=>[id,w.randomEvents[id].weight]));return null;};try{w.nextDay();}finally{w.chooseEvent=choose;}return result;}
+function quiet(w){for(const id of ['townFarm','townTame','townMine','townLumber','townBirth','townDeath','townExpand']){if(w.gameEvents[id].func)w.gameEvents[id].func=()=>{};if(w.gameEvents[id].perChunk)w.gameEvents[id].perChunk=()=>{};}w.gameEvents.processAll.func=()=>{};}
+function errors(g){assert.deepEqual(g.errors,[]);}
+
+test('actual food shortage favours farming proposals and relief removes that pressure',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);town.research={education:100};const fed=samples(w,town);town.resources.crop=0;const hungry=samples(w,town);assert.ok(hungry.counts.farm>fed.counts.farm*2);
+ const value=hungry.values.find(v=>v.type==='farm');assert.equal(value.need.food,0);assert.ok(value.need.wanted>0);assert.match(w.gameEvents.unlockLevel.message(null,town,{value}),/Food is running short/);town.resources.crop=1000;assert.equal(samples(w,town).counts.farm,fed.counts.farm);assert.equal(w.planet.unlocks.farm,10,'Sampling a proposal grants no technology');errors(g);
+});
+
+test('a locally encountered clay sample with an actual storage problem motivates relevant shaping and fire knowledge',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);w.planet.unlocks.smith=0;w.planet.unlocks.fire=0;town.research={education:100};const before=samples(w,town);town._paultendoGrainStore={vessels:[],steps:[],pressure:{day:w.planet.day,target:w.$c.maxResource(town)+8}};add(w,town,'clay',2);
+ const after=samples(w,town);assert.ok(after.counts.fire>before.counts.fire);assert.ok(after.counts.smith>before.counts.smith);const value=after.values.find(v=>v.type==='fire');assert.equal(value.need.material,'clay');assert.equal(value.need.purpose,'pottery');assert.equal(value.need.through,20);assert.equal(town.resources.pottery,undefined);assert.equal(town._paultendoMaterials.clay.technique,undefined);assert.equal(w.planet.unlocks.fire,0);errors(g);
+});
+
+test('material experiments never supply a reason for the native Firebombing choice',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);Object.assign(w.planet.unlocks,{fire:20,military:10,smith:20});town.research={education:100};curious(w,town);add(w,town,'sand',3);const value=samples(w,town).values.find(v=>v.type==='fire');assert.ok(value);assert.equal(value.levelData.name,'Firebombing');assert.equal(value.need,undefined);assert.doesNotMatch(w.gameEvents.unlockLevel.message(null,town,{value}),/sand|workshop|hotter/);errors(g);
+});
+
+test('research priorities influence branch choice while native prerequisites and refusals still apply',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);town.research={education:100};const education=samples(w,town);town.research={farm:100};const farming=samples(w,town);assert.ok(farming.counts.farm>education.counts.farm);assert.ok(education.counts.education>farming.counts.education);
+ w.planet.unlocksRejected.farm=w.planet.day;assert.equal(samples(w,town).counts.farm,undefined);w.planet.day+=11;assert.ok(samples(w,town).counts.farm>0);w.planet.unlocks.farm=0;assert.equal(samples(w,town).counts.education,undefined);assert.equal(samples(w,town).counts.military,undefined,'Military still needs a second settlement');errors(g);
+});
+
+test('samples and technical milestones alone create neither demand nor a furnace proposal attributed to a disinterested town',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);Object.assign(w.planet.unlocks,{smith:30,fire:40});town.research={farm:100};curious(w,town);for(const p of town._paultendoPeople)p.outlook='steadfast';add(w,town,'sand',3);
+ assert.doesNotMatch(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}),/Claybank|has sand/);assert.equal(town.resources.glass,undefined);assert.equal(w.planet._paultendoLife.materialWork.length,0);errors(g);
+});
+
+test('an actual sand sample and curious available worker favour furnace research without awarding glass',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);quiet(w);Object.assign(w.planet.unlocks,{smith:30,fire:40});curious(w,town);const before=weights(w);add(w,town,'sand',3);const after=weights(w);
+ assert.ok(after.unlockForges/after.unlockSteel>before.unlockForges/before.unlockSteel);assert.match(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}),/has sand to experiment with/);assert.equal(town.resources.glass,undefined);assert.equal(w.planet._paultendoLife.materialWork.length,0,'The furnace is still missing');assert.equal(w.planet.unlocks.fire,40);town.jobs.miner=0;assert.doesNotMatch(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}),/has sand/);errors(g);
+});
+
+test('hidden workshops can influence research without revealing their identity or raw samples',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);Object.assign(w.planet.unlocks,{smith:30,fire:40});curious(w,town);add(w,town,'sand',3);town._hidden=true;assert.doesNotMatch(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}),/Claybank|has sand/);
+ town.resources.crop=0;const value=samples(w,town).values.find(v=>v.type==='farm');assert.equal(value.need.known,false);assert.doesNotMatch(w.gameEvents.unlockLevel.message(null,town,{value}),/running short|Claybank/);errors(g);
+});
+
+test('a sample-backed proposal keeps its original question through native choice and save recovery',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);quiet(w);town._paultendoGrainStore={vessels:[],steps:[],pressure:{day:30,target:w.$c.maxResource(town)+8}};add(w,town,'clay',2);w.planet.unlocks.fire=0;
+ const value=samples(w,town).values.find(v=>v.type==='fire'),caller=w.readyEvent('unlockLevel',w.regGet('player',1),town);assert.ok(caller);caller.args.value=value;caller.message=w.gameEvents.unlockLevel.message(caller.subject,town,caller.args);const choose=w.chooseEvent,ready=w.readyEvent;w.chooseEvent=()=> 'unlockLevel';w.readyEvent=(key,...args)=>key==='unlockLevel'?caller:ready(key,...args);try{w.nextDay();}finally{w.chooseEvent=choose;w.readyEvent=ready;}
+ const entry=w.document.getElementById('logMessage-'+caller.logID);assert.match(entry.textContent,/clay in the stores/);entry.querySelector('[type="yes"]').click();assert.equal(w.planet.unlocks.fire,10);assert.equal(town.resources.clay,2);assert.equal(town.resources.pottery,undefined);const decision=w.planet._paultendoLife.decisions.at(-1),question=decision.question;assert.deepEqual(plain(decision.need),plain(value.need));assert.match(question,/clay in the stores/);
+ const restored=await makeGame({save:plain(w.generateSave())});t.after(restored.close);assert.equal(restored.window.planet._paultendoLife.decisions.at(-1).question,question);assert.equal(restored.window.planet.unlocks.fire,10);assert.deepEqual(plain(restored.window.planet._paultendoLife.decisions.at(-1).need),plain(value.need));errors(g);errors(restored);
+});
