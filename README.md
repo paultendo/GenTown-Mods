@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.51**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
+Version **1.6.52**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.51/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.52/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.51)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.52)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -59,6 +59,10 @@ Clay, sand, charcoal, bricks, glass, coal and steel now connect discoveries to a
 
 A harvest that actually overflows the grain stores can give people a reason to fire clay vessels. Actual clay and fuel become vessels over five work days. A first firing can fail. Each vessel installed beside the stores holds eight extra grain from later harvests or deliveries. Food is never awarded by the discovery. The vessels can also come from a neighbour’s practiced workshop through the existing gift, trade or barter system. Materials and workshops links to the grain stores, their maker and the shipment that brought them. The storage quantities and timings are initial balance values.
 
+Repeated actual harvests can give farmers a reason to shape stone handtools. Two stone becomes two tools over four work days after Stonework is known. Steel and later shaping knowledge enable stronger handtools over six work days. Trials, shared material claims, neighbouring workshops and shipments use the same production and exchange systems. Installed tools help actual harvests and wear through use. Usable stone tools stay in service when steel becomes available. Their makers and journeys remain attached through reloads.
+
+When attacked, farmers can also take up those same tools in defence. Working edges offer less strength than trained soldiers, and fighting damages them faster than fieldwork. Broken tools leave the farms without that help. Tool stores create no army or military discovery, and handtools supply no offensive boost. Strength, wear and harvest gains are initial balance values.
+
 Steel trials consume actual metal and fuel over eight work days. Learning or military priorities can give miners a reason to investigate, while an instrument creates practical demand. Encountered steel plus shaping knowledge opens an optional steel tuning fork with a steadier note for music or drills. The rough metal fork remains available. Autonomous makers can choose spare known steel. Older unfinished instruments keep their saved recipe, and milestones award no manufactured stock.
 
 Actual shipments can carry a maker's guidance, if they choose to share it and someone accepts it. Hearing the method makes later trials quicker and less risky, but local mastery still requires successful work. Manufactured materials retain their original maker through reexport, instrument-making, reloads and the Traveler's history. These recipes, deposits, delays, quality differences and risks are explicit game calibration. Furnace capacity is represented by the native Forges discovery rather than a separate workshop building. Separate ores, wider alloys and a fuller local technology model remain future work.
@@ -84,4 +88,4 @@ The regression tests cover startup, late installation and redraw, overlay creati
 
 [GenTown](https://r74n.com/gentown/) and the engine, styles, fonts, and icons are by **R74n**. The local snapshot retains the original engine source and credit. Its source URLs and SHA-256 hashes are recorded in [`vendor/gentown/upstream.json`](vendor/gentown/upstream.json); the [R74n Content License](vendor/gentown/LICENSE.txt) applies to those assets. `index.html` is adapted from the original game page for local loading. The paultendo overhaul is in `paultendo-mod.js` and can be installed independently.
 
-Local samples can now favour the technical discoveries needed to work them. Actual purposes, a curious available worker or existing research interests determine whether a sample is worth investigating. Clay needed for overflowing grain stores can favour basic fire and shaping knowledge. Sand with an interested worker can favour hotter furnaces. The same recipe requirements guide these priorities, and the actual sample remains in store. Research never awards stock or local manufacturing mastery. Hunger, journeys, building work, illness, war and revolt also influence which eligible native branch gets proposed, alongside the town's research priorities. Refusals, prerequisites and native choice effects remain intact. Material research cannot promote Firebombing. Extended furnace weights stay within the existing bounded weighting model. Longer automated starts still found settlements with no workshops after 180 days, so full progression and human pacing balance remain unverified.
+Local samples can now favour the technical discoveries needed to work them. Actual purposes, a curious available worker or existing research interests determine whether a sample is worth investigating. Clay needed for overflowing grain stores can favour basic fire and shaping knowledge. Sand with an interested worker can favour hotter furnaces. The same recipe requirements guide these priorities, and the actual sample remains in store. Research never awards stock or local manufacturing mastery. Hunger, journeys, building work, illness, war and revolt also influence which eligible native branch gets proposed, alongside the town's research priorities. Refusals, prerequisites and native choice effects remain intact. Material research cannot promote Firebombing. Extended furnace weights stay within the existing bounded weighting model. Full progression and human pacing balance remain unverified.
