@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.49/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.50/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.49";
+    const MOD_VERSION = "1.6.50";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -3058,12 +3058,17 @@
                 target.resources.cash=Math.max(0,stockBefore-paid);result=target;
                 // Native spending pays for work within this settlement.
                 target.wealth=(target.wealth || 0)+paid;
+            } else if(action==='AddResource'&&args?.type==='crop'&&target?.resources&&PAULTENDO_STATE.commoditiesReady&&target._paultendoGrainStore?.vessels?.length) {
+                // Installed vessels expand only grain storage. Native meals,
+                // harvests and arriving cargo still use the same actual stock.
+                if(!(args.count<=0))target.resources.crop=Math.floor(Math.min(commodityCapacity(target,'crop'),stockBefore+(args.count || 1)));
             } else result = baseHappen(action, subject, target, args, targetClass);
             if(PAULTENDO_STATE.commoditiesReady&&stockBefore!==null) {
                 const after=target.resources[args.type] || 0,delta=after-stockBefore;
                 if(args.type==='cash'&&delta)recordCashFlow(target,delta,PAULTENDO_STATE.cashSource || 'other');
                 else if(action==='RemoveResource'&&delta<0)consumeCommodityLots(target,args.type,stockBefore,after);
                 if(action==='AddResource'&&delta>0&&(MATERIAL_RECIPES[args.type]||MATERIAL_SOURCES[args.type]))encounterMaterial(target,args.type);
+                if(action==='AddResource'&&args.type==='crop'&&PAULTENDO_STATE.grainHarvest===target)observeGrainOverflow(target,stockBefore,args.count,after);
             }
             if (speciesRate !== null && target.rate > speciesRate) {
                 try { recordLivingSpeciesUse(target, subject, target.type === 'plant' ? 'cultivation' : 'breeding'); } catch {}
@@ -4529,6 +4534,10 @@
     function resolveChronicleStory(ref) {
         const state = planet?._paultendoLife;
         if (!state || !ref) return null;
+        if(ref.kind==='storage') {
+            const town=regGet('town',Number(ref.id));
+            return livingTownKnown(town)&&town._paultendoGrainStore?{label:'Visit the grain stores',open:()=>openGrainStores(town)}:null;
+        }
         const lists = {craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
         const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
         if (!record) return null;
@@ -4554,13 +4563,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['craft','material','exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
+        if (!['craft','material','storage','exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['craft','material','exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
+        if (!ref || !['craft','material','storage','exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -5997,7 +6006,8 @@
         sand:{label:'sand',role:'miner',description:'Pale grains gathered from dry ground. The finest samples may change in a fierce enough fire.'},
         glass:{label:'glass',role:'miner',description:'A cooled melt of sand and minerals. It catches the light. A clear piece can be ground into a lens.'},
         coal:{label:'coal',role:'miner',description:'Dark pieces dug from a seam in the ground. A workshop can use them as fuel, leaving its timber for other work.'},
-        steel:{label:'steel',role:'miner',description:'Metal worked again in a hot fire. A careful maker can use it for a fork with a clearer note.'}
+        steel:{label:'steel',role:'miner',description:'Metal worked again in a hot fire. A careful maker can use it for a fork with a clearer note.'},
+        pottery:{label:'clay vessels',role:'miner',description:'Clay shaped into vessels and fired hard. Set beside the grain stores, each can hold eight more grain.'}
     };
     // Recipe durations, sample sizes and first-trial risks are game calibration.
     // Knowledge is local. Global milestones open possibilities, never award stock.
@@ -6005,8 +6015,67 @@
         charcoal:{cost:{lumber:2},output:1,days:3,needs:{fire:10},sample:'lumber',established:{fire:40},roles:['lumberer','miner'],risk:0.15,success:'The timber holds its shape, but turns black. It burns hotter than the wood they started with.',failure:'Air gets into the covered fire. The timber burns away to ash.'},
         brick:{cost:{clay:2,charcoal:1},output:2,days:5,needs:{fire:20,smith:20},sample:'clay',established:{fire:40},roles:['miner'],risk:0.35,success:'The clay comes out hard. The blocks keep their shape even when soaked.',failure:'The firing leaves cracks through the clay. These blocks will not hold a wall.'},
         glass:{cost:{sand:3,charcoal:2,rock:1},output:2,days:7,needs:{fire:50,smith:30},sample:'sand',established:{fire:50},roles:['miner','scholar'],risk:0.3,success:'The cloudy melt cools into glass. Held up to the light, its clearer patches show the world beyond.',failure:'The heat leaves a brittle, cloudy mass. It crumbles before it can be worked.'},
-        steel:{cost:{metal:2,charcoal:1},output:2,days:8,needs:{fire:50,smith:40},sample:'metal',established:{smith:50},roles:['miner'],risk:0.3,success:'The metal holds a sharper edge. They set the pieces aside to learn what else they can make from them.',failure:'The pieces split under the hammer. This batch cannot be shaped into an instrument.'}
+        steel:{cost:{metal:2,charcoal:1},output:2,days:8,needs:{fire:50,smith:40},sample:'metal',established:{smith:50},roles:['miner'],risk:0.3,success:'The metal holds a sharper edge. They set the pieces aside to learn what else they can make from them.',failure:'The pieces split under the hammer. This batch cannot be shaped into an instrument.'},
+        pottery:{cost:{clay:2,charcoal:1},output:2,days:5,needs:{fire:20,smith:10},sample:'clay',established:{fire:40},roles:['miner','farmer'],risk:0.25,success:'The vessels keep their shape and hold their contents. There may be room for more of the harvest now.',failure:'The vessels crack in the heat. Grain would spill through their sides.'}
     };
+    // Capacity and the thirty-day harvest memory are initial game calibration.
+    // Vessels become durable local fixtures only when actual stock is installed.
+    const GRAIN_STORAGE = {perVessel:8,memoryDays:30};
+    function commodityCapacity(town,type) {
+        const extra=type==='crop'?(town._paultendoGrainStore?.vessels || []).reduce((n,v)=>n+v.count*GRAIN_STORAGE.perVessel,0):0;
+        return $c.maxResource(town)+extra;
+    }
+    function grainStorageNeed(town) {
+        const pressure=town._paultendoGrainStore?.pressure;
+        if(!pressure||planet.day-pressure.day>GRAIN_STORAGE.memoryDays||town.end||town.pop<=0)return 0;
+        return Math.ceil(Math.max(0,pressure.target-commodityCapacity(town,'crop'))/GRAIN_STORAGE.perVessel);
+    }
+    function grainStorageStep(town,text) {
+        const store=town._paultendoGrainStore,steps=store.steps ||= [];
+        steps.push({day:planet.day,text});if(steps.length>24)steps.shift();
+        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'storage',id:town.id}});
+    }
+    function observeGrainOverflow(town,before,count,after) {
+        if(!Number.isFinite(count)||count<=0||before>commodityCapacity(town,'crop'))return;
+        const lost=Math.max(0,Math.floor(before+count)-after);if(!lost)return;
+        const store=town._paultendoGrainStore ||= {vessels:[],steps:[]};
+        const old=store.pressure,expired=!old||planet.day-old.day>GRAIN_STORAGE.memoryDays;
+        store.pressure={day:planet.day,target:Math.max(before+count,expired?0:old.target)};
+        if(expired||planet.day-(store.lastReport ?? -999)>=EXCHANGE_PACE.flowDays) {
+            store.lastReport=planet.day;
+            grainStorageStep(town,`The grain stores in ${town.name} are full. ${lost} grain from the harvest could not be kept.`);
+        }
+    }
+    function advanceGrainStores() {
+        for(const town of regToArray('town')) {
+            const need=grainStorageNeed(town);if(!need||hasIssue(town,'war'))continue;
+            const other=commodityWorkClaims(town).filter(c=>c.kind!=='storage'&&c.kind!=='construction').reduce((n,c)=>n+(c.cost.pottery || 0),0);
+            const count=Math.min(need,Math.max(0,commodityStock(town,'pottery')-other));if(!count)continue;
+            const person=livingCommunityPerson(town,'farmer') || livingCommunityPerson(town,'resident');
+            if(!livingTeachingPersonAvailable(person,town))continue;
+            const vessel={id:`store:${livingWorldState().nextId++}`,count,person:person.id,name:person.name,day:planet.day,inputs:[]};
+            withCommodityUse({kind:'storage',id:vessel.id,name:'grain stores',inputs:vessel.inputs},()=>happen('RemoveResource',null,town,{type:'pottery',count}));
+            town._paultendoGrainStore.vessels.push(vessel);
+            for(const input of vessel.inputs)rememberCommodityUse(town,input,{kind:'storage',id:vessel.id,name:'grain stores'});
+            grainStorageStep(town,`${person.name} sets ${count} clay ${count===1?'vessel':'vessels'} beside the grain stores in ${town.name}. There is room for ${count*GRAIN_STORAGE.perVessel} more grain.`);
+        }
+    }
+    function openGrainStores(town) {
+        if(!livingTownKnown(town))return;
+        const store=town._paultendoGrainStore,items=[{text:'← Back to materials',func:()=>openTownMaterials(town)}];
+        items.push({heading:true,text:`${commodityStock(town,'crop')} grain · Room for ${commodityCapacity(town,'crop')}`});
+        const count=(store?.vessels || []).reduce((n,v)=>n+v.count,0);
+        items.push({text:count?`${count} fired clay ${count===1?'vessel holds':'vessels hold'} another ${count*GRAIN_STORAGE.perVessel} grain, ready for the next harvest.`:'The last harvest filled the stores. A fired clay vessel could hold eight more grain.'});
+        for(const step of store?.steps || [])items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        const need=grainStorageNeed(town);if(need)items.push({text:`Room for that harvest would take ${need} more clay ${need===1?'vessel':'vessels'}.`});
+        for(const input of (store?.vessels || []).flatMap(v=>v.inputs)) {
+            const work=input.production&&getUniverse().currentWorldId===input.production.world&&travelerState().passage===input.production.passage&&livingWorldState().materialWork.find(w=>w.id===input.production.work);
+            if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'Visit the maker’s workshop',func:()=>openMaterialWork(work)});
+            const exchange=input.exchange&&commodityExchangeState().exchanges.find(r=>r.id===input.exchange);
+            if(exchange)items.push({text:'Follow the vessels’ journey',func:()=>openCommodityJourney(exchange)});
+        }
+        populateExecutive(items,'Grain stores');markLivingStoryControls();openExecutive();
+    }
     const MATERIAL_SOURCES = {clay:{biomes:['wetland'],needs:{smith:10},sample:2,quantity:40,ground:'wet ground'},sand:{biomes:['desert'],needs:{smith:20},sample:3,quantity:60,ground:'dry ground'},coal:{biomes:['badlands','mountain'],needs:{smith:40},sample:2,quantity:60,ground:'a dark seam'}};
     function encounterMaterial(town,type,source) {
         if(!COMMODITIES[type]||!town||town.end||town.pop<=0)return;
@@ -6076,12 +6145,13 @@
     }
     function materialDirectNeed(town,type) {
         if(type==='brick')return Math.ceil(materialConstructionNeed(town)/2);
-        const promised=commodityWorkClaims(town).filter(c=>c.kind==='craft').reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        const promised=commodityWorkClaims(town).filter(c=>['craft','storage'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
         return Math.max(0,promised-commodityStock(town,type));
     }
     function materialIntent(town,type) {
         const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type))return null;
         const actual=materialDirectNeed(town,type)>0;
+        if(type==='pottery'&&!actual)return null;
         const practiced=town._paultendoMaterials?.[type]?.technique;
         if(type==='steel'&&!actual&&livingResearchPriority(town.research)!=='education'&&!(livingResearchPriority(town.research)==='military'&&town.jobs?.soldier>0))return null;
         const sample=commodityStock(town,recipe.sample)>0||town._paultendoMaterials?.[recipe.sample];
@@ -6177,7 +6247,7 @@
                     work.cost=cost;
                     materialStep(work,`${work.name} chooses ${cost.coal?'coal':'charcoal'} for the fire.`);
                 }
-                if((!work.trial||work.purpose?.exchange)&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
+                if((!work.trial||work.purpose?.exchange||work.purpose?.actual)&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
                 if(Object.entries(work.cost).some(([type,count])=>commodityStock(town,type)<count))continue;
                 // Protect other craft inputs. Construction can choose these inputs
                 // or fired bricks, but a second workshop cannot spend the same units.
@@ -6226,6 +6296,7 @@
     function openTownMaterials(town) {
         if(!livingTownKnown(town))return;
         const items=[{text:'← Back to the town',func:()=>{closeExecutive();openRegBrowser(town,'town');}}];
+        if(town._paultendoGrainStore)items.push({text:`Grain stores<span class="paultendoStoryProse">${commodityStock(town,'crop')} grain. Room for ${commodityCapacity(town,'crop')}.</span>`,func:()=>openGrainStores(town)});
         for(const [type,entry] of Object.entries(town._paultendoMaterials || {})) {
             items.push({heading:true,text:`${COMMODITIES[type].label[0].toUpperCase()+COMMODITIES[type].label.slice(1)} · ${commodityStock(town,type)} in store`});
             items.push({text:COMMODITIES[type].description});
@@ -6319,6 +6390,7 @@
     }
     function commodityWorkClaims(town,excludeExchange) {
         const claims=[];
+        const storage=grainStorageNeed(town);if(storage)claims.push({kind:'storage',id:`storage:${town.id}`,cost:{pottery:storage}});
         // Native construction spends two units of progress per rock or one per lumber.
         for(const project of regToArray('process')) if(project.town===town.id&&project.type==='project'&&!project.done&&!project.end&&Number.isFinite(project.cost)) {
             claims.push({kind:'construction',id:project.id,cost:Math.max(0,project.cost)});
@@ -6419,6 +6491,7 @@
         const town=exchangeTownLabel(record,use.town),goods=COMMODITIES[use.type].label;
         if(!use.known&&!record.known?.[use.town]&&!livingTownKnown(regGet('town',use.town)))return `${town} puts ${goods} from this exchange to use.`;
         if(use.kind==='meals')return `${goods[0].toUpperCase()+goods.slice(1)} from this exchange feeds people in ${town}.`;
+        if(use.kind==='storage')return `${town} sets clay vessels from this exchange beside its grain stores.`;
         if(use.kind==='construction')return `${town} uses ${goods} from this exchange to build a ${(use.name || 'building').replace(/_/g,' ')}.`;
         if(use.kind==='material')return `${town} uses ${goods} from this exchange while making ${COMMODITIES[use.name]?.label || 'new materials'}.`;
         if(use.kind==='craft')return `${town} uses ${goods} from this exchange to make a ${(LIVING_ARTIFACTS[use.name]?.name || 'new object').toLowerCase()}.`;
@@ -6426,7 +6499,7 @@
     }
     function commodityTerms(buyer,seller,person,path,type='crop',offer={}) {
         const demand=commodityDemand(buyer,type,path),spare=offer.spare ?? commoditySpare(seller,type,path,offer.exchange);
-        const count=Math.floor(Math.min(spare,demand,Math.max(0,$c.maxResource(buyer)-commodityStock(buyer,type))));
+        const count=Math.floor(Math.min(spare,demand,Math.max(0,commodityCapacity(buyer,type)-commodityStock(buyer,type))));
         if(count<=0) return {kind:'refuse',reason:'stores'};
         const memory=exchangeMemory(seller,buyer),relation=getRelations(seller,buyer);
         const practice=livingWorldState().teachings.some(t=>t.town===seller.id&&t.active&&['care','food'].includes(t.meaning));
@@ -6453,7 +6526,7 @@
         if(planet.unlocks.trade>=10&&relation>=-4) {
             const wanted=Object.entries(COMMODITIES).filter(([other])=>other!==type).map(([other])=>[other,commodityDemand(seller,other,path)]).filter(([,need])=>need>0).sort((a,b)=>b[1]-a[1]);
             for(const [other,need] of wanted) {
-                const capacity=Math.max(0,Math.floor($c.maxResource(seller)-commodityStock(seller,other)));
+                const capacity=Math.max(0,Math.floor(commodityCapacity(seller,other)-commodityStock(seller,other)));
                 const offered=Math.min(commoditySpare(buyer,other,path),Math.ceil(need),capacity);
                 const paymentValue=commodityUnitValue(seller,other,commodityStock(seller,other)+offered,need,path);
                 const goodsValue=commodityUnitValue(seller,type,spare,demand,path);
@@ -6472,7 +6545,7 @@
         const recent=state.materialWork.filter(w=>w.town===town.id).at(-1);
         if(recent&&planet.day-(recent.finished || recent.day)<EXCHANGE_PACE.retryDays)return null;
         const person=materialWorker(town,recipe),cost=materialBatchCost(town,type);
-        if(!person||Object.entries(cost).some(([key,count])=>commodityStock(town,key)-commodityCommittedStock(town,key)<count)||commodityStock(town,type)+recipe.output>$c.maxResource(town))return null;
+        if(!person||Object.entries(cost).some(([key,count])=>commodityStock(town,key)-commodityCommittedStock(town,key)<count)||commodityStock(town,type)+recipe.output>commodityCapacity(town,type))return null;
         return {person,cost,count:recipe.output,days:Math.max(2,recipe.days-(town._paultendoMaterials[type].lesson?2:0))};
     }
     function commissionMaterial(record,buyer,seller,path) {
@@ -6488,7 +6561,7 @@
     }
     function commissionedTerms(record,buyer,seller,path) {
         const promised=record.manufacture.terms;
-        const capacity=Math.max(0,$c.maxResource(buyer)-commodityStock(buyer,record.type));
+        const capacity=Math.max(0,commodityCapacity(buyer,record.type)-commodityStock(buyer,record.type));
         if(capacity<1)return {kind:'wait',reason:'room'};
         const spare=commoditySpare(seller,record.type,path,record.id);
         if(spare<1)return {kind:'wait',reason:'stores'};
@@ -6701,6 +6774,7 @@
                 else if(project&&!project.end)items.push({text:`See the ${escapeLivingText(project.subtype.replace(/_/g,' '))}`,func:()=>{closeExecutive();openRegBrowser(project,'process');}});
             }
             if(claim.kind==='material'){const work=livingWorldState().materialWork.find(w=>w.id===claim.id);if(work)items.push({text:'Visit the workshop',func:()=>openMaterialWork(work)});}
+            if(claim.kind==='storage')items.push({text:'Visit the grain stores',func:()=>openGrainStores(regGet('town',record.buyer))});
             if(claim.kind==='craft'){
                 const work=livingWorldState().artifactWork.find(w=>w.id===claim.id),artifact=work?.artifact&&livingWorldState().artifacts.find(a=>a.id===work.artifact);
                 if(artifact&&livingArtifactKnown(artifact))items.push({text:`Visit ${escapeLivingText(artifactTitle(artifact))}`,func:()=>openLivingArtifact(artifact)});
@@ -7728,7 +7802,7 @@
         if(commodityExchangeState().exchanges.some(r=>r.buyer===town.id||r.seller===town.id)) {
             const food=document.createElement('button');food.textContent='Trade and neighbours';food.addEventListener('click',()=>{closePopups();openCommodityHistory(town);});section.appendChild(food);
         }
-        if(Object.keys(town._paultendoMaterials || {}).length||livingWorldState().materialWork.some(w=>w.town===town.id)){
+        if(town._paultendoGrainStore||Object.keys(town._paultendoMaterials || {}).length||livingWorldState().materialWork.some(w=>w.town===town.id)){
             const materials=document.createElement('button');materials.textContent='Materials and workshops';materials.addEventListener('click',()=>{closePopups();openTownMaterials(town);});section.appendChild(materials);
         }
         if(livingWorldState().artifactWork.some(w=>w.town===town.id)){
@@ -7829,7 +7903,8 @@
             const base = info.func;
             info.func = function(subject, target, args) {
                 const before = subject?.resources?.[type] || 0;
-                const result = base.apply(this, arguments);
+                const harvest=PAULTENDO_STATE.grainHarvest;let result;
+                try{if(type==='crop')PAULTENDO_STATE.grainHarvest=subject;result=base.apply(this,arguments);}finally{PAULTENDO_STATE.grainHarvest=harvest;}
                 try { observeLivingProduction(subject, type, before); if(type==='crop') observeLivingCommunityHarvest(subject,before); else if(subject?.jobs?.farmer>0&&subject.legal?.farm!==false)observeFoodFlow(subject,'herd',Math.max(0,commodityStock(subject,type)-before)); } catch (error) { console.warn('[paultendo-mod] Harvest follow-up failed:', error); }
                 return result;
             };
@@ -7888,6 +7963,17 @@
             mine.perChunk._paultendoMaterials=true;
         }
         PAULTENDO_STATE.commoditiesReady=true;
+        const resourceTotal=typeof textParserCommands==='object'&&textParserCommands.resourcetotal;
+        if(resourceTotal?.func&&!resourceTotal.func._paultendoStorage) {
+            const base=resourceTotal.func;
+            resourceTotal.func=function(args) {
+                const town=args[1]==='crop'&&regGet('town',parseInt(args[0]));
+                if(!town?._paultendoGrainStore?.vessels?.length)return base.apply(this,arguments);
+                const total=commodityStock(town,'crop');
+                return total>=commodityCapacity(town,'crop')?`{{color:{{num:${total}|K}}|#ffff8c}}`:`{{num:${total}|K}}`;
+            };
+            resourceTotal.func._paultendoStorage=true;
+        }
         ensurePlanetState();
         if(typeof refreshExecutive==='function'&&!refreshExecutive._paultendoLivingView) {
             const base=refreshExecutive;
@@ -13767,7 +13853,7 @@
                     try { advanceLivingWhispers(); } catch (error) { console.warn("[paultendo-mod] Whisper follow-up failed:", error); }
                     try { advanceLivingArtifactWork(); advanceLivingArtifacts(); refreshLivingArtifactView(); } catch (error) { console.warn("[paultendo-mod] Artifact follow-up failed:", error); }
                     try { observeLivingInventions(); } catch(error) { console.warn('[paultendo-mod] Invention follow-up failed:',error); }
-                    try { advanceCommodityJourneys(); advanceMaterialWork(); observeCommodityNeeds(); advanceLivingTeachings(); } catch (error) { console.warn('[paultendo-mod] Words carried by the road failed:',error); }
+                    try { advanceCommodityJourneys(); advanceMaterialWork(); advanceGrainStores(); observeCommodityNeeds(); advanceLivingTeachings(); } catch (error) { console.warn('[paultendo-mod] Words carried by the road failed:',error); }
                     try { observeLivingPlaces(); } catch (error) { console.warn("[paultendo-mod] Place follow-up failed:", error); }
                     try { observeLivingWorld(); } catch (error) { console.warn("[paultendo-mod] Settlement follow-up failed:", error); }
                     try { renderLivingFields(); updateCanvas(); } catch {}
