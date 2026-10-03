@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.59/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.60/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.59";
+    const MOD_VERSION = "1.6.60";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -4668,6 +4668,11 @@
             const town=regGet('town',Number(ref.id));
             return livingTownKnown(town)&&town._paultendoGrainStore?{label:'Visit the grain stores',open:()=>openGrainStores(town)}:null;
         }
+        if(ref.kind==='discovery') {
+            const discovery=state.discoveries?.[ref.id],town=regGet('town',discovery?.origin);
+            const level=livingDiscoveryBranches()[discovery?.key]?.levels.find(item=>item.level===discovery.level);
+            return level&&livingTownKnown(town)?{label:'Explore the discovery',open:()=>openUnlockDetail(discovery.key,level,town.id)}:null;
+        }
         const lists = {craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
         const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
         if (!record) return null;
@@ -4693,13 +4698,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
+        if (!['craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
+        if (!ref || !['craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -5010,6 +5015,7 @@
             }
             document.getElementById('actionSubList').appendChild(details);
         }
+        markLivingStoryControls();
         openExecutive();
     }
 
@@ -7872,12 +7878,12 @@
         }
     }
 
-    function noteLivingMoment(town, text, discovery, source, day = planet.day) {
+    function noteLivingMoment(town, text, discovery, source, day = planet.day, story = null) {
         const state = livingWorldState();
         state.moments.push({ day, town: town.id, text, discovery: discovery || null, source: source || null });
         if (state.moments.length > 60) state.moments.shift();
         state.lastReportDay = planet.day;
-        logMessage(text, 'milestone',{_paultendoStory:source?{kind:'decision',id:source}:null});
+        logMessage(text, 'milestone',{_paultendoStory:story || (source?{kind:'decision',id:source}:null)});
     }
 
     function observeLivingWorld() {
@@ -12983,12 +12989,14 @@
         if (universe.currentWorldId === worldId) return true;
 
         try { syncLogToPlanet(); } catch {}
+        planet._paultendoRecentEvents = recentEvents.slice(-3);
         syncCurrentWorldState(universe);
         ensureWorldState(target);
 
         const previousDay = getUniverseDay();
         universe.currentWorldId = worldId;
         applyWorldState(target.state, target);
+        recentEvents = (planet._paultendoRecentEvents || []).slice(-3);
         if (planet && (typeof planet.day !== "number" || !isFinite(planet.day))) {
             planet.day = previousDay || 1;
         }
@@ -14054,15 +14062,68 @@
         });
     }
 
-    // Use the same daily rules as the visited world. Background worlds own
-    // their history and state, while the player's controls and callbacks stay
-    // attached to the visited world. Random proposals remain foreground-only.
+    // Background worlds draw one event through the native weights, eligibility
+    // and cooldowns. Existing automatic events decide for themselves. Player
+    // interventions and naming prompts remain attached to the visited world.
+    function advanceBackgroundEvent() {
+        if (recentEvents.length >= 3) recentEvents.shift();
+        for (let tries = 0; tries < $c.dailyEventTries; tries++) {
+            const traceLength = debugContext.trace.length;
+            try {
+                const town = choose(regToArray('town'));
+                const id = chooseEvent(undefined, town), info = randomEvents[id];
+                if (!info) continue;
+                // GenTown skips this gate when an event has no numeric weight.
+                if (Object.entries(info.needsUnlock || {}).some(([key, level]) => !(planet.unlocks[key] >= level))) continue;
+                const subject = info.subject?.reg === 'town' ? town : null;
+                const target = !subject && info.target?.reg === 'town' && !info.target.random ? town : null;
+                const caller = readyEvent(id, subject, target);
+                if (!caller || info.target && !caller.target || planet.dead && caller.subject?._reg !== 'nature') continue;
+                if (info.check && !info.check(caller.subject, caller.target, caller.args)) continue;
+                debugContext.eventClass = id;
+                debugContext.eventArgs = caller.args;
+                caller.args._paultendoAutonomous = true;
+                caller.done = true;
+                currentEvents[caller.eventID] = caller;
+                doEvent(id, caller);
+                let text;
+                if (info.messageDone) text = typeof info.messageDone === 'function'
+                    ? info.messageDone(caller.subject, caller.target, caller.args) : info.messageDone;
+                else text = caller.message || (typeof info.message === 'function'
+                    ? info.message(caller.subject, caller.target, caller.args) : info.message);
+                if (id === 'unlockLevel') {
+                    const {type, levelData, need} = caller.args.value;
+                    if (planet.unlocks[type] >= levelData.level) {
+                        const key = `${type}:${levelData.level}`;
+                        const discovery = livingWorldState().discoveries[key];
+                        const reason = need?.text || `They have been studying ${titleCase(type)}.`;
+                        if (discovery) {
+                            discovery.autonomous = true;
+                            discovery.reason = reason;
+                            if (need) discovery.need = structuredClone(need);
+                        }
+                        text = `${townRef(caller.target.id)} discovers {{b:${levelData.name}}}. ${escapeLivingText(reason)}`;
+                        noteLivingMoment(caller.target, text, key, null, planet.day, {kind:'discovery',id:key});
+                        text = null;
+                    }
+                }
+                if (text) logMessage(text, info.messageType);
+                recentEvents.push(id);
+                if (info.cooldown) planet.cooldownEvents[id] = planet.day;
+                return;
+            } finally { debugContext.trace.length = traceLength; }
+        }
+    }
+
+    // Use the same daily rules as the visited world. Each world owns its
+    // history, while the player's controls and callbacks stay on the visited world.
     function simulateInactiveWorld(world) {
         const runtime = {
             backgroundWorld: PAULTENDO_STATE.backgroundWorld,
             attention: PAULTENDO_STATE.attention,
-            sunsetting, debugContext, currentEvents, townsBefore
+            sunsetting, debugContext, currentEvents, townsBefore, randomEvents, recentEvents, userSettings
         };
+        const weights = new Map(Object.values(randomEvents).map(info => [info, info.weight]));
         const functions = new Map();
         const replace = (name, fn = () => {}) => {
             if (typeof PAULTENDO_GLOBAL[name] !== "function") return;
@@ -14103,6 +14164,12 @@
             PAULTENDO_STATE.backgroundWorld = world.id;
             PAULTENDO_STATE.attention = undefined;
             debugContext = {trace:[]}; currentEvents = {}; townsBefore = null;
+            recentEvents = (planet._paultendoRecentEvents || []).slice(-3);
+            // Native discovery notifications and score records must not touch
+            // the visited world's menu or the player's saved preferences.
+            userSettings = {...userSettings, notify:false};
+            randomEvents = Object.fromEntries(Object.entries(randomEvents).filter(([id, info]) =>
+                id === 'unlockLevel' || info.auto === true && !info.value?.ask && !info.value?.choose));
             for (const name of ["initGame", "setView", "updateStats", "refreshExecutive", "renderMap", "renderHighlight", "renderCursor", "updateCanvas", "fitToScreen", "resizeCanvases", "updateTitle", "autosave", "saveSettings", "logChange", "logSub", "fadeMessage", "clearLog", "doPrompt", "openExecutive", "closeExecutive", "populateExecutive", "openRegBrowser", "logTip"]) replace(name);
             replace("logMessage", archive);
             replace("unhideEntity", entity => { if (entity?.name) delete entity.named; });
@@ -14133,15 +14200,22 @@
                 for (const [text,type,args] of planet.nextDayMessages.splice(0)) archive(text,type,args);
                 if (!regCount("town")) { if (!planet.dead) killPlanet(); }
                 else if (planet.dead) revivePlanet();
+                applyTechWeightBias();
+                advanceBackgroundEvent();
                 advanceWorldLife();
                 advanceSkyFlights();
             } finally {
-                try { planet._paultendoLogHTML = "uri:" + encodeURIComponent(history.innerHTML); }
+                try {
+                    planet._paultendoLogHTML = "uri:" + encodeURIComponent(history.innerHTML);
+                    planet._paultendoRecentEvents = recentEvents.slice(-3);
+                }
                 finally {
+                    for (const [info, weight] of weights) info.weight = weight;
                     for (const [name, fn] of functions) PAULTENDO_GLOBAL[name] = fn;
                     Object.assign(PAULTENDO_STATE, {backgroundWorld:runtime.backgroundWorld,attention:runtime.attention});
                     sunsetting = runtime.sunsetting; debugContext = runtime.debugContext;
                     currentEvents = runtime.currentEvents; townsBefore = runtime.townsBefore;
+                    randomEvents = runtime.randomEvents; recentEvents = runtime.recentEvents; userSettings = runtime.userSettings;
                 }
             }
         });
@@ -14232,6 +14306,7 @@
                 const result = baseNextDay.apply(this, args);
                 const dayAfter = (typeof planet !== "undefined") ? planet.day : undefined;
                 if (dayBefore !== dayAfter) {
+                    planet._paultendoRecentEvents = recentEvents.slice(-3);
                     try { advanceWorldLife(); refreshLivingArtifactView(); } catch (error) { console.warn("[paultendo-mod] World follow-up failed:", error); }
                     try { renderLivingFields(); updateCanvas(); } catch {}
                     try { syncLogToPlanet(); } catch {}
@@ -14285,6 +14360,7 @@
             }
             try {
                 ensurePlanetState();
+                recentEvents = (planet._paultendoRecentEvents || []).slice(-3);
                 const universe = getUniverse();
                 if (universe) {
                     universe.currentWorldId = getCurrentWorldId();
@@ -19727,7 +19803,13 @@
         const base=info.value,message=info.message;
         info.value=function(subject,town) {
             if(!town||town.end||town.pop<=0)return base.apply(this,arguments);
-            const choices=nativeTechChoices(subject,town);
+            let choices=nativeTechChoices(subject,town);
+            if (PAULTENDO_STATE.backgroundWorld !== undefined) {
+                choices=choices.filter(choice=>choice.need || town.research?.[choice.type]>0);
+                if(!choices.length)return false;
+                const choice=weightedChoice(choices,c=>c.weight);
+                const {weight,attention,...value}=choice;return value;
+            }
             if(!choices.some(choice=>choice.need)&&!Object.values(town.research || {}).some(value=>value>0))return base.apply(this,arguments);
             if(!choices.length)return false;
             const choice=weightedChoice(choices,c=>c.weight);
