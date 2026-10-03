@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.36/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.37/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,20 +49,24 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.36";
+    const MOD_VERSION = "1.6.37";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
     if (installURL && typeof userSettings !== "undefined" && Array.isArray(userSettings.mods)
         && typeof normalizeMod === "function" && typeof saveSettings === "function") {
         const currentURL = normalizeMod(installURL);
-        if (userSettings.mods.includes(currentURL)) {
+        const replacingLoadedVersion = typeof window !== 'undefined' && window._paultendoState?.loadedVersion && window._paultendoState.loadedVersion !== MOD_VERSION;
+        // Earlier releases can prune this URL while both startup scripts are in
+        // flight. Restore the requested update even if the old script removed it.
+        if (userSettings.mods.includes(currentURL) || replacingLoadedVersion) {
             const mods = userSettings.mods.filter(url => {
                 if (url === currentURL) return true;
                 try { return new URL(url, document.baseURI).pathname.split("/").pop() !== "paultendo-mod.js"; }
                 catch { return true; }
             });
-            if (mods.length !== userSettings.mods.length) {
+            if (!mods.includes(currentURL)) mods.push(currentURL);
+            if (JSON.stringify(mods) !== JSON.stringify(userSettings.mods)) {
                 userSettings.mods = mods;
                 saveSettings();
             }

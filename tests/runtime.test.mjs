@@ -16,7 +16,7 @@ test('bundled game and overhaul boot without uncaught errors', async t => {
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.36');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.37');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));
@@ -319,7 +319,7 @@ test('mod management receives complete URLs and can remove an installation', asy
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.36/paultendo-mod.js';
+  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.37/paultendo-mod.js';
   window.userSettings.mods = [url];
   window.showMods();
   window.handlePrompt(url);
@@ -333,13 +333,32 @@ test('adding an updated URL replaces older URLs before the duplicate guard retur
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.36/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.37/paultendo-mod.js';
   window.userSettings.mods = ['https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js', current, 'example_mod.js'];
   window._paultendoState.loadedVersion = '1.6.27';
   Object.defineProperty(window.document, 'currentScript', { configurable: true, get: () => ({ src: current }) });
   game.evaluate('paultendo-mod.js');
   assert.deepEqual(Array.from(window.userSettings.mods), [current, 'example_mod.js']);
   assert.deepEqual(JSON.parse(window.localStorage.getItem('R74nMain-GenTownSettings')).mods, [current, 'example_mod.js']);
+});
+
+test('an update survives an older startup script pruning the new URL before it runs', async t => {
+  const game = await makeGame(); t.after(game.close);
+  const {window} = game;
+  const old = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.35/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.37/paultendo-mod.js';
+  // This is the observed live race: the old script has already saved only itself.
+  window.userSettings.mods = [old, 'example_mod.js'];
+  window.saveSettings();
+  window._paultendoState.loadedVersion = '1.6.35';
+  Object.defineProperty(window.document, 'currentScript', {configurable:true, get:() => ({src:current})});
+  game.evaluate('paultendo-mod.js');
+  assert.deepEqual(Array.from(window.userSettings.mods), ['example_mod.js', current]);
+  assert.deepEqual(JSON.parse(window.localStorage.getItem('R74nMain-GenTownSettings')).mods, ['example_mod.js', current]);
+  // The duplicate guard keeps the old runtime until reload, but preserves the update.
+  assert.equal(window._paultendoState.loadedVersion, '1.6.35');
+  assert.equal(window.document.querySelectorAll('#paultendoAutoplayToggle').length, 1);
+  assert.deepEqual(game.errors, []);
 });
 
 test('Play advances days and Pause cancels the next tick', async t => {
