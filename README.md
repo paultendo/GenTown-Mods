@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.34**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
+Version **1.6.35**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.34/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.35/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically. The Chronicle will show `paultendo-mod active (v1.6.34)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically. The Chronicle will show `paultendo-mod active (v1.6.35)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -35,6 +35,8 @@ Discovery and road overlays preserve the painted terrain when added, including a
 
 Town descriptions now begin with life in the settlement: its working population, food stores, research and construction. Discovery pages include short stories and facts about the player's towns. Farming towns have striped fields on the map, drawn only in visible territory or terrain views. Choices gain optional consequence previews and a saved town history. First adoption of new work and completed construction receive Chronicle follow-ups based on actual jobs and project landmarks. First harvests and livestock are recorded from actual farming and taming, with their original dates retained through reload. Discovery pages collect these town moments and describe their effects in words, with the numbers available on request. Town landmarks and known trade neighbours can be visited from the settlement view. Unlocks now includes all 41 later advances from the overhaul, grouped by branch. Each has a story, verified effects, town activity and the actual missing prerequisites for the next advance. The list counts discoveries, and procedural methods and schools sit behind Local tradition. These display changes preserve the native random unlock tree and the mod’s existing event eligibility. Existing saves keep their current activity without invented past choices or discovery dates. Phone controls and discovery navigation are also corrected.
 
+Town choice history now opens into connected stories. Discovery adoption and first harvests sit beneath the choice that enabled them, with links back to the discovery or completed landmark. Each chapter keeps the original proposal and response, then shows current law, research, healthcare or diplomatic conditions separately. Advice that fails to take hold is remembered as such. Legacy histories retain their unknown consequences. [The Traveler roadmap](TRAVELER_ROADMAP.md) records the direction for exploration, individual reception and emergent local stories.
+
 Live decisions have a warm highlight and working buttons. Unanswered entries recede into the Chronicle without explanatory text. Advancing the day preserves GenTown's rules: most proposals lapse, while some events have a fallback, such as generating a discovery name. Autoplay pauses for decisions unless Auto-decide is enabled. GenTown does not save pending event callbacks across a reload.
 
 ```sh
@@ -42,7 +44,7 @@ npm run check
 npm test
 ```
 
-The 51 regression tests cover startup, late installation and redraw, overlay creation, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, background reports, unlock details and notifications, discovery menus, species naming, mod management, autoplay and decisions, settlement activity and lore, choice provenance, adoption and construction follow-ups, fields and visibility, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
+The 55 regression tests cover startup, late installation and redraw, overlay creation, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, background reports, unlock details and notifications, discovery menus, species naming, mod management, autoplay and decisions, settlement activity and lore, choice provenance, adoption and construction follow-ups, fields and visibility, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
 
 ## Credits
 

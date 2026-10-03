@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.34/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.35/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.34";
+    const MOD_VERSION = "1.6.35";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -5207,7 +5207,63 @@
     }
 
     function livingTownSnapshot(town) {
-        return { id: town.id, pop: town.pop || 0, jobs: {...town.jobs}, resources: {...town.resources}, influences: {...town.influences}, research: {...town.research} };
+        return { id: town.id, pop: town.pop || 0, jobs: {...town.jobs}, resources: {...town.resources}, influences: {...town.influences}, research: {...town.research}, legal: Object.fromEntries(Object.keys(allLaws).map(key => [key, happen('Legality', null, town, {law: key})])), publicHealthcare: town.publicHealthcare === true, relations: {...town.relations} };
+    }
+
+    function livingResearchPriority(research) {
+        return Object.entries(research || {}).filter(([, value]) => value > 0).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    }
+
+    function escapeLivingText(value) {
+        return String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[character]));
+    }
+
+    function livingLawName(key) {
+        const name = key.split('.').pop();
+        return (regBrowserKeys[name] || name).replace(/_/g, ' ').toLowerCase();
+    }
+
+    // Keep only changes made by this callback. Later observations describe current
+    // conditions, rather than claiming every subsequent change came from the player.
+    function livingDecisionTraces(before, town) {
+        const traces = [];
+        for (const key of Object.keys(town.legal || {})) {
+            if (typeof town.legal[key] !== 'boolean' || before.legal[key] === town.legal[key]) continue;
+            traces.push({ kind: 'law', town: town.id, key, value: town.legal[key] });
+        }
+        const priority = livingResearchPriority(town.research);
+        if (priority !== livingResearchPriority(before.research)) traces.push({ kind: 'research', town: town.id, key: priority });
+        if (before.publicHealthcare !== (town.publicHealthcare === true)) traces.push({ kind: 'healthcare', town: town.id, value: town.publicHealthcare === true });
+        for (const [other, relation] of Object.entries(town.relations || {})) {
+            const change = relation - (before.relations[other] || 0);
+            if (Math.abs(change) < 0.1 || !livingTownKnown(regGet('town', Number(other)))) continue;
+            traces.push({ kind: 'relations', town: town.id, other: Number(other), change });
+        }
+        return traces;
+    }
+
+    function livingTraceNow(trace, town) {
+        if (trace.kind === 'law') {
+            const legal = happen('Legality', null, town, {law: trace.key});
+            const name = titleCase(livingLawName(trace.key));
+            return legal === trace.value
+                ? `${name} ${legal ? 'remains allowed' : 'is still forbidden'} here.`
+                : `${name} ${legal ? 'is allowed' : 'is forbidden'} here now.`;
+        }
+        if (trace.kind === 'research') {
+            const current = livingResearchPriority(town.research);
+            if (!current) return 'The town has no leading field of research now.';
+            const name = titleCase(researchInfluences[current] || current);
+            return `${name} ${current === trace.key ? 'still leads' : 'now leads'} the town’s research.`;
+        }
+        if (trace.kind === 'healthcare') return town.publicHealthcare === true ? 'Public healthcare still serves the town.' : 'Care is a private matter here now.';
+        if (trace.kind === 'relations') {
+            const other = regGet('town', trace.other);
+            if (!livingTownKnown(other)) return null;
+            const relation = town.relations?.[other.id] || 0;
+            return `Relations with ${other.name} are ${relation > 2 ? 'friendly' : relation < -2 ? 'strained' : 'uneasy'} now.`;
+        }
+        return null;
     }
 
     function livingTownKnown(town) {
@@ -5267,7 +5323,7 @@
         const entry = button?.closest('.logMessage');
         const caller = entry && currentEvents[entry.dataset.eventid];
         if (!caller || caller.done || !caller.needsInput || livingDecisionCaptures.has(caller)) return;
-        livingDecisionCaptures.set(caller, { planet, entry, automated: !!PAULTENDO_STATE.autoChoosing, question: entry.querySelector('.logText')?.textContent || '', before: regToArray('town').filter(t => !t.end).map(livingTownSnapshot), processes: new Set(regToArray('process').map(p => p.id)) });
+        livingDecisionCaptures.set(caller, { planet, entry, automated: !!PAULTENDO_STATE.autoChoosing, question: entry.querySelector('.logText')?.textContent || '', unlocks: {...planet.unlocks}, before: regToArray('town').filter(t => !t.end).map(livingTownSnapshot), processes: new Set(regToArray('process').map(p => p.id)) });
     }
 
     function finishLivingDecisions() {
@@ -5280,6 +5336,7 @@
             if (!selected) continue;
             const towns = [];
             const changes = [];
+            const traces = [];
             for (const before of capture.before) {
                 const town = regGet('town', before.id);
                 if (!town || town.end) continue;
@@ -5287,13 +5344,19 @@
                 for (const key of Object.keys({...before.influences, ...town.influences})) delta[key] = (town.influences?.[key] || 0) - (before.influences[key] || 0);
                 const phrases = livingInfluencePhrases(delta);
                 const researchChanged = JSON.stringify(before.research) !== JSON.stringify(town.research || {});
-                if (phrases.length || researchChanged || caller.target === town || caller.subject === town) towns.push(town.id);
+                const townTraces = livingDecisionTraces(before, town);
+                traces.push(...townTraces);
+                if (phrases.length || researchChanged || townTraces.length || caller.target === town || caller.subject === town) towns.push(town.id);
                 if (phrases.length) changes.push({ town: town.id, text: phrases.join('. ') + '.' });
             }
             const level = caller.args?.value?.levelData;
-            const title = level?.name || (caller.eventClass === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : caller.eventClass === 'townProjectStart' ? `A new ${String(caller.args.value).replace(/_/g, ' ')}` : 'A choice for the town');
+            const title = level?.name || (caller.eventClass === 'townLaw' ? `${titleCase(caller.args.name || livingLawName(caller.args.value))} law` : caller.eventClass === 'establishHealthcare' ? 'Care for the sick' : caller.eventClass === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : caller.eventClass === 'townProjectStart' ? `A new ${String(caller.args.value).replace(/_/g, ' ')}` : 'A choice for the town');
             const projects = regToArray('process').filter(p => p.type === 'project' && !capture.processes.has(p.id)).map(p => ({ id: p.id, town: p.town, subtype: p.subtype, reported: false }));
-            const record = { id: state.nextId++, day: planet.day, title, question: capture.question, automated: capture.automated, outcome: (selected.innerText || selected.textContent).trim(), text: capture.entry.querySelector('.logText')?.textContent || capture.question, towns, changes, projects, logId: caller.logID };
+            const record = { id: state.nextId++, day: planet.day, title, question: capture.question, automated: capture.automated, outcome: (selected.innerText || selected.textContent).trim(), text: capture.entry.querySelector('.logText')?.textContent || capture.question, towns, changes, projects, traces, received: typeof caller.args?.success === 'boolean' ? caller.args.success : null, logId: caller.logID };
+            if (level && (capture.unlocks[caller.args.value.type] || 0) < level.level) {
+                const discovery = state.discoveries[`${caller.args.value.type}:${level.level}`];
+                if (discovery?.day === planet.day && discovery.decision == null) discovery.decision = record.id;
+            }
             state.decisions.push(record);
             if (state.decisions.length > 48) state.decisions.shift();
             capture.entry.querySelector('.paultendoDecisionPreview')?.remove();
@@ -5373,7 +5436,7 @@
                 const text = discovery.level === 10
                     ? `On Day ${harvest.day}, ${townRef(town.id)} brought in its first harvest after discovering Agriculture: ${harvest.count} ${harvest.count === 1 ? 'crop' : 'crops'}.`
                     : `On Day ${harvest.day}, ${townRef(town.id)} began keeping animals. ${harvest.count} livestock joined the settlement.`;
-                noteLivingMoment(town, text, id, null, harvest.day);
+                noteLivingMoment(town, text, id, discovery.decision, harvest.day);
                 return;
             }
             const jobs = Object.entries(jobNeedsUnlock).filter(([, gate]) => gate[0] === discovery.key && gate[1] === discovery.level).map(([job]) => job);
@@ -5385,7 +5448,7 @@
                 if (!adopted.length) continue;
                 observation.reported = true;
                 const work = adopted.map(job => `${town.jobs[job]} ${town.jobs[job] === 1 ? job : wordPlural(job)}`).join(' and ');
-                noteLivingMoment(town, `{{b:${discovery.name}}} takes root in ${townRef(town.id)}. ${work} ${adopted.reduce((n, job) => n + town.jobs[job], 0) === 1 ? 'now works' : 'now work'} there.`, id, null);
+                noteLivingMoment(town, `{{b:${discovery.name}}} takes root in ${townRef(town.id)}. ${work} ${adopted.reduce((n, job) => n + town.jobs[job], 0) === 1 ? 'now works' : 'now work'} there.`, id, discovery.decision);
                 return;
             }
         }
@@ -5443,18 +5506,65 @@
         return lines;
     }
 
+    function livingMomentLabel(moment) {
+        return `Day ${moment.day} · ${moment.text.replace(new RegExp(`^On Day ${moment.day}, `), '')}`;
+    }
+
+    function markLivingStoryControls() {
+        for (const button of document.querySelectorAll('#actionSubList [role="button"]')) button.classList.add('paultendoStoryLink');
+    }
+
+    function openLivingChoiceStory(town, decision) {
+        if (!livingTownKnown(town)) return;
+        const state = livingWorldState();
+        const items = [{ text: '← Back to your mark', func: () => openLivingTownHistory(town) }];
+        items.push({ heading: true, text: `Day ${decision.day} · ${decision.title}` });
+        if (decision.question) items.push({ text: escapeLivingText(decision.question) });
+        items.push({ text: `${decision.automated ? 'Autoplay chose' : 'Your choice'}: ${escapeLivingText(decision.outcome)}` });
+        if (decision.received === false) items.push({ text: 'The nudge did not take hold.' });
+        if (decision.text !== decision.question) items.push({ text: escapeLivingText(decision.text) });
+        for (const change of decision.changes.filter(c => c.town === town.id)) items.push({ text: escapeLivingText(change.text) });
+        const moments = state.moments.filter(m => m.town === town.id && m.source === decision.id).sort((a, b) => a.day - b.day);
+        if (moments.length) {
+            items.push({ heading: true, text: 'What followed' });
+            for (const moment of moments) items.push({ text: livingMomentLabel(moment) });
+        }
+        const now = [...new Set((decision.traces || []).filter(trace => trace.town === town.id).map(trace => livingTraceNow(trace, town)).filter(Boolean))];
+        if (now.length) {
+            items.push({ heading: true, text: 'Today' });
+            for (const text of now) items.push({ text: escapeLivingText(text) });
+        }
+        for (const project of decision.projects || []) {
+            const process = regGet('process', project.id);
+            const marker = process && regGet('marker', process.marker);
+            if (project.town !== town.id || !marker || marker.end || marker._hidden || marker.process !== process.id || !isChunkExplored(marker.x, marker.y)) continue;
+            items.push({ text: `Visit the ${project.subtype.replace(/_/g, ' ')}`, func: () => { closeExecutive(); openRegBrowser(marker, 'marker'); } });
+        }
+        const discovery = Object.values(state.discoveries).find(d => d.decision === decision.id);
+        const level = discovery && livingDiscoveryBranches()[discovery.key]?.levels.find(l => l.level === discovery.level);
+        if (level) items.push({ text: `Explore ${level.name}`, func: () => openUnlockDetail(discovery.key, level, town.id) });
+        populateExecutive(items, `${town.name} · ${decision.title}`);
+        markLivingStoryControls();
+        openExecutive();
+    }
+
     function openLivingTownHistory(town) {
+        if (!livingTownKnown(town)) return;
         const state = livingWorldState();
         const items = [{ text: '← Back to settlement', func: () => { closePopups(); closeExecutive(); openRegBrowser(town, 'town'); } }];
-        const entries = [...state.decisions.filter(d => d.towns.includes(town.id)).map(d => ({ day: d.day, title: d.title, text: d.text, outcome: d.outcome, automated: d.automated, changes: d.changes.filter(c => c.town === town.id).map(c => c.text).join(' ') })), ...state.moments.filter(m => m.town === town.id).map(m => ({ day: m.day, text: m.text }))].sort((a, b) => b.day - a.day);
+        const decisions = state.decisions.filter(d => d.towns.includes(town.id));
+        const ids = new Set(decisions.map(d => d.id));
+        const entries = [...decisions.map(d => ({day: d.day, decision: d})), ...state.moments.filter(m => m.town === town.id && !ids.has(m.source))].sort((a, b) => b.day - a.day);
         for (const entry of entries.slice(0, 20)) {
-            items.push({ heading: true, text: `Day ${entry.day}${entry.title ? ` · ${entry.title}` : ''}` });
-            if (entry.outcome) items.push({ text: `${entry.automated ? 'Autoplay chose' : 'Your choice'}: ${entry.outcome}` });
-            items.push({ text: entry.text });
-            if (entry.changes) items.push({ text: entry.changes });
+            if (entry.decision) {
+                const d = entry.decision;
+                const count = state.moments.filter(m => m.town === town.id && m.source === d.id).length;
+                items.push({ text: `Day ${d.day} · ${escapeLivingText(d.title)}<br>${d.automated ? 'Autoplay chose' : 'Your choice'}: ${escapeLivingText(d.outcome)}${count ? `<br>${count} ${count === 1 ? 'later moment' : 'later moments'}` : ''}`, func: () => openLivingChoiceStory(town, d) });
+            } else items.push({ text: livingMomentLabel(entry) });
         }
         if (!entries.length) items.push({ text: 'The settlement’s next chapter is still being written.' });
         populateExecutive(items, `${town.name} · Your mark`);
+        markLivingStoryControls();
         openExecutive();
     }
 
@@ -5484,7 +5594,7 @@
         }
         const state = livingWorldState();
         const recent = [...state.moments.filter(m => m.town === town.id), ...state.decisions.filter(d => d.towns.includes(town.id)).map(d => ({day:d.day,text:d.text}))].sort((a,b)=>b.day-a.day).slice(0,2);
-        for (const moment of recent) { const line = document.createElement('p'); line.innerHTML = parseText(`Day ${moment.day} · ${moment.text}`); section.appendChild(line); }
+        for (const moment of recent) { const line = document.createElement('p'); line.innerHTML = parseText(livingMomentLabel(moment)); section.appendChild(line); }
         if (recent.length) {
             const history = document.createElement('button'); history.textContent = 'Your mark on this town';
             history.addEventListener('click', () => { closePopups(); openLivingTownHistory(town); }); section.appendChild(history);
@@ -5581,6 +5691,7 @@
             .paultendoDecisionPreview p { margin: 0.25em 0; line-height: 1.25; }
             .logMessage[done] .paultendoDecisionPreview, .logMessage.faded .paultendoDecisionPreview { display: none; }
             .paultendoDecisionEcho { display: block; font-size: 0.8em; color: #e5dc98; margin-top: 0.3em; }
+            #actionSubList .paultendoStoryLink { min-height: 44px; box-sizing: border-box; overflow-wrap: anywhere; align-content: center; }
             #paultendoFieldsKey { font-size: 0.75em; margin: 0 0.6em; color: #d0db9a; white-space: nowrap; }
             #paultendoFieldsKey::before { content: ''; display: inline-block; width: 0.75em; height: 0.75em; margin-right: 0.25em; background: repeating-linear-gradient(#a38743 0 2px, #c5d873 2px 4px); vertical-align: middle; }
             #paultendoFieldsKey[hidden] { display: none; }
