@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.52/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.53/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.52";
+    const MOD_VERSION = "1.6.53";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -1845,47 +1845,62 @@
         style.textContent = `
             #paultendoChronicleHeader {
                 display: flex;
-                flex-direction: column;
-                gap: 4px;
-                margin: 0.25em 0 0.5em 0;
-                font-size: 0.9em;
-                color: rgba(240,240,240,0.85);
-            }
-            #paultendoChronicleHeader .chronicleRow {
-                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
                 align-items: center;
-                justify-content: space-between;
-                gap: 8px;
+                gap: 4px;
+                margin: 0 0 0.25em;
             }
-            #paultendoChronicleHeader .chronicleTitle {
-                font-weight: 600;
-                text-transform: uppercase;
-                font-size: 0.75em;
-                letter-spacing: 0.08em;
-                opacity: 0.85;
+            #paultendoChronicleHighlights {
+                margin: 0.75em 0.4em 0.4em;
+                text-align: left;
+                font-size: 0.85em;
+                color: #c9c9bf;
             }
-            #paultendoChronicleHeadlines {
-                display: flex;
-                flex-direction: column;
-                gap: 2px;
+            #paultendoChronicleHighlights[hidden] { display: none; }
+            #statsPanel > #paultendoChronicleHighlights { flex: 0 0 auto; max-height: 8em; overflow-y: auto; }
+            #statsPanel:has(> #paultendoChronicleHighlights:not([hidden])) #statsMain { flex: 1 1 0; min-height: 0; }
+            #statsPanel:has(> #paultendoChronicleHighlights) #underStats { flex: 0 0 auto; }
+
+            #paultendoChronicleHighlights > summary {
+                cursor: pointer;
+                color: #e5dc98;
+                min-height: 36px;
+                display: list-item;
+                align-content: center;
             }
-            .paultendoChronicleHeadline {
-                font-size: 0.9em;
-                color: rgba(235,235,235,0.9);
+            #paultendoChronicleHeadlines { display: flex; flex-direction: column; gap: 0.5em; }
+            .paultendoChronicleHeadline { line-height: 1.25; overflow-wrap: anywhere; }
+            .paultendoChronicleRead {
+                font: inherit;
+                color: #e5dc98;
+                background: transparent;
+                border: none;
+                text-decoration: underline;
+                cursor: pointer;
+                margin-left: 0.4em;
+                min-height: 36px;
             }
-            .paultendoChronicleHeadline span {
-                opacity: 0.85;
+            #paultendoChronicleHighlights :is(summary,button,[role="link"]):focus-visible {
+                outline: 2px solid white; outline-offset: 2px;
             }
             .paultendoChronicleToggle {
+                font: inherit;
+                color: #c9c9bf;
+                background: transparent;
                 cursor: pointer;
-                border: 1px solid rgba(200,200,200,0.4);
-                border-radius: 10px;
+                border: 1px solid #777;
                 padding: 2px 8px;
                 font-size: 0.75em;
-                opacity: 0.9;
+                min-height: 36px;
             }
-            .paultendoChronicleToggle.off {
-                opacity: 0.6;
+            .paultendoChronicleToggle.off { color: #aaa; }
+            @media (max-width: 600px) {
+                #paultendoChronicleHeader { display: block; }
+                #paultendoChronicleHeader > .paultendoChronicleToggle { float: right; }
+                #paultendoChronicleHeader #paultendoChronicleHighlights { margin: 0; }
+                #paultendoChronicleHeader #paultendoChronicleToday { padding-right: 135px; }
+                #paultendoChronicleHeader #paultendoChronicleHeadlines { clear: both; }
             }
             .paultendoBackgroundReport { color: #bcc9d8; }
             .paultendoBackgroundReport details { display: inline-block; max-width: 100%; vertical-align: top; }
@@ -1923,14 +1938,26 @@
         if (!header) {
             header = document.createElement("div");
             header.id = "paultendoChronicleHeader";
-            header.innerHTML = `
-                <div class="chronicleRow">
-                    <span class="chronicleTitle">Chronicle Highlights</span>
-                    <span class="paultendoChronicleToggle" id="paultendoChronicleFollow"></span>
-                </div>
-                <div id="paultendoChronicleHeadlines"></div>
-            `;
+            header.innerHTML = '<button type="button" class="paultendoChronicleToggle" id="paultendoChronicleFollow"></button>';
             logPanel.insertBefore(header, logMessages);
+        }
+        let highlights = document.getElementById('paultendoChronicleHighlights');
+        if (!highlights) {
+            highlights = document.createElement('details');
+            highlights.id = 'paultendoChronicleHighlights';
+            highlights.hidden = true;
+            highlights.innerHTML = '<summary id="paultendoChronicleToday">Today</summary><div id="paultendoChronicleHeadlines"></div>';
+        }
+        const compact = window.innerWidth <= 600;
+        const host = compact ? header : document.getElementById('statsPanel');
+        if (host && highlights.parentNode !== host) {
+            if (compact) host.appendChild(highlights);
+            else host.insertBefore(highlights, document.getElementById('underStats'));
+            highlights.open = !compact;
+        }
+        if (!header._paultendoResizeBound) {
+            window.addEventListener('resize', ensureChronicleHeader);
+            header._paultendoResizeBound = true;
         }
         ensureChronicleStyles();
         updateChronicleHeader();
@@ -1981,13 +2008,13 @@
     function getChroniclePriority(type, text) {
         if (!text) return 0;
         const safeType = (type || "").toLowerCase();
-        if (safeType === "tip" || safeType === "sunset") return 0;
+        if (safeType === "tip" || safeType === "sunset" || /^The Sun rises on Planet /i.test(text)) return 0;
         let priority = 0;
         if (safeType === "milestone") priority = 3;
         if (safeType === "warning") priority = Math.max(priority, 3);
         const lower = text.toLowerCase();
-        if (/(war|revolution|coup|uprising|siege)/.test(lower)) priority = Math.max(priority, 3);
-        if (/(famine|plague|epidemic|disaster|earthquake|cyclone|volcano|drought)/.test(lower)) priority = Math.max(priority, 2);
+        if (/\b(war|revolution|coup|uprising|siege)\b/.test(lower)) priority = Math.max(priority, 3);
+        if (/\b(famine|plague|epidemic|disaster|earthquake|cyclone|volcano|drought)\b/.test(lower)) priority = Math.max(priority, 2);
         if (/(founded|new town|discovered|discovery|great work|wonders?|space|launch|moon|colony)/.test(lower)) priority = Math.max(priority, 2);
         if (/(treaty|alliance|vassal|tribute|peace)/.test(lower)) priority = Math.max(priority, 1);
         return priority;
@@ -2002,7 +2029,7 @@
         if (!day || isNaN(day)) return;
         const safeText = sanitizeChronicleMessage(text);
         if (!safeText) return;
-        const priority = getChroniclePriority(type, safeText);
+        const priority = Math.max(getChroniclePriority(type, safeText), options.highlight ? 1 : 0);
         const entry = { id: uuid, day, type, text: safeText, priority };
         if (options?.story) entry.story = options.story;
         if (options && options.tradeoff) entry.tradeoff = options.tradeoff;
@@ -2034,13 +2061,9 @@
         container.innerHTML = "";
         const dayEntries = Array.isArray(state.entriesByDay?.[day]) ? state.entriesByDay[day] : [];
         const entries = dayEntries.filter(e => e && e.priority > 0);
-        if (!entries.length) {
-            const empty = document.createElement("div");
-            empty.className = "paultendoChronicleHeadline";
-            empty.textContent = "No major events yet today.";
-            container.appendChild(empty);
-            return;
-        }
+        const highlights = document.getElementById('paultendoChronicleHighlights');
+        highlights.hidden = !entries.length;
+        if (!entries.length) return;
         const seen = new Set();
         const sorted = entries
             .slice()
@@ -2055,8 +2078,69 @@
             seen.add(key);
             const item = document.createElement("div");
             item.className = "paultendoChronicleHeadline";
-            item.textContent = safeText;
+            const source = document.getElementById('logMessage-'+entry.id);
+            const text = source?.querySelector('.logText');
+            if (text) copyChronicleHighlightText(text, item);
+            else item.textContent = safeText;
+            if (source) {
+                const read = document.createElement('button');
+                read.type = 'button'; read.className = 'paultendoChronicleRead'; read.textContent = 'Read';
+                read.setAttribute('aria-label', 'Read full event: '+safeText);
+                read.addEventListener('click', () => {
+                    const story = source.querySelector('.paultendoChronicleStoryLink');
+                    if (story) story.click();
+                    else {
+                        source.setAttribute('tabindex','-1');
+                        source.scrollIntoView?.({block:'center'});
+                        source.focus({preventScroll:true});
+                    }
+                });
+                item.appendChild(read);
+            }
             container.appendChild(item);
+        }
+        const count = container.childElementCount;
+        highlights.hidden = !count;
+        document.getElementById('paultendoChronicleToday').textContent = `Today · ${count} ${count === 1 ? 'event' : 'events'}`;
+    }
+
+    // Copy native text and flags, never event handlers or arbitrary CSS from saves.
+    function copyChronicleColors(source, target) {
+        const declarations = new Map((source.getAttribute('style') || '').split(';').map(part => {
+            const colon = part.indexOf(':'); return [part.slice(0,colon).trim().toLowerCase(),part.slice(colon+1).trim()];
+        }));
+        target.style.color = source.style.color || declarations.get('color') || '';
+        target.style.backgroundColor = source.style.backgroundColor || declarations.get('background-color') || '';
+        const gradient = source.style.backgroundImage || declarations.get('background-image') || declarations.get('background') || '';
+        if (/^linear-gradient\([a-z0-9#%.,()\s+-]+\)$/i.test(gradient) && !/url|var|expression/i.test(gradient)) target.style.backgroundImage = gradient;
+    }
+    function copyChronicleHighlightText(source, target) {
+        for (const child of source.childNodes) {
+            if (child.nodeType === 3) { target.appendChild(document.createTextNode(child.textContent)); continue; }
+            if (child.nodeType !== 1) continue;
+            if (child.classList.contains('paultendoChronicleStoryLink')) continue;
+            if (!['SPAN','B','I','EM','STRONG','SMALL','U','S','BR','IMG'].includes(child.tagName)) {
+                target.appendChild(document.createTextNode(child.textContent)); continue;
+            }
+            if (child.tagName === 'IMG' && !/^icons\/[a-z-]+\.png$/.test(child.getAttribute('src') || '')) continue;
+            const copy = document.createElement(child.tagName);
+            copy.className = [...child.classList].filter(c => ['entityName','affix','font2','inlineIcon','pixelart','secret','usurp'].includes(c)).join(' ');
+            copyChronicleColors(child, copy);
+            if (child.tagName === 'IMG') { copy.src = child.getAttribute('src'); copy.alt = child.alt; }
+            copyChronicleHighlightText(child, copy);
+            if (child.matches('.entityName[data-reg][data-id]')) {
+                copy.dataset.reg = child.dataset.reg; copy.dataset.id = child.dataset.id;
+                copy.setAttribute('role','link'); copy.tabIndex = 0;
+                const visit = () => {
+                    const registry = copy.dataset.reg, id = Number(copy.dataset.id);
+                    if (typeof regGet === 'function' && typeof handleEntityClick === 'function'
+                        && Object.prototype.hasOwnProperty.call(reg,registry) && Number.isInteger(id) && id > 0
+                        && regGet(registry,id)) handleEntityClick(copy);
+                };
+                copy.addEventListener('click',visit);
+                copy.addEventListener('keydown',event => { if (event.key === 'Enter') { event.preventDefault(); visit(); } });
+            }
+            target.appendChild(copy);
         }
     }
 
@@ -2116,7 +2200,7 @@
             const story = chronicleStoryFromElement(entry);
             if (story) attachChronicleStory(entry, story);
             const tradeoff = entry.getAttribute("data-tradeoff") || null;
-            addChronicleEntry(dayValue, id, type, entry.querySelector(".logText")?.innerText || text, { story, tradeoff });
+            addChronicleEntry(dayValue, id, type, entry.querySelector(".logText")?.innerText || text, { story, tradeoff, highlight: entry.dataset.chronicleHighlight === "true" });
         }
         // Older choice records already know their native log ID. Reconnect those,
         // without assigning an invented source to unrelated historical entries.
@@ -2432,11 +2516,12 @@
                         const story = args?._paultendoStory || null;
                         const tradeoffSummary = context ? getTradeoffSummaryFromContext(context) : null;
                         if (dayValue) {
-                            addChronicleEntry(dayValue, uuid, type, plainText, { story, tradeoff: tradeoffSummary });
+                            addChronicleEntry(dayValue, uuid, type, plainText, { story, tradeoff: tradeoffSummary, highlight: !!args?._paultendoHighlight });
                             scheduleChronicleDayMarkers(dayValue);
                         }
                         if (elem) {
                             if (story) rememberChronicleStory(elem, story, type);
+                            if (args?._paultendoHighlight) elem.dataset.chronicleHighlight = "true";
                             if (tradeoffSummary) {
                                 elem.setAttribute("data-tradeoff", tradeoffSummary);
                             }
@@ -2474,9 +2559,10 @@
                             const safeText = sanitizeChronicleMessage(plainText);
                             const state = initChronicleState();
                             if (state && state.entriesById[uuid]) {
-                                state.entriesById[uuid].text = safeText;
-                                const day = parseInt(dayValue);
-                                if (!isNaN(day)) updateChronicleHeadlines(day);
+                                const record = state.entriesById[uuid];
+                                record.text = safeText;
+                                record.priority = Math.max(getChroniclePriority(record.type,safeText),elem.dataset.chronicleHighlight === 'true' ? 1 : 0);
+                                updateChronicleHeadlines(planet?.day);
                             }
                             const store = getChronicleStore();
                             if (store && store.byLogId && store.byLogId[uuid]) {
@@ -6013,6 +6099,7 @@
         steel:{label:'steel',role:'miner',description:'Metal worked again in a hot fire. A careful maker can use it for a fork with a clearer note.'},
         pottery:{label:'clay vessels',role:'miner',description:'Clay shaped into vessels and fired hard. Set beside the grain stores, each can hold eight more grain.'},
         stone_tools:{label:'stone handtools',role:'farmer',description:'Stone chipped into hand-sized edges. Farmers can work their fields with them. Repeated use wears the edges away.'},
+        metal_tools:{label:'metal handtools',role:'farmer',description:'Metal worked into small blades and fitted for fieldwork. Their edges serve longer than chipped stone, but still wear with use.'},
         steel_tools:{label:'steel handtools',role:'farmer',description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'}
     };
     // Recipe durations, sample sizes and first-trial risks are game calibration.
@@ -6024,6 +6111,7 @@
         steel:{cost:{metal:2,charcoal:1},output:2,days:8,needs:{fire:50,smith:40},sample:'metal',established:{smith:50},roles:['miner'],risk:0.3,success:'The metal holds a sharper edge. They set the pieces aside to learn what else they can make from them.',failure:'The pieces split under the hammer. This batch cannot be shaped into an instrument.'},
         pottery:{cost:{clay:2,charcoal:1},output:2,days:5,needs:{fire:20,smith:10},sample:'clay',established:{fire:40},roles:['miner','farmer'],risk:0.25,success:'The vessels keep their shape and hold their contents. There may be room for more of the harvest now.',failure:'The vessels crack in the heat. Grain would spill through their sides.'},
         stone_tools:{cost:{rock:2},output:2,days:4,needs:{smith:10},sample:'rock',established:{smith:20},roles:['farmer','miner'],risk:0.15,method:'shaping',success:'The stone holds a working edge. The farmers can take these tools into their fields.',failure:'The stone splits where the working edge should be. These pieces cannot serve as tools.'},
+        metal_tools:{cost:{metal:2},output:2,days:5,needs:{smith:40},sample:'metal',established:{smith:40},roles:['miner','farmer'],risk:0.2,method:'shaping',success:'The metal holds a working edge. The farmers can fit these blades for work in the fields.',failure:'The blades split as they are shaped. The pieces cannot serve as tools.'},
         steel_tools:{cost:{steel:2},output:2,days:6,needs:{smith:50},sample:'steel',established:{smith:50},roles:['miner','farmer'],risk:0.1,method:'shaping',success:'The blades hold their shape. They are ready for work in the fields.',failure:'The blanks split as they are worked. The blades cannot be used.'}
     };
     // Capacity and the thirty-day harvest memory are initial game calibration.
@@ -6086,7 +6174,7 @@
     }
     // Initial game calibration. Wear comes from actual harvest work, not days
     // spent waiting, and improved tools do not replace usable older tools.
-    const FARM_TOOLS={stone_tools:{uses:40,boost:0.2,defence:0.25,combatWear:4},steel_tools:{uses:120,boost:0.35,defence:0.5,combatWear:6}};
+    const FARM_TOOLS={stone_tools:{uses:40,boost:0.2,defence:0.25,combatWear:4},metal_tools:{uses:80,boost:0.3,defence:0.4,combatWear:5},steel_tools:{uses:120,boost:0.35,defence:0.5,combatWear:6}};
     function farmToolCount(town) {return (town._paultendoFarmTools?.sets || []).reduce((n,set)=>n+Math.min(set.count,Math.max(0,set.uses)),0);}
     function farmToolNeed(town) {
         if(!town||town.end||town.pop<=0||!(town.jobs?.farmer>0)||town.legal?.farm===false)return 0;
@@ -6094,16 +6182,20 @@
         if(harvests.length<3||commodityStock(town,'crop')>=commodityCapacity(town,'crop')*0.8)return 0;
         return Math.max(0,town.jobs.farmer-farmToolCount(town));
     }
-    function farmToolKind(town) {return town._paultendoMaterials?.steel_tools||town._paultendoMaterials?.steel&&planet.unlocks.smith>=50?'steel_tools':'stone_tools';}
+    function farmToolKind(town) {
+        if(town._paultendoMaterials?.steel_tools||town._paultendoMaterials?.steel&&planet.unlocks.smith>=50)return 'steel_tools';
+        if(town._paultendoMaterials?.metal_tools||commodityStock(town,'metal')>0&&planet.unlocks.smith>=40)return 'metal_tools';
+        return 'stone_tools';
+    }
     function farmToolStep(town,text) {
         const store=town._paultendoFarmTools,steps=store.steps ||= [];
         steps.push({day:planet.day,text});if(steps.length>32)steps.shift();
-        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'tools',id:town.id}});
+        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'tools',id:town.id},_paultendoHighlight:!store.steps.slice(0,-1).some(s=>s.text===text)});
     }
     function advanceFarmTools() {
         for(const town of regToArray('town')) {
             let need=farmToolNeed(town);if(!need||hasIssue(town,'war'))continue;
-            for(const type of ['steel_tools','stone_tools']) {
+            for(const type of ['steel_tools','metal_tools','stone_tools']) {
                 const other=commodityWorkClaims(town).filter(c=>!['equipment','construction'].includes(c.kind)).reduce((n,c)=>n+(c.cost[type] || 0),0);
                 const count=Math.min(need,Math.max(0,commodityStock(town,type)-other));if(!count)continue;
                 const person=livingCommunityPerson(town,'farmer');if(!livingTeachingPersonAvailable(person,town))continue;
@@ -6240,7 +6332,7 @@
     function materialStep(work,text) {
         work.steps.push({day:planet.day,text});
         const town=regGet('town',work.town);
-        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'material',id:work.id}});
+        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'material',id:work.id},_paultendoHighlight:['made','failed'].includes(work.status)});
     }
     function startMaterialBatch(town,type,practical=false) {
         const recipe=MATERIAL_RECIPES[type],person=materialWorker(town,recipe);
@@ -12863,6 +12955,39 @@
         if (logDiv) planet._paultendoLogHTML = "uri:" + encodeURIComponent(logDiv.innerHTML);
     }
 
+    function retireRepeatedLoadGreetings(logDiv) {
+        const seen=new Map(),removed=new Set(),known=new Set(Object.keys(planet[CHRONICLE_STORE_KEY]?.byLogId || {}));
+        const prefix=`The Sun rises on Planet ${planet.name}...`.replace(/\s+/g,' ').trim();
+        for(const entry of logDiv.querySelectorAll('.logMessage')) {
+            if(entry.querySelector('.logAct')||entry.hasAttribute('data-story-kind'))continue;
+            const text=(entry.querySelector('.logText')?.textContent || '').replace(/\s+/g,' ').trim();
+            const day=entry.querySelector('.logDay')?.dataset.day;
+            if(!day||!(text===prefix||text.startsWith(prefix+' Inhabitants are ')&&/ Inhabitants are (concerned|worried|irked|anxious) about .+\.$/.test(text)))continue;
+            // The native load greeting varies its adjective. Its day, planet
+            // and named current issues identify the same report after reload.
+            const key=day+'|'+text.replace(/ Inhabitants are (concerned|worried|irked|anxious) about /,' Inhabitants are concerned about ');
+            const previous=seen.get(key);
+            if(!previous){seen.set(key,entry);continue;}
+            const id=entry.id.slice('logMessage-'.length),prior=previous.id.slice('logMessage-'.length);
+            const discard=known.has(id)&&!known.has(prior)?previous:entry;
+            if(discard===previous)seen.set(key,entry);
+            if(discard.id)removed.add(discard.id.slice('logMessage-'.length));
+            discard.remove();
+        }
+        if(!removed.size)return;
+        const store=getChronicleStore();
+        for(const day of store?.days || []) {
+            day.entries=day.entries.filter(entry=>!removed.has(entry.logId));
+            day.counts={};
+            for(const entry of day.entries)day.counts[entry.system || 'misc']=(day.counts[entry.system || 'misc'] || 0)+1;
+        }
+        if(store) {
+            store.index=Object.fromEntries(store.days.map(day=>[String(day.day),day]));
+            store.byLogId=Object.fromEntries(store.days.flatMap(day=>day.entries.filter(entry=>entry.logId).map(entry=>[entry.logId,entry])));
+        }
+        return removed.size;
+    }
+
     function restoreLogFromPlanet(options = {}) {
         if (!planet || typeof document === "undefined") return;
         const logDiv = document.getElementById("logMessages");
@@ -12880,14 +13005,15 @@
             const tags = new Set(["SPAN", "DIV", "IMG", "BR", "B", "I", "EM", "STRONG", "SMALL", "U", "S", "DETAILS", "SUMMARY", "UL", "LI"]);
             for (const node of template.content.querySelectorAll("*")) {
                 if (!tags.has(node.tagName)) { node.replaceWith(document.createTextNode(node.textContent)); continue; }
-                const color = node.style.color;
+                const colors = document.createElement("span");
+                copyChronicleColors(node, colors);
                 for (const attr of Array.from(node.attributes)) {
                     const allowed = /^(id|class|title|alt|role|tabindex|data-[a-z-]+|aria-[a-z-]+)$/.test(attr.name)
                         || (node.tagName === "IMG" && attr.name === "src" && /^icons\/[a-z-]+\.png$/.test(attr.value));
                     if (!allowed) node.removeAttribute(attr.name);
                 }
                 if (node.id && !/^logMessage-[a-f0-9-]{36}$/i.test(node.id)) node.removeAttribute("id");
-                if (color) node.style.color = color;
+                copyChronicleColors(colors, node);
             }
             const liveIds = new Set(options.merge ? Array.from(logDiv.children, node => node.id) : []);
             if (!options.merge) logDiv.replaceChildren();
@@ -12928,6 +13054,7 @@
                 logDiv.appendChild(entry);
                 if (entry.id) liveIds.add(entry.id);
             }
+            retireRepeatedLoadGreetings(logDiv);
             try { rebuildChronicleUiStateFromLog(); } catch {}
         }
     }
@@ -14084,6 +14211,12 @@
                 baseParseSave(json);
                 try { deserializeUniverse(json, baseParseSave); } catch {}
                 ensurePlanetState();
+                const logDiv=document.getElementById('logMessages');
+                // Native parseSave emits its greeting after initGame restores
+                // history, so retire that duplicate once loading has finished.
+                if(logDiv&&retireRepeatedLoadGreetings(logDiv)) {
+                    rebuildChronicleUiStateFromLog();syncLogToPlanet();
+                }
             };
             parseSave._paultendoUniverse = true;
             parseSave._paultendoBase = baseParseSave;
@@ -19349,6 +19482,19 @@
             if(!actual&&!curious&&!established&&!(type==='steel'&&study==='education'))continue;
             interests.push({type,sample:recipe.sample,actual,needs:recipe.needs});
         }
+        // Working edges supply a local reason to improve tools. Receiving a
+        // sample or reaching a date cannot substitute for actual use.
+        const used=(town._paultendoFarmTools?.sets || []).filter(set=>set.type==='stone_tools'&&set.uses<FARM_TOOLS.stone_tools.uses*set.count);
+        const current=planet.unlocks.smith || 0;
+        if(current>=10&&current<30&&used.length&&farmToolNeed(town)>0&&commodityStock(town,'rock')>0&&['farmer','miner'].some(role=>town.jobs?.[role]>0)) {
+            interests.push({type:'stone_tools',sample:'rock',actual:true,needs:current<20?{smith:20}:{smith:30,fire:10},text:'Their working stone edges wear away. They want tools that last longer.',tools:used.slice(-4).map(set=>({id:set.id,uses:set.uses,count:set.count}))});
+        }
+        // Keep making usable stone while the next technique is unavailable.
+        // Its possible successor can motivate research without reserving metal
+        // for work that nobody yet knows how to do.
+        if(current>=30&&current<40&&farmToolNeed(town)>0&&commodityStock(town,'metal')>0&&['farmer','miner'].some(role=>town.jobs?.[role]>0)) {
+            interests.push({type:'metal_tools',sample:'metal',actual:true,needs:MATERIAL_RECIPES.metal_tools.needs,text:'There is metal in the stores. The farmers need more working tools.'});
+        }
         return interests;
     }
 
@@ -19367,7 +19513,7 @@
                 // Controlling a workshop fire must not promote Firebombing,
                 // which is a separate moral choice in the native fire branch.
                 const through=key==='fire'?Math.min(20,level):level;
-                add(key,interest.actual?2:1,`There is ${COMMODITIES[interest.sample].label} in the stores to experiment with.`,{material:interest.sample,purpose:interest.type,through});
+                add(key,interest.actual?2:1,interest.text || `There is ${COMMODITIES[interest.sample].label} in the stores to experiment with.`,{material:interest.sample,purpose:interest.type,through,...(interest.tools?{tools:interest.tools}:{})});
             }
         }
         const visits=Object.values(livingWorldState().places).flatMap(p=>(p.visits || []).filter(v=>v.town===town.id&&planet.day-v.day<=30&&v.pathLength>=6));

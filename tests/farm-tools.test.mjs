@@ -72,15 +72,15 @@ function fight(w,war,roll=0){const random=w.Math.random;w.Math.random=()=>roll;t
 
 test('working handtools defend an actual attack but do not equip an offensive army',async t=>{
  const outcomes=[];
- for(const type of [null,'stone_tools','steel_tools']){
+ for(const type of [null,'stone_tools','metal_tools','steel_tools']){
   const g=await makeGame();t.after(g.close);const {w,town}=setup(g);prime(w,town);if(type){add(w,town,type,20);next(w);}w.planet.unlocks.military=10;
   const {rival,war}=enemy(w,town);rival._paultendoFarmTools=plain(town._paultendoFarmTools || {sets:[],steps:[]});const attackerTools=plain(rival._paultendoFarmTools);
   const size=town.size;fight(w,war);outcomes.push(size-town.size);
   assert.deepEqual(plain(rival._paultendoFarmTools),attackerTools,'Attackers get no offensive boost or tool wear');assert.equal(rival.jobs.soldier,10);assert.equal(town.jobs.soldier || 0,0);assert.equal(w.planet.unlocks.military,10);
-  if(type){assert.equal(town._paultendoFarmTools.defences,1);assert.equal(town._paultendoFarmTools.sets[0].uses,20*(type==='stone_tools'?36:114));assert.equal(town.resources[type] || 0,0);}
+  if(type){assert.equal(town._paultendoFarmTools.defences,1);assert.equal(town._paultendoFarmTools.sets[0].uses,20*({stone_tools:36,metal_tools:75,steel_tools:114}[type]));assert.equal(town.resources[type] || 0,0);}
   errors(g);
  }
- assert.ok(outcomes[0]>outcomes[1],JSON.stringify(outcomes));assert.ok(outcomes[1]>=outcomes[2],JSON.stringify(outcomes));
+ assert.ok(outcomes[0]>outcomes[1],JSON.stringify(outcomes));assert.ok(outcomes[1]>=outcomes[2],JSON.stringify(outcomes));assert.ok(outcomes[2]>=outcomes[3],JSON.stringify(outcomes));
 });
 
 test('war alone does not damage tools, while a real early skirmish spends working edges and preserves that damage through reload',async t=>{
@@ -90,4 +90,12 @@ test('war alone does not damage tools, while a real early skirmish spends workin
 
 test('tools broken in defending a town cannot boost its next harvest',async t=>{
  const g=await makeGame();t.after(g.close);const {w,town}=setup(g);prime(w,town);add(w,town,'stone_tools',2);next(w);town._paultendoFarmTools.sets[0].uses=2;const {war}=enemy(w,town);fight(w,war);assert.equal(tools(town),0);assert.match(town._paultendoFarmTools.steps.map(s=>s.text).join(' '),/breaks in the fighting/);const extra=town._paultendoFarmTools.extra;town.resources.crop=100;harvest(w,town,20);assert.equal(town._paultendoFarmTools.extra,extra);assert.equal(town.jobs.soldier || 0,0);errors(g);
+});
+
+test('metal handtools need actual metal and shaping knowledge, then complement usable stone with their own maker and wear',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);prime(w,town);add(w,town,'stone_tools',2);next(w);Object.assign(w.planet.unlocks,{smith:30,fire:10});add(w,town,'metal',2);next(w);assert.equal(work(w,town,'metal_tools'),undefined);assert.equal(town.resources.metal,2);w.planet.unlocks.smith=40;harvest(w,town);next(w);const batch=work(w,town,'metal_tools');assert.ok(batch);finish(w,batch,town);assert.equal(batch.finished-batch.started,5);assert.equal(town.resources.metal || 0,0);assert.equal(tools(town),4);const set=town._paultendoFarmTools.sets.find(s=>s.type==='metal_tools');assert.equal(set.uses,160);assert.equal(set.inputs[0].production.work,batch.id);assert.ok(town._paultendoFarmTools.sets.find(s=>s.type==='stone_tools').uses>0);const before=set.uses;harvest(w,town,20);assert.equal(set.uses,before-2);assert.equal(w.planet.unlocks.smith,40);errors(g);
+});
+
+test('native Metal Tools knowledge awards no gear and available stone remains a real alternative while metal cannot yet be shaped',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);prime(w,town);Object.assign(w.planet.unlocks,{smith:30,fire:10});add(w,town,'metal',2);add(w,town,'rock',2);next(w);const batch=work(w,town);assert.equal(batch.type,'stone_tools');finish(w,batch,town);assert.equal(tools(town),2);assert.equal(town.resources.metal,2);w.planet.unlocks.smith=40;next(w);assert.equal(town.resources.metal_tools,undefined,'The discovery has no manufactured output');assert.equal(work(w,town,'metal_tools'),undefined,'Actual finished work still has its recovery interval');w.planet.day+=8;prime(w,town);next(w);assert.equal(work(w,town,'metal_tools').status,'waiting');errors(g);
 });

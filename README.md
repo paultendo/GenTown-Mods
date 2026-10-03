@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.52**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
+Version **1.6.53**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.52/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.53/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.52)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.53)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -29,7 +29,7 @@ The local origin has its own saves; it does not share storage with r74n.com. The
 
 ## Compatibility and verification
 
-The overhaul now reads per-planet configuration, preserves native custom map sizes, initializes save hooks before autoload, restores inactive worlds, and redraws the map when installed after the game is already running. Chronicle history is encoded for GenTown's save import format and restored with sanitized markup. Play/Pause uses one timer, pauses for decisions or hidden pages, and does not automatically confirm destructive dialogs. Runtime caches stay out of saved games.
+The overhaul now reads per-planet configuration, preserves native custom map sizes, initializes save hooks before autoload, restores inactive worlds, and redraws the map when installed after the game is already running. Chronicle history is encoded for GenTown's save import format and restored with sanitized markup. Repeated native sunrise greetings from the same day and current issues are retired after loading, with Chronicle indexes kept consistent. Genuine repeated events, different days, changing issue reports and linked stories remain. Play/Pause uses one timer, pauses for decisions or hidden pages, and does not automatically confirm destructive dialogs. Runtime caches stay out of saved games.
 
 Discovery and road overlays preserve the painted terrain when added, including after reload and daily road updates. Background reports are dated, collapsed, and exclude decisions and routine sunsets. Unlocks clears its notification when opened and offers discovery stories and gameplay effects. Advanced menus appear as their discoveries become available. Unnamed species identify themselves as plants or animals, informational entries use an Info label, and Review decision takes you to a pending choice.
 
@@ -59,7 +59,7 @@ Clay, sand, charcoal, bricks, glass, coal and steel now connect discoveries to a
 
 A harvest that actually overflows the grain stores can give people a reason to fire clay vessels. Actual clay and fuel become vessels over five work days. A first firing can fail. Each vessel installed beside the stores holds eight extra grain from later harvests or deliveries. Food is never awarded by the discovery. The vessels can also come from a neighbour’s practiced workshop through the existing gift, trade or barter system. Materials and workshops links to the grain stores, their maker and the shipment that brought them. The storage quantities and timings are initial balance values.
 
-Repeated actual harvests can give farmers a reason to shape stone handtools. Two stone becomes two tools over four work days after Stonework is known. Steel and later shaping knowledge enable stronger handtools over six work days. Trials, shared material claims, neighbouring workshops and shipments use the same production and exchange systems. Installed tools help actual harvests and wear through use. Usable stone tools stay in service when steel becomes available. Their makers and journeys remain attached through reloads.
+Repeated actual harvests can give farmers a reason to shape stone handtools. Two stone becomes two tools over four work days after Stonework is known. Actual metal and Metal Tools knowledge enable metal handtools over five work days. Steel and later shaping knowledge enable stronger handtools over six work days. Trials, shared material claims, neighbouring workshops and shipments use the same production and exchange systems. Installed tools help actual harvests and wear through use. Usable stone tools stay in service when steel becomes available. Their makers and journeys remain attached through reloads. Working stone edges that actually wear down can favour eligible research into more durable methods. A real metal sample and unmet fieldwork can favour metal shaping. These reasons neither award discoveries nor stop useful stone production while another technique is unavailable.
 
 When attacked, farmers can also take up those same tools in defence. Working edges offer less strength than trained soldiers, and fighting damages them faster than fieldwork. Broken tools leave the farms without that help. Tool stores create no army or military discovery, and handtools supply no offensive boost. Strength, wear and harvest gains are initial balance values.
 
@@ -89,3 +89,5 @@ The regression tests cover startup, late installation and redraw, overlay creati
 [GenTown](https://r74n.com/gentown/) and the engine, styles, fonts, and icons are by **R74n**. The local snapshot retains the original engine source and credit. Its source URLs and SHA-256 hashes are recorded in [`vendor/gentown/upstream.json`](vendor/gentown/upstream.json); the [R74n Content License](vendor/gentown/LICENSE.txt) applies to those assets. `index.html` is adapted from the original game page for local loading. The paultendo overhaul is in `paultendo-mod.js` and can be installed independently.
 
 Local samples can now favour the technical discoveries needed to work them. Actual purposes, a curious available worker or existing research interests determine whether a sample is worth investigating. Clay needed for overflowing grain stores can favour basic fire and shaping knowledge. Sand with an interested worker can favour hotter furnaces. The same recipe requirements guide these priorities, and the actual sample remains in store. Research never awards stock or local manufacturing mastery. Hunger, journeys, building work, illness, war and revolt also influence which eligible native branch gets proposed, alongside the town's research priorities. Refusals, prerequisites and native choice effects remain intact. Material research cannot promote Firebombing. Extended furnace weights stay within the existing bounded weighting model. Full progression and human pacing balance remain unverified.
+
+Today’s news appears above the day controls on desktop and in a compact disclosure on phones. Town flags retain their colours after reload, events link back to their full stories, and quiet days leave the space clear. Completed or failed workshops and distinct field outcomes make useful work and its consequences visible.

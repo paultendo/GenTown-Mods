@@ -121,3 +121,66 @@ test('pruned or unseen stories leave their recorded event intact without broken 
     assert.deepEqual(restored.errors,[]);
   }
 });
+
+test('reload keeps one native greeting per day and current issue report without merging real events or story links',async t=>{
+ const game=await makeGame();t.after(game.close);const w=game.window,town=settleGame(game);w.planet.day=12;
+ const greeting=`The Sun rises on Planet ${w.planet.name}...`,first=w.logMessage(greeting),second=w.logMessage(greeting);
+ const repeatedEvent='Two strangers reach the town.';const a=w.logMessage(repeatedEvent),b=w.logMessage(repeatedEvent);
+ const issueA=w.logMessage(greeting+' Inhabitants are worried about a flood.'),issueB=w.logMessage(greeting+' Inhabitants are anxious about a flood.'),otherIssue=w.logMessage(greeting+' Inhabitants are worried about a war.');
+ const root=scholar(w,town),linked=w.logMessage(greeting,null,{_paultendoStory:{kind:'teaching',id:root.id}});
+ w.planet.day=11;const older=w.logMessage(greeting);w.planet.day=12;
+ let saved=JSON.parse(JSON.stringify(w.generateSave()));
+ for(let n=0;n<3;n++){
+  const restored=await makeGame({save:saved});const rw=restored.window;const logs=[...rw.document.querySelectorAll('.logMessage')];
+  const plainGreetings=logs.filter(e=>e.querySelector('.logDay')?.dataset.day==='12'&&!e.dataset.storyKind&&e.querySelector('.logText')?.textContent===greeting);assert.equal(plainGreetings.length,1);
+  const issueLogs=logs.filter(e=>/Inhabitants are (worried|anxious) about a flood\./.test(e.querySelector('.logText')?.textContent || ''));assert.equal(issueLogs.length,1);assert.ok(entry(rw,otherIssue));assert.ok(entry(rw,older));assert.ok(entry(rw,a));assert.ok(entry(rw,b));assert.ok(entry(rw,linked).querySelector('.paultendoChronicleStoryLink'));
+  const remaining=new Set(logs.map(e=>e.id.slice('logMessage-'.length))),store=rw.planet._paultendoChronicleStore;
+  for(const id of [first,second,issueA,issueB])if(!remaining.has(id))assert.equal(store.byLogId[id],undefined);
+  for(const day of store.days){const counts={};for(const e of day.entries)counts[e.system || 'misc']=(counts[e.system || 'misc'] || 0)+1;assert.deepEqual(JSON.parse(JSON.stringify(day.counts)),counts);}
+  saved=JSON.parse(JSON.stringify(rw.generateSave()));assert.deepEqual(restored.errors,[]);restored.close();
+ }
+ assert.deepEqual(game.errors,[]);
+});
+
+test('today’s news keeps native coloured flags, opens towns and original events, and survives reload safely',async t=>{
+ const game=await makeGame();t.after(game.close);const w=game.window,town=settleGame(game);
+ town.flag='{{color:><|#f47759|#554aff}}';
+ const id=w.logMessage('{{regname:town|'+town.id+'}} signs a peace treaty.','milestone');
+ const native=entry(w,id).querySelector('.entityName .font2');assert.ok(native);
+ await new Promise(r=>setTimeout(r,40));
+ let highlights=w.document.getElementById('paultendoChronicleHighlights');
+ assert.equal(highlights.parentNode.id,'statsPanel');assert.equal(highlights.hidden,false);
+ let flag=highlights.querySelector('.font2');assert.equal(flag.style.color,native.style.color);assert.equal(flag.style.backgroundColor,native.style.backgroundColor);
+ let visited;w.handleEntityClick=el=>{visited=el.dataset.id;};
+ highlights.querySelector('.entityName').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));assert.equal(visited,String(town.id));
+ highlights.querySelector('.paultendoChronicleRead').click();assert.equal(w.document.activeElement,entry(w,id));
+ // A native striped flag has a gradient; unrelated saved CSS or handlers never survive.
+ const striped=w.logMessage('{{colorsdown:XXX|#fff|#f00|#00f}} A new town is founded.','milestone');
+ const unsafe=entry(w,id).querySelector('.logText');unsafe.style.position='fixed';unsafe.setAttribute('onclick','window.injected=true');
+ const restored=await makeGame({save:JSON.parse(JSON.stringify(w.generateSave()))});t.after(restored.close);const rw=restored.window;
+ flag=entry(rw,id).querySelector('.font2');assert.equal(flag.style.backgroundColor,native.style.backgroundColor);
+ assert.match(entry(rw,striped).querySelector('.font2').style.backgroundImage,/linear-gradient/);
+ highlights=rw.document.getElementById('paultendoChronicleHighlights');
+ assert.equal(highlights.querySelector('.entityName .font2').style.backgroundColor,native.style.backgroundColor);
+ assert.equal(entry(rw,id).querySelector('.logText').style.position,'');assert.equal(entry(rw,id).querySelector('.logText').hasAttribute('onclick'),false);
+ assert.equal(highlights.querySelector('[onclick]'),null);
+ assert.deepEqual(restored.errors,[]);assert.deepEqual(game.errors,[]);
+});
+
+test('quiet days leave space for choices and compact news stays beside the Chronicle without duplicating actions',async t=>{
+ const game=await makeGame();t.after(game.close);const w=game.window,town=settleGame(game);
+ await new Promise(r=>setTimeout(r,40));w.planet.day=15;w.clearLog();w.logMessage('The Sun rises on Planet '+w.planet.name+'... Inhabitants are worried about a war.');
+ w.logMessage('A reward reaches the town.');await new Promise(r=>setTimeout(r,40));
+ const highlights=w.document.getElementById('paultendoChronicleHighlights');assert.equal(highlights.hidden,true);
+ assert.doesNotMatch(w.document.getElementById('logPanel').textContent,/No major events|Chronicle Highlights/);
+ const proposal=propose(w,town,'unlockLevel',{value:{type:'farm',levelData:w.unlockTree.farm.levels[0]}});
+ proposal.querySelector('.logText').appendChild(w.document.createTextNode(' A discovery awaits.'));
+ w.logChange(proposal.id.slice('logMessage-'.length),'A discovery awaits.');
+ w.logMessage('An earthquake shakes the coast.','warning');await new Promise(r=>setTimeout(r,40));
+ assert.equal(highlights.hidden,false);assert.equal(highlights.querySelector('.logAct'),null);
+ Object.defineProperty(w,'innerWidth',{value:390,writable:true});w.dispatchEvent(new w.Event('resize'));
+ assert.equal(highlights.parentNode.id,'paultendoChronicleHeader');assert.equal(highlights.open,false);
+ highlights.open=true;w.innerWidth=1200;w.dispatchEvent(new w.Event('resize'));
+ assert.equal(highlights.parentNode.id,'statsPanel');assert.equal(highlights.open,true);
+ assert.ok(proposal.querySelector('[type="yes"]'));assert.deepEqual(game.errors,[]);
+});
