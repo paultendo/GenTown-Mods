@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.47**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
+Version **1.6.48**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.47/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.48/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.47)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.48)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -55,13 +55,17 @@ Communities can now begin practices without a whisper. Actual repeated harvests 
 
 Grain, livestock, stone, timber and metal now share actual exchange journeys. Meals and unfinished work create demand. Communities may give, bargain, barter or refuse according to their means, values, faith and remembered help. Supplies and payment remain with carriers until arrival, including through blocked routes and reloads. Construction and craft reserve their materials, and stone and timber can substitute in native building work. Imported goods keep records of their actual use in meals, buildings and created instruments. Caravans no longer invent cargo or profit, market purchases no longer buy abstract luxury or tool bonuses, and public cashflow reports actual receipts and spending. Taxes and upkeep move divisible cash between public stores and native private wealth. Sustained hunger and refused supplies can deepen war pressure where rule, soldiers and beliefs permit it. This is a shared commodity foundation. Global milestones still enable the common technology branches. Local material practice now develops separately; a full settlement-specific technology tree remains work ahead.
 
-Clay, sand, charcoal, bricks and glass now connect discoveries to actual sources and workshop work. Better tools reveal small samples on owned wetland or desert ground. Named workers can try new processes when techniques, materials and circumstances permit it. A trial can fail, and hunger, fighting or lost workers can delay it. Bricks replace stone in construction. Glass requires sand, charcoal and stone, then feeds actual lens-making. A lens idea can create demand for missing glass, including imports and fuel production. Older unfinished lenses keep their saved recipe. There is no free stock when a milestone is reached, and practiced workshops stop when their work is no longer needed.
+Clay, sand, charcoal, bricks, glass, coal and steel now connect discoveries to actual sources and workshop work. Better tools reveal small samples on owned wetland, desert or coal-bearing ground. Named workers can try new processes when techniques, materials and circumstances permit it. A trial can fail, and hunger, fighting or lost workers can delay it. Bricks replace stone in construction. Glass requires sand, fuel and stone, then feeds actual lens-making. A lens idea can create demand for missing glass, including imports and fuel production. Coal can replace workshop charcoal after controlled fire is known, sparing timber for other work. A waiting workshop can change fuel as supplies arrive. Once work starts, it keeps the recipe it paid for. Clay, sand and coal depletion now survive native save compression.
 
-Actual shipments can carry a maker's guidance, if they choose to share it and someone accepts it. Hearing the method makes later trials quicker and less risky, but local mastery still requires successful work. Glass retains its original maker through reexport, instrument-making, reloads and the Traveler's history. These recipes, deposits, delays and risks are explicit game calibration. Furnace capacity is represented by the native Forges discovery rather than a separate workshop building. Coal, alloys and a fuller local technology model remain future work.
+Steel trials consume actual metal and fuel over eight work days. Learning or military priorities can give miners a reason to investigate, while an instrument creates practical demand. Encountered steel plus shaping knowledge opens an optional steel tuning fork with a steadier note for music or drills. The rough metal fork remains available. Autonomous makers can choose spare known steel. Older unfinished instruments keep their saved recipe, and milestones award no manufactured stock.
+
+Actual shipments can carry a maker's guidance, if they choose to share it and someone accepts it. Hearing the method makes later trials quicker and less risky, but local mastery still requires successful work. Manufactured materials retain their original maker through reexport, instrument-making, reloads and the Traveler's history. These recipes, deposits, delays, quality differences and risks are explicit game calibration. Furnace capacity is represented by the native Forges discovery rather than a separate workshop building. Separate ores, wider alloys and a fuller local technology model remain future work.
 
 People can now begin instruments without a Traveler whisper. Persistent illness, leading research priorities, repeated long expeditions, military drills or unhappiness can supply a reason. Actual jobs, technical knowledge, outlook, food and uncommitted materials decide whether work can begin. Competing reasons use the town's current pressures, research shares and values. A useful accessible instrument meets its particular need, while a hoarded object may leave others without one. A gathering idea can lapse when its need passes. Autonomous work records its own maker and cause, with Chronicle and settlement links, rather than inventing player instructions. These objects can be named, used, entrusted and carried into another beginning. Object production and custody continue beyond explored land, with undiscovered identities kept out of visible reports.
 
 Story descriptions now use smaller, softer text, with clearer actions and fewer dividing lines. Opening a story returns its scroll position to the heading.
+
+Person and object panels refresh their displayed story as days pass. Refreshing no longer replays a crafting or whisper instruction.
 
 Live decisions have a warm highlight and working buttons. Unanswered entries recede into the Chronicle without explanatory text. Advancing the day preserves GenTown's rules: most proposals lapse, while some events have a fallback, such as generating a discovery name. Autoplay pauses for decisions unless Auto-decide is enabled. GenTown does not save pending event callbacks across a reload.
 

@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.47/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.48/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.47";
+    const MOD_VERSION = "1.6.48";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -3102,6 +3102,16 @@
         if (!planet.unlocks || typeof planet.unlocks !== "object") {
             planet.unlocks = {};
         }
+        if(planet.chunks&&PAULTENDO_STATE.materialDepositChunks!==planet.chunks) {
+            const deposits=planet._paultendoDeposits ||= {};
+            // Native saves compress chunks and omit custom fields. Keep the
+            // finite source ledger on the planet, with live chunk aliases.
+            for(const [key,chunk] of Object.entries(planet.chunks)) {
+                if(chunk._paultendoDeposits&&!deposits[key])deposits[key]=chunk._paultendoDeposits;
+                if(deposits[key])chunk._paultendoDeposits=deposits[key];
+            }
+            PAULTENDO_STATE.materialDepositChunks=planet.chunks;
+        }
     }
 
     function getDailyCache(key, builder) {
@@ -5185,9 +5195,13 @@
     function artifactTitle(artifact) { return artifact.title || LIVING_ARTIFACTS[artifact.kind].name; }
     function artifactDescription(artifact) { return artifact.description || LIVING_ARTIFACTS[artifact.kind].description; }
     function artifactPhrase(artifact) { return artifact.title || `the ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()}`; }
-    function livingArtifactRecipe(town,person,kind) {
+    function livingArtifactRecipe(town,person,kind,material) {
         const u=planet.unlocks || {};
         if(!livingTeachingPersonAvailable(person,town)) return null;
+        if(material==='steel') {
+            if(kind!=='fork'||!['musician','scholar','miner'].includes(person.role)||u.smith<50||!town._paultendoMaterials?.steel)return null;
+            return {cost:{steel:3},needs:{smith:50},quality:0.8,description:'Three lengths of steel worked into a fork. Its note settles clearly. Hammer marks remain near the base.'};
+        }
         if(kind==='fork'&&['musician','scholar','miner'].includes(person.role)&&u.smith>=30) return {cost:{metal:3},description:'A pair of hand-worked metal prongs. Their note wavers before it settles. Small marks from the maker’s tools remain.'};
         if(kind==='lens'&&['doctor','scholar'].includes(person.role)&&u.education>=20&&u.fire>=40&&u.smith>=30) return {cost:{glass:1,metal:2},description:'Glass ground by hand and held in a metal ring. The centre is clear, but the rim turns the world cloudy.'};
         if(kind==='compass'&&['scholar','miner'].includes(person.role)&&u.smith>=40&&u.travel>=30&&u.education>=20) return {cost:{rock:1,metal:3},description:'A worked needle beside a magnetic stone, set inside a rough metal case. The needle sometimes catches against the rim.'};
@@ -5203,24 +5217,25 @@
     function openLivingWorkshop(town,person) {
         const items=[{text:'← Back to the people',func:()=>openLivingPerson(town,person)},{text:'An idea is a beginning. Making it real will take materials, time and someone willing to try.'}];
         for(const kind of Object.keys(LIVING_ARTIFACTS)) if(livingArtifactWorkAvailable(town,person,kind)) items.push({text:`Make a ${LIVING_ARTIFACTS[kind].name.toLowerCase()}`,func:()=>{sendLivingWhisper(town,person,'craft',null,null,kind);openLivingPerson(town,person);}});
+        if(livingArtifactWorkAvailable(town,person,'fork')&&livingArtifactRecipe(town,person,'fork','steel'))items.push({text:'Make a tuning fork from steel<span class="paultendoStoryProse">Needs 3 steel. A steadier note for songs or drills.</span>',func:()=>{sendLivingWhisper(town,person,'craft',null,null,'fork','steel');openLivingPerson(town,person);}});
         populateExecutive(items,'Something of their own');markLivingStoryControls();openExecutive();
     }
     function startLivingArtifactWork(town,person,record,artifact) {
         const kind=artifact?.kind || record.projectKind;
-        return beginLivingArtifactWork(town,person,kind,{record,artifact});
+        return beginLivingArtifactWork(town,person,kind,{record,artifact,material:record.projectMaterial});
     }
-    function beginLivingArtifactWork(town,person,kind,{record,artifact,cause}={}) {
+    function beginLivingArtifactWork(town,person,kind,{record,artifact,cause,material}={}) {
         if(!livingArtifactWorkAvailable(town,person,kind,artifact,!!cause)) return {acted:false,reason:'Their work no longer has the footing it needs.'};
-        const recipe=livingArtifactRecipe(town,person,kind);
+        const recipe=livingArtifactRecipe(town,person,kind,material);if(!recipe)return {acted:false,reason:'They have not learned how to work that material yet.'};
         const missing=Object.entries(recipe.cost).filter(([k,n])=>(town.resources[k]||0)<n);
-        if(missing.some(([k])=>k!=='glass')) return {acted:false,reason:'They cannot spare the materials.'};
+        if(missing.some(([k])=>!MATERIAL_RECIPES[k])) return {acted:false,reason:'They cannot spare the materials.'};
         const practiced=livingWorldState().artifactWork.some(w=>w.status==='made'&&w.person===person.id&&w.kind===kind);
         const days=Math.max(3,LIVING_PACE.work[kind]-(practiced?2:0)-(planet.unlocks.smith>=80?2:0));
         const work={id:`work:${livingWorldState().nextId++}`,town:town.id,person:person.id,name:person.name,kind,parent:artifact?.id,whisper:record?.id,cause:cause&&structuredClone(cause),autonomous:!!cause,day:planet.day,started:missing.length?null:planet.day,due:missing.length?null:planet.day+days,days,status:missing.length?'gathering':'working',recipe:structuredClone(recipe),steps:[]};
         livingWorldState().artifactWork.push(work);if(record)record.work=work.id;
         const text=artifact?`${person.name} begins making an object of their own, working from ${artifactTitle(artifact)}.`:`${person.name} begins working on a ${LIVING_ARTIFACTS[kind].name.toLowerCase()} of their own.`;
         if(cause)artifactWorkStep(work,cause.text,null,false);
-        artifactWorkStep(work,missing.length?`${person.name} starts looking for glass to make a lens in ${town.name}.`:text,record,!!cause);
+        artifactWorkStep(work,missing.length?`${person.name} starts looking for ${commaList(missing.map(([type])=>COMMODITIES[type].label))} to make a ${LIVING_ARTIFACTS[kind].name.toLowerCase()} in ${town.name}.`:text,record,!!cause);
         return {acted:true,work};
     }
     function artifactWorkStep(work,text,record,report=true) {
@@ -5235,6 +5250,7 @@
     }
     function artifactWorkRecipe(town,person,work) {
         const current=livingArtifactRecipe(town,person,work.kind);if(!current)return null;
+        if(Object.entries(work.recipe?.needs || {}).some(([key,level])=>(planet.unlocks[key] || 0)<level))return null;
         // Existing unfinished lenses keep the recipe promised in their save.
         return work.recipe || (work.kind==='lens'?{...current,cost:{rock:3,metal:2}}:current);
     }
@@ -5250,7 +5266,7 @@
                 if(work.autonomous&&!livingInventionCauses(town).some(c=>c.key===work.cause.key)){work.status='abandoned';artifactWorkStep(work,`${person.name} puts the idea aside. The need that began it has passed.`,record);continue;}
                 if(hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town)||Object.entries(recipe.cost).some(([type,count])=>commodityStock(town,type)<count))continue;
                 work.status='working';work.started=planet.day;work.due=planet.day+work.days;
-                artifactWorkStep(work,`${person.name} has the glass and metal. Work on the lens begins in ${town.name}.`,record);
+                artifactWorkStep(work,`${person.name} has the materials. Work on the ${LIVING_ARTIFACTS[work.kind].name.toLowerCase()} begins in ${town.name}.`,record);
                 continue;
             }
             if(planet.day<work.due) {
@@ -5276,7 +5292,7 @@
                     work.status='abandoned';text='The materials could not be gathered. The work is put aside.';
                 } else {
                     const traveler=travelerState(),lineage=`made:${traveler.passage}:${getUniverse().currentWorldId}:${traveler.nextObject++}`;
-                    const artifact={id:`artifact:${state.nextId++}`,kind:work.kind,title:`${person.name}’s ${LIVING_ARTIFACTS[work.kind].name.toLowerCase()}`,description:recipe.description,quality:0.6,lineage,place:ensureLivingPlace(chunkAt(...getTownCenter(town))).id,status:'carried',events:[],searches:0,uses:{},origin:{passage:traveler.passage,lineage,history:[],maker:{name:person.name,role:person.role,town:town.name,world:planet.name,day:planet.day,materials:paid},whisper:record?.words,cause:work.cause&&structuredClone(work.cause)}};
+                    const artifact={id:`artifact:${state.nextId++}`,kind:work.kind,title:`${person.name}’s ${LIVING_ARTIFACTS[work.kind].name.toLowerCase()}`,description:recipe.description,quality:recipe.quality || 0.6,lineage,place:ensureLivingPlace(chunkAt(...getTownCenter(town))).id,status:'carried',events:[],searches:0,uses:{},origin:{passage:traveler.passage,lineage,history:[],maker:{name:person.name,role:person.role,town:town.name,world:planet.name,day:planet.day,materials:paid},whisper:record?.words,cause:work.cause&&structuredClone(work.cause)}};
                     if(parent){artifact.parent={lineage:parent.lineage || parent.origin.lineage,title:artifactTitle(parent),phrase:artifactPhrase(parent)};parent.crafted ||= {};parent.crafted[town.id]=artifact.lineage;}
                     state.artifacts.push(artifact);work.status='made';work.artifact=artifact.id;work.materials=paid;
                     for(const input of inputs)rememberCommodityUse(town,input,{kind:'craft',id:work.id,name:work.kind});
@@ -5341,11 +5357,12 @@
                     const mind=livingPersonMind(person),practiced=state.artifactWork.some(w=>w.town===town.id&&w.person===person.id&&w.kind===cause.kind&&w.status==='made');
                     if(!practiced&&mind.outlook!=='curious'&&!(cause.key==='illness'&&mind.outlook==='generous')&&!(cause.key==='drills'&&(town.values?.order || 0)>=4))continue;
                     if(state.whispers.some(w=>w.person===person.id&&!w.resolved))continue;
-                    const recipe=livingArtifactRecipe(town,person,cause.kind);if(!recipe)continue;
+                    const material=cause.kind==='fork'&&planet.unlocks.smith>=50&&town._paultendoMaterials?.steel&&commodityStock(town,'steel')-commodityCommittedStock(town,'steel')>=3?'steel':undefined;
+                    const recipe=livingArtifactRecipe(town,person,cause.kind,material);if(!recipe)continue;
                     // Respect work already promised. Missing glass may create a
                     // demand, but scarce metal cannot fund two competing crafts.
-                    if(Object.entries(recipe.cost).some(([type,count])=>type!=='glass'&&commodityStock(town,type)-commodityCommittedStock(town,type)<count))continue;
-                    if(beginLivingArtifactWork(town,person,cause.kind,{cause:{...cause,since:notice.day,observations:notice.days}}).acted)break;
+                    if(Object.entries(recipe.cost).some(([type,count])=>!MATERIAL_RECIPES[type]&&commodityStock(town,type)-commodityCommittedStock(town,type)<count))continue;
+                    if(beginLivingArtifactWork(town,person,cause.kind,{material,cause:{...cause,since:notice.day,observations:notice.days}}).acted)break;
                 }
                 if(state.artifactWork.some(w=>w.town===town.id&&['gathering','working'].includes(w.status)))break;
             }
@@ -5978,16 +5995,19 @@
         charcoal:{label:'charcoal',role:'lumberer',description:'Timber burned with little air. A small, dark fuel for a hotter fire.'},
         brick:{label:'bricks',role:'miner',description:'Clay shaped, dried and fired. The blocks can take the place of stone in a building.'},
         sand:{label:'sand',role:'miner',description:'Pale grains gathered from dry ground. The finest samples may change in a fierce enough fire.'},
-        glass:{label:'glass',role:'miner',description:'A cooled melt of sand and minerals. It catches the light. A clear piece can be ground into a lens.'}
+        glass:{label:'glass',role:'miner',description:'A cooled melt of sand and minerals. It catches the light. A clear piece can be ground into a lens.'},
+        coal:{label:'coal',role:'miner',description:'Dark pieces dug from a seam in the ground. A workshop can use them as fuel, leaving its timber for other work.'},
+        steel:{label:'steel',role:'miner',description:'Metal worked again in a hot fire. A careful maker can use it for a fork with a clearer note.'}
     };
     // Recipe durations, sample sizes and first-trial risks are game calibration.
     // Knowledge is local. Global milestones open possibilities, never award stock.
     const MATERIAL_RECIPES = {
         charcoal:{cost:{lumber:2},output:1,days:3,needs:{fire:10},sample:'lumber',established:{fire:40},roles:['lumberer','miner'],risk:0.15,success:'The timber holds its shape, but turns black. It burns hotter than the wood they started with.',failure:'Air gets into the covered fire. The timber burns away to ash.'},
         brick:{cost:{clay:2,charcoal:1},output:2,days:5,needs:{fire:20,smith:20},sample:'clay',established:{fire:40},roles:['miner'],risk:0.35,success:'The clay comes out hard. The blocks keep their shape even when soaked.',failure:'The firing leaves cracks through the clay. These blocks will not hold a wall.'},
-        glass:{cost:{sand:3,charcoal:2,rock:1},output:2,days:7,needs:{fire:50,smith:30},sample:'sand',established:{fire:50},roles:['miner','scholar'],risk:0.3,success:'The cloudy melt cools into glass. Held up to the light, its clearer patches show the world beyond.',failure:'The heat leaves a brittle, cloudy mass. It crumbles before it can be worked.'}
+        glass:{cost:{sand:3,charcoal:2,rock:1},output:2,days:7,needs:{fire:50,smith:30},sample:'sand',established:{fire:50},roles:['miner','scholar'],risk:0.3,success:'The cloudy melt cools into glass. Held up to the light, its clearer patches show the world beyond.',failure:'The heat leaves a brittle, cloudy mass. It crumbles before it can be worked.'},
+        steel:{cost:{metal:2,charcoal:1},output:2,days:8,needs:{fire:50,smith:40},sample:'metal',established:{smith:50},roles:['miner'],risk:0.3,success:'The metal holds a sharper edge. They set the pieces aside to learn what else they can make from them.',failure:'The pieces split under the hammer. This batch cannot be shaped into an instrument.'}
     };
-    const MATERIAL_SOURCES = {clay:{biomes:['wetland'],needs:{smith:10},sample:2,quantity:40,ground:'wet ground'},sand:{biomes:['desert'],needs:{smith:20},sample:3,quantity:60,ground:'dry ground'}};
+    const MATERIAL_SOURCES = {clay:{biomes:['wetland'],needs:{smith:10},sample:2,quantity:40,ground:'wet ground'},sand:{biomes:['desert'],needs:{smith:20},sample:3,quantity:60,ground:'dry ground'},coal:{biomes:['badlands','mountain'],needs:{smith:40},sample:2,quantity:60,ground:'a dark seam'}};
     function encounterMaterial(town,type,source) {
         if(!COMMODITIES[type]||!town||town.end||town.pop<=0)return;
         const known=town._paultendoMaterials ||= {},first=!known[type];
@@ -6008,7 +6028,9 @@
             if(!source.biomes.includes(chunk.b)||Object.entries(source.needs).some(([key,level])=>(planet.unlocks[key] || 0)<level))continue;
             const desired=Math.max(source.sample,commodityCommittedStock(town,type),type==='clay'?Math.ceil(materialConstructionNeed(town)/2):0);
             if(commodityStock(town,type)>=desired||commodityStock(town,type)>=$c.maxResource(town))continue;
-            const deposit=(chunk._paultendoDeposits ||= {})[type] ||= {remaining:source.quantity};
+            const deposits=planet._paultendoDeposits ||= {},key=`${chunk.x},${chunk.y}`;
+            const local=deposits[key] ||= chunk._paultendoDeposits || {};chunk._paultendoDeposits=local;
+            const deposit=local[type] ||= {remaining:source.quantity};
             if(deposit.remaining<=0)continue;
             const count=Math.min(1,gained,deposit.remaining);
             happen('RemoveResource',null,town,{type:'rock',count});
@@ -6022,6 +6044,19 @@
         return people.find(person=>person.outlook==='curious') || people[0] || null;
     }
     function materialTechniqueAvailable(type) {return Object.entries(MATERIAL_RECIPES[type].needs).every(([key,level])=>(planet.unlocks[key] || 0)>=level);}
+    function materialBatchCost(town,type,work) {
+        const cost={...MATERIAL_RECIPES[type].cost};
+        if(!cost.charcoal||(planet.unlocks.fire || 0)<40||!town._paultendoMaterials?.coal)return cost;
+        const other=commodityWorkClaims(town).filter(c=>c.kind!=='construction'&&c.id!==work?.id);
+        const spare=key=>Math.max(0,commodityStock(town,key)-other.reduce((sum,c)=>sum+(c.cost[key] || 0),0));
+        const charcoal=spare('charcoal'),coal=spare('coal');
+        // A known alternative can meet a shortage, but it does not erase fuel
+        // reserved for someone else's work or create a demand just from a milestone.
+        if(charcoal<cost.charcoal&&(coal>=cost.charcoal||coal>charcoal||spare('lumber')<cost.charcoal*2)) {
+            cost.coal=cost.charcoal;delete cost.charcoal;
+        }
+        return cost;
+    }
     function materialStep(work,text) {
         work.steps.push({day:planet.day,text});
         const town=regGet('town',work.town);
@@ -6032,7 +6067,7 @@
         if(!person||!materialTechniqueAvailable(type)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town))return null;
         const practiced=!!town._paultendoMaterials?.[type]?.technique;
         if(!practiced&&person.outlook!=='curious'&&!materialConstructionNeed(town)&&!practical?.allowed)return null;
-        const state=livingWorldState(),work={id:`material:${state.nextId++}`,town:town.id,type,person:person.id,name:person.name,day:planet.day,status:'waiting',cost:{...recipe.cost},remaining:Math.max(2,recipe.days-(town._paultendoMaterials?.[type]?.lesson?2:0)),output:recipe.output,trial:!practiced,purpose:practical || null,lesson:town._paultendoMaterials?.[type]?.lesson?structuredClone(town._paultendoMaterials[type].lesson):null,steps:[],inputs:[]};
+        const state=livingWorldState(),work={id:`material:${state.nextId++}`,town:town.id,type,person:person.id,name:person.name,day:planet.day,status:'waiting',cost:materialBatchCost(town,type),remaining:Math.max(2,recipe.days-(town._paultendoMaterials?.[type]?.lesson?2:0)),output:recipe.output,trial:!practiced,purpose:practical || null,lesson:town._paultendoMaterials?.[type]?.lesson?structuredClone(town._paultendoMaterials[type].lesson):null,steps:[],inputs:[]};
         // Decide a trial's uncertainty once. Reloading cannot reroll it.
         work.roll=Math.random();state.materialWork.push(work);
         materialStep(work,`${person.name} wants to try making ${COMMODITIES[type].label} in ${town.name}.`);
@@ -6047,6 +6082,7 @@
         const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type))return null;
         const actual=materialDirectNeed(town,type)>0;
         const practiced=town._paultendoMaterials?.[type]?.technique;
+        if(type==='steel'&&!actual&&livingResearchPriority(town.research)!=='education'&&!(livingResearchPriority(town.research)==='military'&&town.jobs?.soldier>0))return null;
         const sample=commodityStock(town,recipe.sample)>0||town._paultendoMaterials?.[recipe.sample];
         if(!actual&&(practiced||!sample))return null;
         const established=Object.entries(recipe.established).every(([key,level])=>(planet.unlocks[key] || 0)>=level);
@@ -6064,7 +6100,7 @@
         const intents=Object.keys(MATERIAL_RECIPES).map(type=>materialIntent(town,type)).filter(Boolean).sort((a,b)=>Number(b.actual)-Number(a.actual));
         const prerequisite=(type,seen=new Set())=>{
             if(seen.has(type)||!materialTechniqueAvailable(type))return null;seen.add(type);
-            for(const [input,count] of Object.entries(MATERIAL_RECIPES[type].cost))if(commodityStock(town,input)<count&&MATERIAL_RECIPES[input]) {
+            for(const [input,count] of Object.entries(materialBatchCost(town,type)))if(commodityStock(town,input)<count&&MATERIAL_RECIPES[input]) {
                 const next=prerequisite(input,seen);if(next)return next;
             }
             return type;
@@ -6117,6 +6153,11 @@
             if(blocked){work.pause='The work is set aside until there are hands, food and peace for it.';continue;}
             delete work.pause;
             if(work.status==='waiting') {
+                const cost=materialBatchCost(town,work.type,work);
+                if(JSON.stringify(cost)!==JSON.stringify(work.cost)) {
+                    work.cost=cost;
+                    materialStep(work,`${work.name} chooses ${cost.coal?'coal':'charcoal'} for the fire.`);
+                }
                 if(!work.trial&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
                 if(Object.entries(work.cost).some(([type,count])=>commodityStock(town,type)<count))continue;
                 // Protect other craft inputs. Construction can choose these inputs
@@ -6772,12 +6813,13 @@
         return null;
     }
 
-    function sendLivingWhisper(town, person, topic, placeId, artifactId, projectKind) {
+    function sendLivingWhisper(town, person, topic, placeId, artifactId, projectKind, projectMaterial) {
         const definition = LIVING_WHISPERS[topic];
         const artifact = artifactId && livingWorldState().artifacts.find(a=>a.id===artifactId);
         if (!definition || !livingPersonAvailable(person, town) || livingWhisperWait(person,topic,artifact)) return false;
         if (artifactId && (!['share','hoard','return','hurry','craft'].includes(topic) || !livingArtifactHolder(artifact,town,person))) return false;
         if (topic==='craft' ? !livingArtifactWorkAvailable(town,person,artifact?.kind || projectKind,artifact) : !livingWhisperAvailable(town, topic, artifact)) return false;
+        if(projectMaterial&&!livingArtifactRecipe(town,person,projectKind,projectMaterial))return false;
         const place = placeId && livingWorldState().places[placeId];
         const rival = place && topic === 'conquer' && livingPlaceRival(town,place);
         if (placeId && !(topic === 'explore' && livingPlaceReturn(town,place)) && !rival) return false;
@@ -6792,6 +6834,7 @@
         }
         if(artifact){record.artifact=artifact.id;record.title=`${definition.title}: ${artifactTitle(artifact)}`;}
         if(projectKind){record.projectKind=projectKind;record.words=`Try making a ${LIVING_ARTIFACTS[projectKind].name.toLowerCase()} of your own.`;}
+        if(projectMaterial){record.projectMaterial=projectMaterial;record.words=`Try making a ${LIVING_ARTIFACTS[projectKind].name.toLowerCase()} from ${COMMODITIES[projectMaterial].label}.`;}
         state.whispers.push(record);
         state.lastWhisper = mind.lastWhisper = planet.day;
         // Keep pending words even when trimming an older world's history.
@@ -7756,6 +7799,22 @@
             mine.perChunk._paultendoMaterials=true;
         }
         PAULTENDO_STATE.commoditiesReady=true;
+        ensurePlanetState();
+        if(typeof refreshExecutive==='function'&&!refreshExecutive._paultendoLivingView) {
+            const base=refreshExecutive;
+            refreshExecutive=function() {
+                // Native refresh re-clicks the button which opened a panel.
+                // A craft or whisper button must not become another instruction
+                // each time the day changes. Refresh the displayed story instead.
+                const town=livingPersonView?.planet===planet&&regGet('town',livingPersonView.town);
+                const person=town&&findLivingPerson(town,livingPersonView.person);
+                if(person&&currentExecutive===escapeLivingText(person.name).toLowerCase()){refreshLivingPersonView();return;}
+                const artifact=livingArtifactView?.planet===planet&&livingWorldState().artifacts.find(a=>a.id===livingArtifactView.id);
+                if(artifact&&currentExecutive===escapeLivingText(artifactTitle(artifact)).toLowerCase()){openLivingArtifact(artifact);return;}
+                return base.apply(this,arguments);
+            };
+            refreshExecutive._paultendoLivingView=true;
+        }
         ensureLivingWorldStyles();
         renderTravelerOpening();
         if (!PAULTENDO_STATE.livingDecisionBound && document.getElementById('logMessages')) {
@@ -13674,6 +13733,7 @@
                 PAULTENDO_GLOBAL._paultendoSuppressLogSync = previousSuppress;
             }
             try {
+                ensurePlanetState();
                 const universe = getUniverse();
                 if (universe) {
                     universe.currentWorldId = getCurrentWorldId();
@@ -13731,6 +13791,7 @@
                 stopAutoplay("manual");
                 baseParseSave(json);
                 try { deserializeUniverse(json, baseParseSave); } catch {}
+                ensurePlanetState();
             };
             parseSave._paultendoUniverse = true;
             parseSave._paultendoBase = baseParseSave;
@@ -18992,13 +19053,15 @@
             ? regFilter("town", t => t && t.famine && !t.famine.ended).length
             : 0;
         const firings=(planet._paultendoLife?.materialWork || []).filter(w=>w.type==='brick'&&['made','failed'].includes(w.status)&&planet.day-w.finished<=90).length;
-        return { wars, revolutions, epidemics, famines, firings };
+        const metalTrials=(planet._paultendoLife?.materialWork || []).filter(w=>w.type==='steel'&&['made','failed'].includes(w.status)&&planet.day-w.finished<=90).length;
+        return { wars, revolutions, epidemics, famines, firings, metalTrials };
     }
 
     function techBiasMultiplier(eventId, domain, signals) {
         let mult = 1;
         const s = signals || {};
         if(eventId==='unlockKilns'&&s.firings>0)mult+=Math.min(0.35,s.firings*0.12);
+        if(eventId==='unlockSteel'&&s.metalTrials>0)mult+=Math.min(0.35,s.metalTrials*0.12);
 
         if (s.wars > 0 && (domain === "military" || domain === "fire")) {
             mult += Math.min(0.35, s.wars * 0.15);
@@ -19321,7 +19384,10 @@
             if (planet.unlocks.smith < 50 && planet.unlocks.smith >= 40 && planet.unlocks.fire >= 40) return true;
             return false;
         },
-        message: () => "Smiths experiment with refining iron into something stronger. {{should}}",
+        message: () => {
+            const trial=(planet._paultendoLife?.materialWork || []).findLast(w=>w.type==='steel'&&['made','failed'].includes(w.status)&&planet.day-w.finished<=90&&livingTownKnown(regGet('town',w.town)));
+            return trial?`${escapeLivingText(trial.name)} wants to learn how to shape the metal from their hot fire. {{should}}`:"Smiths experiment with refining iron into something stronger. {{should}}";
+        },
         func: () => {
             planet.unlocks.smith = 50;
             happen("Influence", null, null, { military: 2, trade: 1 });
