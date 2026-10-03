@@ -5,7 +5,7 @@ const panel=w=>w.document.getElementById('actionSubList');
 function click(w,text){const b=[...panel(w).querySelectorAll('[role="button"],.actionItem')].find(b=>b.textContent.includes(text));assert.ok(b,`Missing ${text}: ${panel(w).textContent}`);b.click();}
 function next(w){const choose=w.chooseEvent;w.chooseEvent=()=>null;try{w.nextDay();}finally{w.chooseEvent=choose;}}
 function prepare(g,role='doctor'){
- const w=g.window,t=settleGame(g);t.name='Wick';t.pop=48;t.jobs={[role]:47};t.resources.crop=200;t.resources.metal=20;t.resources.rock=20;t.guidanceTrust=90;w.planet.day=10;
+ const w=g.window,t=settleGame(g);t.name='Wick';t.pop=48;t.jobs={[role]:47};t.resources.crop=200;t.resources.metal=20;t.resources.rock=20;t.resources.glass=20;t.guidanceTrust=90;w.planet.day=10;
  Object.assign(w.planet.unlocks,{education:20,fire:40,smith:40,travel:30,trade:10});t.influences.travel=3;
  w.openRegBrowser(t,'town');[...w.document.querySelectorAll('.paultendoTownLife button')].find(b=>b.textContent==='Meet the people').click();
  for(const p of t._paultendoPeople){p.outlook='curious';p.trust=90;}
@@ -31,7 +31,7 @@ test('player-inspired successors use real materials, name a maker and retain the
  const {r,work}=craft(w,town,parent);assert.equal(work.status,'working');assert.equal(w.planet._paultendoLife.artifacts.length,1);
  // Native production remains running. Compare the actual paid material record at completion.
  w.planet.day=work.due-1;next(w);const made=w.planet._paultendoLife.artifacts.find(a=>a.id===work.artifact);
- assert.ok(made);assert.equal(work.status,'made');assert.deepEqual(JSON.parse(JSON.stringify(work.materials)),{rock:3,metal:2});
+ assert.ok(made);assert.equal(work.status,'made');assert.deepEqual(JSON.parse(JSON.stringify(work.materials)),{glass:1,metal:2});
  assert.equal(made.origin.maker.name,parent.name);assert.equal(made.origin.maker.town,'Wick');assert.equal(made.origin.maker.day,w.planet.day);
  assert.equal(made.parent.lineage,parent.lineage);assert.equal(made.origin.whisper,'Try making something of your own.');assert.equal(r.created,made.id);
  rename(w,town,made,'The Clouded Eye');assert.equal(made.title,'The Clouded Eye');assert.equal(made.named,true);

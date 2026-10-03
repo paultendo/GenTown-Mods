@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.45/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.46/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.45";
+    const MOD_VERSION = "1.6.46";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -3063,7 +3063,7 @@
                 const after=target.resources[args.type] || 0,delta=after-stockBefore;
                 if(args.type==='cash'&&delta)recordCashFlow(target,delta,PAULTENDO_STATE.cashSource || 'other');
                 else if(action==='RemoveResource'&&delta<0)consumeCommodityLots(target,args.type,stockBefore,after);
-                if(action==='AddResource'&&delta>0&&(MATERIAL_RECIPES[args.type]||args.type==='clay'))encounterMaterial(target,args.type);
+                if(action==='AddResource'&&delta>0&&(MATERIAL_RECIPES[args.type]||MATERIAL_SOURCES[args.type]))encounterMaterial(target,args.type);
             }
             if (speciesRate !== null && target.rate > speciesRate) {
                 try { recordLivingSpeciesUse(target, subject, target.type === 'plant' ? 'cultivation' : 'breeding'); } catch {}
@@ -5188,7 +5188,7 @@
         const u=planet.unlocks || {};
         if(!livingPersonAvailable(person,town)) return null;
         if(kind==='fork'&&['musician','scholar','miner'].includes(person.role)&&u.smith>=30) return {cost:{metal:3},description:'A pair of hand-worked metal prongs. Their note wavers before it settles. Small marks from the maker’s tools remain.'};
-        if(kind==='lens'&&['doctor','scholar'].includes(person.role)&&u.education>=20&&u.fire>=40&&u.smith>=30) return {cost:{rock:3,metal:2},description:'Glass ground by hand and held in a metal ring. The centre is clear, but the rim turns the world cloudy.'};
+        if(kind==='lens'&&['doctor','scholar'].includes(person.role)&&u.education>=20&&u.fire>=40&&u.smith>=30) return {cost:{glass:1,metal:2},description:'Glass ground by hand and held in a metal ring. The centre is clear, but the rim turns the world cloudy.'};
         if(kind==='compass'&&['scholar','miner'].includes(person.role)&&u.smith>=40&&u.travel>=30&&u.education>=20) return {cost:{rock:1,metal:3},description:'A worked needle beside a magnetic stone, set inside a rough metal case. The needle sometimes catches against the rim.'};
         return null;
     }
@@ -5196,7 +5196,7 @@
         if(!livingArtifactRecipe(town,person,kind)||hasIssue(town,'war')||town.resources.crop<town.pop*0.2) return false;
         if(artifact&&(!livingArtifactHolder(artifact,town,person)||artifact.status==='hoarded'||artifact.crafted?.[town.id])) return false;
         if(livingWorldState().materialWork.some(w=>['waiting','working'].includes(w.status)&&w.town===town.id&&w.person===person.id))return false;
-        return !livingWorldState().artifactWork.some(p=>p.status==='working'&&p.town===town.id&&p.person===person.id&&p.kind===kind);
+        return !livingWorldState().artifactWork.some(p=>['gathering','working'].includes(p.status)&&p.town===town.id&&p.person===person.id);
     }
     function openLivingWorkshop(town,person) {
         const items=[{text:'← Back to the people',func:()=>openLivingPerson(town,person)},{text:'An idea is a beginning. Making it real will take materials, time and someone willing to try.'}];
@@ -5207,21 +5207,35 @@
         const kind=artifact?.kind || record.projectKind;
         if(!livingArtifactWorkAvailable(town,person,kind,artifact)) return {acted:false,reason:'Their work no longer has the footing it needs.'};
         const recipe=livingArtifactRecipe(town,person,kind);
-        if(Object.entries(recipe.cost).some(([k,n])=>(town.resources[k]||0)<n)) return {acted:false,reason:'They cannot spare the materials.'};
+        const missing=Object.entries(recipe.cost).filter(([k,n])=>(town.resources[k]||0)<n);
+        if(missing.some(([k])=>k!=='glass')) return {acted:false,reason:'They cannot spare the materials.'};
         const practiced=livingWorldState().artifactWork.some(w=>w.status==='made'&&w.person===person.id&&w.kind===kind);
         const days=Math.max(3,LIVING_PACE.work[kind]-(practiced?2:0)-(planet.unlocks.smith>=80?2:0));
-        const work={id:`work:${livingWorldState().nextId++}`,town:town.id,person:person.id,kind,parent:artifact?.id,whisper:record.id,started:planet.day,due:planet.day+days,status:'working'};
+        const work={id:`work:${livingWorldState().nextId++}`,town:town.id,person:person.id,kind,parent:artifact?.id,whisper:record.id,started:missing.length?null:planet.day,due:missing.length?null:planet.day+days,days,status:missing.length?'gathering':'working',recipe:structuredClone(recipe)};
         livingWorldState().artifactWork.push(work);record.work=work.id;
         const text=artifact?`${person.name} begins making an object of their own, working from ${artifactTitle(artifact)}.`:`${person.name} begins working on a ${LIVING_ARTIFACTS[kind].name.toLowerCase()} of their own.`;
-        record.steps.push({day:planet.day,text});return {acted:true};
+        record.steps.push({day:planet.day,text:missing.length?`${person.name} starts looking for glass to make a lens in ${town.name}.`:text});return {acted:true};
+    }
+    function artifactWorkRecipe(town,person,work) {
+        const current=livingArtifactRecipe(town,person,work.kind);if(!current)return null;
+        // Existing unfinished lenses keep the recipe promised in their save.
+        return work.recipe || (work.kind==='lens'?{...current,cost:{rock:3,metal:2}}:current);
     }
     function advanceLivingArtifactWork() {
         const state=livingWorldState();
-        for(const work of state.artifactWork.filter(w=>w.status==='working')) {
+        for(const work of state.artifactWork.filter(w=>['gathering','working'].includes(w.status))) {
             const town=regGet('town',work.town),person=town&&findLivingPerson(town,work.person);
             const parent=work.parent&&state.artifacts.find(a=>a.id===work.parent);
-            const recipe=town&&person&&livingArtifactRecipe(town,person,work.kind);
+            const recipe=town&&person&&artifactWorkRecipe(town,person,work);
             const record=state.whispers.find(w=>w.id===work.whisper);
+            if(work.status==='gathering'){
+                if(!recipe||(work.parent&&!parent)||(parent&&!livingArtifactHolder(parent,town,person))||parent?.status==='hoarded'){work.status='abandoned';if(record)record.steps.push({day:planet.day,text:'The idea is put aside. Its maker or inspiration is no longer there.'});continue;}
+                if(hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town)||Object.entries(recipe.cost).some(([type,count])=>commodityStock(town,type)<count))continue;
+                work.status='working';work.started=planet.day;work.due=planet.day+work.days;
+                const text=`${person.name} has the glass and metal. Work on the lens begins in ${town.name}.`;if(record)record.steps.push({day:planet.day,text});
+                if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:record?{kind:'whisper',id:record.id}:null});
+                continue;
+            }
             if(planet.day<work.due) {
                 if(!work.progress&&planet.day>=work.started+Math.ceil((work.due-work.started)/2)&&recipe&&Object.entries(recipe.cost).every(([k,n])=>(town.resources[k]||0)>=n)&&(!parent||livingArtifactHolder(parent,town,person))&&!hasIssue(town,'war')&&town.resources.crop>=town.pop*0.2) {
                     work.progress=planet.day;
@@ -5233,7 +5247,7 @@
                 continue;
             }
             let text;
-            if(!recipe||!livingPersonAvailable(person,town)||(parent&&!livingArtifactHolder(parent,town,person))||parent?.status==='hoarded'||hasIssue(town,'war')||town.resources.crop<town.pop*0.2||Object.entries(recipe?.cost || {}).some(([k,n])=>(town?.resources?.[k]||0)<n)) {
+            if(!recipe||!livingPersonAvailable(person,town)||(work.parent&&!parent)||(parent&&!livingArtifactHolder(parent,town,person))||parent?.status==='hoarded'||hasIssue(town,'war')||town.resources.crop<town.pop*0.2||Object.entries(recipe?.cost || {}).some(([k,n])=>(town?.resources?.[k]||0)<n)) {
                 work.status='abandoned';text='The unfinished work is put aside. The hands, peace or materials it needed are no longer there.';
             } else {
                 const before={...town.resources};
@@ -5250,9 +5264,10 @@
                     if(parent){artifact.parent={lineage:parent.lineage || parent.origin.lineage,title:artifactTitle(parent),phrase:artifactPhrase(parent)};parent.crafted ||= {};parent.crafted[town.id]=artifact.lineage;}
                     state.artifacts.push(artifact);work.status='made';work.artifact=artifact.id;work.materials=paid;
                     for(const input of inputs)rememberCommodityUse(town,input,{kind:'craft',id:work.id,name:work.kind});
-                    artifact.origin.materialSources=inputs.map(input=>{
+                    artifact.origin.materialProductions=inputs.filter(input=>input.production).map(input=>({...structuredClone(input.production),count:input.count,type:input.type}));
+                    artifact.origin.materialSources=inputs.filter(input=>input.exchange).map(input=>{
                         const exchange=commodityExchangeState().exchanges.find(r=>r.id===input.exchange),source=exchange&&regGet('town',input.from || exchange.seller);
-                        return {...input,world:getUniverse().currentWorldId,town:source?.id,townName:source?.name,known:!!exchange?.known?.[source?.id]||livingTownKnown(source)};
+                        return {...input,world:getUniverse().currentWorldId,passage:travelerState().passage,town:source?.id,townName:source?.name,known:!!exchange?.known?.[source?.id]||livingTownKnown(source)};
                     });
                     text=`${person.name} finishes ${artifactTitle(artifact)} in ${town.name}. The rough edges show where their own hands took over.`;
                     carryLivingArtifact(artifact,town,person,text);
@@ -5299,7 +5314,7 @@
     }
     function livingArtifactReturnNeed(artifact,town,person) {
         if(hasIssue(town,'war')||hasIssue(town,'revolution')) return 'The fighting keeps them close to home.';
-        if(livingWorldState().artifactWork.some(w=>w.status==='working'&&w.parent===artifact.id)) return 'They are still using it to finish their own work.';
+        if(livingWorldState().artifactWork.some(w=>['gathering','working'].includes(w.status)&&w.parent===artifact.id)) return 'They are still using it to finish their own work.';
         const use=livingArtifactUse(artifact,town,person)?.meaning;
         if(use==='healing'&&(town.influences.disease||0)>=2&&!livingArtifactSubstitute(artifact,town,person)) return 'The sick still need it.';
         if(use==='revered'&&(town.influences.faith||0)>=3) return 'People still gather around it. They cannot yet bear to part with it.';
@@ -5590,7 +5605,14 @@
         for(const source of artifact.origin?.materialSources || []) {
             const goods=COMMODITIES[source.type]?.label || source.type;
             items.push({text:`${source.count} ${escapeLivingText(goods)} came from ${source.known?escapeLivingText(source.townName):'another settlement'} before it was made.`});
-            if(source.world===getUniverse().currentWorldId&&resolveChronicleStory({kind:'exchange',id:source.exchange}))items.push({text:'Remember the exchange',func:()=>resolveChronicleStory({kind:'exchange',id:source.exchange})?.open()});
+            if(source.passage===travelerState().passage&&source.world===getUniverse().currentWorldId&&resolveChronicleStory({kind:'exchange',id:source.exchange}))items.push({text:'Remember the exchange',func:()=>resolveChronicleStory({kind:'exchange',id:source.exchange})?.open()});
+        }
+        for(const source of artifact.origin?.materialProductions || []) {
+            const sameHistory=source.passage===travelerState().passage&&source.world===getUniverse().currentWorldId;
+            const known=source.known || sameHistory&&livingTownKnown(regGet('town',source.town));
+            items.push({text:known?`${source.count} ${COMMODITIES[source.type].label} came from ${escapeLivingText(source.name)}’s work in ${escapeLivingText(source.townName)} on Day ${source.day}.`:`${source.count} ${COMMODITIES[source.type].label} was made beyond the land you know.`});
+            const work=sameHistory&&livingWorldState().materialWork.find(w=>w.id===source.work);
+            if(known&&work)items.push({text:'Remember how it was made',func:()=>openMaterialWork(work)});
         }
         items.push({text:artifact.status==='returned'?'You carry it now.':artifact.status==='waiting'?(artifact.cached?'It lies among the remains, waiting to be found again.':'It is still waiting where you left it.'):artifact.status==='broken'?'The object is broken. Its story remains.':livingTownKnown(town)?`${escapeLivingText(artifact.name)} keeps it in ${escapeLivingText(town.name)}.`:'Its bearer has passed beyond your notice.'});
         if(artifact.returnOffer&&livingTownKnown(town)&&person) items.push({text:`${escapeLivingText(person.name)} has promised it to you. ${escapeLivingText(livingArtifactReturnNeed(artifact,town,person) || 'They are not ready to part with it yet.')}`});
@@ -5859,14 +5881,18 @@
         metal:{label:'metal',role:'miner'},
         clay:{label:'clay',role:'miner',description:'Soft earth that holds a shape when wet. Heat can turn it into something harder.'},
         charcoal:{label:'charcoal',role:'lumberer',description:'Timber burned with little air. A small, dark fuel for a hotter fire.'},
-        brick:{label:'bricks',role:'miner',description:'Clay shaped, dried and fired. The blocks can take the place of stone in a building.'}
+        brick:{label:'bricks',role:'miner',description:'Clay shaped, dried and fired. The blocks can take the place of stone in a building.'},
+        sand:{label:'sand',role:'miner',description:'Pale grains gathered from dry ground. The finest samples may change in a fierce enough fire.'},
+        glass:{label:'glass',role:'miner',description:'A cooled melt of sand and minerals. It catches the light. A clear piece can be ground into a lens.'}
     };
     // Recipe durations, sample sizes and first-trial risks are game calibration.
     // Knowledge is local. Global milestones open possibilities, never award stock.
     const MATERIAL_RECIPES = {
-        charcoal:{cost:{lumber:2},output:1,days:3,needs:{fire:10},roles:['lumberer','miner'],risk:0.15,success:'The timber holds its shape, but turns black. It burns hotter than the wood they started with.',failure:'Air gets into the covered fire. The timber burns away to ash.'},
-        brick:{cost:{clay:2,charcoal:1},output:2,days:5,needs:{fire:20,smith:20},roles:['miner'],risk:0.35,success:'The clay comes out hard. The blocks keep their shape even when soaked.',failure:'The firing leaves cracks through the clay. These blocks will not hold a wall.'}
+        charcoal:{cost:{lumber:2},output:1,days:3,needs:{fire:10},sample:'lumber',established:{fire:40},roles:['lumberer','miner'],risk:0.15,success:'The timber holds its shape, but turns black. It burns hotter than the wood they started with.',failure:'Air gets into the covered fire. The timber burns away to ash.'},
+        brick:{cost:{clay:2,charcoal:1},output:2,days:5,needs:{fire:20,smith:20},sample:'clay',established:{fire:40},roles:['miner'],risk:0.35,success:'The clay comes out hard. The blocks keep their shape even when soaked.',failure:'The firing leaves cracks through the clay. These blocks will not hold a wall.'},
+        glass:{cost:{sand:3,charcoal:2,rock:1},output:2,days:7,needs:{fire:50,smith:30},sample:'sand',established:{fire:50},roles:['miner','scholar'],risk:0.3,success:'The cloudy melt cools into glass. Held up to the light, its clearer patches show the world beyond.',failure:'The heat leaves a brittle, cloudy mass. It crumbles before it can be worked.'}
     };
+    const MATERIAL_SOURCES = {clay:{biomes:['wetland'],needs:{smith:10},sample:2,quantity:40,ground:'wet ground'},sand:{biomes:['desert'],needs:{smith:20},sample:3,quantity:60,ground:'dry ground'}};
     function encounterMaterial(town,type,source) {
         if(!COMMODITIES[type]||!town||town.end||town.pop<=0)return;
         const known=town._paultendoMaterials ||= {},first=!known[type];
@@ -5882,17 +5908,19 @@
         return Math.max(0,work-stored);
     }
     function collectLocalMaterial(town,chunk,gained) {
-        if(gained<1||!(town.jobs?.miner>0)||!(planet.unlocks.smith>=10)||chunk?.b!=='wetland'||chunk.v?.s!==town.id||town.end)return;
-        const desired=Math.max(2,Math.ceil(materialConstructionNeed(town)/2));
-        if(commodityStock(town,'clay')>=desired||commodityStock(town,'clay')>=$c.maxResource(town))return;
-        // A finite pocket belongs to the ground, not the settlement or its save age.
-        // The wetland source is a deliberate simplified geography rule.
-        const deposit=(chunk._paultendoDeposits ||= {}).clay ||= {remaining:40};
-        if(deposit.remaining<=0)return;
-        const count=Math.min(1,gained,deposit.remaining);
-        happen('RemoveResource',null,town,{type:'rock',count});
-        happen('AddResource',null,town,{type:'clay',count});deposit.remaining-=count;
-        encounterMaterial(town,'clay',{x:chunk.x,y:chunk.y,biome:chunk.b});
+        if(gained<1||!(town.jobs?.miner>0)||chunk?.v?.s!==town.id||town.end)return;
+        for(const [type,source] of Object.entries(MATERIAL_SOURCES)) {
+            if(!source.biomes.includes(chunk.b)||Object.entries(source.needs).some(([key,level])=>(planet.unlocks[key] || 0)<level))continue;
+            const desired=Math.max(source.sample,commodityCommittedStock(town,type),type==='clay'?Math.ceil(materialConstructionNeed(town)/2):0);
+            if(commodityStock(town,type)>=desired||commodityStock(town,type)>=$c.maxResource(town))continue;
+            const deposit=(chunk._paultendoDeposits ||= {})[type] ||= {remaining:source.quantity};
+            if(deposit.remaining<=0)continue;
+            const count=Math.min(1,gained,deposit.remaining);
+            happen('RemoveResource',null,town,{type:'rock',count});
+            happen('AddResource',null,town,{type,count});deposit.remaining-=count;gained-=count;
+            encounterMaterial(town,type,{x:chunk.x,y:chunk.y,biome:chunk.b});
+            if(gained<1)break;
+        }
     }
     function materialWorker(town,recipe) {
         const people=recipe.roles.map(role=>livingCommunityPerson(town,role)).filter(person=>person&&livingTeachingPersonAvailable(person,town)&&!livingWorldState().artifactWork.some(w=>w.town===town.id&&w.person===person.id&&w.status==='working'));
@@ -5908,23 +5936,74 @@
         const recipe=MATERIAL_RECIPES[type],person=materialWorker(town,recipe);
         if(!person||!materialTechniqueAvailable(type)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town))return null;
         const practiced=!!town._paultendoMaterials?.[type]?.technique;
-        if(!practiced&&person.outlook!=='curious'&&!materialConstructionNeed(town)&&!practical)return null;
-        const state=livingWorldState(),work={id:`material:${state.nextId++}`,town:town.id,type,person:person.id,name:person.name,day:planet.day,status:'waiting',cost:{...recipe.cost},remaining:recipe.days,output:recipe.output,trial:!practiced,steps:[],inputs:[]};
+        if(!practiced&&person.outlook!=='curious'&&!materialConstructionNeed(town)&&!practical?.allowed)return null;
+        const state=livingWorldState(),work={id:`material:${state.nextId++}`,town:town.id,type,person:person.id,name:person.name,day:planet.day,status:'waiting',cost:{...recipe.cost},remaining:Math.max(2,recipe.days-(town._paultendoMaterials?.[type]?.lesson?2:0)),output:recipe.output,trial:!practiced,purpose:practical || null,lesson:town._paultendoMaterials?.[type]?.lesson?structuredClone(town._paultendoMaterials[type].lesson):null,steps:[],inputs:[]};
         // Decide a trial's uncertainty once. Reloading cannot reroll it.
         work.roll=Math.random();state.materialWork.push(work);
         materialStep(work,`${person.name} wants to try making ${COMMODITIES[type].label} in ${town.name}.`);
         return work;
     }
+    function materialDirectNeed(town,type) {
+        if(type==='brick')return Math.ceil(materialConstructionNeed(town)/2);
+        const promised=commodityWorkClaims(town).filter(c=>c.kind==='craft').reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        return Math.max(0,promised-commodityStock(town,type));
+    }
+    function materialIntent(town,type) {
+        const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type))return null;
+        const actual=materialDirectNeed(town,type)>0;
+        const practiced=town._paultendoMaterials?.[type]?.technique;
+        const sample=commodityStock(town,recipe.sample)>0||town._paultendoMaterials?.[recipe.sample];
+        if(!actual&&(practiced||!sample))return null;
+        const established=Object.entries(recipe.established).every(([key,level])=>(planet.unlocks[key] || 0)>=level);
+        return {type,actual,allowed:actual||established||!!town._paultendoMaterials?.[type]?.lesson};
+    }
+    function materialPurposeWanted(town,work) {
+        const root=work.purpose?.type;
+        if(root)return !!materialIntent(town,root);
+        return materialConstructionNeed(town)>0||materialDirectNeed(town,work.type)>0;
+    }
     function planMaterialWork(town) {
         if(livingWorldState().materialWork.some(w=>w.town===town.id&&['waiting','working','storing'].includes(w.status)))return;
         const recent=livingWorldState().materialWork.filter(w=>w.town===town.id).at(-1);
         if(recent&&planet.day-(recent.finished || recent.day)<EXCHANGE_PACE.retryDays)return;
-        const need=materialConstructionNeed(town),clay=commodityStock(town,'clay');
-        const brickKnown=town._paultendoMaterials?.brick?.technique;
-        const brickWanted=materialTechniqueAvailable('brick')&&(clay>=2||town._paultendoMaterials?.clay)&&(need>0||!brickKnown);
-        const charcoalKnown=town._paultendoMaterials?.charcoal?.technique;
-        if(materialTechniqueAvailable('charcoal')&&((brickWanted&&commodityStock(town,'charcoal')<1)||!charcoalKnown&&commodityStock(town,'lumber')>=2))startMaterialBatch(town,'charcoal',brickWanted&&planet.unlocks.fire>=40);
-        else if(brickWanted)startMaterialBatch(town,'brick',planet.unlocks.fire>=40);
+        const intents=Object.keys(MATERIAL_RECIPES).map(type=>materialIntent(town,type)).filter(Boolean).sort((a,b)=>Number(b.actual)-Number(a.actual));
+        const prerequisite=(type,seen=new Set())=>{
+            if(seen.has(type)||!materialTechniqueAvailable(type))return null;seen.add(type);
+            for(const [input,count] of Object.entries(MATERIAL_RECIPES[type].cost))if(commodityStock(town,input)<count&&MATERIAL_RECIPES[input]) {
+                const next=prerequisite(input,seen);if(next)return next;
+            }
+            return type;
+        };
+        for(const intent of intents){const type=prerequisite(intent.type);if(type&&startMaterialBatch(town,type,intent))return;}
+    }
+    function addProducedMaterialLot(town,work,count) {
+        if(count<=0)return;
+        const production={work:work.id,world:getUniverse().currentWorldId,passage:travelerState().passage,town:town.id,townName:town.name,known:livingTownKnown(town),person:work.person,name:work.name,day:work.fired || work.finished || planet.day,cost:{...work.cost},output:work.output};
+        const lots=(town._paultendoCommodityLots ||= {})[work.type] ||= [];
+        const last=lots.at(-1);
+        if(last?.production?.work===work.id&&!last.exchange)last.count+=count;
+        else lots.push({from:town.id,count,production});
+        if(lots.length>EXCHANGE_PACE.maxHistory)lots.splice(0,lots.length-EXCHANGE_PACE.maxHistory);
+    }
+    function materialInstructions(from,to,type,exchange) {
+        const entry=from._paultendoMaterials?.[type];if(!entry?.technique||!MATERIAL_RECIPES[type]||to._paultendoMaterials?.[type]?.technique)return null;
+        const person=(from._paultendoPeople || []).find(p=>p.id===entry.technique.person);
+        if(!livingTeachingPersonAvailable(person,from))return null;
+        const faith=getTownReligion(from),insular=(from.influences.faith || 0)>4&&faith?.tenets?.includes('insular')&&from.religion!==to.religion;
+        const shares=livingWorldState().teachings.some(t=>t.town===from.id&&t.active&&t.meaning==='learning');
+        const withheld=insular||!shares&&(person.outlook==='guarded'||(from.values?.openness || 0)<=-3);
+        return {from:from.id,townName:from.name,known:livingTownKnown(from),person:person.id,name:person.name,origin:entry.technique.work,type,exchange,day:planet.day,withheld};
+    }
+    function receiveMaterialInstructions(town,lesson,record) {
+        if(!lesson||lesson.withheld)return;
+        const entry=encounterMaterial(town,lesson.type);if(entry.technique||entry.lesson)return;
+        const person=materialWorker(town,MATERIAL_RECIPES[lesson.type]);if(!person)return;
+        const outlook=livingPersonMind(person).outlook;
+        const chance=clampChance(0.6+(outlook==='curious'?0.2:outlook==='guarded'?-0.25:0)+clampValue(getRelations(town,regGet('town',lesson.from)),-5,5)*0.04,0.05,0.95);
+        const roll=mulberry32(fnv1a32(`${planet.config?.seed}:${record.id}:${town.id}:${lesson.type}:workshop-visit`))();
+        if(roll>=chance){noteExchangeStep(record,'lessonDeclined',{type:lesson.type,town:town.id});return;}
+        entry.lesson={...lesson,listener:person.id,listenerName:person.name,heard:planet.day};
+        noteExchangeStep(record,'lesson',{type:lesson.type,town:town.id,person:person.name,origin:lesson.known?lesson.townName:'another settlement'});
     }
     function advanceMaterialWork() {
         const state=livingWorldState();
@@ -5935,7 +6014,7 @@
             const person=(town._paultendoPeople || []).find(p=>p.id===work.person);
             if(work.status==='storing') {
                 const before=commodityStock(town,work.type);
-                happen('AddResource',null,town,{type:work.type,count:work.cargo});work.cargo-=commodityStock(town,work.type)-before;
+                happen('AddResource',null,town,{type:work.type,count:work.cargo});const added=commodityStock(town,work.type)-before;work.cargo-=added;addProducedMaterialLot(town,work,added);
                 if(work.cargo<=0){work.status='made';work.finished=planet.day;}
                 continue;
             }
@@ -5943,7 +6022,7 @@
             if(blocked){work.pause='The work is set aside until there are hands, food and peace for it.';continue;}
             delete work.pause;
             if(work.status==='waiting') {
-                if(!work.trial&&materialConstructionNeed(town)<=0){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. The building no longer needs it.`);continue;}
+                if(!work.trial&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
                 if(Object.entries(work.cost).some(([type,count])=>commodityStock(town,type)<count))continue;
                 // Protect other craft inputs. Construction can choose these inputs
                 // or fired bricks, but a second workshop cannot spend the same units.
@@ -5956,15 +6035,15 @@
                 }
                 work.status='working';work.started=planet.day;
                 for(const input of work.inputs)rememberCommodityUse(town,input,{kind:'material',id:work.id,name:work.type});
-                materialStep(work,`${work.name} begins the ${work.type==='brick'?'firing':'covered fire'} in ${town.name}.`);
+                materialStep(work,`${work.name} begins the ${work.type==='charcoal'?'covered fire':'firing'} in ${town.name}.`);
                 continue;
             }
             if(--work.remaining>0)continue;
-            const risk=work.type==='brick'&&planet.unlocks.fire>=40?0.08:recipe.risk;
+            const risk=(work.type==='brick'&&planet.unlocks.fire>=40?0.08:recipe.risk)*(work.lesson?0.4:1);
             if(work.trial&&work.roll<risk){work.status='failed';work.finished=planet.day;materialStep(work,`${work.name} opens the fire. ${recipe.failure}`);continue;}
             const entry=encounterMaterial(town,work.type);entry.technique ||= {day:planet.day,work:work.id,person:work.person};
             const before=commodityStock(town,work.type);
-            happen('AddResource',null,town,{type:work.type,count:work.output});work.cargo=work.output-(commodityStock(town,work.type)-before);
+            work.fired=planet.day;happen('AddResource',null,town,{type:work.type,count:work.output});const added=commodityStock(town,work.type)-before;work.cargo=work.output-added;addProducedMaterialLot(town,work,added);
             work.status=work.cargo>0?'storing':'made';work.finished=planet.day;
             materialStep(work,`${work.name} finishes ${COMMODITIES[work.type].label} in ${town.name}. ${recipe.success}`);
         }
@@ -5995,7 +6074,8 @@
             items.push({text:COMMODITIES[type].description});
             if(entry.technique){const first=livingWorldState().materialWork.find(w=>w.id===entry.technique.work);items.push({text:`First made here on Day ${entry.technique.day}.`,...(first?{func:()=>openMaterialWork(first)}:{})});}
             else if(MATERIAL_RECIPES[type])items.push({text:'They have seen it, but have not yet learned to make it.'});
-            if(entry.sources.some(s=>isChunkExplored(s.x,s.y)))items.push({text:'Found in wet ground.'});
+            if(entry.sources.some(s=>isChunkExplored(s.x,s.y)))items.push({text:`Found in ${MATERIAL_SOURCES[type]?.ground || 'the ground'}.`});
+            if(entry.lesson){const origin=entry.lesson.known?entry.lesson.townName:'another settlement';items.push({text:`Visitors from ${escapeLivingText(origin)} showed them a way to make it.`});const exchange=commodityExchangeState().exchanges.find(r=>r.id===entry.lesson.exchange);if(exchange)items.push({text:'Remember their visit',func:()=>openCommodityJourney(exchange)});}
         }
         const work=livingWorldState().materialWork.filter(w=>w.town===town.id).slice(-8).reverse();
         if(work.length)items.push({heading:true,text:'At the workshop'});
@@ -6086,8 +6166,8 @@
         for(const project of regToArray('process')) if(project.town===town.id&&project.type==='project'&&!project.done&&!project.end&&Number.isFinite(project.cost)) {
             claims.push({kind:'construction',id:project.id,cost:Math.max(0,project.cost)});
         }
-        for(const work of livingWorldState().artifactWork) if(work.town===town.id&&work.status==='working') {
-            const person=findLivingPerson(town,work.person),recipe=person&&livingArtifactRecipe(town,person,work.kind);
+        for(const work of livingWorldState().artifactWork) if(work.town===town.id&&['gathering','working'].includes(work.status)) {
+            const person=findLivingPerson(town,work.person),recipe=person&&artifactWorkRecipe(town,person,work);
             if(recipe)claims.push({kind:'craft',id:work.id,cost:recipe.cost});
         }
         for(const work of livingWorldState().materialWork) if(work.town===town.id&&work.status==='waiting')claims.push({kind:'material',id:work.id,cost:work.cost});
@@ -6124,13 +6204,22 @@
         const productivity=type==='rock'&&commodityWorkClaims(town).some(c=>c.kind==='construction')?2:1;
         return Math.max(0.1,(claims+demand)*productivity/Math.max(1,available)+commodityTravelDays(path)/Math.max(1,available));
     }
-    function addCommodityLot(town,type,count,record,from) {
+    function addCommodityLot(town,type,count,record,from,cargoLots) {
         if(count<=0)return;
         const lots=(town._paultendoCommodityLots ||= {})[type] ||= [];
-        const last=lots.at(-1);
-        if(last?.exchange===record.id)last.count+=count;
-        else lots.push({exchange:record.id,from:from?.id || record.seller,count});
+        const add=(amount,production)=>{
+            const last=lots.at(-1);
+            if(last?.exchange===record.id&&last?.production?.work===production?.work&&last?.production?.world===production?.world&&last?.production?.passage===production?.passage)last.count+=amount;
+            else lots.push({exchange:record.id,from:from?.id || record.seller,count:amount,...(production?{production:structuredClone(production)}:{})});
+        };
+        let remaining=count;
+        while(remaining>0&&cargoLots?.length){const lot=cargoLots[0],n=Math.min(remaining,lot.count);if(n>0)add(n,lot.production);remaining-=n;lot.count-=n;if(lot.count<=0)cargoLots.shift();}
+        if(remaining>0)add(remaining);
         if(lots.length>EXCHANGE_PACE.maxHistory)lots.splice(0,lots.length-EXCHANGE_PACE.maxHistory);
+    }
+    function commodityCargoLots(count,inputs) {
+        const untracked=Math.max(0,count-inputs.reduce((sum,input)=>sum+input.count,0));
+        return [...(untracked?[{count:untracked}]:[]),...inputs.map(input=>({count:input.count,...(input.production?{production:structuredClone(input.production)}:{})}))];
     }
     function withCommodityUse(context,fn) {
         const previous=PAULTENDO_STATE.commodityUse;
@@ -6148,7 +6237,7 @@
         for(const lot of lots) {
             const count=Math.min(lot.count,removed);if(count<=0)continue;
             lot.count-=count;removed-=count;
-            const input={exchange:lot.exchange,from:lot.from,type,count,day:planet.day};
+            const input={exchange:lot.exchange,from:lot.from,type,count,day:planet.day,...(lot.production?{production:structuredClone(lot.production)}:{})};
             const context=PAULTENDO_STATE.commodityUse;
             if(context?.inputs)context.inputs.push(input);
             else if(context)rememberCommodityUse(town,input,context);
@@ -6235,6 +6324,9 @@
             case 'closed':return `The journey between ${buyer} and ${seller} can no longer reach its destination.`;
             case 'threat':return `${buyer} threatens ${seller} over the food it refused to send. Relations worsen and the risk of war grows.`;
             case 'used':return exchangeUseText(record,step.use);
+            case 'withheld':return `${exchangeTownLabel(record,step.town)} keeps its way of making ${COMMODITIES[step.type].label} to itself.`;
+            case 'lesson':return `${step.person} hears how visitors from ${step.origin} make ${COMMODITIES[step.type].label}. They will still need to try it with their own hands.`;
+            case 'lessonDeclined':return `${exchangeTownLabel(record,step.town)} keeps the goods, but lets the visitors’ lessons pass.`;
         }
         return '';
     }
@@ -6299,15 +6391,23 @@
         const rollback=()=>{
             for(const saved of stocks){saved.town.resources[saved.type]=saved.count;if(saved.type==='cash'){saved.town._paultendoCashFlow=saved.cashFlow;delete saved.town._paultendoEconomy;}else if(saved.town._paultendoCommodityLots)saved.town._paultendoCommodityLots[saved.type]=saved.lots;}
         };
-        const removed=removeCommodityStock(seller,record.type,terms.count);
+        const cargoInputs=[],paymentInputs=[];
+        const removed=withCommodityUse({kind:'transport',inputs:cargoInputs},()=>removeCommodityStock(seller,record.type,terms.count));
         if(removed!==terms.count){rollback();return false;}
         if(terms.payment) {
-            const paid=removeCommodityStock(buyer,terms.payment.type,terms.payment.count);
+            const paid=withCommodityUse({kind:'transport',inputs:paymentInputs},()=>removeCommodityStock(buyer,terms.payment.type,terms.payment.count));
             if(paid!==terms.payment.count){rollback();return false;}
             record.paymentCargo=paid;
         }
+        record.cargoLots=commodityCargoLots(removed,cargoInputs);
+        record.paymentLots=terms.payment?commodityCargoLots(terms.payment.count,paymentInputs):[];
+        record.materialLesson=materialInstructions(seller,buyer,record.type,record.id);
+        record.returnLesson=terms.payment&&materialInstructions(buyer,seller,terms.payment.type,record.id);
         record.cargo=removed;record.payment=terms.payment;record.quote=terms.quote;record.previousHelp=terms.previousHelp;record.kind=terms.kind;record.status='carrying';record.due=planet.day+commodityTravelDays(path);
-        recordTraffic(path,0.35);noteExchangeStep(record,terms.kind,{count:removed,payment:terms.payment,reason:terms.reason});return true;
+        recordTraffic(path,0.35);noteExchangeStep(record,terms.kind,{count:removed,payment:terms.payment,reason:terms.reason});
+        if(record.materialLesson?.withheld)noteExchangeStep(record,'withheld',{type:record.type,town:seller.id});
+        if(record.returnLesson?.withheld)noteExchangeStep(record,'withheld',{type:terms.payment.type,town:buyer.id});
+        return true;
     }
     function foodRefusalCanBecomeThreat(record,buyer,seller) {
         const hunger=buyer._paultendoCommunityWork?.hunger;
@@ -6341,7 +6441,7 @@
                 const before=commodityStock(buyer,record.type);happen('AddResource',seller,buyer,{type:record.type,count:record.cargo});
                 const received=Math.max(0,commodityStock(buyer,record.type)-before);
                 record.cargo-=received;record.delivered=(record.delivered || 0)+received;
-                addCommodityLot(buyer,record.type,received,record);
+                addCommodityLot(buyer,record.type,received,record,null,record.cargoLots);
             }
             if(record.paymentCargo>0) {
                 const before=commodityStock(seller,record.payment.type);
@@ -6349,7 +6449,7 @@
                 try{happen('AddResource',buyer,seller,{type:record.payment.type,count:record.paymentCargo});}finally{PAULTENDO_STATE.cashSource=source;}
                 const received=Math.max(0,commodityStock(seller,record.payment.type)-before);
                 record.paymentCargo-=received;record.paid=(record.paid || 0)+received;
-                if(record.payment.type!=='cash')addCommodityLot(seller,record.payment.type,received,record,buyer);
+                if(record.payment.type!=='cash')addCommodityLot(seller,record.payment.type,received,record,buyer,record.paymentLots);
             }
             if(record.cargo>0||record.paymentCargo>0){record.due=planet.day+1;continue;}
             record.resolved=true;record.status='arrived';record.arrived=planet.day;
@@ -6358,6 +6458,7 @@
             if(record.payment&&record.payment.type!=='cash')rememberCommodityExchange(buyer,seller,'trade',record.payment.type,record.paid,record.id);
             const route=getTradeRouteBetween(buyer,seller);
             if(route?.active){route.totalGoods=(route.totalGoods || 0)+record.delivered;route.caravans=(route.caravans || 0)+1;route.lastCaravanDay=planet.day;}
+            receiveMaterialInstructions(buyer,record.materialLesson,record);receiveMaterialInstructions(seller,record.returnLesson,record);
             recordTraffic(path,0.5);noteLivingExchange(seller,buyer,path,{type:record.kind==='aid'?'gift':'caravan',route:route?.id,goods:record.type});
             // Only real meals can calm hunger. A delivered supply can end a famine
             // when it actually provides enough for the recipient's next meal.
@@ -6795,6 +6896,8 @@
         const items = [{text:'← Back to the people',func:() => openLivingPeople(town)}, {heading:true,text:escapeLivingText(record.name)}, {text:`Day ${record.day} · You whispered: “${escapeLivingText(record.words)}”`}];
         if (!record.resolved) items.push({text:'Your words are still with them.'});
         for (const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        const pending=record.work&&livingWorldState().artifactWork.find(w=>w.id===record.work);
+        if(pending?.status==='gathering')items.push({text:`Still needed: ${Object.entries(pending.recipe.cost).filter(([type,count])=>commodityStock(town,type)<count).map(([type,count])=>`${count-commodityStock(town,type)} ${COMMODITIES[type].label}`).join(', ') || 'a quiet day to begin'}.`},{text:'Materials and workshops',func:()=>openTownMaterials(town)});
         if (record.changes) for (const line of livingInfluencePhrases(record.changes, 6)) items.push({text:line + '.'});
         const artifact = record.artifact && livingWorldState().artifacts.find(a=>a.id===record.artifact);
         if(record.teaching) items.push({text:'Follow the words',func:()=>openLivingTownTeachings(town)});
@@ -6817,6 +6920,9 @@
         const artifact = artifactId && livingWorldState().artifacts.find(a=>a.id===artifactId);
         const mind = livingPersonMind(person);
         const items = [artifactId ? {text:'← Back to the object',func:()=>openLivingArtifact(artifact)} : {text:'← Back to the people',func:() => openLivingPeople(town,placeId)}, {text:`${escapeLivingText(livingPersonLabel(person))} of ${escapeLivingText(town.name)}.`}, {text:`${escapeLivingText(titleCase(mind.outlook))}. ${LIVING_OUTLOOKS[mind.outlook] || ''}`}];
+        const pendingWork=livingWorldState().artifactWork.find(w=>w.town===town.id&&w.person===person.id&&['gathering','working'].includes(w.status));
+        const pendingWords=pendingWork&&livingWorldState().whispers.find(w=>w.id===pendingWork.whisper);
+        if(pendingWords)items.push({text:'Follow their work',func:()=>openLivingWhisperStory(town,pendingWords)});
         if (person.figure) for (const deed of (person.figure.deeds || []).slice(-2)) items.push({text:escapeLivingText(deed)});
         if(artifact?.returnOffer) items.push({text:`They have promised it to you. ${escapeLivingText(livingArtifactReturnNeed(artifact,town,person) || 'They still want time with it.')}`});
         const available = livingPersonAvailable(person, town);
