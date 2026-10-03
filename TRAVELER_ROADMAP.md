@@ -18,9 +18,11 @@ Species proof: native encounter, naming, cultivation and town-animal callbacks a
 
 ## People carry the consequences
 
-Interventions should reach particular people with different interests and credibility. Existing figures, trust, culture, values and institutions provide the material. A suggestion can be adopted, distorted, resisted or remembered differently. Reception must come from those interacting systems rather than a random flavour sentence attached to guaranteed success.
+Known settlements now offer named contacts drawn from their actual jobs and established figures. A direct whisper is saved as words still carried by that person. Two days later, their outlook, individual and community trust, local values and current pressures determine reception. A worker may turn teaching into their own practice, a farmer may survey for resources and a priest may lead a pilgrimage. A surplus town can send actual food to a hungry known trade partner along a real path. Good intentions can become military discipline. Darker suggestions can undermine obedience or be interpreted as a reason for tighter control. Claims against reachable neighbours reduce relations and add persistent war pressure, with actual conflict using the existing war simulation. Generous recipients are less willing to treat neighbours as prey.
 
-Proof: comparable interventions in distinct local conditions produce materially different responses, and the path from suggestion to response remains inspectable through the saved history.
+These contacts are a small window into the population, not a simulated life for every resident. They are first met through the settlement page and retain their identity, outlook, trust and whisper history across reloads. Established figures keep their existing deeds and mortality. Workers who leave a job cannot act as though they still hold it. Advice has personal and global intervals, and the world does not pause for these words. This does not yet implement transmission through several people, forgotten memories, succession or a complete social network.
+
+Proof: ten tests exercise comparable words through different people and trust, changing conditions, reloads, real resource conservation and routes, exploration and fog, deceased figures, dissent versus suppression, hostile relations, war pressure and the native war process. Removing the route changes a food gift into local care. Unknown towns cannot supply whisper targets.
 
 ## The world surprises us
 

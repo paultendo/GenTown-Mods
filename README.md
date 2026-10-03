@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.37**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
+Version **1.6.38**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.37/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.38/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.37)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.38)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -39,6 +39,8 @@ Town choice history now opens into connected stories. Discovery adoption and fir
 
 Species pages now open with field notes about their habitat and traits. Naming prompts describe what was found. New encounters retain their town and date, and actual improvements in cultivation or breeding and adoption as a town animal become part of the species history. The settlement links to its encountered and used species, and species pages lead back to known towns. Unknown and hidden towns stay out of these notes. Existing species retain their current traits and town roles without invented encounter dates or species-specific harvest quantities. The season indicator also advances with the day.
 
+Meet the people in a known settlement to whisper through a worker or an established figure. Their outlook, trust, values and current pressures shape their response after two days. Advice can become lessons, drills, care, a real food gift along a trade route or an expedition that reveals terrain. Darker words can stir dissent, be twisted into tighter control, sour relations with a reachable neighbour or push tension into the existing war system. These interventions carry costs and can be refused. The world keeps moving while words settle, and pending whispers and their actual responses survive reloads. Each person and the town history link back to what was said and what they did. Names use a private random stream, so merely meeting someone does not change the simulation’s next roll.
+
 Live decisions have a warm highlight and working buttons. Unanswered entries recede into the Chronicle without explanatory text. Advancing the day preserves GenTown's rules: most proposals lapse, while some events have a fallback, such as generating a discovery name. Autoplay pauses for decisions unless Auto-decide is enabled. GenTown does not save pending event callbacks across a reload.
 
 ```sh
@@ -46,7 +48,7 @@ npm run check
 npm test
 ```
 
-The 59 regression tests cover startup, late installation and redraw, overlay creation, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, background reports, unlock details and notifications, discovery menus, species naming, mod management, autoplay and decisions, settlement activity and lore, choice provenance, species encounters and local uses, adoption and construction follow-ups, fields and visibility, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
+The 69 regression tests cover startup, late installation and redraw, overlay creation, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, background reports, unlock details and notifications, discovery menus, species naming, mod management, autoplay and decisions, settlement activity and lore, choice provenance, species encounters and local uses, individual whispers and their reception, actual food transfers and exploration, unrest and war pressure, adoption and construction follow-ups, fields and visibility, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
 
 ## Credits
 

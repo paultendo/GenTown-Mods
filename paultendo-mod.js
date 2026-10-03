@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.37/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.38/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.37";
+    const MOD_VERSION = "1.6.38";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -5211,8 +5211,312 @@
         state.decisions ||= [];
         state.moments ||= [];
         state.species ||= {};
+        state.whispers ||= [];
         state.nextId ||= 1;
         return state;
+    }
+
+    const LIVING_OUTLOOKS = {
+        curious: 'Drawn to unfamiliar paths and new ideas.',
+        steadfast: 'Prefers a practice that has already earned its place.',
+        generous: 'Quick to notice who has been left behind.',
+        guarded: 'Slow to trust a voice they cannot see.'
+    };
+    const LIVING_WHISPERS = {
+        explore: { title: 'Beyond the borders', words: 'There is more beyond these borders.' },
+        learn: { title: 'Knowledge passed on', words: 'Pass on what you know.' },
+        care: { title: 'No one left hungry', words: 'Do not leave people to face hardship alone.' },
+        defy: { title: 'A voice against the rulers', words: 'Those who rule you can be brought down.' },
+        conquer: { title: 'What belongs to others', words: 'Your neighbours have what should be yours.' }
+    };
+    const LIVING_FIGURE_ROLES = { SCHOLAR:'scholar', INVENTOR:'scholar', GENERAL:'soldier', HERO:'soldier', TYRANT:'soldier', PROPHET:'priest', HEALER:'doctor', ARTIST:'musician' };
+    let livingPersonView = null;
+
+    function livingPersonSeed(town, id) {
+        return fnv1a32(`${planet.config?.seed || planet.id || planet.name}:${town.id}:${id}`);
+    }
+
+    function makeLivingPerson(town, id, role, figure) {
+        const rand = mulberry32(livingPersonSeed(town, id));
+        // Use the engine's name components with a private stream. Meeting someone
+        // must not consume the simulation RNG or reroll their identity on reload.
+        let name = figure?.name;
+        if (!name) {
+            for (let attempt = 0; attempt < 8; attempt++) {
+                const ending = chooseSeeded(rand, Object.keys(wordComponents.nameSuffixes));
+                name = titleCase(chooseSeeded(rand, wordComponents.C) + chooseSeeded(rand, wordComponents.V) + chooseSeeded(rand, wordComponents.nameSuffixes[ending]));
+                if (!badWords.some(word => name.toLowerCase().includes(word))) break;
+                name = null;
+            }
+            name ||= 'Wayfarer';
+        }
+        return { id, name, role, met: planet.day, outlook: chooseSeeded(rand, Object.keys(LIVING_OUTLOOKS)), trust: clampValue(getGuidanceTrust(town), 10, 90) };
+    }
+
+    function livingPeople(town, meet = false) {
+        if (!livingTownKnown(town) || town.pop <= 0) return [];
+        const people = town._paultendoPeople || (meet ? (town._paultendoPeople = []) : []);
+        if (meet) {
+            const roles = ['resident', ...['farmer','doctor','scholar','priest','soldier','musician','miner','lumberer'].filter(role => town.jobs?.[role] > 0)];
+            for (const role of roles.slice(0, Math.min(5, Math.floor(town.pop)))) {
+                if (!people.some(person => person.role === role)) people.push(makeLivingPerson(town, `resident:${town.id}:${role}`, role));
+            }
+        }
+        const figures = (planet.figures || []).filter(figure => figure.hometown === town.id && !figure._hidden);
+        const noted = figures.map(figure => {
+            if (meet) figure._paultendoPerson ||= makeLivingPerson(town, `figure:${figure.id}`, LIVING_FIGURE_ROLES[figure.type] || 'resident', figure);
+            return figure._paultendoPerson && {...figure._paultendoPerson, name:figure.name, role:LIVING_FIGURE_ROLES[figure.type] || 'resident', figure};
+        }).filter(Boolean);
+        return [...noted, ...people];
+    }
+
+    function livingPersonMind(person) { return person.figure?._paultendoPerson || person; }
+    function livingPersonAvailable(person, town) {
+        return livingTownKnown(town) && town.pop > 0 && (person.figure ? !person.figure.died : person.role === 'resident' || town.jobs?.[person.role] > 0);
+    }
+    function findLivingPerson(town, id) { return livingPeople(town).find(person => person.id === id); }
+    function livingPersonLabel(person) { return person.figure?.title || titleCase(person.role === 'resident' ? 'settler' : person.role); }
+
+    function livingConflictNeighbours(town) {
+        const range = Math.min(Math.max(worldConfig.width, worldConfig.height) * 0.25, EARLY_WAR_CONFIG.raidDistance * 2);
+        return regToArray('town').filter(other => other.id !== town.id && livingTownKnown(other) && !areAllied(town,other) && getTownDistance(town,other) <= range)
+            .sort((a,b) => (town.relations?.[a.id] || 0) - (town.relations?.[b.id] || 0) || getTownDistance(town,a) - getTownDistance(town,b));
+    }
+
+    function livingWhisperAvailable(town, topic) {
+        if (topic === 'learn') return planet.unlocks?.education >= 10;
+        if (topic === 'defy') return planet.unlocks?.government >= 10 && town.gov && town.gov !== 'anarchy';
+        if (topic === 'conquer') return planet.unlocks?.military >= 10 && livingConflictNeighbours(town).length > 0;
+        return true;
+    }
+
+    function livingWhisperWait(person) {
+        const mind = livingPersonMind(person), state = livingWorldState();
+        if (state.whispers.some(record => !record.resolved && record.person === person.id)) return 'Your last words are still with them.';
+        if (mind.lastWhisper !== undefined && planet.day - mind.lastWhisper < 12) return 'Give them time before speaking again.';
+        if (state.lastWhisper !== undefined && planet.day - state.lastWhisper < 2) return 'Let your last words settle.';
+        return null;
+    }
+
+    function sendLivingWhisper(town, person, topic) {
+        const definition = LIVING_WHISPERS[topic];
+        if (!definition || !livingPersonAvailable(person, town) || livingWhisperWait(person)) return false;
+        if (!livingWhisperAvailable(town, topic)) return false;
+        const state = livingWorldState(), mind = livingPersonMind(person);
+        const roll = mulberry32(livingPersonSeed(town, `${person.id}:${topic}:${planet.day}`))();
+        const record = { id:`whisper:${state.nextId++}`, topic, title:definition.title, words:definition.words, person:person.id, name:person.name, town:town.id, day:planet.day, due:planet.day + 2, roll, resolved:false, steps:[] };
+        state.whispers.push(record);
+        state.lastWhisper = mind.lastWhisper = planet.day;
+        // Keep pending words even when trimming an older world's history.
+        while (state.whispers.length > 48) {
+            const index = state.whispers.findIndex(record => record.resolved);
+            if (index < 0) break;
+            state.whispers.splice(index, 1);
+        }
+        logMessage(`You whisper to {{b:${escapeLivingText(person.name)}}} of ${townRef(town.id)}: “${definition.words}”`);
+        syncLogToPlanet(); autosave();
+        return true;
+    }
+
+    function livingWhisperReception(town, person, record) {
+        const mind = livingPersonMind(person);
+        const war = hasIssue(town, 'war') || hasIssue(town, 'revolution');
+        const food = (town.resources?.crop || 0) + (town.resources?.livestock || 0);
+        const hungry = food < town.pop * 0.2 && (town.influences?.hunger || 0) > 0;
+        if (record.topic === 'explore' && (war || hungry)) return { accepted:false, reason:war ? 'The town needs them close while the fighting lasts.' : 'There are hungry people at home. They cannot leave them behind.' };
+        if (record.topic === 'explore' && happen('Legality', null, town, {law:'travel'}) === false) return {accepted:false, reason:'Travel is forbidden here. They will not risk the journey.'};
+        if (record.topic === 'learn' && !(planet.unlocks?.education >= 10)) return {accepted:false, reason:'The teaching you had in mind has no foothold here yet.'};
+        if (record.topic === 'conquer' && hungry) return {accepted:false,reason:'There are hungry people at home. They will not spend those lives on a conquest.'};
+        let affinity = mind.outlook === 'guarded' ? -0.18 : mind.outlook === 'curious' && record.topic !== 'care' ? 0.15 : mind.outlook === 'generous' && record.topic === 'care' ? 0.18 : mind.outlook === 'steadfast' && record.topic === 'explore' ? -0.1 : 0;
+        if (record.topic === 'conquer' && mind.outlook === 'generous') affinity -= 0.3;
+        if (record.topic === 'defy' && mind.outlook === 'steadfast') affinity -= 0.25;
+        if (record.topic === 'defy' && (town.influences?.happy || 0) < -3) affinity += 0.15;
+        const axes = record.topic === 'explore' ? {openness:0.012,change:0.012,order:-0.006} : record.topic === 'learn' ? {change:0.01,openness:0.01} : record.topic === 'defy' ? {change:0.015,order:-0.015} : record.topic === 'conquer' ? {wealth:0.015,justice:-0.015} : {justice:0.015,wealth:-0.006};
+        for (const [axis, weight] of Object.entries(axes)) affinity += (town.values?.[axis] || 0) * weight;
+        const communityTrust = getGuidanceTrust(town);
+        const chance = clampChance(0.55 + (mind.trust - 50) / 200 + (communityTrust - 50) / 200 + affinity + (record.topic === 'care' && (hungry || war) ? 0.1 : 0), 0.05, 0.95);
+        return { accepted:record.roll < chance, reason:record.topic === 'conquer' && mind.outlook === 'generous' ? 'They will not turn their neighbours into prey.' : record.topic === 'defy' && mind.outlook === 'steadfast' ? 'They would rather hold this town together than tear its rule apart.' : (mind.trust + communityTrust) / 2 < 35 ? 'They do not trust your voice enough to act on it.' : 'They hear you out, then return to their own concerns.' };
+    }
+
+    function livingWhisperGift(town, person, record) {
+        if ((town.resources?.crop || 0) <= town.pop || happen('Legality', null, town, {law:'travel'}) === false) return false;
+        const partners = getTownTradePartners(town).filter(other => livingTownKnown(other) && (town.relations?.[other.id] || 0) >= 0 && !hasIssue(other, 'war') && (other.resources?.crop || 0) + (other.resources?.livestock || 0) < other.pop * 0.2);
+        for (const partner of partners) {
+            const path = getCachedPath(town, partner, 40);
+            if (!path?.length) continue;
+            const count = Math.min(Math.floor(town.resources.crop - town.pop), Math.max(1, Math.floor(partner.pop * 0.1)), 12);
+            const before = partner.resources.crop || 0;
+            happen('AddResource', town, partner, {type:'crop',count});
+            const received = (partner.resources.crop || 0) - before;
+            if (received <= 0) continue;
+            happen('RemoveResource', partner, town, {type:'crop',count:received});
+            happen('AddRelation', town, partner, {amount:1});
+            recordTraffic(path, 0.5);
+            record.partner = partner.id;
+            record.food = received;
+            record.steps.push({day:planet.day,text:`${person.name} brought ${received} crops from ${town.name} to hungry neighbours in ${partner.name}. The gift brought the towns closer.`});
+            return true;
+        }
+        return false;
+    }
+
+    function actOnLivingWhisper(town, person, record) {
+        const before = {...town.influences};
+        let effects = null;
+        if (record.topic === 'explore') {
+            if (!canTownExplore(town, false)) return {acted:false,reason:'They could not gather an expedition. The journey waits for another time.'};
+            const mission = person.role === 'priest' ? buildPilgrimageMission(town) || buildFrontierMission(town) : ['farmer','miner','lumberer'].includes(person.role) ? buildResourceSurveyMission(town) || buildFrontierMission(town) : buildFrontierMission(town);
+            const known = new Set(Object.keys(planet._paultendoFog?.explored || {}));
+            if (!mission || !executeExplorationMission(town, mission, {silent:true})) return {acted:false,reason:'They found no safe route out. Your words did not become a journey.'};
+            const revealed = Object.keys(planet._paultendoFog?.explored || {}).filter(key => !known.has(key)).length;
+            record.mission = {type:mission.type,label:mission.label,revealed, target:mission.target ? [mission.target.x,mission.target.y] : null};
+            record.reshaped = mission.type !== 'frontier';
+            record.steps.push({day:planet.day,text:`${person.name} led ${mission.type === 'pilgrimage' ? 'pilgrims' : 'scouts'} on a ${mission.label}.${revealed > 0 ? ' More of the surrounding land is known now.' : ' They charted the route.'}`});
+        } else if (record.topic === 'learn') {
+            if (person.role === 'soldier' && planet.unlocks?.military >= 10) {
+                effects = {military:0.6,education:0.1,crime:0.05}; record.reshaped = true;
+                record.steps.push({day:planet.day,text:`${person.name} took your words to the soldiers. They began practising what the veterans could teach them.`});
+            } else if (person.role === 'priest') {
+                effects = {faith:0.6,education:0.15}; record.reshaped = true;
+                record.steps.push({day:planet.day,text:`${person.name} understood your words as a call to pass on the town’s beliefs. Lessons became sermons.`});
+            } else if (person.role === 'musician') {
+                effects = {happy:0.5,education:0.2}; record.reshaped = true;
+                record.steps.push({day:planet.day,text:`${person.name} put what they knew into song. The lessons travelled with the tune.`});
+            } else {
+                effects = {education:0.6,trade:-0.1};
+                record.steps.push({day:planet.day,text:`${person.name} gathered people to share what they knew.`});
+            }
+        } else if (record.topic === 'defy') {
+            if (!livingWhisperAvailable(town,'defy')) return {acted:false,reason:'The rulers you spoke against no longer hold this town.'};
+            if (person.figure?.type === 'RULER' || person.figure?.type === 'TYRANT' || (person.role === 'soldier' && (town.values?.order || 0) > 2)) {
+                effects = {law:0.4,happy:-0.3,crime:0.1}; record.reshaped = true;
+                record.steps.push({day:planet.day,text:`${person.name} took your words as a warning of revolt. They pressed for tighter control, leaving less room for dissent.`});
+            } else {
+                effects = {law:-0.4,happy:-0.55,crime:0.35};
+                record.steps.push({day:planet.day,text:`${person.name} began questioning the rulers in public. Resentment grew and obedience weakened.`});
+            }
+        } else if (record.topic === 'conquer') {
+            const neighbour = livingConflictNeighbours(town).find(other => getCachedPath(town,other,40)?.length);
+            if (!neighbour) return {acted:false,reason:'There is no neighbour they can reach to turn your words against.'};
+            record.partner = neighbour.id;
+            if (areAtWar(town,neighbour)) {
+                effects = {military:0.5,happy:-0.3};
+                record.steps.push({day:planet.day,text:`${person.name} urged the town to keep fighting ${neighbour.name}. The war effort gained ground at home.`});
+            } else if (hasIssue(town,'war') || hasIssue(neighbour,'war')) {
+                return {acted:false,reason:'The fighting already under way leaves no room for another enemy.'};
+            } else {
+                const relation = town.relations?.[neighbour.id] || 0;
+                const pressure = getWarPressureValue(town,neighbour);
+                happen('AddRelation',town,neighbour,{amount:-0.75});
+                bumpWarPressure(town,neighbour,12);
+                record.hostility = {relation:(town.relations?.[neighbour.id] || 0)-relation,pressure:getWarPressureValue(town,neighbour)-pressure};
+                effects = {military:0.35,happy:-0.25};
+                const began = maybeStartWarFromPressure(town,neighbour,getWarPressureValue(town,neighbour));
+                if (began) record.war = town.issues.war;
+                record.steps.push({day:planet.day,text:began ? `${person.name} pressed the claim against ${neighbour.name}. Tensions broke into war.` : `${person.name} spread claims against ${neighbour.name}. ${record.hostility.relation < 0 || record.hostility.pressure > 0 ? 'Relations soured and the towns moved closer to war.' : 'Old hostilities found a new voice.'}`});
+            }
+        } else if (record.topic === 'care') {
+            if (!hasIssue(town, 'war') && livingWhisperGift(town, person, record)) return {acted:true};
+            if (person.role === 'farmer' && planet.unlocks?.farm >= 10 && happen('Legality', null, town, {law:'farm'}) !== false) {
+                effects = {farm:0.55,trade:-0.15};
+                record.steps.push({day:planet.day,text:`${person.name} turned the talk toward feeding people. They rallied the farmers.`});
+            } else if (person.role === 'soldier' && planet.unlocks?.military >= 10) {
+                effects = {military:0.5,happy:0.15,crime:0.05}; record.reshaped = true;
+                record.steps.push({day:planet.day,text:`${person.name} heard a call to protect people. They rallied the soldiers rather than organising care.`});
+            } else {
+                effects = {disease:-0.35,happy:0.25};
+                record.steps.push({day:planet.day,text:`${person.name} rallied neighbours to look after one another.`});
+            }
+        }
+        if (effects) {
+            happen('Influence', null, town, {...effects,temp:true});
+            record.changes = Object.fromEntries([...new Set([...Object.keys(before),...Object.keys(town.influences || {})])].map(key => [key,(town.influences?.[key] || 0) - (before[key] || 0)]).filter(([,change]) => change !== 0));
+            if (!Object.values(record.changes).some(change => change !== 0)) { record.steps.pop(); return {acted:false,reason:'The idea found no foothold. Town life carried on as before.'}; }
+        }
+        return {acted:true};
+    }
+
+    function advanceLivingWhispers() {
+        const state = livingWorldState();
+        if (!state) return;
+        let responded = false;
+        for (const record of state.whispers.filter(record => !record.resolved && planet.day >= record.due)) {
+            const town = regGet('town', record.town), person = town && findLivingPerson(town, record.person);
+            if (town && !town.end && !livingTownKnown(town)) continue;
+            record.resolved = true; record.responseDay = planet.day;
+            responded = true;
+            if (!person || !livingPersonAvailable(person, town)) { record.reception = 'lost'; record.steps.push({day:planet.day,text:`You lost touch with ${record.name} before your words could take hold.`}); continue; }
+            const mind = livingPersonMind(person), reception = livingWhisperReception(town, person, record);
+            const action = reception.accepted ? actOnLivingWhisper(town, person, record) : {acted:false,reason:reception.reason};
+            if (action.acted) {
+                record.reception = record.reshaped ? 'reshaped' : 'heard';
+                mind.trust = clampValue(mind.trust + 3, 0, 100);
+                adjustGuidanceTrust(town, 0.3, 'whisper:heard');
+            } else {
+                record.reception = reception.accepted ? 'stalled' : 'refused';
+                record.steps.push({day:planet.day,text:`${person.name} did not take up your suggestion. ${action.reason}`});
+                if (!reception.accepted) mind.trust = clampValue(mind.trust - 1, 0, 100);
+            }
+            if (livingTownKnown(town)) logMessage(escapeLivingText(record.steps.at(-1).text), action.acted ? ['defy','conquer'].includes(record.topic) ? 'warning' : 'milestone' : undefined);
+        }
+        if (responded) {
+            updateStats();
+            const view = livingPersonView;
+            const town = view?.planet === planet && regGet('town',view.town);
+            const person = town && findLivingPerson(town,view.person);
+            if (person && currentExecutive === escapeLivingText(person.name).toLowerCase()) openLivingPerson(town,person);
+        }
+    }
+
+    function openLivingWhisperStory(town, record) {
+        if (!livingTownKnown(town)) return;
+        livingPersonView = null;
+        const items = [{text:'← Back to the people',func:() => openLivingPeople(town)}, {heading:true,text:escapeLivingText(record.name)}, {text:`Day ${record.day} · You whispered: “${escapeLivingText(record.words)}”`}];
+        if (!record.resolved) items.push({text:'Your words are still with them.'});
+        for (const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        if (record.changes) for (const line of livingInfluencePhrases(record.changes, 6)) items.push({text:line + '.'});
+        if (record.hostility && (record.hostility.relation < 0 || record.hostility.pressure > 0)) items.push({text:'Their claim left a lasting strain between the towns.'});
+        const partner = record.partner && regGet('town', record.partner);
+        if (livingTownKnown(partner)) items.push({text:`Visit ${escapeLivingText(partner.name)}`,func:() => {closePopups();closeExecutive();openRegBrowser(partner,'town');}});
+        const person = findLivingPerson(town, record.person);
+        if (person) items.push({text:`Visit ${escapeLivingText(person.name)}`,func:() => openLivingPerson(town, person)});
+        populateExecutive(items, record.title); markLivingStoryControls(); openExecutive();
+    }
+
+    function openLivingPerson(town, person) {
+        if (!livingTownKnown(town)) return;
+        livingPersonView = {planet,town:town.id,person:person.id};
+        const mind = livingPersonMind(person);
+        const items = [{text:'← Back to the people',func:() => openLivingPeople(town)}, {text:`${escapeLivingText(livingPersonLabel(person))} of ${escapeLivingText(town.name)}.`}, {text:`${escapeLivingText(titleCase(mind.outlook))}. ${LIVING_OUTLOOKS[mind.outlook] || ''}`}];
+        if (person.figure) for (const deed of (person.figure.deeds || []).slice(-2)) items.push({text:escapeLivingText(deed)});
+        const available = livingPersonAvailable(person, town);
+        if (!available) items.push({text:person.figure?.died ? 'Their part in this town’s story has ended.' : 'They are no longer at this work.'});
+        else {
+            items.push({text:mind.trust < 35 ? 'They hold your voice at arm’s length.' : mind.trust > 70 ? 'Your voice has come to mean something to them.' : 'They are still making sense of your voice.'});
+            const wait = livingWhisperWait(person);
+            if (wait) items.push({text:wait});
+            else {
+                items.push({heading:true,text:'Whisper'});
+                for (const [topic, definition] of Object.entries(LIVING_WHISPERS)) {
+                    if (!livingWhisperAvailable(town,topic)) continue;
+                    items.push({text:`“${definition.words}”`,func:() => {if (sendLivingWhisper(town, person, topic)) openLivingPerson(town, person);}});
+                }
+            }
+        }
+        const whispers = livingWorldState().whispers.filter(record => record.person === person.id && record.town === town.id).slice(-4).reverse();
+        if (whispers.length) items.push({heading:true,text:'What they carried'});
+        for (const record of whispers) items.push({text:`Day ${record.day} · ${record.title}`,func:() => openLivingWhisperStory(town, record)});
+        populateExecutive(items, escapeLivingText(person.name)); markLivingStoryControls(); openExecutive();
+    }
+
+    function openLivingPeople(town) {
+        if (!livingTownKnown(town)) return;
+        livingPersonView = null;
+        const people = livingPeople(town, true);
+        const items = [{text:'← Back to settlement',func:() => {closePopups();closeExecutive();openRegBrowser(town,'town');}}];
+        for (const person of people) items.push({text:`${escapeLivingText(person.name)} · ${escapeLivingText(livingPersonLabel(person))}${livingPersonAvailable(person,town) ? '' : ' · Remembered'}`,func:() => openLivingPerson(town, person)});
+        populateExecutive(items, `${escapeLivingText(town.name)} · People`); markLivingStoryControls(); openExecutive();
+        autosave();
     }
 
     function livingSpeciesKnown(species) {
@@ -5437,7 +5741,7 @@
             farm: ['Farming gains support', 'Farming loses support'], travel: ['People are more inclined to travel', 'People are less inclined to travel'],
             happy: ['Spirits lift', 'Spirits fall'], disease: ['Disease pressure rises', 'Disease pressure eases'], hunger: ['Hunger pressure rises', 'Hunger pressure eases'],
             trade: ['Trade gains support', 'Trade loses support'], education: ['Learning gains support', 'Learning loses support'], military: ['Military strength gains support', 'Military strength loses support'],
-            crime: ['Crime pressure rises', 'Crime pressure eases'], faith: ['Faith gains support', 'Faith loses support']
+            crime: ['Crime pressure rises', 'Crime pressure eases'], faith: ['Faith gains support', 'Faith loses support'], law: ['Law gains support', 'Law loses support']
         };
         return Object.keys(phrases).filter(key => typeof delta?.[key] === 'number' && Math.abs(delta[key]) >= 0.1)
             .slice(0, limit).map(key => phrases[key][delta[key] > 0 ? 0 : 1]);
@@ -5637,6 +5941,7 @@
 
     function markLivingStoryControls() {
         for (const button of document.querySelectorAll('#actionSubList [role="button"]')) button.classList.add('paultendoStoryLink');
+        document.querySelector('#actionSubList .panelTitle')?.classList.add('paultendoStoryTitle');
     }
 
     function openLivingChoiceStory(town, decision) {
@@ -5679,9 +5984,13 @@
         const items = [{ text: '← Back to settlement', func: () => { closePopups(); closeExecutive(); openRegBrowser(town, 'town'); } }];
         const decisions = state.decisions.filter(d => d.towns.includes(town.id));
         const ids = new Set(decisions.map(d => d.id));
-        const entries = [...decisions.map(d => ({day: d.day, decision: d})), ...state.moments.filter(m => m.town === town.id && !ids.has(m.source))].sort((a, b) => b.day - a.day);
+        const entries = [...decisions.map(d => ({day: d.day, decision: d})), ...state.moments.filter(m => m.town === town.id && !ids.has(m.source)), ...state.whispers.filter(w => w.town === town.id || w.partner === town.id).map(w => ({day:w.responseDay || w.day,whisper:w}))].sort((a, b) => b.day - a.day);
         for (const entry of entries.slice(0, 20)) {
-            if (entry.decision) {
+            if (entry.whisper) {
+                const w = entry.whisper, source = regGet('town', w.town);
+                if (!livingTownKnown(source)) continue;
+                items.push({text:`Day ${entry.day} · ${escapeLivingText(w.name)}<br>${escapeLivingText(w.steps.at(-1)?.text || 'Your words are still with them.')}`,func:() => openLivingWhisperStory(source,w)});
+            } else if (entry.decision) {
                 const d = entry.decision;
                 const count = state.moments.filter(m => m.town === town.id && m.source === d.id).length;
                 items.push({ text: `Day ${d.day} · ${escapeLivingText(d.title)}<br>${d.automated ? 'Autoplay chose' : 'Your choice'}: ${escapeLivingText(d.outcome)}${count ? `<br>${count} ${count === 1 ? 'later moment' : 'later moments'}` : ''}`, func: () => openLivingChoiceStory(town, d) });
@@ -5710,6 +6019,10 @@
             links.appendChild(button);
         }
         section.appendChild(links);
+        if (town.pop > 0) {
+            const people = document.createElement('button'); people.textContent = 'Meet the people';
+            people.addEventListener('click', () => { closePopups(); openLivingPeople(town); }); section.appendChild(people);
+        }
         appendLivingTownSpecies(town, section);
         const places = livingPlaceItems(town);
         if (places.length) {
@@ -5721,7 +6034,7 @@
         const state = livingWorldState();
         const recent = [...state.moments.filter(m => m.town === town.id), ...state.decisions.filter(d => d.towns.includes(town.id)).map(d => ({day:d.day,text:d.text}))].sort((a,b)=>b.day-a.day).slice(0,2);
         for (const moment of recent) { const line = document.createElement('p'); line.innerHTML = parseText(livingMomentLabel(moment)); section.appendChild(line); }
-        if (recent.length) {
+        if (recent.length || state.whispers.some(w => w.town === town.id || w.partner === town.id)) {
             const history = document.createElement('button'); history.textContent = 'Your mark on this town';
             history.addEventListener('click', () => { closePopups(); openLivingTownHistory(town); }); section.appendChild(history);
         }
@@ -5848,7 +6161,10 @@
             #paultendoFieldsKey { font-size: 0.75em; margin: 0 0.6em; color: #d0db9a; white-space: nowrap; }
             #paultendoFieldsKey::before { content: ''; display: inline-block; width: 0.75em; height: 0.75em; margin-right: 0.25em; background: repeating-linear-gradient(#a38743 0 2px, #c5d873 2px 4px); vertical-align: middle; }
             #paultendoFieldsKey[hidden] { display: none; }
-            @media (max-width: 600px) { .paultendoTownLife button { min-height: 44px; } }
+            @media (max-width: 600px) {
+                .paultendoTownLife button { min-height: 44px; }
+                #actionSubList .paultendoStoryTitle { display: block; padding-inline: 28px; box-sizing: border-box; overflow-wrap: anywhere; }
+            }
         `;
         document.head.appendChild(style);
     }
@@ -11645,6 +11961,7 @@
                 const dayAfter = (typeof planet !== "undefined") ? planet.day : undefined;
                 if (dayBefore !== dayAfter) {
                     try { updateSeasonState(); } catch {}
+                    try { advanceLivingWhispers(); } catch (error) { console.warn("[paultendo-mod] Whisper follow-up failed:", error); }
                     try { observeLivingWorld(); } catch (error) { console.warn("[paultendo-mod] Settlement follow-up failed:", error); }
                     try { renderLivingFields(); updateCanvas(); } catch {}
                     try { syncLogToPlanet(); } catch {}
