@@ -31,16 +31,16 @@ test('research priorities influence branch choice while native prerequisites and
 
 test('samples and technical milestones alone create neither demand nor a furnace proposal attributed to a disinterested town',async t=>{
  const g=await makeGame();t.after(g.close);const {w,town}=setup(g);Object.assign(w.planet.unlocks,{smith:30,fire:40});town.research={farm:100};curious(w,town);for(const p of town._paultendoPeople)p.outlook='steadfast';add(w,town,'sand',3);
- assert.doesNotMatch(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}),/Claybank|has sand/);assert.equal(town.resources.glass,undefined);assert.equal(w.planet._paultendoLife.materialWork.length,0);errors(g);
+ assert.doesNotMatch(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}) || '',/Claybank|has sand/);assert.equal(town.resources.glass,undefined);assert.equal(w.planet._paultendoLife.materialWork.length,0);errors(g);
 });
 
 test('an actual sand sample and curious available worker favour furnace research without awarding glass',async t=>{
- const g=await makeGame();t.after(g.close);const {w,town}=setup(g);quiet(w);Object.assign(w.planet.unlocks,{smith:30,fire:40});curious(w,town);const before=weights(w);add(w,town,'sand',3);const after=weights(w);
- assert.ok(after.unlockForges/after.unlockSteel>before.unlockForges/before.unlockSteel);assert.match(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}),/has sand to experiment with/);assert.equal(town.resources.glass,undefined);assert.equal(w.planet._paultendoLife.materialWork.length,0,'The furnace is still missing');assert.equal(w.planet.unlocks.fire,40);town.jobs.miner=0;assert.doesNotMatch(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}),/has sand/);errors(g);
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);quiet(w);Object.assign(w.planet.unlocks,{smith:30,fire:40});curious(w,town);assert.equal(w.readyEvent('unlockForges'),undefined);add(w,town,'sand',3);const caller=w.readyEvent('unlockForges');
+ assert.ok(caller);assert.equal(caller.args.value.town,town.id);assert.match(caller.args.value.cause.text,/sand/);assert.equal(w.gameEvents.unlockForges.check(caller.subject,caller.target,caller.args),true);assert.equal(town.resources.glass,undefined);assert.equal(w.planet._paultendoLife.materialWork.length,0,'The furnace is still missing');assert.equal(w.planet.unlocks.fire,40);town.jobs.miner=0;assert.doesNotMatch(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}) || '',/has sand/);errors(g);
 });
 
 test('hidden workshops can influence research without revealing their identity or raw samples',async t=>{
- const g=await makeGame();t.after(g.close);const {w,town}=setup(g);Object.assign(w.planet.unlocks,{smith:30,fire:40});curious(w,town);add(w,town,'sand',3);town._hidden=true;assert.doesNotMatch(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}),/Claybank|has sand/);
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);Object.assign(w.planet.unlocks,{smith:30,fire:40});curious(w,town);add(w,town,'sand',3);town._hidden=true;assert.doesNotMatch(w.gameEvents.unlockForges.message(w.regGet('player',1),null,{_paultendoTechVariant:{baseName:'Forges',originTownId:town.id}}) || '',/Claybank|has sand/);
  town.resources.crop=0;const value=samples(w,town).values.find(v=>v.type==='farm');assert.equal(value.need.known,false);assert.doesNotMatch(w.gameEvents.unlockLevel.message(null,town,{value}),/running short|Claybank/);errors(g);
 });
 

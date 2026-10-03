@@ -9,7 +9,7 @@ function selectDiscovery(window, name) {
   assert.ok(button, `${name} must be a readable discovery`); button.click(); return list;
 }
 
-test('all 41 extended discoveries are readable and match the actual event effects and gates', async t => {
+test('all 41 extended discoveries preserve their knowledge gates and offer readable lore without instant awards', async t => {
   const game = await makeGame(); t.after(game.close);
   const { window } = game; settleGame(game);
   const events = Object.entries(window.gameEvents).filter(([, info]) => info._paultendoDiscovery);
@@ -19,18 +19,15 @@ test('all 41 extended discoveries are readable and match the actual event effect
     const discovery = info._paultendoDiscovery;
     window.planet.unlocks = Object.fromEntries(['farm','travel','fire','smith','trade','government','education','military','astronomy','faith'].map(key => [key, 0]));
     Object.assign(window.planet.unlocks, discovery.needsUnlock);
-    assert.ok(info.check(player, null, {}), `${id} must be eligible at the displayed requirements`);
+    assert.ok(info._paultendoRequirementsCheck(player, null, {}), `${id} must be eligible at the displayed requirements`);
     for (const [key, value] of Object.entries(discovery.needsUnlock)) {
       window.planet.unlocks[key] = value - 1;
-      assert.equal(!!info.check(player, null, {}), false, `${id} must require the advertised ${key} discovery`);
+      assert.equal(!!info._paultendoRequirementsCheck(player, null, {}), false, `${id} must require the advertised ${key} discovery`);
       window.planet.unlocks[key] = value;
     }
-    const calls = [];
-    const happen = window.happen;
-    window.happen = (action, subject, target, args, registry) => { if (action === 'Influence') calls.push({...args}); return happen(action, subject, target, args, registry); };
-    try { window.doEvent(id, window.readyEvent(id, player)); } finally { window.happen = happen; }
-    assert.equal(window.planet.unlocks[discovery.key], discovery.level, `${id} must unlock the advertised advance`);
-    assert.ok(calls.some(call => JSON.stringify(call) === JSON.stringify(discovery.influences)), `${id} must apply the effects shown in its page`);
+    assert.equal(info.check(player,null,{}),false,`${id} needs work and a purpose as well as knowledge`);
+    assert.equal(window.readyEvent(id),undefined);
+    window.planet.unlocks[discovery.key]=discovery.level;
     const detail = selectDiscovery(window, discovery.name);
     assert.match(detail.textContent, new RegExp(discovery.name));
     assert.ok(detail.textContent.includes(discovery.tale), `${id} must reward curiosity with its own story`);
@@ -74,10 +71,13 @@ test('advanced breakthroughs notify once and keep their true date and origin thr
   const game = await makeGame(); t.after(game.close);
   const { window } = game; const town = settleGame(game);
   window.planet.unlocks.education = 30;
-  window.planet.day = 40;
+  window.planet.day = 40;town.pop=20;town.jobs={scholar:2};town.research={education:100};town.resources={crop:1000,lumber:2};
+  for(const id of ['townBirth','townDeath','townExpand','townEat'])window.gameEvents[id].func=()=>{};
+  window.gameEvents.processAll.func=()=>{};const choose=window.chooseEvent;window.chooseEvent=()=>null;
   window.doEvent('unlockLibraries', window.readyEvent('unlockLibraries'));
+  for(let n=0;n<11;n++)window.nextDay();window.chooseEvent=choose;
   const discovery = window.planet._paultendoLife.discoveries['education:40'];
-  assert.equal(discovery.day, 40); assert.equal(discovery.origin, town.id);
+  assert.equal(discovery.day, 51); assert.equal(discovery.origin, town.id);
   const button = window.document.getElementById('actionItem-unlocks');
   assert.equal(button.classList.contains('notify'), true);
   selectDiscovery(window, 'Libraries');
@@ -88,13 +88,13 @@ test('advanced breakthroughs notify once and keep their true date and origin thr
   assert.ok(moment); assert.match(moment.text, /Libraries.*1 doctor now works/);
   const saved = JSON.parse(JSON.stringify(window.generateSave()));
   const restored = await makeGame({save:saved}); t.after(restored.close);
-  assert.equal(restored.window.planet._paultendoLife.discoveries['education:40'].day, 40);
+  assert.equal(restored.window.planet._paultendoLife.discoveries['education:40'].day, 51);
   assert.equal(restored.window.document.getElementById('actionItem-unlocks').classList.contains('notify'), false);
   const detail = selectDiscovery(restored.window, 'Libraries');
-  assert.match(detail.textContent, /Origins.*Day 40.*From the Chronicle/s);
+  assert.match(detail.textContent, /Origins.*Day 51.*From the Chronicle/s);
   assert.match(detail.textContent, /1 doctor/);
   assert.equal(restored.window.document.querySelector('.paultendoDiscoveryNotes').open, false);
-  assert.match(detail.textContent, /First recorded.*Day 40/s);
+  assert.match(detail.textContent, /First recorded.*Day 51/s);
   restored.window.openRegBrowser(restored.window.regGet('town', town.id), 'town');
   const townButtons = [...restored.window.document.querySelectorAll('.paultendoTownLife button')].map(n=>n.textContent);
   assert.ok(townButtons.includes('Libraries')); assert.equal(townButtons.includes('Higher Education'), false);
