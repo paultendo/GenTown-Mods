@@ -52,9 +52,10 @@ test('first firings can fail, spend the real inputs, and keep that outcome throu
 
 test('food shortages, war and absent workers pause an underway firing without producing goods',async t=>{
  const g=await makeGame();t.after(g.close);const {w,town}=setup(g);town.resources.clay=2;town.resources.lumber=2;const batch=plan(w,town);next(w);const remaining=batch.remaining;
- town.resources.crop=0;next(w);assert.equal(batch.remaining,remaining);assert.equal(town.resources.charcoal,undefined);
- town.resources.crop=1000;town.jobs={farmer:20};next(w);assert.equal(batch.remaining,remaining);assert.match(batch.pause,/hands, food and peace/);
- town.jobs={miner:10,lumberer:10};finish(w,batch);assert.equal(town.resources.charcoal,1);noErrors(g);
+ town.resources.crop=0;next(w);assert.equal(batch.remaining,remaining);assert.equal(town.resources.charcoal,undefined);assert.equal(batch.delay.reason,'food');assert.match(batch.pause,/not enough food/);
+ town.resources.crop=1000;town.jobs={farmer:20};next(w);assert.equal(batch.remaining,remaining);assert.equal(batch.delay.reason,'hands');assert.match(batch.pause,/cannot tend the work/);
+ town.jobs={miner:10,lumberer:10};const center=w.planet.chunks[town.center.join(',')],chunk=w.filterChunks(c=>!c.v.s&&c.v.g===center.v.g&&c.b!=='water'&&c.b!=='mountain')[0],rival=w.happen('Create',null,null,{x:chunk.x,y:chunk.y},'town');const war=w.happen('Create',town,null,{type:'war',towns:[town.id,rival.id]},'process');town.issues.war=war.id;next(w);assert.equal(batch.remaining,remaining);assert.equal(batch.delay.reason,'war');assert.match(batch.pause,/Fighting/);war.end=true;delete town.issues.war;
+ finish(w,batch);assert.equal(town.resources.charcoal,1);assert.equal(batch.delay,undefined);assert.ok(batch.steps.some(s=>s.text.includes('returns to the work')));noErrors(g);
 });
 
 test('bricks need firing techniques, clay and fuel, then replace stone in an actual project',async t=>{

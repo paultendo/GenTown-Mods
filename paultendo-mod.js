@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.48/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.49/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.48";
+    const MOD_VERSION = "1.6.49";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -6070,7 +6070,8 @@
         const state=livingWorldState(),work={id:`material:${state.nextId++}`,town:town.id,type,person:person.id,name:person.name,day:planet.day,status:'waiting',cost:materialBatchCost(town,type),remaining:Math.max(2,recipe.days-(town._paultendoMaterials?.[type]?.lesson?2:0)),output:recipe.output,trial:!practiced,purpose:practical || null,lesson:town._paultendoMaterials?.[type]?.lesson?structuredClone(town._paultendoMaterials[type].lesson):null,steps:[],inputs:[]};
         // Decide a trial's uncertainty once. Reloading cannot reroll it.
         work.roll=Math.random();state.materialWork.push(work);
-        materialStep(work,`${person.name} wants to try making ${COMMODITIES[type].label} in ${town.name}.`);
+        const request=practical?.exchange&&commodityExchangeState().exchanges.find(r=>r.id===practical.exchange);
+        materialStep(work,request?`${person.name} takes up ${exchangeTownLabel(request,request.buyer)}’s request for ${COMMODITIES[type].label}.`:`${person.name} wants to try making ${COMMODITIES[type].label} in ${town.name}.`);
         return work;
     }
     function materialDirectNeed(town,type) {
@@ -6089,6 +6090,11 @@
         return {type,actual,allowed:actual||established||!!town._paultendoMaterials?.[type]?.lesson};
     }
     function materialPurposeWanted(town,work) {
+        if(work.purpose?.exchange) {
+            const request=commodityExchangeState().exchanges.find(r=>r.id===work.purpose.exchange),buyer=request&&regGet('town',request.buyer);
+            const path=buyer&&commodityPath(buyer,town);
+            return !!request&&!request.resolved&&!!path&&commodityDemand(buyer,request.type,path)>0;
+        }
         const root=work.purpose?.type;
         if(root)return !!materialIntent(town,root);
         return materialConstructionNeed(town)>0||materialDirectNeed(town,work.type)>0;
@@ -6149,8 +6155,21 @@
                 if(work.cargo<=0){work.status='made';work.finished=planet.day;}
                 continue;
             }
-            const blocked=!livingTeachingPersonAvailable(person,town)||!materialTechniqueAvailable(work.type)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town);
-            if(blocked){work.pause='The work is set aside until there are hands, food and peace for it.';continue;}
+            if(work.status==='waiting'&&work.purpose?.exchange&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
+            const blocked=!livingTeachingPersonAvailable(person,town)?'hands':!materialTechniqueAvailable(work.type)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            if(blocked){
+                const pause={hands:`${work.name} cannot tend the work. It waits for them.`,knowledge:`The workshop cannot keep working this way.`,war:`Fighting pulls ${work.name} away from the work.`,food:`${work.name} puts the work aside. There is not enough food in ${town.name}.`}[blocked];
+                if(work.delay?.reason!==blocked){work.delay={reason:blocked,day:planet.day};materialStep(work,pause);}
+                work.pause=pause;continue;
+            }
+            if(work.delay) {
+                if(work.delay.reason==='food') {
+                    const relief=commodityExchangeState().exchanges.findLast(r=>r.buyer===town.id&&COMMODITIES[r.type]?.edible&&r.arrived>=work.delay.day&&r.delivered>0&&(town._paultendoCommodityLots?.[r.type] || []).some(l=>l.exchange===r.id&&l.count>0));
+                    if(relief){const support=work.relief ||= [];if(!support.some(r=>r.exchange===relief.id))support.push({exchange:relief.id,day:planet.day});materialStep(work,`Food from ${exchangeTownLabel(relief,relief.seller)} is in the stores. ${work.name} returns to the work.`);}
+                    else materialStep(work,`${work.name} returns to the work. The town has food again.`);
+                } else materialStep(work,`${work.name} returns to the work.`);
+                delete work.delay;
+            }
             delete work.pause;
             if(work.status==='waiting') {
                 const cost=materialBatchCost(town,work.type,work);
@@ -6158,7 +6177,7 @@
                     work.cost=cost;
                     materialStep(work,`${work.name} chooses ${cost.coal?'coal':'charcoal'} for the fire.`);
                 }
-                if(!work.trial&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
+                if((!work.trial||work.purpose?.exchange)&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
                 if(Object.entries(work.cost).some(([type,count])=>commodityStock(town,type)<count))continue;
                 // Protect other craft inputs. Construction can choose these inputs
                 // or fired bricks, but a second workshop cannot spend the same units.
@@ -6185,7 +6204,8 @@
         }
         for(const town of regToArray('town'))if(!town.end&&town.pop>0)planMaterialWork(town);
         // Preserve active work. Bound only completed histories.
-        const finished=state.materialWork.filter(w=>!['waiting','working','storing'].includes(w.status));
+        const ordered=new Set(commodityExchangeState().exchanges.filter(r=>!r.resolved&&r.manufacture).map(r=>r.manufacture.work));
+        const finished=state.materialWork.filter(w=>!['waiting','working','storing'].includes(w.status)&&!ordered.has(w.id));
         if(finished.length>EXCHANGE_PACE.maxHistory){const old=new Set(finished.slice(0,finished.length-EXCHANGE_PACE.maxHistory).map(w=>w.id));state.materialWork=state.materialWork.filter(w=>!old.has(w.id));}
     }
     function openMaterialWork(work) {
@@ -6200,6 +6220,7 @@
         else if(work.status==='storing')items.push({text:`${work.cargo} ${COMMODITIES[work.type].label} waits for room in the stores.`});
         else if(work.status==='lost')items.push({text:'The workshop was lost with the town.'});
         for(const input of work.inputs || []){const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(record)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(record)});}
+        for(const support of work.relief || []){const record=commodityExchangeState().exchanges.find(r=>r.id===support.exchange);if(record)items.push({text:'Remember the food that reached them',func:()=>openCommodityJourney(record)});}
         populateExecutive(items,COMMODITIES[work.type].label[0].toUpperCase()+COMMODITIES[work.type].label.slice(1));markLivingStoryControls();openExecutive();
     }
     function openTownMaterials(town) {
@@ -6296,7 +6317,7 @@
         const flow=foodFlow(town),runway=available/Math.max(1,flow.consumption);
         return Math.max(0.1,flow.consumption/Math.max(1,available)+demand/Math.max(1,available)+travelDays/Math.max(1,runway));
     }
-    function commodityWorkClaims(town) {
+    function commodityWorkClaims(town,excludeExchange) {
         const claims=[];
         // Native construction spends two units of progress per rock or one per lumber.
         for(const project of regToArray('process')) if(project.town===town.id&&project.type==='project'&&!project.done&&!project.end&&Number.isFinite(project.cost)) {
@@ -6307,13 +6328,19 @@
             if(recipe)claims.push({kind:'craft',id:work.id,cost:recipe.cost});
         }
         for(const work of livingWorldState().materialWork) if(work.town===town.id&&work.status==='waiting')claims.push({kind:'material',id:work.id,cost:work.cost});
+        for(const request of commodityExchangeState().exchanges) if(request.seller===town.id&&request.status==='making'&&!request.resolved&&request.id!==excludeExchange) {
+            const work=livingWorldState().materialWork.find(w=>w.id===request.manufacture?.work);
+            // Reserve only finished goods. The actual workshop already claims
+            // its inputs while waiting and pays for them when work begins.
+            if(work&&['made','storing'].includes(work.status))claims.push({kind:'order',id:request.id,cost:{[request.type]:Math.min(request.manufacture.count,work.output-(work.cargo || 0))}});
+        }
         return claims;
     }
     const BUILDING_MATERIALS = {rock:2,lumber:1,brick:2};
-    function commodityCommittedStock(town,type) {
+    function commodityCommittedStock(town,type,excludeExchange) {
         const craft=Object.fromEntries(Object.keys(COMMODITIES).map(key=>[key,0]));
         let construction=0;
-        for(const claim of commodityWorkClaims(town)) {
+        for(const claim of commodityWorkClaims(town,excludeExchange)) {
             if(claim.kind==='construction')construction+=claim.cost;
             else for(const [key,count] of Object.entries(claim.cost))craft[key]=(craft[key] || 0)+count;
         }
@@ -6326,9 +6353,9 @@
     function commodityWorkDemand(town) {
         return Object.fromEntries(Object.keys(COMMODITIES).filter(type=>!COMMODITIES[type].edible&&(type!=='brick'||town._paultendoMaterials?.brick)).map(type=>[type,Math.max(0,commodityCommittedStock(town,type)-commodityStock(town,type))]).filter(([,need])=>need>0));
     }
-    function commoditySpare(town,type,path) {
+    function commoditySpare(town,type,path,excludeExchange) {
         const held=commodityStock(town,type);
-        const reserve=COMMODITIES[type]?.edible?Math.max(0,foodBuffer(town,path?commodityTravelDays(path)*2:0)-(mealStock(town)-held)):commodityCommittedStock(town,type);
+        const reserve=COMMODITIES[type]?.edible?Math.max(0,foodBuffer(town,path?commodityTravelDays(path)*2:0)-(mealStock(town)-held)):commodityCommittedStock(town,type,excludeExchange);
         return Math.max(0,Math.floor(held-reserve));
     }
     function commodityDemand(town,type,path) {
@@ -6397,8 +6424,8 @@
         if(use.kind==='craft')return `${town} uses ${goods} from this exchange to make a ${(LIVING_ARTIFACTS[use.name]?.name || 'new object').toLowerCase()}.`;
         return '';
     }
-    function commodityTerms(buyer,seller,person,path,type='crop') {
-        const demand=commodityDemand(buyer,type,path),spare=commoditySpare(seller,type,path);
+    function commodityTerms(buyer,seller,person,path,type='crop',offer={}) {
+        const demand=commodityDemand(buyer,type,path),spare=offer.spare ?? commoditySpare(seller,type,path,offer.exchange);
         const count=Math.floor(Math.min(spare,demand,Math.max(0,$c.maxResource(buyer)-commodityStock(buyer,type))));
         if(count<=0) return {kind:'refuse',reason:'stores'};
         const memory=exchangeMemory(seller,buyer),relation=getRelations(seller,buyer);
@@ -6437,6 +6464,41 @@
         }
         return aid || {kind:'refuse',reason:relation<-4?'rivalry':closed?'outsiders':'terms'};
     }
+    function materialOffer(town,type) {
+        const recipe=MATERIAL_RECIPES[type];
+        if(!recipe||!town._paultendoMaterials?.[type]?.technique||!materialTechniqueAvailable(type)||hasIssue(town,'war')||mealStock(town)<foodBuffer(town))return null;
+        const state=livingWorldState();
+        if(state.materialWork.some(w=>w.town===town.id&&['waiting','working','storing'].includes(w.status))||commodityExchangeState().exchanges.some(r=>r.seller===town.id&&r.status==='making'&&!r.resolved))return null;
+        const recent=state.materialWork.filter(w=>w.town===town.id).at(-1);
+        if(recent&&planet.day-(recent.finished || recent.day)<EXCHANGE_PACE.retryDays)return null;
+        const person=materialWorker(town,recipe),cost=materialBatchCost(town,type);
+        if(!person||Object.entries(cost).some(([key,count])=>commodityStock(town,key)-commodityCommittedStock(town,key)<count)||commodityStock(town,type)+recipe.output>$c.maxResource(town))return null;
+        return {person,cost,count:recipe.output,days:Math.max(2,recipe.days-(town._paultendoMaterials[type].lesson?2:0))};
+    }
+    function commissionMaterial(record,buyer,seller,path) {
+        const offer=materialOffer(seller,record.type);if(!offer)return false;
+        const terms=commodityTerms(buyer,seller,offer.person,path,record.type,{spare:offer.count});
+        if(terms.kind==='refuse')return {refusal:terms.reason};
+        const work=startMaterialBatch(seller,record.type,{exchange:record.id,allowed:true});if(!work)return false;
+        record.manufacture={work:work.id,person:work.person,name:work.name,count:terms.count,terms:structuredClone(terms)};
+        record.status='making';record.due=planet.day+1;
+        record.reply={day:planet.day,person:work.person,name:work.name,reason:terms.reason,values:{...seller.values},religion:seller.religion,faith:seller.influences.faith};
+        noteExchangeStep(record,'commission',{name:work.name,count:terms.count,payment:terms.payment,reason:terms.reason});
+        return true;
+    }
+    function commissionedTerms(record,buyer,seller,path) {
+        const promised=record.manufacture.terms;
+        const capacity=Math.max(0,$c.maxResource(buyer)-commodityStock(buyer,record.type));
+        if(capacity<1)return {kind:'wait',reason:'room'};
+        const spare=commoditySpare(seller,record.type,path,record.id);
+        if(spare<1)return {kind:'wait',reason:'stores'};
+        let count=Math.floor(Math.min(promised.count,commodityDemand(buyer,record.type,path),spare,capacity));
+        if(promised.payment)count=Math.min(count,Math.floor(commoditySpare(buyer,promised.payment.type,path)/(promised.payment.count/promised.count)));
+        if(count<=0)return {kind:'refuse',reason:'terms'};
+        const terms={...structuredClone(promised),count};
+        if(terms.payment)terms.payment.count=Math.ceil(count*promised.payment.count/promised.count);
+        return terms;
+    }
     function exchangeTownLabel(record,id) {
         const town=regGet('town',id);
         return record.known?.[id]||livingTownKnown(town)?record.names[id]:'another settlement';
@@ -6450,6 +6512,11 @@
             case 'work':return `${buyer} seeks ${goods} from ${seller} for work already underway.`;
             case 'caravan':return `Merchants seek ${goods} from ${seller} for ${buyer}.`;
             case 'famine':return `${buyer} asks ${seller} for help through the famine.`;
+            case 'commission':return `${record.known?.[record.seller]||livingTownKnown(regGet('town',record.seller))?step.name:`A maker in ${seller}`} agrees to make ${step.count} ${goods} for ${buyer}.${step.payment?` They ask for ${step.payment.count} ${payment} when the goods are ready.`:' They offer their work as help.'}`;
+            case 'workBlocked':return `The road between ${buyer} and ${seller} is closed. The workshop keeps the goods until it opens.`;
+            case 'workLost':return `${seller} can no longer finish the ${goods} for ${buyer}.`;
+            case 'workRoom':return `${seller} keeps the finished ${goods} until ${buyer} has room for it.`;
+            case 'workStores':return `${seller} keeps the ${goods} for its own work. The request from ${buyer} must wait.`;
             case 'aid':return `${seller} sends ${step.count} ${goods} to ${buyer}.${step.reason==='remembered'?' They remember help that once came the other way.':step.reason==='practice'?' Helping neighbours has become a practice here.':step.reason==='belief'?' They put their belief in shared provision into practice.':step.reason==='shared'?' They share from the town’s stores.':''}`;
             case 'trade':return `${seller} sends ${step.count} ${goods} to ${buyer} for ${step.payment.count} in payment.`;
             case 'barter':return `${seller} sends ${step.count} ${goods} to ${buyer} in exchange for ${step.payment.count} ${payment}. Both supplies travel with the carriers.`;
@@ -6490,10 +6557,12 @@
             const path=commodityPath(buyer,seller);if(!path)continue;
             for(const type of types) {
                 const wanted=commodityDemand(buyer,type,path),spare=commoditySpare(seller,type,path);
-                if(wanted<=0||spare<=0)continue;
+                if(wanted<=0)continue;
+                const offer=spare<=0&&materialOffer(seller,type);
+                if(spare<=0&&(!offer||commodityTerms(buyer,seller,offer.person,path,type,{spare:offer.count}).kind==='refuse'))continue;
                 const memory=exchangeMemory(buyer,seller);
                 const urgency=commodityUnitValue(buyer,type,commodityStock(buyer,type),wanted,path);
-                const score=urgency*(1+Math.min(wanted,spare)/wanted)+getRelations(buyer,seller)*0.2+(Object.values(memory.given).some(n=>n>0)?1:0)-path.length*0.15;
+                const score=urgency*(1+Math.min(wanted,spare || offer.count)/wanted)+getRelations(buyer,seller)*0.2+(Object.values(memory.given).some(n=>n>0)?1:0)-path.length*0.15-(offer?offer.days*0.15:0);
                 candidates.push({town:seller,path,type,score});
             }
         }
@@ -6558,6 +6627,20 @@
             const buyer=regGet('town',record.buyer),seller=regGet('town',record.seller);
             if(!buyer||buyer.end||buyer.pop<=0||!seller||seller.end||seller.pop<=0) {record.resolved=true;record.status='lost';record.lost={type:record.type,count:record.cargo,payment:record.paymentCargo || 0};record.cargo=0;record.paymentCargo=0;noteExchangeStep(record,'closed');continue;}
             const path=commodityPath(buyer,seller);
+            if(record.status==='making') {
+                const work=livingWorldState().materialWork.find(w=>w.id===record.manufacture?.work);
+                if(!work||['lost','failed'].includes(work.status)){record.resolved=true;record.status='unfilled';noteExchangeStep(record,'workLost');continue;}
+                if(!path) {
+                    if(work.started==null){record.resolved=true;record.status='closed';noteExchangeStep(record,'closed');continue;}
+                    record.due=planet.day+1;if(record.steps.at(-1)?.kind!=='workBlocked')noteExchangeStep(record,'workBlocked');continue;
+                }
+                if(work.status==='withdrawn'||commodityDemand(buyer,record.type,path)<=0){record.resolved=true;record.status='withdrawn';noteExchangeStep(record,'recovered');continue;}
+                if(!['made','storing'].includes(work.status)){record.due=planet.day+1;continue;}
+                const terms=commissionedTerms(record,buyer,seller,path);
+                if(terms.kind==='wait'){record.due=planet.day+1;const kind=terms.reason==='room'?'workRoom':'workStores';if(record.steps.at(-1)?.kind!==kind)noteExchangeStep(record,kind);continue;}
+                if(terms.kind!=='refuse'&&sendCommodityJourney(record,buyer,seller,path,terms))continue;
+                record.resolved=true;record.status='refused';record.refusal='terms';noteExchangeStep(record,'refuse',{reason:'terms'});continue;
+            }
             if(record.status==='asking') {
                 if(!path){record.resolved=true;record.status='closed';noteExchangeStep(record,'closed');continue;}
                 if(commodityDemand(buyer,record.type,path)<=0){record.resolved=true;record.status='withdrawn';noteExchangeStep(record,'recovered');continue;}
@@ -6566,6 +6649,9 @@
                 const terms=commodityTerms(buyer,seller,person,path,record.type);
                 record.reply={day:planet.day,person:person?.id,name:person?.name,reason:terms.reason,values:{...seller.values},religion:seller.religion,faith:seller.influences.faith};
                 if(terms.kind!=='refuse'&&sendCommodityJourney(record,buyer,seller,path,terms)) continue;
+                const commission=terms.reason==='stores'&&commissionMaterial(record,buyer,seller,path);
+                if(commission===true)continue;
+                if(commission?.refusal)terms.reason=commission.refusal;
                 record.resolved=true;record.status='refused';record.refusal=terms.reason || 'terms';
                 const memory=exchangeMemory(buyer,seller);memory.refused++;memory.lastRefused={day:planet.day,source:record.id,type:record.type};
                 if(COMMODITIES[record.type].edible){const food=foodMemory(buyer,seller);food.refused++;food.lastRefused={...memory.lastRefused};}
@@ -6606,6 +6692,8 @@
         const known=[record.buyer,record.seller].map(id=>regGet('town',id)).find(livingTownKnown);if(!known)return;
         const items=[{text:'← Back to trade and neighbours',func:()=>openCommodityHistory(known)}];
         for(const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(exchangeStepText(record,step))}`});
+        const production=record.manufacture&&livingWorldState().materialWork.find(w=>w.id===record.manufacture.work);
+        if(production&&livingTownKnown(regGet('town',record.seller)))items.push({text:'Visit the workshop',func:()=>openMaterialWork(production)});
         if(livingTownKnown(regGet('town',record.buyer)))for(const claim of record.purposes || []) {
             if(claim.kind==='construction'){
                 const project=regGet('process',claim.id),marker=project?.marker&&regGet('marker',project.marker);
@@ -6618,7 +6706,7 @@
                 if(artifact&&livingArtifactKnown(artifact))items.push({text:`Visit ${escapeLivingText(artifactTitle(artifact))}`,func:()=>openLivingArtifact(artifact)});
             }
         }
-        if(!record.resolved) items.push({text:record.cargo>0||record.paymentCargo>0?'The cargo is still with the carriers.':'The request is still on its way.'});
+        if(!record.resolved) items.push({text:record.status==='making'?'The workshop is filling the request.':record.cargo>0||record.paymentCargo>0?'The cargo is still with the carriers.':'The request is still on its way.'});
         const previous=record.previousHelp;
         if(previous?.source&&previous.source!==record.id) {
             const root=commodityExchangeState().exchanges.find(r=>r.id===previous.source);if(root&&resolveChronicleStory({kind:'food',id:root.id}))items.push({text:'Remember the earlier help',func:()=>openCommodityJourney(root)});
@@ -7773,9 +7861,10 @@
             const base=project.func;
             project.func=function(subject){return withCommodityUse({kind:'construction',id:subject.id,name:subject.subtype},()=>{
                 const town=regGet('town',subject.town);
-                if(town&&!town.end&&subject.cost>0&&commodityStock(town,'brick')>0) {
+                const bricks=town&&Math.max(0,commodityStock(town,'brick')-commodityWorkClaims(town).filter(c=>c.kind!=='construction').reduce((sum,c)=>sum+(c.cost.brick || 0),0));
+                if(town&&!town.end&&subject.cost>0&&bricks>0) {
                     const budget=Math.min(subject.cost,randRange(1,Math.max(1,Math.ceil(subject.total*0.5))));
-                    const count=Math.min(commodityStock(town,'brick'),Math.ceil(budget/2));
+                    const count=Math.min(bricks,Math.ceil(budget/2));
                     happen('RemoveResource',null,town,{type:'brick',count});subject.cost-=count*2;
                     happen('RemoveResource',null,town,{type:'cash',count:Math.min(budget,count*2)});
                     if(subject.cost<=0){happen('Finish',null,subject);logMessage(`Construction in ${townRef(town.id)} is finished.`,undefined);delete subject.cost;}
@@ -16616,7 +16705,7 @@
         if(!buyer||!seller||planet.day-buyer.start<=1)return null;
         const path=commodityPath(buyer,seller);if(!path)return null;
         if(type==='food')type=['crop','livestock'].filter(t=>commoditySpare(seller,t,path)>0).sort((a,b)=>commoditySpare(seller,b,path)-commoditySpare(seller,a,path))[0];
-        if(!COMMODITIES[type]||commodityDemand(buyer,type,path)<=0||commoditySpare(seller,type,path)<=0)return null;
+        if(!COMMODITIES[type]||commodityDemand(buyer,type,path)<=0||commoditySpare(seller,type,path)<=0&&!materialOffer(seller,type))return null;
         return newCommodityJourney(buyer,seller,path,'market',type);
     }
 
