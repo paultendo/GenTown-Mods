@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.31/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.32/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.31";
+    const MOD_VERSION = "1.6.32";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -3270,6 +3270,7 @@
                 try { markFogDirty(); } catch {}
                 try { scheduleFogRefresh(true); } catch {}
             }
+            if (action === "Unlock") { try { recordLivingDiscovery(subject, args); } catch {} }
             try { handleAutoplayEventForHappen(action, subject, target, result); } catch {}
             if (planet && (action === "Create" || action === "End" || action === "Finish")) {
                 dailyCaches.delete(planet);
@@ -4930,16 +4931,24 @@
         populateExecutive(items, "Unlocks (" + Math.round(unlocked / total * 100) + "%)");
     }
 
-    function openUnlockDetail(type, levelData) {
+    function openUnlockDetail(type, levelData, townId = null) {
         const meta = getTechUnlockMeta(type, levelData.level);
         const items = [{ text: "← Back to Unlocks", func: openUnlocksPanelEnhanced }];
-        items.push({ heading: true, text: "The discovery" });
+        const tale = DISCOVERY_TALES[type]?.[levelData.level];
+        if (tale) items.push({ text: tale, spacer: true });
         if (levelData.messageDone) items.push({ text: levelData.messageDone });
-        if (levelData.messageTomorrow) items.push({ text: levelData.messageTomorrow });
         if (!levelData.messageDone && !levelData.messageTomorrow) items.push({ text: `The people of {{planet}} have developed ${levelData.name}.` });
         if (meta) {
-            items.push({ heading: true, text: "How it happened" });
+            items.push({ heading: true, text: "First heard here" });
             items.push({ text: formatTechUnlockMeta(meta) });
+        }
+        const towns = regToArray('town').filter(livingTownKnown).filter(town => !townId || town.id === townId);
+        for (const town of towns.slice(0, 3)) {
+            items.push({ heading: true, text: `In ${town.name}` });
+            const facts = livingTownLines(town, type);
+            for (const text of facts) items.push({ text });
+            if (type === 'farm' && !town.jobs?.farmer) items.push({ text: 'No farmers have taken up the work here yet.' });
+            items.push({ text: `Visit ${town.name}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(town, 'town'); } });
         }
         items.push({ heading: true, text: "What it changes" });
         for (const [key, value] of Object.entries(levelData.influences || {})) {
@@ -4952,6 +4961,7 @@
         const next = unlockTree[type].levels.find(level => level.level > levelData.level);
         if (next) items.push({ spacer: true, text: `Next in this branch: ${next.name}. Further research and prerequisites are needed.` });
         populateExecutive(items, levelData.name);
+        openExecutive();
     }
 
     function overrideUnlocksPanel() {
@@ -5110,6 +5120,349 @@
             influences: { happy: 0.3, faith: 0.3, order: 0.2 }
         }
     };
+
+    // Settlement life connects existing simulation facts to discoveries and choices.
+    // This layer observes the world; it does not add bonuses or consume random rolls.
+    const livingDecisionCaptures = new Map();
+    const DISCOVERY_TALES = {
+        farm: {10: 'A seed kept through winter can become a meal next season. Fields give people a reason to stay.', 20: 'A beast that once fled the camp may come back for scraps. Keeping animals brings food closer to home.', 30: 'Water need not stop at the riverbank. Carrying it to the crops changes what the land can provide.', 40: 'One harvest need not exhaust a field. Changing what grows there gives the soil a chance to recover.'},
+        travel: {10: 'There is more to the world than the edge of town. Each journey brings unfamiliar places within reach.', 20: 'Footsteps leave a trail. Repeated journeys turn a route remembered by a few into a path others can follow.', 30: 'Water becomes a way forward. A shore that once ended a journey can become its beginning.', 40: 'A rolling load is easier to move than one carried on a back. Distance becomes less of a burden.'},
+        fire: {10: 'The night has a gathering place. A tended flame brings warmth and light after the sun has gone.', 20: 'The hearth changes the meal as well as the evening. Cooked food eases hunger and disease.', 30: 'The warmth of the hearth becomes a weapon. Military strength comes at the expense of happiness.'},
+        smith: {10: 'Stone becomes something to shape, rather than something merely found. Durable material opens new possibilities.', 20: 'A shaped edge on a handle changes a day of work. Farming improves, and mining and lumbering become possible.', 30: 'Heat reveals what a shiny rock can become. Cast metal opens another chapter in craft and exchange.', 40: 'A sharper, stronger tool serves both the field and the battlefield. Craft changes peaceful work and warfare together.'},
+        trade: {10: 'Something spare in one home can be precious in another. Exchange gives journeys a new purpose.', 20: 'Exchange becomes a repeated journey. Goods and travellers begin to follow familiar routes.', 30: 'A price can be carried more easily than a cart of goods. Currency gives exchange a common language.'},
+        government: {10: 'A rule can outlast the quarrel that produced it. Laws bring another way to restrain crime.'},
+        education: {10: 'Knowledge need not end with the person who holds it. Teaching gives learning a place in town life.', 20: 'Learning branches into specialised fields. A community can pursue more than the knowledge of everyday survival.'},
+        military: {10: 'Defence becomes a profession. Soldiers can protect a settlement, though military life also brings pressure on order.', 20: 'Those who fight need more than courage. Protective gear strengthens the military.', 30: 'A weapon can cross the space between opponents. Greater military strength also brings more crime pressure.', 40: 'Riding gives combat another kind of movement. The military gains strength.', 50: 'Vehicles carry combat beyond the strength of a single rider. Military power and travel both gain support.'},
+        astronomy: {10: 'The sky becomes something to study. Curiosity above the horizon encourages learning and journeys below it.', 20: 'An instrument makes distant things less distant. The night sky offers new work for curious minds.'}
+    };
+
+    function livingWorldState() {
+        if (!planet) return null;
+        const state = planet._paultendoLife ||= { discoveries: {}, decisions: [], moments: [], nextId: 1 };
+        state.discoveries ||= {};
+        state.decisions ||= [];
+        state.moments ||= [];
+        state.nextId ||= 1;
+        return state;
+    }
+
+    function livingTownSnapshot(town) {
+        return { id: town.id, pop: town.pop || 0, jobs: {...town.jobs}, resources: {...town.resources}, influences: {...town.influences}, research: {...town.research} };
+    }
+
+    function livingTownKnown(town) {
+        if (!town || town.end || town._hidden) return false;
+        const center = town.center;
+        return !!center && (typeof isChunkExplored !== 'function' || isChunkExplored(center[0], center[1]));
+    }
+
+    function seedLivingDiscoveries() {
+        const state = livingWorldState();
+        if (!state || typeof unlockTree === 'undefined') return;
+        for (const [key, branch] of Object.entries(unlockTree)) {
+            for (const level of branch.levels) {
+                if ((planet.unlocks?.[key] || 0) < level.level) continue;
+                const id = `${key}:${level.level}`;
+                if (!state.discoveries[id]) state.discoveries[id] = { key, level: level.level, name: level.name, day: null, origin: null, towns: {} };
+                const discovery = state.discoveries[id];
+                for (const town of regToArray('town').filter(t => !t.end)) {
+                    if (!discovery.towns[town.id]) {
+                        const jobs = Object.entries(jobNeedsUnlock).filter(([, gate]) => gate[0] === key && gate[1] === level.level).map(([job]) => job);
+                        discovery.towns[town.id] = { jobs: {...town.jobs}, reported: jobs.some(job => town.jobs?.[job] > 0) };
+                    }
+                }
+            }
+        }
+    }
+
+    function recordLivingDiscovery(subject, args) {
+        const key = args?.value?.type;
+        const level = args?.value?.levelData;
+        if (!key || !level || (planet.unlocks?.[key] || 0) < level.level) return;
+        const state = livingWorldState();
+        const id = `${key}:${level.level}`;
+        if (state.discoveries[id]?.day != null) return;
+        state.discoveries[id] = { key, level: level.level, name: level.name, day: planet.day, origin: subject?._reg === 'town' ? subject.id : null, towns: {} };
+        for (const town of regToArray('town').filter(t => !t.end)) state.discoveries[id].towns[town.id] = { jobs: {...town.jobs}, reported: false };
+        const metadata = initTechUnlockMap();
+        metadata[key] ||= {};
+        metadata[key][level.level] ||= { name: level.name, day: planet.day, originTownId: state.discoveries[id].origin };
+    }
+
+    function livingInfluencePhrases(delta) {
+        const phrases = {
+            farm: ['Farming gains support', 'Farming loses support'], travel: ['People are more inclined to travel', 'People are less inclined to travel'],
+            happy: ['Spirits lift', 'Spirits fall'], disease: ['Disease pressure rises', 'Disease pressure eases'], hunger: ['Hunger pressure rises', 'Hunger pressure eases'],
+            trade: ['Trade gains support', 'Trade loses support'], education: ['Learning gains support', 'Learning loses support'], military: ['Military strength gains support', 'Military strength loses support'],
+            crime: ['Crime pressure rises', 'Crime pressure eases'], faith: ['Faith gains support', 'Faith loses support']
+        };
+        return Object.keys(phrases).filter(key => typeof delta?.[key] === 'number' && Math.abs(delta[key]) >= 0.1)
+            .slice(0, 3).map(key => phrases[key][delta[key] > 0 ? 0 : 1]);
+    }
+
+    function captureLivingDecision(event) {
+        const button = event.target.closest?.('.logAct [role="button"]');
+        const entry = button?.closest('.logMessage');
+        const caller = entry && currentEvents[entry.dataset.eventid];
+        if (!caller || caller.done || !caller.needsInput || livingDecisionCaptures.has(caller)) return;
+        livingDecisionCaptures.set(caller, { planet, entry, automated: !!PAULTENDO_STATE.autoChoosing, question: entry.querySelector('.logText')?.textContent || '', before: regToArray('town').filter(t => !t.end).map(livingTownSnapshot), processes: new Set(regToArray('process').map(p => p.id)) });
+    }
+
+    function finishLivingDecisions() {
+        for (const [caller, capture] of livingDecisionCaptures) {
+            if (capture.planet !== planet || !Object.values(currentEvents).includes(caller)) { livingDecisionCaptures.delete(caller); continue; }
+            if (!caller.done) continue;
+            livingDecisionCaptures.delete(caller);
+            const state = livingWorldState();
+            const selected = capture.entry.querySelector('[selected="true"]');
+            if (!selected) continue;
+            const towns = [];
+            const changes = [];
+            for (const before of capture.before) {
+                const town = regGet('town', before.id);
+                if (!town || town.end) continue;
+                const delta = {};
+                for (const key of Object.keys({...before.influences, ...town.influences})) delta[key] = (town.influences?.[key] || 0) - (before.influences[key] || 0);
+                const phrases = livingInfluencePhrases(delta);
+                const researchChanged = JSON.stringify(before.research) !== JSON.stringify(town.research || {});
+                if (phrases.length || researchChanged || caller.target === town || caller.subject === town) towns.push(town.id);
+                if (phrases.length) changes.push({ town: town.id, text: phrases.join('. ') + '.' });
+            }
+            const level = caller.args?.value?.levelData;
+            const title = level?.name || (caller.eventClass === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : caller.eventClass === 'townProjectStart' ? `A new ${String(caller.args.value).replace(/_/g, ' ')}` : 'A choice for the town');
+            const projects = regToArray('process').filter(p => p.type === 'project' && !capture.processes.has(p.id)).map(p => ({ id: p.id, town: p.town, subtype: p.subtype, reported: false }));
+            const record = { id: state.nextId++, day: planet.day, title, question: capture.question, automated: capture.automated, outcome: (selected.innerText || selected.textContent).trim(), text: capture.entry.querySelector('.logText')?.textContent || capture.question, towns, changes, projects, logId: caller.logID };
+            state.decisions.push(record);
+            if (state.decisions.length > 48) state.decisions.shift();
+            capture.entry.querySelector('.paultendoDecisionPreview')?.remove();
+            if (changes.length) {
+                const echo = document.createElement('small');
+                echo.className = 'paultendoDecisionEcho';
+                echo.textContent = changes[0].text;
+                capture.entry.appendChild(echo);
+            }
+            syncLogToPlanet();
+        }
+    }
+
+    function updateLivingDecisionPreviews() {
+        for (const caller of Object.values(currentEvents)) {
+            if (!caller.needsInput || caller.done || !caller.logID) continue;
+            const entry = document.getElementById('logMessage-' + caller.logID);
+            if (!entry || entry.querySelector('.paultendoDecisionPreview')) continue;
+            const info = gameEvents[caller.eventClass];
+            const level = caller.args?.value?.levelData;
+            if (!entry.querySelector('.logAct [type="yes"]')) continue;
+            const yes = livingInfluencePhrases(level?.influences || info?.influences);
+            const no = livingInfluencePhrases(level?.influencesNo || info?.influencesNo);
+            if (caller.eventClass === 'townProjectStart') yes.push(`Construction of a ${String(caller.args.value).replace(/_/g, ' ')} begins`);
+            if (caller.eventClass === 'increaseResearch') {
+                yes.push(`${titleCase(researchInfluences[caller.args.value] || caller.args.value)} becomes the town's leading research`);
+                no.push(caller.target?.research?.[caller.args.value] > 0 ? 'This field loses research priority' : 'This field stays outside the research priorities');
+            }
+            if (!yes.length && !no.length) continue;
+            const details = document.createElement('details');
+            details.className = 'paultendoDecisionPreview';
+            const summary = document.createElement('summary');
+            summary.textContent = 'What could change?';
+            details.appendChild(summary);
+            for (const [label, phrases] of [[caller.args?.buttonYes || info?.button || info?.buttonYes || 'Yes', yes], [caller.args?.buttonNo || info?.buttonNo || 'No', no]]) {
+                if (!phrases.length) continue;
+                const line = document.createElement('p');
+                line.textContent = `${titleCase(label)}: ${phrases.join('. ')}.`;
+                details.appendChild(line);
+            }
+            entry.appendChild(details);
+        }
+    }
+
+    function noteLivingMoment(town, text, discovery, source) {
+        const state = livingWorldState();
+        state.moments.push({ day: planet.day, town: town.id, text, discovery: discovery || null, source: source || null });
+        if (state.moments.length > 60) state.moments.shift();
+        state.lastReportDay = planet.day;
+        logMessage(text, 'milestone');
+    }
+
+    function observeLivingWorld() {
+        seedLivingDiscoveries();
+        const state = livingWorldState();
+        if (!state || planet.day === state.lastReportDay) return;
+        for (const decision of state.decisions) {
+            for (const project of decision.projects) {
+                if (project.reported) continue;
+                const process = regGet('process', project.id);
+                const town = regGet('town', project.town);
+                if (!process || process.end || !process.done || !livingTownKnown(town)) continue;
+                // Finish can fail to place a landmark when the town has no free site.
+                const marker = regGet('marker', process.marker);
+                if (!marker || marker.end || marker.process !== process.id) continue;
+                project.reported = true;
+                noteLivingMoment(town, `The ${project.subtype.replace(/_/g, ' ')} approved on Day ${decision.day} now stands in ${townRef(town.id)}.`, null, decision.id);
+                return;
+            }
+        }
+        for (const [id, discovery] of Object.entries(state.discoveries)) {
+            const jobs = Object.entries(jobNeedsUnlock).filter(([, gate]) => gate[0] === discovery.key && gate[1] === discovery.level).map(([job]) => job);
+            if (!jobs.length) continue;
+            for (const town of regToArray('town').filter(livingTownKnown)) {
+                const observation = discovery.towns[town.id];
+                if (!observation || observation.reported) continue;
+                const adopted = jobs.filter(job => (town.jobs?.[job] || 0) > (observation.jobs[job] || 0));
+                if (!adopted.length) continue;
+                observation.reported = true;
+                const work = adopted.map(job => `${town.jobs[job]} ${town.jobs[job] === 1 ? job : wordPlural(job)}`).join(' and ');
+                noteLivingMoment(town, `{{b:${discovery.name}}} takes root in ${townRef(town.id)}. ${work} ${adopted.reduce((n, job) => n + town.jobs[job], 0) === 1 ? 'now works' : 'now work'} there.`, id, null);
+                return;
+            }
+        }
+    }
+
+    function livingTownLines(town, key) {
+        const lines = [];
+        if ((!key || key === 'farm') && town.jobs?.farmer > 0) lines.push(town.legal?.farm === false ? `${town.jobs.farmer} ${town.jobs.farmer === 1 ? 'farmer lives' : 'farmers live'} here, but farming is forbidden.` : `${town.jobs.farmer} ${town.jobs.farmer === 1 ? 'farmer tends' : 'farmers tend'} the fields.`);
+        if (!key || key === 'farm' || key === 'fire') {
+            const food = (town.resources?.crop || 0) + (town.resources?.livestock || 0);
+            if (food > 0) {
+                const stores = [];
+                if (town.resources?.crop > 0) stores.push(`${Math.round(town.resources.crop)} crops`);
+                if (town.resources?.livestock > 0) stores.push(`${Math.round(town.resources.livestock)} livestock`);
+                lines.push(`The stores hold ${commaList(stores)}.`);
+            }
+            else if (town.pop > 0) lines.push('The food stores are empty.');
+        }
+        const workers = Object.entries(town.jobs || {}).filter(([job, count]) => job !== 'farmer' && count > 0 && (!key || jobNeedsUnlock[job]?.[0] === key));
+        if (workers.length) lines.push(`${commaList(workers.map(([job, count]) => `${count} ${count === 1 ? job : wordPlural(job)}`))} ${workers.reduce((n, [, count]) => n + count, 0) === 1 ? 'works' : 'work'} here.`);
+        if (!key || key === 'education' || key === 'trade') {
+            const priorities = Object.entries(town.research || {}).filter(([, value]) => value > 0).sort((a, b) => b[1] - a[1]);
+            if (priorities.length) lines.push(`Research favours ${researchInfluences[priorities[0][0]] || priorities[0][0]}.`);
+        }
+        const buildings = regToArray('marker').filter(m => !m.end && m.town === town.id && m.type === 'landmark' && (!key || actionables.process._projectSubtypes[m.subtype]?.needsUnlock?.[key]));
+        if (buildings.length) lines.push(`Built here: ${commaList([...new Set(buildings.map(m => m.subtype?.replace(/_/g, ' ') || m.name).filter(Boolean))].slice(0, 3))}.`);
+        const projects = regToArray('process').filter(p => p.town === town.id && p.type === 'project' && !p.done && (!key || actionables.process._projectSubtypes[p.subtype]?.needsUnlock?.[key]));
+        if (projects.length) lines.push(`Under construction: ${commaList(projects.map(p => p.subtype.replace(/_/g, ' ')))}.`);
+        return lines;
+    }
+
+    function openLivingTownHistory(town) {
+        const state = livingWorldState();
+        const items = [{ text: '← Back to settlement', func: () => { closePopups(); closeExecutive(); openRegBrowser(town, 'town'); } }];
+        const entries = [...state.decisions.filter(d => d.towns.includes(town.id)).map(d => ({ day: d.day, title: d.title, text: d.text, outcome: d.outcome, automated: d.automated, changes: d.changes.filter(c => c.town === town.id).map(c => c.text).join(' ') })), ...state.moments.filter(m => m.town === town.id).map(m => ({ day: m.day, text: m.text }))].sort((a, b) => b.day - a.day);
+        for (const entry of entries.slice(0, 20)) {
+            items.push({ heading: true, text: `Day ${entry.day}${entry.title ? ` · ${entry.title}` : ''}` });
+            if (entry.outcome) items.push({ text: `${entry.automated ? 'Autoplay chose' : 'Your choice'}: ${entry.outcome}` });
+            items.push({ text: entry.text });
+            if (entry.changes) items.push({ text: entry.changes });
+        }
+        if (!entries.length) items.push({ text: 'The settlement’s next chapter is still being written.' });
+        populateExecutive(items, `${town.name} · Your mark`);
+        openExecutive();
+    }
+
+    function appendLivingTownView(town) {
+        const content = document.getElementById('regContent');
+        if (!content || !livingTownKnown(town)) return;
+        const section = document.createElement('section');
+        section.className = 'paultendoTownLife';
+        const title = document.createElement('h3'); title.textContent = 'Life in town'; section.appendChild(title);
+        for (const text of livingTownLines(town).slice(0, 6)) { const line = document.createElement('p'); line.textContent = text; section.appendChild(line); }
+        const links = document.createElement('div'); links.className = 'paultendoLifeDiscoveries';
+        for (const [key, branch] of Object.entries(unlockTree)) {
+            const levels = branch.levels.filter(l => (planet.unlocks?.[key] || 0) >= l.level);
+            if (!levels.length) continue;
+            const level = levels[levels.length - 1];
+            const button = document.createElement('button'); button.textContent = level.name;
+            button.addEventListener('click', () => { closePopups(); openUnlockDetail(key, level, town.id); });
+            links.appendChild(button);
+        }
+        section.appendChild(links);
+        const state = livingWorldState();
+        const recent = [...state.moments.filter(m => m.town === town.id), ...state.decisions.filter(d => d.towns.includes(town.id)).map(d => ({day:d.day,text:d.text}))].sort((a,b)=>b.day-a.day).slice(0,2);
+        for (const moment of recent) { const line = document.createElement('p'); line.innerHTML = parseText(`Day ${moment.day} · ${moment.text}`); section.appendChild(line); }
+        if (recent.length) {
+            const history = document.createElement('button'); history.textContent = 'Your mark on this town';
+            history.addEventListener('click', () => { closePopups(); openLivingTownHistory(town); }); section.appendChild(history);
+        }
+        content.querySelector('.regTitle')?.closest('.regSection')?.after(section);
+    }
+
+    function renderLivingFields() {
+        if (!planet || typeof canvasLayers === 'undefined') return;
+        if (!canvasLayers.townLife) {
+            addCanvasLayer('townLife');
+            canvasLayers.townLife.width = worldConfig.width;
+            canvasLayers.townLife.height = worldConfig.height;
+            if (canvasLayersOrder.includes('fog')) moveCanvasLayerBefore('townLife', 'fog');
+        }
+        const canvas = canvasLayers.townLife;
+        const ctx = canvasLayersCtx.townLife;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const drawFields = currentView === 'terrain' || currentView === 'territory';
+        const farmingTowns = regToArray('town').filter(town => drawFields && livingTownKnown(town) && town.jobs?.farmer > 0 && town.legal?.farm !== false);
+        if (!farmingTowns.length) { const key = document.getElementById('paultendoFieldsKey'); if (key) key.hidden = true; return; }
+        const territories = new Map();
+        for (const chunk of Object.values(planet.chunks || {})) {
+            if (!chunk.v?.s || chunk.v.m || biomes[chunk.b]?.infertile || chunk.b === 'water' || chunk.b === 'mountain') continue;
+            if (!territories.has(chunk.v.s)) territories.set(chunk.v.s, []);
+            territories.get(chunk.v.s).push(chunk);
+        }
+        let shown = 0;
+        for (const town of farmingTowns) {
+            const chunks = (territories.get(town.id) || []).sort((a,b)=>fnv1a32(`${town.id}:${a.x},${a.y}`)-fnv1a32(`${town.id}:${b.x},${b.y}`));
+            const count = Math.min(Math.ceil(town.jobs.farmer / 4), 8, chunks.length);
+            for (const chunk of chunks.slice(0, count)) {
+                if (!isChunkVisible(chunk.x, chunk.y)) continue;
+                const size = worldConfig.chunkSize;
+                const x = chunk.x * size, y = chunk.y * size;
+                ctx.fillStyle = '#a38743'; ctx.fillRect(x, y, size, size);
+                ctx.fillStyle = '#c5d873';
+                for (let row = 1; row < size; row += 2) ctx.fillRect(x, y + row, Math.max(1, size - 1), 1);
+                shown++;
+            }
+        }
+        let key = document.getElementById('paultendoFieldsKey');
+        if (!key && document.getElementById('underMap')) { key = document.createElement('span'); key.id = 'paultendoFieldsKey'; key.textContent = 'Fields'; key.title = 'Farming settlements have striped fields'; document.getElementById('underMap').appendChild(key); }
+        if (key) key.hidden = !shown;
+    }
+
+    function initLivingWorld() {
+        seedLivingDiscoveries();
+        ensureLivingWorldStyles();
+        if (!PAULTENDO_STATE.livingDecisionBound && document.getElementById('logMessages')) {
+            document.getElementById('logMessages').addEventListener('click', captureLivingDecision, true);
+            PAULTENDO_STATE.livingDecisionBound = true;
+        }
+        if (typeof openRegBrowser === 'function' && !openRegBrowser._paultendoLife) {
+            const base = openRegBrowser;
+            openRegBrowser = function(obj, registry) { const result = base.apply(this, arguments); if (registry === 'town') appendLivingTownView(obj); return result; };
+            openRegBrowser._paultendoLife = true;
+        }
+    }
+
+    function ensureLivingWorldStyles() {
+        if (document.getElementById('paultendoLifeStyles')) return;
+        const style = document.createElement('style');
+        style.id = 'paultendoLifeStyles';
+        style.textContent = `
+            .paultendoTownLife { padding: 0.6em 0 0.9em; border-bottom: 1px solid #77745f; text-align: left; }
+            .paultendoTownLife h3 { color: #e5dc98; font: inherit; margin: 0 0 0.4em; }
+            .paultendoTownLife p { margin: 0.3em 0; line-height: 1.25; overflow-wrap: anywhere; }
+            .paultendoTownLife button { font: inherit; color: #e5dc98; background: #26251c; border: 1px solid #888260; padding: 0.3em 0.45em; cursor: pointer; text-align: left; }
+            .paultendoTownLife button:hover { color: #fff1a0; background: #373326; }
+            .paultendoTownLife button:focus-visible, .paultendoDecisionPreview summary:focus-visible { outline: 2px solid #fff1a0; outline-offset: 3px; }
+            .paultendoLifeDiscoveries { display: flex; flex-wrap: wrap; gap: 0.35em; margin: 0.65em 0; }
+            .paultendoDecisionPreview { font-size: 0.8em; color: #e5dc98; margin: 0.45em 0 0.15em; }
+            .paultendoDecisionPreview summary { cursor: pointer; width: fit-content; }
+            .paultendoDecisionPreview p { margin: 0.25em 0; line-height: 1.25; }
+            .logMessage[done] .paultendoDecisionPreview, .logMessage.faded .paultendoDecisionPreview { display: none; }
+            .paultendoDecisionEcho { display: block; font-size: 0.8em; color: #e5dc98; margin-top: 0.3em; }
+            #paultendoFieldsKey { font-size: 0.75em; margin: 0 0.6em; color: #d0db9a; white-space: nowrap; }
+            #paultendoFieldsKey::before { content: ''; display: inline-block; width: 0.75em; height: 0.75em; margin-right: 0.25em; background: repeating-linear-gradient(#a38743 0 2px, #c5d873 2px 4px); vertical-align: middle; }
+            #paultendoFieldsKey[hidden] { display: none; }
+            @media (max-width: 600px) { .paultendoTownLife button { min-height: 44px; } }
+        `;
+        document.head.appendChild(style);
+    }
 
     function getSeasonInfo(day = null) {
         if (!planet) return null;
@@ -5457,12 +5810,13 @@
             .paultendoAutoplayButton:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
             @media (max-width: 599px) {
                 #gameHalf1-2 { display: flex; flex-direction: column; }
-                #mobileControlBar { height: auto; min-height: 1.75em; flex-wrap: wrap; flex-shrink: 0; }
+                #mobileControlBar { height: auto; min-height: 44px; flex: 0 0 auto; flex-wrap: wrap; padding: 0 6px; }
+                #mobileControlBar > div { height: 44px; }
                 #paultendoAutoplayControlsMobile { height: auto; flex-grow: 0; margin: 0 6px; }
                 #paultendoAutoplayControlsMobile button { min-height: 36px; }
                 #paultendoAutoplayStatusMobile { padding-bottom: 4px; }
                 #logPanel { height: auto; flex: 1; min-height: 0; }
-                #mobileBelowBar { flex-shrink: 0; }
+                #mobileBelowBar { height: 44px; flex: 0 0 auto; }
             }
         `;
         document.head.appendChild(style);
@@ -5805,7 +6159,8 @@
             try {
                 const btn = pickLogDecision(decision.buttons, decision.messageEl);
                 if (btn && typeof btn.click === "function") {
-                    btn.click();
+                    PAULTENDO_STATE.autoChoosing = true;
+                    try { btn.click(); } finally { PAULTENDO_STATE.autoChoosing = false; }
                 }
             } catch {}
             scheduleAutoplayTick(200);
@@ -10900,6 +11255,8 @@
                 const result = baseNextDay.apply(this, args);
                 const dayAfter = (typeof planet !== "undefined") ? planet.day : undefined;
                 if (dayBefore !== dayAfter) {
+                    try { observeLivingWorld(); } catch (error) { console.warn("[paultendo-mod] Settlement follow-up failed:", error); }
+                    try { renderLivingFields(); updateCanvas(); } catch {}
                     try { syncLogToPlanet(); } catch {}
                     try { updateSpaceTech(); } catch {}
                     try { updateSpaceDiscovery(); } catch {}
@@ -20224,6 +20581,7 @@
                 ensureEpidemicLayer();
                 baseRenderMap();
                 try { renderEpidemicOverlay(); } catch {}
+                try { renderLivingFields(); } catch {}
                 try { renderDiscoveryFog(); } catch {}
                 try { renderMarkers(); } catch {}
             };
@@ -28060,6 +28418,7 @@
             const baseUpdateStats = updateStats;
             updateStats = function(...args) {
                 const result = baseUpdateStats.apply(this, args);
+                try { finishLivingDecisions(); seedLivingDiscoveries(); updateLivingDecisionPreviews(); } catch (error) { console.warn("[paultendo-mod] Settlement update failed:", error); }
                 updateAutoplayUI();
                 updateProgressMenus();
                 return result;
@@ -31029,7 +31388,7 @@
         if (typeof regBrowserKeys === "undefined") regBrowserKeys = {};
         if (typeof regBrowserValues === "undefined") regBrowserValues = {};
         if (!regBrowserKeys.prestige_) regBrowserKeys.prestige_ = "Prestige";
-        if (!regBrowserValues.prestige_score) regBrowserValues.prestige_score = "Prestige";
+        if (!regBrowserKeys.prestige_score) regBrowserKeys.prestige_score = "Prestige";
 
         if (!regBrowserExtra.town) regBrowserExtra.town = {};
         if (regBrowserExtra.town._paultendoPrestigeExtra) return;
@@ -31052,13 +31411,13 @@
         if (typeof regBrowserKeys === "undefined") regBrowserKeys = {};
         if (typeof regBrowserValues === "undefined") regBrowserValues = {};
         if (!regBrowserKeys.society_) regBrowserKeys.society_ = "Society";
-        if (!regBrowserValues.traditions) regBrowserValues.traditions = "Traditions";
-        if (!regBrowserValues.reputation_prosperity) regBrowserValues.reputation_prosperity = "Reputation (Prosperity)";
-        if (!regBrowserValues.reputation_danger) regBrowserValues.reputation_danger = "Reputation (Danger)";
-        if (!regBrowserValues.reputation_sanctity) regBrowserValues.reputation_sanctity = "Reputation (Sanctity)";
-        if (!regBrowserValues.knowledge_core) regBrowserValues.knowledge_core = "Knowledge";
-        if (!regBrowserValues.knowledge_tags) regBrowserValues.knowledge_tags = "Knowledge Tags";
-        if (!regBrowserValues.guidance_trust) regBrowserValues.guidance_trust = "Guidance Trust";
+        if (!regBrowserKeys.traditions) regBrowserKeys.traditions = "Traditions";
+        if (!regBrowserKeys.reputation_prosperity) regBrowserKeys.reputation_prosperity = "Reputation (Prosperity)";
+        if (!regBrowserKeys.reputation_danger) regBrowserKeys.reputation_danger = "Reputation (Danger)";
+        if (!regBrowserKeys.reputation_sanctity) regBrowserKeys.reputation_sanctity = "Reputation (Sanctity)";
+        if (!regBrowserKeys.knowledge_core) regBrowserKeys.knowledge_core = "Knowledge";
+        if (!regBrowserKeys.knowledge_tags) regBrowserKeys.knowledge_tags = "Knowledge Tags";
+        if (!regBrowserKeys.guidance_trust) regBrowserKeys.guidance_trust = "Guidance Trust";
 
         if (!regBrowserExtra.town) regBrowserExtra.town = {};
         if (regBrowserExtra.town._paultendoSocietyExtra) return;
@@ -31091,9 +31450,9 @@
         if (typeof regBrowserKeys === "undefined") regBrowserKeys = {};
         if (typeof regBrowserValues === "undefined") regBrowserValues = {};
         if (!regBrowserKeys.infrastructure_) regBrowserKeys.infrastructure_ = "Infrastructure";
-        if (!regBrowserValues.infrastructure_roads) regBrowserValues.infrastructure_roads = "Roads";
-        if (!regBrowserValues.infrastructure_buildings) regBrowserValues.infrastructure_buildings = "Buildings";
-        if (!regBrowserValues.infrastructure_institutions) regBrowserValues.infrastructure_institutions = "Institutions";
+        if (!regBrowserKeys.infrastructure_roads) regBrowserKeys.infrastructure_roads = "Roads";
+        if (!regBrowserKeys.infrastructure_buildings) regBrowserKeys.infrastructure_buildings = "Buildings";
+        if (!regBrowserKeys.infrastructure_institutions) regBrowserKeys.infrastructure_institutions = "Institutions";
 
         if (!regBrowserExtra.town) regBrowserExtra.town = {};
         if (regBrowserExtra.town._paultendoInfrastructureExtra) return;
@@ -34076,6 +34435,9 @@
         if (typeof renderHighlight === "function") renderHighlight();
         updateCanvas();
     }
+    initLivingWorld();
+    renderLivingFields();
+    if (typeof updateCanvas === "function") updateCanvas();
     PAULTENDO_STATE.loadedVersion = MOD_VERSION;
 
 })();
