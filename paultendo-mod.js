@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.42/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.43/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.42";
+    const MOD_VERSION = "1.6.43";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -977,133 +977,6 @@
         return null;
     }
 
-    function shouldNarrate(logType, eventId, logText) {
-        if (!NARRATIVE_CONFIG.enabled) return false;
-        const type = logType || "";
-        if (type === "warning" || type === "milestone") return true;
-        if (/war|revolution|secession|succession|famine|plague|debt|loan|raid|embargo/i.test(eventId || "")) return true;
-        if (/war|revolution|secession|succession|famine|plague|debt|loan|raid|embargo/i.test(logText || "")) return true;
-        if (/alliance|treaty|peace|festival|discovery|breakthrough|great work|monument|museum|theater/i.test(eventId || "")) return true;
-        if (/alliance|treaty|peace|festival|discovery|breakthrough|great work|monument|museum|theater/i.test(logText || "")) return true;
-        return Math.random() < 0.08;
-    }
-
-    function isPositiveNarrativeEvent(eventId, logText, tags = []) {
-        if (/festival|celebration|peace|treaty|alliance|breakthrough|discovery|prosper|thriv|victory|completed|founded|opens|restores/i.test(`${eventId || ""} ${logText || ""}`)) {
-            return true;
-        }
-        const positiveTags = new Set(["prosperity", "stability", "unity", "innovation", "diplomacy", "faith_renewal", "harvest", "celebration", "recovery", "infrastructure"]);
-        return tags.some(tag => positiveTags.has(tag));
-    }
-
-    function buildNarrativeLine(town, eventId, logText, ctx = null) {
-        const scored = getTopNarrativeTags(town, { useDecay: true, novelty: true });
-        const tags = scored.map(t => t.tag);
-        if (tags.length < NARRATIVE_CONFIG.minSignals) return null;
-        const causeA = pickPhrase(NARRATIVE_TAGS[tags[0]] || []);
-        let hasSecond = tags.length >= 2 && tags[1] !== tags[0];
-        let causeB = pickPhrase(
-            hasSecond ? (NARRATIVE_TAGS[tags[1]] || []) : (NARRATIVE_TAGS[tags[0]] || [])
-        );
-        if (!causeA) return null;
-
-        let prevCause = null;
-        const history = getNarrativeHistory(town);
-        if (history.length) {
-            const last = history[history.length - 1];
-            if (last && (planet.day - last.day) <= (NARRATIVE_CONFIG.chainWindowDays || 0)) {
-                prevCause = last.causeA || last.causeB || null;
-                if (prevCause === causeA && last.causeB && last.causeB !== causeA) {
-                    prevCause = last.causeB;
-                }
-                if (prevCause === causeA) prevCause = null;
-            }
-        }
-        const useChain = !!(prevCause && Math.random() < (NARRATIVE_CONFIG.chainChance || 0));
-        if (useChain && !hasSecond) {
-            hasSecond = true;
-            causeB = prevCause;
-        }
-
-        const names = ctx ? buildNarrativeNameContext(ctx, logText) : {};
-        const specificEvent = inferSpecificEventPhrase(eventId, logText, ctx, names);
-        const eventPhrase = specificEvent || inferEventPhrase(eventId, logText);
-        const positive = isPositiveNarrativeEvent(eventId, logText, tags);
-        let structures = NARRATIVE_STRUCTURES
-            .filter(s => {
-                if (!hasSecond && !s.id.startsWith("singleCause") && !s.allowSingle) return false;
-                if (hasSecond && s.id.startsWith("singleCause")) return false;
-                if (positive) return s.id === "uplift" || s.id === "credit" || s.id === "renewal" || !s.id.startsWith("singleCause");
-                return true;
-            })
-            .map(s => ({ ...s, weight: s.weight }));
-        const ctxObj = {
-            town,
-            causeA,
-            causeB: causeB || causeA,
-            prevCause: useChain ? prevCause : null,
-            event: eventPhrase,
-            names
-        };
-        const requireMatch = structures.filter(s => {
-            if (!s.requires || !s.requires.length) return true;
-            return s.requires.every((key) => {
-                if (key === "prevCause") return !!ctxObj.prevCause;
-                return names && names[key];
-            });
-        });
-        if (requireMatch.length) structures = requireMatch;
-        const pick = weightedChoice(structures, s => s.weight) || structures[0];
-        return {
-            line: pick.render(ctxObj),
-            tags: tags.slice(0, 3),
-            causeA: ctxObj.causeA,
-            causeB: ctxObj.causeB,
-            prevCause: ctxObj.prevCause,
-            event: eventPhrase
-        };
-    }
-
-    function maybeEmitNarrativeAside(baseLogMessage, logText, logType) {
-        if (!NARRATIVE_CONFIG.enabled) return;
-        if (isNarrativeLocked()) return;
-        const ctx = getActiveModEventContext();
-        if (!ctx) return;
-        const town = (ctx.subject && ctx.subject._reg === "town") ? ctx.subject
-            : (ctx.target && ctx.target._reg === "town") ? ctx.target
-                : null;
-        if (!town) return;
-
-        const state = initNarrativeState();
-        if (!state) return;
-        const lastDay = state.lastDayByTown[town.id] || -999;
-        if ((planet.day - lastDay) < NARRATIVE_CONFIG.cooldownDays) return;
-        if (!shouldNarrate(logType, ctx.id, logText)) return;
-        if (Math.random() > NARRATIVE_CONFIG.chance) return;
-
-        const result = buildNarrativeLine(town, ctx.id, logText, ctx);
-        if (!result || !result.line) return;
-
-        state.lastDayByTown[town.id] = planet.day;
-        setNarrativeLock(true);
-        try {
-            baseLogMessage(result.line, "tip");
-        } finally {
-            setNarrativeLock(false);
-        }
-        try {
-            recordNarrativeHistory(town, {
-                day: planet.day,
-                tags: result.tags || [],
-                causeA: result.causeA || null,
-                causeB: result.causeB || null,
-                prevCause: result.prevCause || null,
-                event: result.event || null,
-                eventId: ctx.id || null
-            });
-        } catch {}
-    }
-
     const CAUSE_LABELS = {
         famine: "famine",
         disease: "plague",
@@ -1448,57 +1321,6 @@
         return names;
     }
 
-    function buildCauseSummary(ctx, logText) {
-        if (!ctx) return null;
-        const tags = getCauseTagsFromContext(ctx, logText).slice(0, 2);
-        if (!tags.length) return null;
-        return {
-            tags,
-            summary: formatCauseList(tags, false),
-            compact: formatCauseList(tags, true)
-        };
-    }
-
-    function maybeAppendBecauseClause(text, ctx, logType) {
-        if (!text || !ctx) return text;
-        if (logType === "tip") return text;
-        if (/\bbecause\b|\bafter\b|\(.*\)/i.test(text)) return text;
-        const cause = buildCauseSummary(ctx, text);
-        if (!cause || !cause.summary) return text;
-        if (Math.random() < 0.35 || logType === "warning" || logType === "milestone") {
-            const positive = isPositiveNarrativeEvent(ctx.id, text, cause.tags || []);
-            const pool = positive ? BECAUSE_TEMPLATES_POSITIVE : BECAUSE_TEMPLATES;
-            const template = pool[Math.floor(Math.random() * pool.length)];
-            return `${text} (${template(cause.summary)})`;
-        }
-        return text;
-    }
-
-    function buildSwayFailureClause(ctx) {
-        if (!ctx || !ctx.id || !ctx.id.startsWith("sway")) return null;
-        const town = getContextTown(ctx);
-        if (!town) return null;
-        const candidates = [];
-        const trade = town.influences?.trade || 0;
-        const faith = town.influences?.faith || 0;
-        const education = town.influences?.education || 0;
-        const order = town.values?.order || 0;
-        const openness = town.values?.openness || 0;
-        if (trade > 4) candidates.push({ score: trade, text: "their merchants feel secure" });
-        if (faith > 4) candidates.push({ score: faith, text: "their faith runs deep" });
-        if (education > 6) candidates.push({ score: education, text: "their scholars trust their own counsel" });
-        if (order > 3) candidates.push({ score: order, text: "they prize order and caution" });
-        if (openness < -2) candidates.push({ score: Math.abs(openness), text: "they distrust outside advice" });
-        if (ctx.args && ctx.args.otherTown && town.relations) {
-            const rel = town.relations[ctx.args.otherTown.id] || 0;
-            if (rel > 4) candidates.push({ score: rel, text: "they trust their existing partners" });
-            if (rel < -3) candidates.push({ score: Math.abs(rel), text: "they refuse to take their rival's side" });
-        }
-        if (!candidates.length) return null;
-        candidates.sort((a, b) => b.score - a.score);
-        return candidates[0].text;
-    }
-
     function snapshotTownMetrics(town) {
         if (!town || town.end) return null;
         return {
@@ -1522,8 +1344,7 @@
     function getEventReasonLabel(eventId, args, logText = "") {
         if (eventId && eventId.startsWith("sway")) return "your guidance";
         if (args && args.disaster && args.disaster.subtype) return `${args.disaster.subtype} disaster`;
-        const phrase = inferEventPhrase(eventId, logText);
-        return phrase.replace(/^the\s+/i, "");
+        return eventId ? eventId.replace(/^paultendo/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase() : "recent events";
     }
 
     function recordTownImpact(town, stat, delta, reason, sourceId) {
@@ -1624,7 +1445,8 @@
             return up ? `${label} rose` : `${label} fell`;
         };
         const formatList = (list) => list.map(describeDelta).join(", ");
-        const text = `There were gains (${formatList(posTop)}), but costs followed (${formatList(negTop)}).`;
+        const sentence = list => { const text = formatList(list); return text[0].toUpperCase() + text.slice(1) + "."; };
+        const text = `${sentence(posTop)} ${sentence(negTop)}`;
         return { text, positives: posTop, negatives: negTop };
     }
 
@@ -1686,29 +1508,6 @@
             }
         }
         return derived.length ? formatTradeoffForChronicle(derived) : null;
-    }
-
-    function buildCauseChainSummary(ctx, logText) {
-        if (!ctx) return null;
-        const town = getContextTown(ctx);
-        if (!town) return null;
-        const tags = getCauseTagsFromContext(ctx, logText);
-        if (!tags || !tags.length) return null;
-        const causeText = formatCauseList(tags.slice(0, 2), true);
-        if (!causeText) return null;
-        const names = buildNarrativeNameContext(ctx, logText);
-        const eventPhrase = inferSpecificEventPhrase(ctx.id, logText, ctx, names) || inferEventPhrase(ctx.id, logText);
-        if (!eventPhrase) return null;
-        const history = getNarrativeHistory(town);
-        let prevCause = null;
-        if (history && history.length) {
-            const last = history[history.length - 1];
-            prevCause = last?.causeA || last?.causeB || null;
-        }
-        if (prevCause && prevCause !== causeText) {
-            return `${prevCause}, then ${causeText}, then ${eventPhrase}`;
-        }
-        return `${causeText}, then ${eventPhrase}`;
     }
 
     const SYNERGY_RULES = [
@@ -2205,8 +2004,7 @@
         if (!safeText) return;
         const priority = getChroniclePriority(type, safeText);
         const entry = { id: uuid, day, type, text: safeText, priority };
-        if (options && options.cause) entry.cause = options.cause;
-        if (options && options.chain) entry.chain = options.chain;
+        if (options?.story) entry.story = options.story;
         if (options && options.tradeoff) entry.tradeoff = options.tradeoff;
         state.entriesById[uuid] = entry;
         if (!state.entriesByDay[day]) state.entriesByDay[day] = [];
@@ -2314,10 +2112,17 @@
             if (!dayValue) continue;
             const text = entry.querySelector(".logText")?.innerText || "";
             const type = getChronicleTypeFromElement(entry);
-            const cause = entry.getAttribute("data-cause") || null;
-            const chain = entry.getAttribute("data-chain") || null;
+            cleanLegacyChronicleAttribution(entry);
+            const story = chronicleStoryFromElement(entry);
+            if (story) attachChronicleStory(entry, story);
             const tradeoff = entry.getAttribute("data-tradeoff") || null;
-            addChronicleEntry(dayValue, id, type, text, { cause, chain, tradeoff });
+            addChronicleEntry(dayValue, id, type, entry.querySelector(".logText")?.innerText || text, { story, tradeoff });
+        }
+        // Older choice records already know their native log ID. Reconnect those,
+        // without assigning an invented source to unrelated historical entries.
+        for (const decision of planet?._paultendoLife?.decisions || []) {
+            const entry = decision.logId && document.getElementById('logMessage-'+decision.logId);
+            if (entry) rememberChronicleStory(entry,{kind:'decision',id:decision.id});
         }
         try { updateChronicleDayMarkers(); } catch {}
         try { updateChronicleHeadlines(planet?.day); } catch {}
@@ -2589,17 +2394,8 @@
                 const eventContext = getActiveModEventContext() || consumePendingLogContext();
                 const observedStory=!!args?._paultendoObservedStory;
                 const ctx = observedStory?null:eventContext;
-                if (!isNarrativeLocked() && ctx && typeof logText === "string") {
-                    const isSwayFailure = ctx.id && ctx.id.startsWith("sway") &&
-                        (ctx.args?.success === false || ctx.args?.approved === false ||
-                         /(ignores|dismisses|declines|refuses|rejects|hesitate|unconvinced|prefer)/i.test(logText));
-                    const swayClause = isSwayFailure ? buildSwayFailureClause(ctx) : null;
-                    if (swayClause && !/\(.*\)/.test(logText)) {
-                        logText = `${logText} (${swayClause})`;
-                    } else {
-                        logText = maybeAppendBecauseClause(logText, ctx, type);
-                    }
-                }
+                // Conditions can guide the simulation without proving why this event happened.
+                // Only the event's own words and recorded story links belong in the Chronicle.
                 let logPanel = null;
                 let prevScrollTop = 0;
                 let prevScrollHeight = 0;
@@ -2633,24 +2429,14 @@
                         const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
                         const plainText = elem ? (elem.querySelector(".logText")?.innerText || "") : "";
                         const context = observedStory?null:ctx || getActiveModEventContext();
-                        const causeSummary = context ? buildCauseSummary(context, logText) : null;
-                        const chainSummary = context ? buildCauseChainSummary(context, logText) : null;
+                        const story = args?._paultendoStory || null;
                         const tradeoffSummary = context ? getTradeoffSummaryFromContext(context) : null;
                         if (dayValue) {
-                            const cause = causeSummary ? causeSummary.compact : null;
-                            addChronicleEntry(dayValue, uuid, type, plainText, { cause, chain: chainSummary, tradeoff: tradeoffSummary });
+                            addChronicleEntry(dayValue, uuid, type, plainText, { story, tradeoff: tradeoffSummary });
                             scheduleChronicleDayMarkers(dayValue);
                         }
                         if (elem) {
-                            if (causeSummary && causeSummary.compact) {
-                                elem.setAttribute("data-cause", causeSummary.compact);
-                                if (!elem.getAttribute("title")) {
-                                    elem.setAttribute("title", `Roots: ${causeSummary.summary}`);
-                                }
-                            }
-                            if (chainSummary) {
-                                elem.setAttribute("data-chain", chainSummary);
-                            }
+                            if (story) rememberChronicleStory(elem, story, type);
                             if (tradeoffSummary) {
                                 elem.setAttribute("data-tradeoff", tradeoffSummary);
                             }
@@ -2664,7 +2450,7 @@
                 }
                 try { recordOffscreenEvent(logText, type, ctx, args, uuid); } catch {}
                 try { maybeEmitOffscreenDigest(); } catch {}
-                if(!observedStory) try { maybeEmitNarrativeAside(baseLogMessage, logText, type); } catch {}
+
                 return uuid;
             };
             logMessage._paultendoChronicle = true;
@@ -3596,8 +3382,7 @@
         if (reason.startsWith("decision:")) {
             const parts = reason.split(":");
             const eventId = parts[1] || "";
-            const phrase = inferEventPhrase(eventId, "");
-            return phrase.replace(/^the\s+/i, "");
+            return getEventReasonLabel(eventId);
         }
         if (reason === "tech fork") return "new learning";
         if (reason === "cultural tide") return "cultural tides";
@@ -4713,6 +4498,96 @@
         }
     }
 
+    // Chronicle links refer to records of things that happened, never keyword guesses.
+    // Resolve them again when opened: a pruned record or unseen town is not a destination.
+    function resolveChronicleStory(ref) {
+        const state = planet?._paultendoLife;
+        if (!state || !ref) return null;
+        const lists = {teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
+        const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
+        if (!record) return null;
+        if (ref.kind === 'artifact') {
+            if (!livingArtifactKnown(record)) return null;
+            return {label:`Follow ${artifactTitle(record)}`, open:()=>openLivingArtifact(record)};
+        }
+        const town = ref.kind === 'decision'
+            ? (record.towns || []).map(id=>regGet('town',id)).find(livingTownKnown)
+            : regGet('town',record.town);
+        if (!livingTownKnown(town)) return null;
+        if (ref.kind === 'teaching') return {label:'Follow the words',open:()=>openLivingTeaching(record)};
+        if (ref.kind === 'whisper') return {label:'Remember your whisper',open:()=>openLivingWhisperStory(town,record)};
+        if (ref.kind === 'decision') return {label:'Remember the choice',open:()=>openLivingChoiceStory(town,record)};
+        return null;
+    }
+
+    function chronicleStoryFromElement(entry) {
+        const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
+        if (!['teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
+        return {kind,id};
+    }
+
+    function attachChronicleStory(entry, ref) {
+        entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
+        if (!ref || !['teaching','whisper','artifact','decision'].includes(ref.kind)) return;
+        entry.setAttribute('data-story-kind', ref.kind);
+        entry.setAttribute('data-story-id', String(ref.id));
+        const story = resolveChronicleStory(ref);
+        if (!story) return;
+        const link = document.createElement('span');
+        link.className = 'paultendoChronicleStoryLink clickable';
+        link.setAttribute('role','button'); link.tabIndex = 0; link.textContent = story.label;
+        const open = () => { const current=resolveChronicleStory(chronicleStoryFromElement(entry)); if(current) current.open(); };
+        link.addEventListener('click',open);
+        link.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
+        entry.appendChild(link);
+    }
+
+    function rememberChronicleStory(entry, ref, type) {
+        if (!entry?.id || !ref) return;
+        attachChronicleStory(entry,ref);
+        const logId = entry.id.replace(/^logMessage-/,''), day = Number(entry.querySelector('.logDay')?.getAttribute('data-day')) || planet.day;
+        const uiEntry = initChronicleState()?.entriesById?.[logId];
+        if (uiEntry) uiEntry.story = {kind:ref.kind,id:ref.id};
+        recordChronicleEntry('memory', entry.querySelector('.logText')?.textContent, type, {logId,day,story:ref});
+    }
+
+    function cleanLegacyNarrativeText(text, cause) {
+        if (typeof text !== 'string' || !cause) return text;
+        // The old decorator wrote these exact suffixes and saved its guessed cause.
+        // Native event prose, including genuine 'because' clauses, has no such metadata.
+        const suffixes = [...BECAUSE_TEMPLATES, ...BECAUSE_TEMPLATES_POSITIVE].map(template=>` (${template(cause)})`);
+        suffixes.push(...['their merchants feel secure','their faith runs deep','their scholars trust their own counsel','they prize order and caution','they distrust outside advice','they trust their existing partners',"they refuse to take their rival's side"].map(reason=>` (${reason})`));
+        const suffix = suffixes.find(value=>text.endsWith(value));
+        return suffix ? text.slice(0,-suffix.length) : text;
+    }
+
+    function cleanLegacyChronicleAttribution(entry) {
+        const cause = entry.getAttribute('data-cause');
+        if (cause) {
+            const walker = document.createTreeWalker(entry.querySelector('.logText') || entry, NodeFilter.SHOW_TEXT);
+            let last; while(walker.nextNode()) if(walker.currentNode.textContent.trim()) last=walker.currentNode;
+            if(last) last.textContent=cleanLegacyNarrativeText(last.textContent,cause);
+        }
+        entry.removeAttribute('data-cause'); entry.removeAttribute('data-chain');
+        if (entry.getAttribute('title')?.startsWith('Roots: ')) entry.removeAttribute('title');
+    }
+
+    const normalizedChronicleStores = new WeakSet();
+    function migrateChronicleAttribution(store) {
+        if (normalizedChronicleStores.has(store)) return;
+        normalizedChronicleStores.add(store);
+        const entries = new Set([...(store.days || []).flatMap(day=>day.entries || []), ...Object.values(store.index || {}).flatMap(day=>day.entries || []), ...Object.values(store.byLogId || {})]);
+        for (const entry of entries) {
+            entry.message = cleanLegacyNarrativeText(entry.message,entry.cause);
+            delete entry.cause; delete entry.chain;
+        }
+        // JSON restores duplicated objects. All indexes must point to the same entries.
+        store.index = Object.fromEntries((store.days || []).map(day=>[String(day.day),day]));
+        store.byLogId ||= {};
+        for (const day of store.days || []) for (const entry of day.entries || []) if(entry.logId) store.byLogId[entry.logId]=entry;
+        store.narratorVersion = 1;
+    }
+
     const CHRONICLE_CONFIG = {
         maxDays: 30,
         maxEntriesPerDay: 80
@@ -4721,6 +4596,7 @@
     function getChronicleStore() {
         if (!planet) return null;
         if (planet[CHRONICLE_STORE_KEY]) {
+            migrateChronicleAttribution(planet[CHRONICLE_STORE_KEY]);
             if (!planet[CHRONICLE_STORE_KEY].byLogId) {
                 planet[CHRONICLE_STORE_KEY].byLogId = {};
             }
@@ -4729,6 +4605,7 @@
         const legacy = planet._paultendoChronicle;
         if (legacy && legacy.days && legacy.index) {
             planet[CHRONICLE_STORE_KEY] = legacy;
+            migrateChronicleAttribution(legacy);
             if (!planet[CHRONICLE_STORE_KEY].byLogId) {
                 planet[CHRONICLE_STORE_KEY].byLogId = {};
             }
@@ -4782,36 +4659,26 @@
         if (!safeMessage) return;
         const logId = options.logId || null;
         const entryData = { system: system || "misc", message: safeMessage, type: type || null, logId };
-        if (options.cause) entryData.cause = options.cause;
-        if (options.chain) entryData.chain = options.chain;
+        if (options.story) entryData.story = {kind: options.story.kind, id: options.story.id};
         if (options.tradeoff) entryData.tradeoff = options.tradeoff;
         if (logId && typeof document !== "undefined") {
             const elem = document.getElementById("logMessage-" + logId);
             if (elem) {
-                const dataCause = elem.getAttribute("data-cause");
-                const dataChain = elem.getAttribute("data-chain");
-                const dataTradeoff = elem.getAttribute("data-tradeoff");
-                if (!entryData.cause && dataCause) entryData.cause = dataCause;
-                if (!entryData.chain && dataChain) entryData.chain = dataChain;
-                if (!entryData.tradeoff && dataTradeoff) entryData.tradeoff = dataTradeoff;
+                entryData.story ||= chronicleStoryFromElement(elem);
+                entryData.tradeoff ||= elem.getAttribute("data-tradeoff") || null;
             }
+        }
+        const store = getChronicleStore();
+        const existing = logId && store?.byLogId?.[logId];
+        if (existing) {
+            Object.assign(existing, {message:safeMessage, type:type || existing.type});
+            if (entryData.story) existing.story = entryData.story;
+            if (entryData.tradeoff) existing.tradeoff = entryData.tradeoff;
+            return;
         }
         entry.entries.push(entryData);
         entry.counts[system || "misc"] = (entry.counts[system || "misc"] || 0) + 1;
-        const store = getChronicleStore();
-        if (store && store.byLogId && logId) {
-            const existing = store.byLogId[logId];
-            if (existing && existing.cause && !entryData.cause) {
-                entryData.cause = existing.cause;
-            }
-            if (existing && existing.chain && !entryData.chain) {
-                entryData.chain = existing.chain;
-            }
-            if (existing && existing.tradeoff && !entryData.tradeoff) {
-                entryData.tradeoff = existing.tradeoff;
-            }
-            store.byLogId[logId] = entryData;
-        }
+        if (store?.byLogId && logId) store.byLogId[logId] = entryData;
     }
 
     function formatChronicleSummary(day) {
@@ -4865,18 +4732,14 @@
             const tag = evt.system ? `{{b:${titleCase(evt.system)}}} · ` : "";
             const safeMessage = sanitizeChronicleMessage(evt.message);
             if (!safeMessage) return;
-            items.push({ text: `${tag}${safeMessage}` });
-            if (evt.cause) {
-                items.push({ text: `Word is, it traces back to ${evt.cause}.`, indent: 1, opacity: 0.72 });
-            }
-            if (evt.chain) {
-                items.push({ text: `A thread runs: ${evt.chain}.`, indent: 1, opacity: 0.6 });
-            }
+            const story = resolveChronicleStory(evt.story);
+            items.push({ text: `${tag}${escapeLivingText(safeMessage)}`, ...(story ? {func: story.open} : {}) });
             if (evt.tradeoff) {
                 items.push({ text: `${evt.tradeoff}`, indent: 1, opacity: 0.6 });
             }
         });
         populateExecutive(items, "Chronicle Day");
+        markLivingStoryControls();
     }
 
     function appendTechPathUnlocks(items) {
@@ -5042,8 +4905,8 @@
     function modLog(system, message, type, options = {}) {
         if (!message) return false;
         if (!shouldLogSystem(system, { ...options, type })) return false;
-        const result = logMessage(message, type,options.observedStory?{_paultendoObservedStory:true}:undefined);
-        try { recordChronicleEntry(system, message, type, { logId: result, day: planet.day }); } catch {}
+        const result = logMessage(message, type,{_paultendoObservedStory:!!options.observedStory, _paultendoStory:options.story});
+        try { recordChronicleEntry(system, message, type, { logId: result, day: planet.day, story:options.story }); } catch {}
         noteLogSystem(system, options.town);
         try { noteMemoryFromLog(system, message, options); } catch {}
         return result;
@@ -5342,7 +5205,7 @@
                     const progress={fork:'The prongs are shaped. They are still finding the note.',lens:'The glass is taking shape. The centre is clearer than the edges.',compass:'The needle moves, but still catches against its case.'}[work.kind];
                     const text=`${person.name} keeps working. ${progress}`;
                     if(record) record.steps.push({day:planet.day,text});
-                    if(livingTownKnown(town)) logMessage(escapeLivingText(text));
+                    if(livingTownKnown(town)) logMessage(escapeLivingText(text),null,{_paultendoStory:record?{kind:"whisper",id:record.id}:null});
                 }
                 continue;
             }
@@ -5367,7 +5230,7 @@
                 }
             }
             if(record) record.steps.push({day:planet.day,text});
-            if(work.status!=='made'&&livingTownKnown(town)) logMessage(escapeLivingText(text));
+            if(work.status!=='made'&&livingTownKnown(town)) logMessage(escapeLivingText(text),null,{_paultendoStory:record?{kind:'whisper',id:record.id}:null});
             refreshLivingPersonView();
         }
     }
@@ -5480,7 +5343,7 @@
         }
         const record=livingWorldState().whispers.find(w=>w.id===offer.whisper);
         returnLivingArtifact(artifact,town,person,record);
-        logMessage(escapeLivingText(artifact.events.at(-1).text),'milestone');
+        logMessage(escapeLivingText(artifact.events.at(-1).text),'milestone',{_paultendoStory:{kind:'artifact',id:artifact.id}});
         refreshLivingPersonView();return true;
     }
     function openTravelerReturn() {
@@ -5565,7 +5428,7 @@
     function livingArtifactEvent(artifact,text,town,changes,silent=false) {
         artifact.events.push({day:planet.day,text,town:town?.id,knownTown:livingTownKnown(town),changes});
         if (artifact.events.length > 30) artifact.events.splice(1,artifact.events.length-30);
-        if (!silent && livingArtifactKnown(artifact) && (!town || livingTownKnown(town))) logMessage(escapeLivingText(text),changes?.happy < 0 ? 'warning' : 'milestone');
+        if (!silent && livingArtifactKnown(artifact) && (!town || livingTownKnown(town))) logMessage(escapeLivingText(text),changes?.happy < 0 ? 'warning' : 'milestone',{_paultendoStory:{kind:'artifact',id:artifact.id}});
     }
     function leaveLivingArtifact(kind,chunk,lineage) {
         const pack=travelerState().pack,index=pack.findIndex(a=>a.kind===kind&&(!lineage||a.lineage===lineage));
@@ -5914,7 +5777,7 @@
         record.steps.unshift({day:planet.day,text:cause.text});
         const teaching=seedLivingTeaching(town,person,record);
         teaching.strength=record.strength;
-        if(livingTownKnown(town)) modLog('memory',escapeLivingText(record.steps.at(-1).text),null,{town,observedStory:true});
+        if(livingTownKnown(town)) modLog('memory',escapeLivingText(record.steps.at(-1).text),null,{town,observedStory:true,story:{kind:"teaching",id:teaching.id}});
         return teaching;
     }
     function observeLivingCommunityHarvest(town,before) {
@@ -5979,7 +5842,7 @@
         const fromName=livingTownKnown(from)?from.name:'another settlement';
         const text=transport.type==='gift'?`Along with the food, words from ${fromName} reach ${person.name} in ${to.name}.`:`Merchants bring words from ${fromName} to ${person.name} in ${to.name}.`;
         record.steps.push({day:planet.day,text});
-        if(livingTownKnown(to)) modLog('memory',escapeLivingText(text),null,{town:to,observedStory:true});
+        if(livingTownKnown(to)) modLog('memory',escapeLivingText(text),null,{town:to,observedStory:true,story:{kind:"teaching",id:record.id}});
     }
     function noteLivingExchange(from,to,path,transport) {
         if(!from||!to||from.end||to.end||from.id===to.id||!path?.length||areAtWar(from,to)||hasIssue(from,'war')||hasIssue(to,'war')) return;
@@ -6009,7 +5872,7 @@
             const action=reception.accepted?actOnLivingWhisper(town,person,record):{acted:false,reason:reception.reason};
             if(action.acted) adoptLivingTeaching(record,record,person);
             else {record.status=reception.accepted?'stalled':'refused';record.steps.push({day:planet.day,text:`${person.name} lets the visitors’ words pass. ${action.reason}`});}
-            if(livingTownKnown(town)) modLog('memory',escapeLivingText(record.steps.at(-1).text),null,{town,observedStory:true});
+            if(livingTownKnown(town)) modLog('memory',escapeLivingText(record.steps.at(-1).text),null,{town,observedStory:true,story:{kind:'teaching',id:record.id}});
             refreshLivingPersonView();
         }
         for(const record of state.teachings) if(record.active&&(!regGet('town',record.town)||regGet('town',record.town).end)) record.active=false;
@@ -6152,7 +6015,7 @@
             if (index < 0) break;
             state.whispers.splice(index, 1);
         }
-        logMessage(`You whisper to {{b:${escapeLivingText(person.name)}}} of ${townRef(town.id)}: “${escapeLivingText(record.words)}”`);
+        logMessage(`You whisper to {{b:${escapeLivingText(person.name)}}} of ${townRef(town.id)}: “${escapeLivingText(record.words)}”`,null,{_paultendoStory:{kind:"whisper",id:record.id}});
         syncLogToPlanet(); autosave();
         return true;
     }
@@ -6317,7 +6180,7 @@
                 record.steps.push({day:planet.day,text:`${person.name} did not take up your suggestion. ${action.reason}`});
                 if (!reception.accepted) mind.trust = clampValue(mind.trust - 1, 0, 100);
             }
-            if (livingTownKnown(town)) logMessage(escapeLivingText(record.steps.at(-1).text), action.acted ? ['defy','conquer'].includes(record.topic) ? 'warning' : 'milestone' : undefined);
+            if (livingTownKnown(town)) logMessage(escapeLivingText(record.steps.at(-1).text), action.acted ? ['defy','conquer'].includes(record.topic) ? 'warning' : 'milestone' : undefined,{_paultendoStory:{kind:'whisper',id:record.id}});
         }
         if (responded) {updateStats();refreshLivingPersonView();}
     }
@@ -6689,6 +6552,7 @@
                 if (discovery?.day === planet.day && discovery.decision == null) discovery.decision = record.id;
             }
             state.decisions.push(record);
+            rememberChronicleStory(capture.entry,{kind:"decision",id:record.id});
             if (state.decisions.length > 48) state.decisions.shift();
             capture.entry.querySelector('.paultendoDecisionPreview')?.remove();
             if (changes.length) {
@@ -6737,7 +6601,7 @@
         state.moments.push({ day, town: town.id, text, discovery: discovery || null, source: source || null });
         if (state.moments.length > 60) state.moments.shift();
         state.lastReportDay = planet.day;
-        logMessage(text, 'milestone');
+        logMessage(text, 'milestone',{_paultendoStory:source?{kind:'decision',id:source}:null});
     }
 
     function observeLivingWorld() {
@@ -7085,6 +6949,9 @@
             .logMessage[done] .paultendoDecisionPreview, .logMessage.faded .paultendoDecisionPreview { display: none; }
             .paultendoDecisionEcho { display: block; font-size: 0.8em; color: #e5dc98; margin-top: 0.3em; }
             #actionSubList .paultendoStoryLink { min-height: 44px; box-sizing: border-box; overflow-wrap: anywhere; align-content: center; }
+            .paultendoChronicleStoryLink { display: block; width: fit-content; max-width: 100%; min-height: 44px; box-sizing: border-box; align-content: center; font-size: 0.78em; color: #cfc5a1; cursor: pointer; overflow-wrap: anywhere; }
+            .paultendoChronicleStoryLink:hover { color: #fff1a0; }
+            .paultendoChronicleStoryLink:focus-visible { outline: 2px solid #fff1a0; outline-offset: 2px; }
             #actionSubList .paultendoStoryProse { font-size: 0.82em; color: #bfc1b3; line-height: 1.35; border-bottom: none; padding-block: 0.2em 0.4em; }
             #actionSubList .paultendoStoryLink .paultendoStoryProse { display: block; padding-block: 0.15em 0; }
             #actionSubList .paultendoStoryHeading { border-bottom: none; margin-top: 0.65em; }
@@ -11837,6 +11704,9 @@
             if (!options.merge) logDiv.replaceChildren();
             for (const entry of template.content.querySelectorAll(".logMessage")) {
                 if (entry.id && liveIds.has(entry.id)) continue;
+                cleanLegacyChronicleAttribution(entry);
+                const story = chronicleStoryFromElement(entry);
+                if (story) attachChronicleStory(entry, story);
                 // Retire generated copies containing questions without controls.
                 // Their original source entries remain in the Chronicle.
                 if (/^(Far from your gaze, word spreads:|While your eye wandered, whispers carried:|Elsewhere, the world murmured:|Beyond your notice, reports came in:)/i.test(entry.querySelector(".logText")?.textContent?.trim() || "")) continue;

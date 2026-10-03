@@ -132,7 +132,8 @@ test('care can send real food along an active known route, and removing that rou
     const game = await makeGame(); t.after(game.close);
     const {window} = game, town = settleGame(game), person = prepare(window,town,'resident');
     const partner = neighbour(window,town); partner.resources = {};
-    window.planet.tradeRoutes = [{id:1,town1:town.id,town2:partner.id,active}];
+    // Remove the route itself: merchants can naturally reopen an inactive route.
+    window.planet.tradeRoutes = active ? [{id:1,town1:town.id,town2:partner.id,active:true}] : [];
     const record = whisper(window,town,person,'care'); record.roll = 0;
     // Observe the real resource transfer amid native daily production and consumption.
     const happen = window.happen; let received = 0, removed = 0;
