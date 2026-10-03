@@ -16,7 +16,7 @@ test('bundled game and overhaul boot without uncaught errors', async t => {
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.32');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.33');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));
@@ -115,7 +115,10 @@ test('opening Unlocks clears its alert and discoveries open stories and effects'
   agriculture.click();
   const text = window.document.getElementById('actionSubList').textContent;
   assert.match(text, /Crops quickly become a popular product/);
-  assert.match(text, /Farming: \+1 influence/);
+  assert.match(text, /Farming gains support/);
+  const numbers = window.document.querySelector('.paultendoDiscoveryNumbers');
+  assert.equal(numbers.open, false);
+  assert.match(numbers.textContent, /Farming: \+1 influence/);
   assert.match(text, /Enables farmer jobs/);
   window.document.querySelector('#actionSubList [role="button"]').click();
   assert.match(window.document.getElementById('actionSubList').textContent, /Select a discovery/);
@@ -316,7 +319,7 @@ test('mod management receives complete URLs and can remove an installation', asy
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.32/paultendo-mod.js';
+  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.33/paultendo-mod.js';
   window.userSettings.mods = [url];
   window.showMods();
   window.handlePrompt(url);
@@ -330,7 +333,7 @@ test('adding an updated URL replaces older URLs before the duplicate guard retur
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.32/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.33/paultendo-mod.js';
   window.userSettings.mods = ['https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js', current, 'example_mod.js'];
   window._paultendoState.loadedVersion = '1.6.27';
   Object.defineProperty(window.document, 'currentScript', { configurable: true, get: () => ({ src: current }) });

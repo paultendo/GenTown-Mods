@@ -223,3 +223,104 @@ test('automatic choices are remembered as autoplay rather than attributed to the
   assert.match(window.document.getElementById('actionSubList').textContent, /Autoplay chose/);
   assert.deepEqual(game.errors, []);
 });
+
+test('first harvests follow actual production and keep their day through reload', async t => {
+  const game = await makeGame(); t.after(game.close);
+  const { window } = game; const town = settleGame(game);
+  nativeUnlock(window, town, 'farm').querySelector('[type="yes"]').click();
+  const discovery = window.planet._paultendoLife.discoveries['farm:10'];
+  // A gift or trade can fill the stores, but cannot create a harvest story.
+  window.happen('AddResource', null, town, {type:'crop', count:50});
+  assert.equal(discovery.towns[town.id].firstProduce, undefined);
+  town.legal.farm = false;
+  window.gameEvents.townFarm.func(town, null, {value:100});
+  assert.equal(discovery.towns[town.id].firstProduce, undefined);
+  town.legal.farm = true;
+  const day = window.planet.day;
+  const before = town.resources.crop;
+  window.gameEvents.townFarm.func(town, null, {value:100});
+  const harvest = discovery.towns[town.id].firstProduce;
+  assert.equal(harvest.day, day);
+  assert.equal(harvest.count, town.resources.crop - before);
+  assert.ok(harvest.count > 0);
+  const save = JSON.parse(JSON.stringify(window.generateSave()));
+  const restored = await makeGame({save}); t.after(restored.close);
+  restored.window.nextDay();
+  const moments = restored.window.planet._paultendoLife.moments.filter(m => m.discovery === 'farm:10' && /first harvest/.test(m.text));
+  assert.equal(moments.length, 1); assert.equal(moments[0].day, day);
+  const panel = townLife(restored.window, restored.window.regGet('town', town.id));
+  panel.querySelector('button').click();
+  assert.match(restored.window.document.getElementById('actionSubList').textContent, /From the Chronicle.*first harvest/s);
+  for (let i = 0; i < 3; i++) restored.window.nextDay();
+  assert.equal(restored.window.planet._paultendoLife.moments.filter(m => /first harvest/.test(m.text)).length, 1);
+  assert.deepEqual(game.errors, []); assert.deepEqual(restored.errors, []);
+});
+
+test('Husbandry waits for actual taming and reports at most one follow-up per day', async t => {
+  const game = await makeGame(); t.after(game.close);
+  const { window } = game; const town = settleGame(game);
+  nativeUnlock(window, town, 'farm').querySelector('[type="yes"]').click();
+  window.gameEvents.townFarm.func(town, null, {value:100});
+  nativeUnlock(window, town, 'farm', 1).querySelector('[type="yes"]').click();
+  const observation = window.planet._paultendoLife.discoveries['farm:20'].towns[town.id];
+  assert.equal(observation.firstProduce, undefined);
+  town.legal.farm = false;
+  window.gameEvents.townTame.func(town, null, {value:100});
+  assert.equal(observation.firstProduce, undefined);
+  town.legal.farm = true;
+  const before = town.resources.livestock || 0;
+  window.gameEvents.townTame.func(town, null, {value:100});
+  assert.ok(observation.firstProduce.count > 0);
+  assert.equal(observation.firstProduce.count, town.resources.livestock - before);
+  for (let i = 0; i < 5 && !window.planet._paultendoLife.moments.some(m => m.discovery === 'farm:20'); i++) window.nextDay();
+  const moment = window.planet._paultendoLife.moments.find(m => m.discovery === 'farm:20');
+  assert.match(moment.text, /began keeping animals/);
+  const dailyCounts = {};
+  for (const node of window.document.querySelectorAll('.logMessage')) {
+    if (!node.textContent.includes('first harvest') && !node.textContent.includes('began keeping animals')) continue;
+    const day = node.querySelector('.logDay')?.dataset.day; dailyCounts[day] = (dailyCounts[day] || 0) + 1;
+  }
+  assert.ok(Object.values(dailyCounts).every(count => count === 1));
+  assert.deepEqual(game.errors, []);
+});
+
+test('upgrading a dated discovery from v32 does not invent its first harvest', async t => {
+  const game = await makeGame(); t.after(game.close);
+  const { window } = game; const town = settleGame(game);
+  nativeUnlock(window, town, 'farm').querySelector('[type="yes"]').click();
+  const observation = window.planet._paultendoLife.discoveries['farm:10'].towns[town.id];
+  delete observation.produceReported; delete observation.firstProduce;
+  town.jobs.farmer = 10; observation.reported = true;
+  const restored = await makeGame({save:JSON.parse(JSON.stringify(window.generateSave()))}); t.after(restored.close);
+  const restoredTown = restored.window.regGet('town', town.id);
+  restored.window.gameEvents.townFarm.func(restoredTown, null, {value:100});
+  restored.window.nextDay();
+  assert.equal(restored.window.planet._paultendoLife.moments.some(m => /first harvest/.test(m.text)), false);
+  assert.deepEqual(restored.errors, []);
+});
+
+test('town landmarks and trade neighbours can be visited without exposing hidden towns', async t => {
+  const game = await makeGame(); t.after(game.close);
+  const { window } = game; const town = settleGame(game);
+  const site = window.filterChunks(c => c.v.s === town.id)[0];
+  const marker = window.happen('Create', null, null, {type:'landmark',subtype:'park',x:site.x,y:site.y}, 'marker');
+  const free = window.filterChunks(c => !c.v.s && c.b !== 'water' && c.b !== 'mountain')[0];
+  const partner = window.happen('Create', null, null, {x:free.x,y:free.y}, 'town');
+  partner.name = 'Neighbour';
+  window.planet.tradeRoutes = [{id:1,town1:town.id,town2:partner.id,active:true}];
+  let panel = townLife(window, town);
+  assert.match(panel.textContent, /Trade routes link here with Neighbour/);
+  const visit = [...panel.querySelectorAll('button')].find(b => b.textContent === 'Visit Neighbour');
+  assert.ok(visit); visit.click();
+  assert.equal(window.document.querySelector('#regContent .regTitle').textContent, partner.name);
+  panel = townLife(window, town);
+  const park = [...panel.querySelectorAll('button')].find(b => b.textContent === 'Visit the park');
+  assert.ok(park); park.click();
+  assert.match(window.document.querySelector('#regContent').textContent, /Park/);
+  partner._hidden = true;
+  panel = townLife(window, town);
+  assert.doesNotMatch(panel.textContent, /Neighbour/);
+  marker.end = window.planet.day;
+  assert.doesNotMatch(townLife(window, town).textContent, /Visit the park/);
+  assert.deepEqual(game.errors, []);
+});

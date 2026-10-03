@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.32/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.33/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.32";
+    const MOD_VERSION = "1.6.33";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -4948,19 +4948,31 @@
             const facts = livingTownLines(town, type);
             for (const text of facts) items.push({ text });
             if (type === 'farm' && !town.jobs?.farmer) items.push({ text: 'No farmers have taken up the work here yet.' });
+            items.push(...livingPlaceItems(town, type));
             items.push({ text: `Visit ${town.name}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(town, 'town'); } });
         }
         items.push({ heading: true, text: "What it changes" });
-        for (const [key, value] of Object.entries(levelData.influences || {})) {
-            if (typeof value !== "number" || !value) continue;
-            const labels = { farm: "Farming", travel: "Travel", happy: "Happiness", disease: "Disease pressure", trade: "Trade", education: "Education", military: "Military", crime: "Crime pressure", faith: "Faith" };
-            items.push({ text: `${labels[key] || titleCase(key)}: ${value > 0 ? "+" : ""}${value} influence` });
-        }
+        for (const text of livingInfluencePhrases(levelData.influences, Infinity)) items.push({ text: text + '.' });
         const jobs = typeof jobNeedsUnlock === "object" ? Object.entries(jobNeedsUnlock).filter(([, need]) => need[0] === type && need[1] === levelData.level) : [];
         for (const [job] of jobs) items.push({ text: `Enables ${job} jobs.` });
+        const moments = livingWorldState().moments.filter(m => m.discovery === `${type}:${levelData.level}` && (!townId || m.town === townId) && livingTownKnown(regGet('town', m.town))).slice(-3).reverse();
+        if (moments.length) {
+            items.push({ heading: true, text: 'From the Chronicle' });
+            for (const moment of moments) items.push({ text: `Day ${moment.day} · ${moment.text}` });
+        }
         const next = unlockTree[type].levels.find(level => level.level > levelData.level);
         if (next) items.push({ spacer: true, text: `Next in this branch: ${next.name}. Further research and prerequisites are needed.` });
         populateExecutive(items, levelData.name);
+        const numbers = Object.entries(levelData.influences || {}).filter(([, value]) => typeof value === 'number' && value);
+        if (numbers.length) {
+            const details = document.createElement('details'); details.className = 'paultendoDiscoveryNumbers';
+            const summary = document.createElement('summary'); summary.textContent = 'Show the numbers'; details.appendChild(summary);
+            for (const [key, value] of numbers) {
+                const labels = { farm: 'Farming', travel: 'Travel', happy: 'Happiness', disease: 'Disease pressure', hunger: 'Hunger pressure', trade: 'Trade', education: 'Education', military: 'Military', crime: 'Crime pressure', faith: 'Faith' };
+                const line = document.createElement('p'); line.textContent = `${labels[key] || titleCase(key)}: ${value > 0 ? '+' : ''}${value} influence`; details.appendChild(line);
+            }
+            document.getElementById('actionSubList').appendChild(details);
+        }
         openExecutive();
     }
 
@@ -5168,8 +5180,10 @@
                 for (const town of regToArray('town').filter(t => !t.end)) {
                     if (!discovery.towns[town.id]) {
                         const jobs = Object.entries(jobNeedsUnlock).filter(([, gate]) => gate[0] === key && gate[1] === level.level).map(([job]) => job);
-                        discovery.towns[town.id] = { jobs: {...town.jobs}, reported: jobs.some(job => town.jobs?.[job] > 0) };
+                        discovery.towns[town.id] = { jobs: {...town.jobs}, reported: jobs.some(job => town.jobs?.[job] > 0), produceReported: discovery.day == null };
                     }
+                    // v1.6.32 did not observe harvests. Never recreate a first harvest on upgrade.
+                    if (discovery.towns[town.id].produceReported === undefined) discovery.towns[town.id].produceReported = true;
                 }
             }
         }
@@ -5183,13 +5197,13 @@
         const id = `${key}:${level.level}`;
         if (state.discoveries[id]?.day != null) return;
         state.discoveries[id] = { key, level: level.level, name: level.name, day: planet.day, origin: subject?._reg === 'town' ? subject.id : null, towns: {} };
-        for (const town of regToArray('town').filter(t => !t.end)) state.discoveries[id].towns[town.id] = { jobs: {...town.jobs}, reported: false };
+        for (const town of regToArray('town').filter(t => !t.end)) state.discoveries[id].towns[town.id] = { jobs: {...town.jobs}, reported: false, produceReported: false };
         const metadata = initTechUnlockMap();
         metadata[key] ||= {};
         metadata[key][level.level] ||= { name: level.name, day: planet.day, originTownId: state.discoveries[id].origin };
     }
 
-    function livingInfluencePhrases(delta) {
+    function livingInfluencePhrases(delta, limit = 3) {
         const phrases = {
             farm: ['Farming gains support', 'Farming loses support'], travel: ['People are more inclined to travel', 'People are less inclined to travel'],
             happy: ['Spirits lift', 'Spirits fall'], disease: ['Disease pressure rises', 'Disease pressure eases'], hunger: ['Hunger pressure rises', 'Hunger pressure eases'],
@@ -5197,7 +5211,7 @@
             crime: ['Crime pressure rises', 'Crime pressure eases'], faith: ['Faith gains support', 'Faith loses support']
         };
         return Object.keys(phrases).filter(key => typeof delta?.[key] === 'number' && Math.abs(delta[key]) >= 0.1)
-            .slice(0, 3).map(key => phrases[key][delta[key] > 0 ? 0 : 1]);
+            .slice(0, limit).map(key => phrases[key][delta[key] > 0 ? 0 : 1]);
     }
 
     function captureLivingDecision(event) {
@@ -5276,9 +5290,9 @@
         }
     }
 
-    function noteLivingMoment(town, text, discovery, source) {
+    function noteLivingMoment(town, text, discovery, source, day = planet.day) {
         const state = livingWorldState();
-        state.moments.push({ day: planet.day, town: town.id, text, discovery: discovery || null, source: source || null });
+        state.moments.push({ day, town: town.id, text, discovery: discovery || null, source: source || null });
         if (state.moments.length > 60) state.moments.shift();
         state.lastReportDay = planet.day;
         logMessage(text, 'milestone');
@@ -5303,6 +5317,17 @@
             }
         }
         for (const [id, discovery] of Object.entries(state.discoveries)) {
+            for (const town of regToArray('town').filter(livingTownKnown)) {
+                const observation = discovery.towns[town.id];
+                const harvest = observation?.firstProduce;
+                if (!harvest || observation.produceReported) continue;
+                observation.produceReported = true;
+                const text = discovery.level === 10
+                    ? `On Day ${harvest.day}, ${townRef(town.id)} brought in its first harvest after discovering Agriculture: ${harvest.count} ${harvest.count === 1 ? 'crop' : 'crops'}.`
+                    : `On Day ${harvest.day}, ${townRef(town.id)} began keeping animals. ${harvest.count} livestock joined the settlement.`;
+                noteLivingMoment(town, text, id, null, harvest.day);
+                return;
+            }
             const jobs = Object.entries(jobNeedsUnlock).filter(([, gate]) => gate[0] === discovery.key && gate[1] === discovery.level).map(([job]) => job);
             if (!jobs.length) continue;
             for (const town of regToArray('town').filter(livingTownKnown)) {
@@ -5316,6 +5341,31 @@
                 return;
             }
         }
+    }
+
+    function observeLivingProduction(town, type, before) {
+        const id = type === 'crop' ? 'farm:10' : 'farm:20';
+        const discovery = livingWorldState()?.discoveries[id];
+        if (!discovery || discovery.day == null || !town || town.end) return;
+        // A town founded later starts its own chapter. Legacy discoveries keep unknown dates.
+        const observation = discovery.towns[town.id] ||= { jobs: {...town.jobs}, reported: false, produceReported: false };
+        if (observation.produceReported || observation.firstProduce) return;
+        const gained = Math.round((town.resources?.[type] || 0) - before);
+        if (gained > 0) observation.firstProduce = { day: planet.day, count: gained };
+    }
+
+    function livingTownPlaces(town, key) {
+        const markers = regToArray('marker').filter(m => !m.end && !m._hidden && m.town === town.id && m.type === 'landmark' && isChunkExplored(m.x, m.y) && (!key || actionables.process._projectSubtypes[m.subtype]?.needsUnlock?.[key]));
+        const partners = (!key || key === 'trade' || key === 'travel') ? getTradePartners(town).filter(livingTownKnown) : [];
+        return { markers, partners: [...new Map(partners.map(partner => [partner.id, partner])).values()] };
+    }
+
+    function livingPlaceItems(town, key) {
+        const { markers, partners } = livingTownPlaces(town, key);
+        return [
+            ...markers.slice(0, 4).map(marker => ({ text: `Visit the ${marker.subtype?.replace(/_/g, ' ') || marker.name}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(marker, 'marker'); } })),
+            ...partners.slice(0, 4).map(partner => ({ text: `Visit ${partner.name}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(partner, 'town'); } }))
+        ];
     }
 
     function livingTownLines(town, key) {
@@ -5337,7 +5387,8 @@
             const priorities = Object.entries(town.research || {}).filter(([, value]) => value > 0).sort((a, b) => b[1] - a[1]);
             if (priorities.length) lines.push(`Research favours ${researchInfluences[priorities[0][0]] || priorities[0][0]}.`);
         }
-        const buildings = regToArray('marker').filter(m => !m.end && m.town === town.id && m.type === 'landmark' && (!key || actionables.process._projectSubtypes[m.subtype]?.needsUnlock?.[key]));
+        const { markers: buildings, partners } = livingTownPlaces(town, key);
+        if (partners.length) lines.push(`Trade routes link here with ${commaList(partners.map(partner => partner.name))}.`);
         if (buildings.length) lines.push(`Built here: ${commaList([...new Set(buildings.map(m => m.subtype?.replace(/_/g, ' ') || m.name).filter(Boolean))].slice(0, 3))}.`);
         const projects = regToArray('process').filter(p => p.town === town.id && p.type === 'project' && !p.done && (!key || actionables.process._projectSubtypes[p.subtype]?.needsUnlock?.[key]));
         if (projects.length) lines.push(`Under construction: ${commaList(projects.map(p => p.subtype.replace(/_/g, ' ')))}.`);
@@ -5376,6 +5427,13 @@
             links.appendChild(button);
         }
         section.appendChild(links);
+        const places = livingPlaceItems(town);
+        if (places.length) {
+            const heading = document.createElement('h3'); heading.textContent = 'Places and neighbours'; section.appendChild(heading);
+            const visits = document.createElement('div'); visits.className = 'paultendoLifeDiscoveries';
+            for (const place of places) { const button = document.createElement('button'); button.textContent = place.text; button.addEventListener('click', place.func); visits.appendChild(button); }
+            section.appendChild(visits);
+        }
         const state = livingWorldState();
         const recent = [...state.moments.filter(m => m.town === town.id), ...state.decisions.filter(d => d.towns.includes(town.id)).map(d => ({day:d.day,text:d.text}))].sort((a,b)=>b.day-a.day).slice(0,2);
         for (const moment of recent) { const line = document.createElement('p'); line.innerHTML = parseText(`Day ${moment.day} · ${moment.text}`); section.appendChild(line); }
@@ -5427,6 +5485,18 @@
 
     function initLivingWorld() {
         seedLivingDiscoveries();
+        for (const [eventClass, type] of [['townFarm', 'crop'], ['townTame', 'livestock']]) {
+            const info = gameEvents[eventClass];
+            if (!info?.func || info.func._paultendoLife) continue;
+            const base = info.func;
+            info.func = function(subject, target, args) {
+                const before = subject?.resources?.[type] || 0;
+                const result = base.apply(this, arguments);
+                try { observeLivingProduction(subject, type, before); } catch (error) { console.warn('[paultendo-mod] Harvest follow-up failed:', error); }
+                return result;
+            };
+            info.func._paultendoLife = true;
+        }
         ensureLivingWorldStyles();
         if (!PAULTENDO_STATE.livingDecisionBound && document.getElementById('logMessages')) {
             document.getElementById('logMessages').addEventListener('click', captureLivingDecision, true);
@@ -5451,6 +5521,10 @@
             .paultendoTownLife button:hover { color: #fff1a0; background: #373326; }
             .paultendoTownLife button:focus-visible, .paultendoDecisionPreview summary:focus-visible { outline: 2px solid #fff1a0; outline-offset: 3px; }
             .paultendoLifeDiscoveries { display: flex; flex-wrap: wrap; gap: 0.35em; margin: 0.65em 0; }
+            .paultendoDiscoveryNumbers { margin: 0.75em; color: #e5dc98; font-size: 0.85em; }
+            .paultendoDiscoveryNumbers summary { cursor: pointer; min-height: 44px; display: list-item; align-content: center; }
+            .paultendoDiscoveryNumbers summary:focus-visible { outline: 2px solid #fff1a0; outline-offset: 3px; }
+            .paultendoDiscoveryNumbers p { margin: 0.3em 0; }
             .paultendoDecisionPreview { font-size: 0.8em; color: #e5dc98; margin: 0.45em 0 0.15em; }
             .paultendoDecisionPreview summary { cursor: pointer; width: fit-content; }
             .paultendoDecisionPreview p { margin: 0.25em 0; line-height: 1.25; }
