@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
 
 const root = new URL('../', import.meta.url);
-export async function makeGame({ seed = 42, settings = {}, save, mod = true } = {}) {
+export async function makeGame({ seed = 42, settings = {}, save, mod = true, beforeMod } = {}) {
   const errors = [];
   const console = new VirtualConsole();
   console.on('jsdomError', error => errors.push(error.cause || error));
@@ -35,6 +35,7 @@ export async function makeGame({ seed = 42, settings = {}, save, mod = true } = 
   const evaluate = path => new Script(readFileSync(new URL(path, root), 'utf8'), { filename: path }).runInContext(dom.getInternalVMContext());
   window.eval('gameVersion = "1.4"; saveVersion = "gt5";');
   for (const path of ['vendor/gentown/load.js', 'vendor/gentown/perlin.js', 'vendor/gentown/standalone.js', 'vendor/gentown/gentown-data.js', 'app/boot.js', 'vendor/gentown/gentown.js', 'vendor/gentown/gentown-mass.js']) evaluate(path);
+  beforeMod?.(window);
   if (mod === true) evaluate('paultendo-mod.js');
   evaluate('app/ready.js');
   await new Promise(resolve => window.addEventListener('load', resolve, { once: true }));

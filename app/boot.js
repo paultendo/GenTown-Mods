@@ -19,6 +19,12 @@
   }, true);
   window.addEventListener('unhandledrejection', event => showError(event.reason?.message || String(event.reason)));
 
+  // The native resize listener assumes a planet already exists. A browser can
+  // resize between script loading and world creation; creation fits the map later.
+  window.addEventListener('resize', event => {
+    if (typeof planet === 'undefined' || !planet?.config) event.stopImmediatePropagation();
+  }, true);
+
   // Keep the upstream storage format. Failed writes leave the previous save intact.
   const storageSet = R74n.set;
   R74n.set = function(key, value) {

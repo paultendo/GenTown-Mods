@@ -1,5 +1,14 @@
 (() => {
   'use strict';
+  // Native file import replaces the current world but leaves browser storage
+  // unchanged. Keep a successfully imported world without advancing its day.
+  const localParseSave = parseSave;
+  parseSave = Object.assign(function(...args) {
+    const result = localParseSave.apply(this, args);
+    if (gameLoaded && planet?.config) autosave();
+    return result;
+  }, localParseSave);
+
   // Span controls supplied by the base game retain their click handlers and gain keyboard access.
   document.addEventListener('keydown', event => {
     const target = event.target;

@@ -13,6 +13,24 @@ test('bundled game and overhaul boot without uncaught errors', async t => {
   assert.equal(new Set(messages.map(node => node.id)).size, messages.length);
 });
 
+test('a resize before world creation waits safely and normal resize resumes after loading', async t => {
+  let resized = 0;
+  const game = await makeGame({beforeMod(window) {
+    assert.equal(window.planet, null);
+    window.addEventListener('resize', () => resized++);
+    window.dispatchEvent(new window.Event('resize'));
+    assert.equal(resized, 0);
+  }});
+  t.after(game.close);
+  assert.equal(game.window.gameLoaded, true);
+  assert.ok(game.window.planet.config);
+  game.window.dispatchEvent(new game.window.Event('resize'));
+  assert.equal(resized, 1);
+  assert.deepEqual(game.errors, []);
+  assert.equal(game.window.GenTownLocal.errors.length, 0);
+  assert.equal(game.window.document.getElementById('startupError').hidden, true);
+});
+
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
@@ -629,3 +647,18 @@ for (const seed of [7, 42, 123]) {
     assert.deepEqual(game.errors, []);
   });
 }
+
+
+test('a successfully imported world persists locally without advancing a day', async t => {
+  const source = await makeGame(); t.after(source.close);
+  const town = settleGame(source); source.window.planet.day = 52; town.pop = 47;
+  const imported = JSON.parse(JSON.stringify(source.window.generateSave()));
+  const local = await makeGame(); t.after(local.close);
+  local.window.parseSave(imported);
+  assert.equal(local.window.planet.day, 52);
+  const stored = JSON.parse(local.window.R74n.get('GenTownSave'));
+  const reloaded = await makeGame({save: stored}); t.after(reloaded.close);
+  assert.equal(reloaded.window.planet.day, 52);
+  assert.equal(reloaded.window.regGet('town', town.id).pop, 47);
+  assert.deepEqual(local.errors, []); assert.deepEqual(reloaded.errors, []);
+});

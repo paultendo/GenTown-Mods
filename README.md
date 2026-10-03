@@ -16,6 +16,8 @@ Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, 
 
 ## Run locally
 
+The launcher waits for a planet before handling an early resize. Loading a world from a file also saves it in the browser immediately, so refreshing keeps the imported world without advancing a day.
+
 With Node.js 22 or newer:
 
 ```sh
