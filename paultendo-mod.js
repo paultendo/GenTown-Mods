@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.57/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.58/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,15 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.57";
+    const MOD_VERSION = "1.6.58";
+    // Native startup can resize before its saved planet has been parsed.
+    // Install this in the distributable mod, including duplicate-load races.
+    if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
+        window._paultendoStartupResizeGuard = true;
+        window.addEventListener("resize", event => {
+            if (typeof planet === "undefined" || !planet?.config) event.stopImmediatePropagation();
+        }, true);
+    }
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -1870,7 +1878,8 @@
                 align-content: center;
             }
             #paultendoChronicleHeadlines { display: flex; flex-direction: column; gap: 0.5em; }
-            .paultendoChronicleHeadline { line-height: 1.25; overflow-wrap: anywhere; }
+            .paultendoChronicleHeadline { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.4em; align-items: start; line-height: 1.25; overflow-wrap: anywhere; }
+            .paultendoChronicleHeadlineText { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
             .paultendoChronicleRead {
                 font: inherit;
                 color: #e5dc98;
@@ -1953,7 +1962,11 @@
         if (host && highlights.parentNode !== host) {
             if (compact) host.appendChild(highlights);
             else host.insertBefore(highlights, document.getElementById('underStats'));
-            highlights.open = !compact;
+        }
+        const compactNews = compact || window.innerHeight < 850;
+        if (highlights._paultendoCompactNews !== compactNews) {
+            highlights.open = !compactNews;
+            highlights._paultendoCompactNews = compactNews;
         }
         if (!header._paultendoResizeBound) {
             window.addEventListener('resize', ensureChronicleHeader);
@@ -2080,8 +2093,11 @@
             item.className = "paultendoChronicleHeadline";
             const source = document.getElementById('logMessage-'+entry.id);
             const text = source?.querySelector('.logText');
-            if (text) copyChronicleHighlightText(text, item);
-            else item.textContent = safeText;
+            const preview = document.createElement("span");
+            preview.className = "paultendoChronicleHeadlineText";
+            if (text) copyChronicleHighlightText(text, preview);
+            else preview.textContent = safeText;
+            item.appendChild(preview);
             if (source) {
                 const read = document.createElement('button');
                 read.type = 'button'; read.className = 'paultendoChronicleRead'; read.textContent = 'Read';
@@ -2160,6 +2176,7 @@
     let chronicleMarkersPending = false;
     let chronicleHeadlineDay;
     function scheduleChronicleDayMarkers(dayValue) {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         chronicleHeadlineDay = dayValue || (typeof planet !== "undefined" ? planet?.day : undefined);
         if (chronicleMarkersPending) return;
         chronicleMarkersPending = true;
@@ -5403,7 +5420,7 @@
                     town._paultendoCommodityLots=oldLots;
                     work.status='abandoned';text='The materials could not be gathered. The work is put aside.';
                 } else {
-                    const traveler=travelerState(),lineage=`made:${traveler.passage}:${getUniverse().currentWorldId}:${traveler.nextObject++}`;
+                    const traveler=travelerState(),lineage=`made:${traveler.passage}:${skyWorldId()}:${traveler.nextObject++}`;
                     const artifact={id:`artifact:${state.nextId++}`,kind:work.kind,title:`${person.name}’s ${LIVING_ARTIFACTS[work.kind].name.toLowerCase()}`,description:recipe.description,quality:recipe.quality || 0.6,lineage,place:ensureLivingPlace(chunkAt(...getTownCenter(town))).id,status:'carried',events:[],searches:0,uses:{},origin:{passage:traveler.passage,lineage,history:[],maker:{name:person.name,role:person.role,town:town.name,world:planet.name,day:planet.day,materials:paid},whisper:record?.words,cause:work.cause&&structuredClone(work.cause)}};
                     if(parent){artifact.parent={lineage:parent.lineage || parent.origin.lineage,title:artifactTitle(parent),phrase:artifactPhrase(parent)};parent.crafted ||= {};parent.crafted[town.id]=artifact.lineage;}
                     state.artifacts.push(artifact);work.status='made';work.artifact=artifact.id;work.materials=paid;
@@ -5411,7 +5428,7 @@
                     artifact.origin.materialProductions=inputs.filter(input=>input.production).map(input=>({...structuredClone(input.production),count:input.count,type:input.type}));
                     artifact.origin.materialSources=inputs.filter(input=>input.exchange).map(input=>{
                         const exchange=commodityExchangeState().exchanges.find(r=>r.id===input.exchange),source=exchange&&regGet('town',input.from || exchange.seller);
-                        return {...input,world:getUniverse().currentWorldId,passage:travelerState().passage,town:source?.id,townName:source?.name,known:!!exchange?.known?.[source?.id]||livingTownKnown(source)};
+                        return {...input,world:skyWorldId(),passage:travelerState().passage,town:source?.id,townName:source?.name,known:!!exchange?.known?.[source?.id]||livingTownKnown(source)};
                     });
                     text=`${person.name} finishes ${artifactTitle(artifact)} in ${town.name}. The rough edges show where their own hands took over.`;
                     carryLivingArtifact(artifact,town,person,text);
@@ -5964,6 +5981,7 @@
     }
 
     function renderTravelerOpening() {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         const universe = getUniverse(false);
         const show = !!planet && planet.day === 1 && !planet.settled && regCount('town') === 0 && (!universe || universe.currentWorldId === universe.homeWorldId);
         let opening = document.getElementById('paultendoTravelerOpening');
@@ -6409,7 +6427,7 @@
     }
     function addProducedMaterialLot(town,work,count) {
         if(count<=0)return;
-        const production={work:work.id,world:getUniverse().currentWorldId,passage:travelerState().passage,town:town.id,townName:town.name,known:livingTownKnown(town),person:work.person,name:work.name,day:work.fired || work.finished || planet.day,cost:{...work.cost},output:work.output};
+        const production={work:work.id,world:skyWorldId(),passage:travelerState().passage,town:town.id,townName:town.name,known:livingTownKnown(town),person:work.person,name:work.name,day:work.fired || work.finished || planet.day,cost:{...work.cost},output:work.output};
         const lots=(town._paultendoCommodityLots ||= {})[work.type] ||= [];
         const last=lots.at(-1);
         if(last?.production?.work===work.id&&!last.exchange)last.count+=count;
@@ -8078,6 +8096,7 @@
     }
 
     function renderLivingFields() {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         if (!planet || typeof canvasLayers === 'undefined') return;
         if (!canvasLayers.townLife) {
             addCanvasLayer('townLife');
@@ -8334,6 +8353,7 @@
     }
 
     function updateSeasonIndicator() {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         const info = getSeasonInfo();
         if (!info) return;
         ensureSystemStyles();
@@ -9073,6 +9093,7 @@
     }
 
     function handleAutoplayEventForHappen(action, subject, target, result) {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         if (!shouldAutopauseOnMajor()) return;
         if (action === "Create" && result) {
             if (result._reg === "town") {
@@ -9659,6 +9680,7 @@
     }
 
     function refreshWorldStatusPanel() {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         if (typeof currentExecutive === "undefined") return;
         if (currentExecutive !== "world") return;
         openWorldStatusPanel();
@@ -10387,6 +10409,7 @@
     }
 
     function renderFogOfWar() {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         if (!ensureFogLayer()) return;
         const ctx = canvasLayersCtx ? canvasLayersCtx.fog : null;
         if (!ctx || typeof canvasLayers === "undefined") return;
@@ -10458,6 +10481,7 @@
 
     function scheduleFogRefresh(force = false) {
         if (!planet) return;
+        if (PAULTENDO_STATE.backgroundWorld) return;
         const planetRef = planet;
         if (force && planetRef._paultendoFog) {
             planetRef._paultendoFog.dirty = true;
@@ -12436,6 +12460,7 @@
     }
 
     function getCurrentWorldId() {
+        if (PAULTENDO_STATE.backgroundWorld) return PAULTENDO_STATE.backgroundWorld;
         const universe = getUniverse(false);
         if (universe && universe.currentWorldId) return universe.currentWorldId;
         return planet?._paultendoWorldId || 1;
@@ -13434,6 +13459,7 @@
     }
 
     function updateProgressMenus() {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         if (!planet || typeof document === "undefined") return;
         const announced = planet._paultendoMenuAnnounced ||= {};
         for (const id of ["economy", "stance", "solar", "festivals"]) {
@@ -14018,41 +14044,122 @@
         });
     }
 
+    // Use the same daily rules as the visited world. Background worlds own
+    // their history and state, while the player's controls and callbacks stay
+    // attached to the visited world. Random proposals remain foreground-only.
+    function simulateInactiveWorld(world) {
+        const runtime = {
+            backgroundWorld: PAULTENDO_STATE.backgroundWorld,
+            attention: PAULTENDO_STATE.attention,
+            sunsetting, debugContext, currentEvents, townsBefore
+        };
+        const functions = new Map();
+        const replace = (name, fn = () => {}) => {
+            if (typeof PAULTENDO_GLOBAL[name] !== "function") return;
+            functions.set(name, PAULTENDO_GLOBAL[name]);
+            PAULTENDO_GLOBAL[name] = fn;
+        };
+        withWorldState(world, () => {
+            const history = document.createElement("template");
+            let html = planet._paultendoLogHTML || "";
+            if (html.startsWith("uri:")) html = decodeURIComponent(html.slice(4));
+            else html = html.replace(/\[(\/?(?:span|div|img|br|b|i|em|strong|small|u|s)\b[^\]]*)\]/gi, "<$1>");
+            history.innerHTML = html;
+            const archive = (text, type, args) => {
+                if (!text) return;
+                if (sunsetting && type !== "sunset" && type !== "error") {
+                    logTomorrow(text, type, args);
+                    return;
+                }
+                const id = uuidv4(), entry = document.createElement("span");
+                entry.className = `logMessage ${type ? 'log' + titleCase(type) : 'logNormal'} passed`;
+                entry.id = "logMessage-" + id;
+                entry.setAttribute("done", "true");
+                const date = document.createElement("span"), body = document.createElement("span");
+                date.className = "logDay"; date.dataset.day = String(planet.day);
+                date.innerHTML = parseText("{{date:" + planet.day + "|s}}");
+                body.className = "logText"; body.innerHTML = parseText(escapeHTML(text));
+                entry.append(date, body);
+                if (args?._paultendoStory) {
+                    entry.dataset.storyKind = args._paultendoStory.kind;
+                    entry.dataset.storyId = args._paultendoStory.id;
+                }
+                if (args?._paultendoHighlight) entry.dataset.chronicleHighlight = "true";
+                history.content.prepend(entry);
+                while (history.content.children.length > 100) history.content.lastElementChild.remove();
+                recordChronicleEntry("misc", body.textContent, type, {day:planet.day,logId:id,story:args?._paultendoStory});
+                return id;
+            };
+            PAULTENDO_STATE.backgroundWorld = world.id;
+            PAULTENDO_STATE.attention = undefined;
+            debugContext = {trace:[]}; currentEvents = {}; townsBefore = null;
+            for (const name of ["initGame", "setView", "updateStats", "refreshExecutive", "renderMap", "renderHighlight", "renderCursor", "updateCanvas", "fitToScreen", "resizeCanvases", "updateTitle", "autosave", "saveSettings", "logChange", "logSub", "fadeMessage", "clearLog", "doPrompt", "openExecutive", "closeExecutive", "populateExecutive", "openRegBrowser", "logTip"]) replace(name);
+            replace("logMessage", archive);
+            replace("unhideEntity", entity => { if (entity?.name) delete entity.named; });
+            replace("unlockExecutive", id => { (planet.unlockedExecutive ||= {})[id] = true; });
+            replace("lockPlanet", () => { planet.locked = true; });
+            replace("unlockPlanet", () => { planet.locked = false; });
+            replace("killPlanet", () => {
+                planet.dead = planet.day;
+                archive("There are no more settlements on Planet {{planet}}.");
+            });
+            replace("revivePlanet", () => { planet.dead = false; });
+            try {
+                observeNativeResearchNeeds();
+                sunsetting = true;
+                for (const id of Object.keys(dailyEvents)) {
+                    const traceLength = debugContext.trace.length;
+                    try {
+                        debugContext.eventClass = id;
+                        const caller = readyEvent(id);
+                        if (!caller) continue;
+                        debugContext.eventArgs = caller.args;
+                        if (dailyEvents[id].check && !dailyEvents[id].check(caller.subject, caller.target, caller.args)) continue;
+                        doEvent(id, caller);
+                    } finally { debugContext.trace.length = traceLength; }
+                }
+                planet.day = (planet.day || 1) + 1;
+                sunsetting = false;
+                for (const [text,type,args] of planet.nextDayMessages.splice(0)) archive(text,type,args);
+                if (!regCount("town")) { if (!planet.dead) killPlanet(); }
+                else if (planet.dead) revivePlanet();
+                advanceWorldLife();
+                advanceSkyFlights();
+            } finally {
+                try { planet._paultendoLogHTML = "uri:" + encodeURIComponent(history.innerHTML); }
+                finally {
+                    for (const [name, fn] of functions) PAULTENDO_GLOBAL[name] = fn;
+                    Object.assign(PAULTENDO_STATE, {backgroundWorld:runtime.backgroundWorld,attention:runtime.attention});
+                    sunsetting = runtime.sunsetting; debugContext = runtime.debugContext;
+                    currentEvents = runtime.currentEvents; townsBefore = runtime.townsBefore;
+                }
+            }
+        });
+    }
+
     function tickInactiveWorlds() {
         const universe = getUniverse(false);
         if (!universe) return;
-        const activeId = universe.currentWorldId;
-
         for (const world of Object.values(universe.worlds)) {
-            if (!world || !world.state || world.id === activeId) continue;
-            withWorldState(world, () => {
-                planet.day = (planet.day || 1) + 1;
+            if (!world?.state || world.id === universe.currentWorldId) continue;
+            try { simulateInactiveWorld(world); }
+            catch (error) { console.warn("[paultendo-mod] Background world failed:", world.id, error); }
+        }
+    }
 
-                advanceSkyFlights(true);
-
-                // lightweight background growth
-                const towns = getActiveTowns();
-                towns.forEach(town => {
-                    const growth = Math.max(0, Math.round((town.pop || 0) * 0.001));
-                    if (growth > 0) {
-                        town.pop = (town.pop || 0) + growth;
-                        if (typeof statsAdd === "function") statsAdd("birth", growth);
-                        else if (planet && planet.stats) {
-                            planet.stats.birth = (planet.stats.birth || 0) + growth;
-                        }
-                    }
-                });
-
-                // keep local wars moving
-                const processes = getActiveWars();
-                processes.forEach(proc => {
-                    if (typeof metaEvents !== "undefined" && metaEvents.processWar && typeof metaEvents.processWar.func === "function") {
-                        metaEvents.processWar.func(proc);
-                    } else if (typeof processCoalitionWar === "function") {
-                        processCoalitionWar(proc);
-                    }
-                });
-            }, { silent: true });
+    function advanceWorldLife() {
+        for (const [name, step] of [
+            ["Seasons", updateSeasonState], ["Whispers", advanceLivingWhispers],
+            ["Artifact work", advanceLivingArtifactWork], ["Artifacts", advanceLivingArtifacts],
+            ["Inventions", observeLivingInventions], ["Sky study", advanceSkyStudy],
+            ["Commodity journeys", advanceCommodityJourneys], ["Field tools", advanceFarmTools],
+            ["Material work", advanceMaterialWork], ["New field tools", advanceFarmTools],
+            ["Grain stores", advanceGrainStores], ["Commodity needs", observeCommodityNeeds],
+            ["Teachings", advanceLivingTeachings], ["Places", observeLivingPlaces],
+            ["Settlement", observeLivingWorld]
+        ]) {
+            try { step(); }
+            catch (error) { console.warn(`[paultendo-mod] ${name} follow-up failed:`, error); }
         }
     }
 
@@ -14115,20 +14222,13 @@
                 const result = baseNextDay.apply(this, args);
                 const dayAfter = (typeof planet !== "undefined") ? planet.day : undefined;
                 if (dayBefore !== dayAfter) {
-                    try { updateSeasonState(); } catch {}
-                    try { advanceLivingWhispers(); } catch (error) { console.warn("[paultendo-mod] Whisper follow-up failed:", error); }
-                    try { advanceLivingArtifactWork(); advanceLivingArtifacts(); refreshLivingArtifactView(); } catch (error) { console.warn("[paultendo-mod] Artifact follow-up failed:", error); }
-                    try { observeLivingInventions(); } catch(error) { console.warn('[paultendo-mod] Invention follow-up failed:',error); }
-                    try { advanceSkyStudy(); } catch(error) { console.warn('[paultendo-mod] Sky study failed:',error); }
-                    try { advanceCommodityJourneys(); advanceFarmTools(); advanceMaterialWork(); advanceFarmTools(); advanceGrainStores(); observeCommodityNeeds(); advanceLivingTeachings(); } catch (error) { console.warn('[paultendo-mod] Words carried by the road failed:',error); }
-                    try { observeLivingPlaces(); } catch (error) { console.warn("[paultendo-mod] Place follow-up failed:", error); }
-                    try { observeLivingWorld(); } catch (error) { console.warn("[paultendo-mod] Settlement follow-up failed:", error); }
+                    try { advanceWorldLife(); refreshLivingArtifactView(); } catch (error) { console.warn("[paultendo-mod] World follow-up failed:", error); }
                     try { renderLivingFields(); updateCanvas(); } catch {}
                     try { syncLogToPlanet(); } catch {}
                     try { updateSpaceDiscovery(); advanceSkyFlights(); updateSpaceTech(); } catch(error) { console.warn('[paultendo-mod] Sky flight failed:',error); }
                     try { maybeCreateSpaceRoute(); } catch {}
                     try { maybeStartSpaceWar(); } catch {}
-                    try { tickInactiveWorlds(); } catch {}
+                    try { tickInactiveWorlds(); } catch (error) { console.warn("[paultendo-mod] Background world failed:", error); }
                     try { processSpaceRoutes(); } catch(error) {console.warn('[paultendo-mod] Cargo journey failed:',error);}
                     try { processSpaceWars(); } catch {}
                     try { processFrontierCharters(); } catch {}
@@ -23456,6 +23556,7 @@
     }
 
     function renderEpidemicOverlay() {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         if (!ensureEpidemicLayer()) return;
         if (!canvasLayersCtx || !canvasLayersCtx.epidemic) return;
         if (typeof worldConfig.chunkSize === "undefined") return;
@@ -23520,14 +23621,17 @@
 
     function scheduleEpidemicRefresh(force = false) {
         if (!planet) return;
+        if (PAULTENDO_STATE.backgroundWorld) return;
         if (force) markEpidemicDirty();
         if (planet._paultendoEpidemicRefreshPending) return;
         if (!force && planet._paultendoEpidemicDirty === false && planet._paultendoEpidemicRenderDay === planet.day) {
             return;
         }
         planet._paultendoEpidemicRefreshPending = true;
+        const planetRef = planet;
         const refresh = () => {
-            planet._paultendoEpidemicRefreshPending = false;
+            planetRef._paultendoEpidemicRefreshPending = false;
+            if (planetRef !== planet) return;
             try { renderEpidemicOverlay(); } catch {}
             try { if (typeof updateCanvas === "function") updateCanvas(); } catch {}
         };
@@ -36172,6 +36276,7 @@
     }
 
     function renderRoads() {
+        if (PAULTENDO_STATE.backgroundWorld) return;
         if (!ensureRoadLayer()) return;
         const ctx = canvasLayersCtx ? canvasLayersCtx.roads : null;
         if (!ctx || typeof canvasLayers === "undefined") return;
@@ -36233,13 +36338,16 @@
 
     function scheduleRoadRefresh(force = false) {
         if (!planet) return;
+        if (PAULTENDO_STATE.backgroundWorld) return;
         if (planet._paultendoRoadRefreshPending) return;
         if (!force && planet._paultendoRoadDirty === false && planet._paultendoRoadRenderDay === planet.day) {
             return;
         }
         planet._paultendoRoadRefreshPending = true;
+        const planetRef = planet;
         const refresh = () => {
-            planet._paultendoRoadRefreshPending = false;
+            planetRef._paultendoRoadRefreshPending = false;
+            if (planetRef !== planet) return;
             try { renderRoads(); } catch {}
             try { if (typeof updateCanvas === "function") updateCanvas(); } catch {}
         };

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {makeGame,settleGame} from './harness.mjs';
 const plain=x=>JSON.parse(JSON.stringify(x));
 const registry=w=>w._paultendoUniverse._paultendoColonization;
-function quiet(w){for(const id of ['townFarm','townTame','townMine','townLumber','townEat','townBirth','townDeath','townExpand','townEmploy']){if(w.gameEvents[id].func)w.gameEvents[id].func=()=>{};if(w.gameEvents[id].perChunk)w.gameEvents[id].perChunk=()=>{};}w.gameEvents.processAll.func=()=>{};}
+function quiet(w){for(const id of ['townFarm','townTame','townMine','townLumber','townEat','townBirth','townDeath','townExpand','townEmploy','townPay','townTax']){if(w.gameEvents[id].func)w.gameEvents[id].func=()=>{};if(w.gameEvents[id].perChunk)w.gameEvents[id].perChunk=()=>{};}w.gameEvents.processAll.func=()=>{};}
 function setup(g){const w=g.window,town=settleGame(g);w.planet.day=80;town.name='Homebank';town.pop=100;town.jobs={scholar:15,miner:15,farmer:40};town.resources={crop:800,lumber:20,rock:20,metal:20};town.influences.trade=5;town.wealth=90;town.research={farm:10};town._paultendoNextExchangeDay=9999;Object.assign(w.planet.unlocks,{education:70,smith:80,fire:70,travel:90,astronomy:20,trade:10,farm:10});quiet(w);return {w,town};}
 function next(w){const choose=w.chooseEvent;w.chooseEvent=()=>null;try{w.nextDay();}finally{w.chooseEvent=choose;}}
 function panel(w){return w.document.getElementById('actionSubList');}

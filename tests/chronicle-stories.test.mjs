@@ -180,7 +180,9 @@ test('quiet days leave space for choices and compact news stays beside the Chron
  assert.equal(highlights.hidden,false);assert.equal(highlights.querySelector('.logAct'),null);
  Object.defineProperty(w,'innerWidth',{value:390,writable:true});w.dispatchEvent(new w.Event('resize'));
  assert.equal(highlights.parentNode.id,'paultendoChronicleHeader');assert.equal(highlights.open,false);
- highlights.open=true;w.innerWidth=1200;w.dispatchEvent(new w.Event('resize'));
+ highlights.open=true;w.innerWidth=1200;w.innerHeight=1000;w.dispatchEvent(new w.Event('resize'));
  assert.equal(highlights.parentNode.id,'statsPanel');assert.equal(highlights.open,true);
+ w.innerHeight=768;w.dispatchEvent(new w.Event('resize'));assert.equal(highlights.open,false);
+ highlights.open=true;w.dispatchEvent(new w.Event('resize'));assert.equal(highlights.open,true,'A player can keep the compact news open');
  assert.ok(proposal.querySelector('[type="yes"]'));assert.deepEqual(game.errors,[]);
 });
