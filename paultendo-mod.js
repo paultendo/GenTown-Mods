@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.40/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.41/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.40";
+    const MOD_VERSION = "1.6.41";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -5134,8 +5134,8 @@
         }
     };
 
-    // Settlement life connects existing simulation facts to discoveries and choices.
-    // This layer observes the world; it does not add bonuses or consume random rolls.
+    // Settlement histories record actual work and choices. Interventions use native
+    // effects, resources and paths, with a private stream for personal reception.
     const livingDecisionCaptures = new Map();
     // Display metadata for the mod’s existing events. Never extend the native random unlock tree.
     const EXTENDED_DISCOVERIES = [
@@ -5215,6 +5215,7 @@
         state.whispers ||= [];
         state.places ||= {};
         state.artifacts ||= [];
+        state.artifactWork ||= [];
         state.nextId ||= 1;
         return state;
     }
@@ -5232,10 +5233,16 @@
         defy: { title: 'A voice against the rulers', words: 'Those who rule you can be brought down.' },
         conquer: { title: 'What belongs to others', words: 'Your neighbours have what should be yours.' },
         share: {title:'An object shared',words:'Let others learn from it.'},
-        hoard: {title:'An object hidden',words:'Keep it from everyone else.'}
+        hoard: {title:'An object hidden',words:'Keep it from everyone else.'},
+        return: {title:'A gift to the Traveler',words:'Will you entrust it to me?'},
+        hurry: {title:'An object taken too soon',words:'I need it now.'},
+        craft: {title:'Something of their own',words:'Try making something of your own.'}
     };
+    // A reply is quick. Work and attachment develop while the rest of the world continues.
+    const LIVING_PACE = {reply:2, work:{fork:6,lens:8,compass:10}, purpose:{kept:4,healing:6,song:8,drills:12,study:16,revered:28,hoarded:24}, attachment:{generous:-2,curious:0,steadfast:6,guarded:10}, objectLife:12};
     const LIVING_FIGURE_ROLES = { SCHOLAR:'scholar', INVENTOR:'scholar', GENERAL:'soldier', HERO:'soldier', TYRANT:'soldier', PROPHET:'priest', HEALER:'doctor', ARTIST:'musician' };
     let livingPersonView = null;
+    let livingArtifactView = null;
 
     function livingPlaceKnown(place) {
         return !!place && !!chunkAt(place.x,place.y) && isChunkExplored(place.x,place.y);
@@ -5274,29 +5281,296 @@
         fork: {name:'Tuning fork',description:'Two metal prongs. Strike them and one clear note hangs in the air. For a moment, you remember a song.'}
     };
 
+    function travelerState() {
+        const universe=getUniverse();
+        if (!universe.traveler) {
+            const home=universe.worlds[universe.homeWorldId]?.state?.planet || planet;
+            const worlds=Object.values(universe.worlds).map(w=>w.state?.planet).filter(Boolean);
+            const spent=new Set(worlds.flatMap(p=>p._paultendoLife?.artifacts || []).map(a=>a.kind));
+            universe.traveler={version:1,passage:0,nextObject:1,pack:[],echoes:[],beginning:{config:{...home.config},name:home.name}};
+            for(const kind of Object.keys(LIVING_ARTIFACTS)) if(!spent.has(kind)) universe.traveler.pack.push({kind,lineage:`first-inheritance:${kind}`,origin:{passage:0,lineage:`first-inheritance:${kind}`,history:[]}});
+        }
+        return universe.traveler;
+    }
+    function artifactTitle(artifact) { return artifact.title || LIVING_ARTIFACTS[artifact.kind].name; }
+    function artifactDescription(artifact) { return artifact.description || LIVING_ARTIFACTS[artifact.kind].description; }
+    function artifactPhrase(artifact) { return artifact.title || `the ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()}`; }
+    function livingArtifactRecipe(town,person,kind) {
+        const u=planet.unlocks || {};
+        if(!livingPersonAvailable(person,town)) return null;
+        if(kind==='fork'&&['musician','scholar','miner'].includes(person.role)&&u.smith>=30) return {cost:{metal:3},description:'A pair of hand-worked metal prongs. Their note wavers before it settles. Small marks from the maker’s tools remain.'};
+        if(kind==='lens'&&['doctor','scholar'].includes(person.role)&&u.education>=20&&u.fire>=40&&u.smith>=30) return {cost:{rock:3,metal:2},description:'Glass ground by hand and held in a metal ring. The centre is clear, but the rim turns the world cloudy.'};
+        if(kind==='compass'&&['scholar','miner'].includes(person.role)&&u.smith>=40&&u.travel>=30&&u.education>=20) return {cost:{rock:1,metal:3},description:'A worked needle beside a magnetic stone, set inside a rough metal case. The needle sometimes catches against the rim.'};
+        return null;
+    }
+    function livingArtifactWorkAvailable(town,person,kind,artifact) {
+        if(!livingArtifactRecipe(town,person,kind)||hasIssue(town,'war')||town.resources.crop<town.pop*0.2) return false;
+        if(artifact&&(!livingArtifactHolder(artifact,town,person)||artifact.status==='hoarded'||artifact.crafted?.[town.id])) return false;
+        return !livingWorldState().artifactWork.some(p=>p.status==='working'&&p.town===town.id&&p.person===person.id&&p.kind===kind);
+    }
+    function openLivingWorkshop(town,person) {
+        const items=[{text:'← Back to the people',func:()=>openLivingPerson(town,person)},{text:'An idea is a beginning. Making it real will take materials, time and someone willing to try.'}];
+        for(const kind of Object.keys(LIVING_ARTIFACTS)) if(livingArtifactWorkAvailable(town,person,kind)) items.push({text:`Make a ${LIVING_ARTIFACTS[kind].name.toLowerCase()}`,func:()=>{sendLivingWhisper(town,person,'craft',null,null,kind);openLivingPerson(town,person);}});
+        populateExecutive(items,'Something of their own');markLivingStoryControls();openExecutive();
+    }
+    function startLivingArtifactWork(town,person,record,artifact) {
+        const kind=artifact?.kind || record.projectKind;
+        if(!livingArtifactWorkAvailable(town,person,kind,artifact)) return {acted:false,reason:'Their work no longer has the footing it needs.'};
+        const recipe=livingArtifactRecipe(town,person,kind);
+        if(Object.entries(recipe.cost).some(([k,n])=>(town.resources[k]||0)<n)) return {acted:false,reason:'They cannot spare the materials.'};
+        const practiced=livingWorldState().artifactWork.some(w=>w.status==='made'&&w.person===person.id&&w.kind===kind);
+        const days=Math.max(3,LIVING_PACE.work[kind]-(practiced?2:0)-(planet.unlocks.smith>=80?2:0));
+        const work={id:`work:${livingWorldState().nextId++}`,town:town.id,person:person.id,kind,parent:artifact?.id,whisper:record.id,started:planet.day,due:planet.day+days,status:'working'};
+        livingWorldState().artifactWork.push(work);record.work=work.id;
+        const text=artifact?`${person.name} begins making an object of their own, working from ${artifactTitle(artifact)}.`:`${person.name} begins working on a ${LIVING_ARTIFACTS[kind].name.toLowerCase()} of their own.`;
+        record.steps.push({day:planet.day,text});return {acted:true};
+    }
+    function advanceLivingArtifactWork() {
+        const state=livingWorldState();
+        for(const work of state.artifactWork.filter(w=>w.status==='working')) {
+            const town=regGet('town',work.town),person=town&&findLivingPerson(town,work.person);
+            const parent=work.parent&&state.artifacts.find(a=>a.id===work.parent);
+            const recipe=town&&person&&livingArtifactRecipe(town,person,work.kind);
+            const record=state.whispers.find(w=>w.id===work.whisper);
+            if(planet.day<work.due) {
+                if(!work.progress&&planet.day>=work.started+Math.ceil((work.due-work.started)/2)&&recipe&&Object.entries(recipe.cost).every(([k,n])=>(town.resources[k]||0)>=n)&&(!parent||livingArtifactHolder(parent,town,person))&&!hasIssue(town,'war')&&town.resources.crop>=town.pop*0.2) {
+                    work.progress=planet.day;
+                    const progress={fork:'The prongs are shaped. They are still finding the note.',lens:'The glass is taking shape. The centre is clearer than the edges.',compass:'The needle moves, but still catches against its case.'}[work.kind];
+                    const text=`${person.name} keeps working. ${progress}`;
+                    if(record) record.steps.push({day:planet.day,text});
+                    if(livingTownKnown(town)) logMessage(escapeLivingText(text));
+                }
+                continue;
+            }
+            let text;
+            if(!recipe||!livingPersonAvailable(person,town)||(parent&&!livingArtifactHolder(parent,town,person))||parent?.status==='hoarded'||hasIssue(town,'war')||town.resources.crop<town.pop*0.2||Object.entries(recipe?.cost || {}).some(([k,n])=>(town?.resources?.[k]||0)<n)) {
+                work.status='abandoned';text='The unfinished work is put aside. The hands, peace or materials it needed are no longer there.';
+            } else {
+                const before={...town.resources};
+                for(const [type,count] of Object.entries(recipe.cost)) happen('RemoveResource',null,town,{type,count});
+                const paid=Object.fromEntries(Object.keys(recipe.cost).map(k=>[k,(before[k]||0)-(town.resources[k]||0)]));
+                if(Object.entries(recipe.cost).some(([k,n])=>paid[k]!==n)) {
+                    for(const [type,count] of Object.entries(paid)) if(count>0) happen('AddResource',null,town,{type,count});
+                    work.status='abandoned';text='The materials could not be gathered. The work is put aside.';
+                } else {
+                    const traveler=travelerState(),lineage=`made:${traveler.passage}:${getUniverse().currentWorldId}:${traveler.nextObject++}`;
+                    const artifact={id:`artifact:${state.nextId++}`,kind:work.kind,title:`${person.name}’s ${LIVING_ARTIFACTS[work.kind].name.toLowerCase()}`,description:recipe.description,quality:0.6,lineage,place:ensureLivingPlace(chunkAt(...getTownCenter(town))).id,status:'carried',events:[],searches:0,uses:{},origin:{passage:traveler.passage,lineage,history:[],maker:{name:person.name,role:person.role,town:town.name,world:planet.name,day:planet.day,materials:paid},whisper:record?.words}};
+                    if(parent){artifact.parent={lineage:parent.lineage || parent.origin.lineage,title:artifactTitle(parent),phrase:artifactPhrase(parent)};parent.crafted ||= {};parent.crafted[town.id]=artifact.lineage;}
+                    state.artifacts.push(artifact);work.status='made';work.artifact=artifact.id;work.materials=paid;
+                    text=`${person.name} finishes ${artifactTitle(artifact)} in ${town.name}. The rough edges show where their own hands took over.`;
+                    carryLivingArtifact(artifact,town,person,text);
+                    if(record) record.created=artifact.id;
+                }
+            }
+            if(record) record.steps.push({day:planet.day,text});
+            if(work.status!=='made'&&livingTownKnown(town)) logMessage(escapeLivingText(text));
+            refreshLivingPersonView();
+        }
+    }
+    function nameLivingArtifact(artifact) {
+        if(!artifact.origin?.maker||artifact.named||!livingArtifactKnown(artifact)) return;
+        doPrompt({type:'ask',shuffle:false,limit:48,title:'A name for their work',message:'What should this object be called?',default:artifactTitle(artifact),func:value=>{
+            if(typeof value!=='string'||!value.trim()) return;
+            const name=value.trim().replace(/[\u0000-\u001f]/g,'').slice(0,48);
+            artifact.title=name;artifact.named=true;
+            livingArtifactEvent(artifact,`You give the object a name: ${name}.`,regGet('town',artifact.town));
+            if(artifact.status==='returned') {
+                const pack=travelerState().pack,index=pack.findIndex(a=>a.lineage===(artifact.lineage || artifact.origin?.lineage));
+                if(index>=0) pack[index]=carryArtifactMemory(artifact);
+            }
+            syncLogToPlanet();autosave();openLivingArtifact(artifact);
+        }});
+    }
+    function carryArtifactMemory(artifact) {
+        const memory=JSON.parse(JSON.stringify({kind:artifact.kind,title:artifact.title,named:artifact.named,description:artifact.description,quality:artifact.quality,lineage:artifact.lineage || artifact.origin?.lineage,origin:artifact.origin || {passage:0,history:[]},parent:artifact.parent}));
+        memory.origin.history ||= [];
+        memory.origin.history.push({passage:travelerState().passage,world:planet.name,events:JSON.parse(JSON.stringify(artifact.events))});
+        return memory;
+    }
+    function livingArtifactSubstitute(artifact,town,person) {
+        const meaning=livingArtifactUse(artifact,town,person)?.meaning;
+        if(!['healing','song','study','drills'].includes(meaning)) return false;
+        return livingWorldState().artifacts.some(other=>other.id!==artifact.id&&other.kind===artifact.kind&&other.town===town.id&&other.status===meaning&&(other.quality||1)>=(artifact.quality||1)*0.6&&livingArtifactHolder(other,town,findLivingPerson(town,other.person)));
+    }
+    function livingArtifactReturnSpan(artifact,town,person) {
+        const purpose=livingArtifactUse(artifact,town,person)?.meaning || 'kept';
+        const madeHere=artifact.origin?.maker?.name===person.name&&artifact.origin.passage===travelerState().passage&&artifact.origin.maker.world===planet.name;
+        const novelty=madeHere?0:artifact.parent?2:4;
+        const substitute=livingArtifactSubstitute(artifact,town,person)?-4:0;
+        const attachment=LIVING_PACE.attachment[livingPersonMind(person).outlook] || 0;
+        return {purpose,days:Math.max(4,LIVING_PACE.purpose[purpose]+attachment+novelty+substitute)};
+    }
+    function livingArtifactReturnNeed(artifact,town,person) {
+        if(hasIssue(town,'war')||hasIssue(town,'revolution')) return 'The fighting keeps them close to home.';
+        if(livingWorldState().artifactWork.some(w=>w.status==='working'&&w.parent===artifact.id)) return 'They are still using it to finish their own work.';
+        const use=livingArtifactUse(artifact,town,person)?.meaning;
+        if(use==='healing'&&(town.influences.disease||0)>=2&&!livingArtifactSubstitute(artifact,town,person)) return 'The sick still need it.';
+        if(use==='revered'&&(town.influences.faith||0)>=3) return 'People still gather around it. They cannot yet bear to part with it.';
+        if(travelerState().pack.length>=5) return 'Your pack is full. Make room before they can give it to you.';
+        return null;
+    }
+    function promiseLivingArtifact(artifact,town,person,record) {
+        if(artifact.returnOffer) return {acted:false,reason:'They have already promised it to you.'};
+        const firstDay=artifact.placedDay ?? artifact.origin?.maker?.day ?? artifact.events[0]?.day ?? planet.day;
+        const span=livingArtifactReturnSpan(artifact,town,person);
+        artifact.returnOffer={whisper:record.id,town:town.id,person:person.id,purpose:span.purpose,purposeDay:planet.day,firstDay,earliest:Math.max(planet.day+span.days,firstDay+LIVING_PACE.objectLife)};
+        const text=`${person.name} agrees to give you ${artifactPhrase(artifact)}. For now, they want more time with it.`;
+        record.steps.push({day:planet.day,text});livingArtifactEvent(artifact,text,town,null,true);
+        return {acted:true};
+    }
+    function endLivingArtifactPromise(artifact,text,town) {
+        const record=livingWorldState().whispers.find(w=>w.id===artifact.returnOffer?.whisper);
+        if(record) record.steps.push({day:planet.day,text});
+        delete artifact.returnOffer;livingArtifactEvent(artifact,text,town,null,true);
+    }
+    function returnLivingArtifact(artifact,town,person,record,hurried=false) {
+        const traveler=travelerState();
+        if(traveler.pack.length>=5) return {acted:false,reason:'You have no room to carry another object.'};
+        let changes;
+        if(hurried) {
+            const mind=livingPersonMind(person),before={...town.influences};
+            const meaning=livingArtifactUse(artifact,town,person)?.meaning;
+            const effects={healing:{disease:0.3,happy:-0.15},song:{happy:-0.35},drills:{military:-0.3},revered:{faith:-0.35},study:{education:-0.25}}[meaning] || {happy:-0.15};
+            happen('Influence',null,town,{...effects,temp:true});
+            changes=Object.fromEntries(Object.keys(town.influences).map(k=>[k,town.influences[k]-(before[k]||0)]).filter(([,v])=>v));
+            const trust= mind.trust,communityTrust=getGuidanceTrust(town);
+            mind.trust=clampValue(mind.trust-12,0,100);adjustGuidanceTrust(town,-2,'whisper:hurry');
+            record.trustChange=mind.trust-trust;record.communityTrustChange=getGuidanceTrust(town)-communityTrust;record.changes=changes;
+            const cost=`${person.name} cuts short their work with the object. Your voice means less to them now.`;
+            record.steps.push({day:planet.day,text:cost});livingArtifactEvent(artifact,cost,town,changes,true);
+            if(artifact.returnOffer) endLivingArtifactPromise(artifact,`${person.name} gives it to you before they were ready.`,town);
+        }
+        const line=hurried?`${person.name} puts ${artifactPhrase(artifact)} in your hands. They turn away before you can thank them.`:`${person.name} places ${artifactPhrase(artifact)} in your hands. They ask you to remember ${town.name}.`;
+        livingArtifactEvent(artifact,line,town,changes,true);
+        traveler.pack.push(carryArtifactMemory(artifact));
+        artifact.status='returned';artifact.shared=false;delete artifact.returnOffer;
+        if(record) record.steps.push({day:planet.day,text:line});
+        return {acted:true};
+    }
+    function advanceLivingArtifactPromise(artifact,town,person) {
+        const offer=artifact.returnOffer;
+        if(!offer) return false;
+        if(offer.town!==town.id||offer.person!==person.id) {
+            endLivingArtifactPromise(artifact,'The promise belonged to another pair of hands. You will have to ask its new bearer.',town);return false;
+        }
+        const span=livingArtifactReturnSpan(artifact,town,person);
+        if(offer.purpose!==span.purpose) {
+            offer.purpose=span.purpose;offer.purposeDay=planet.day;
+            const text=`${person.name} has found another use for it. They ask you to wait a little longer.`;
+            const record=livingWorldState().whispers.find(w=>w.id===offer.whisper);
+            if(record) record.steps.push({day:planet.day,text});
+            livingArtifactEvent(artifact,text,town);
+        }
+        // Replacements can shorten the wait. A new purpose starts its own period of use.
+        offer.earliest=Math.max(offer.purposeDay+span.days,offer.firstDay+LIVING_PACE.objectLife);
+        const need=livingArtifactReturnNeed(artifact,town,person);
+        if(planet.day<offer.earliest||need) {
+            if(planet.day>=offer.earliest&&need!==offer.need) {
+                offer.need=need;
+                const text=`${person.name} has not forgotten their promise. ${need}`;
+                const record=livingWorldState().whispers.find(w=>w.id===offer.whisper);
+                if(record) record.steps.push({day:planet.day,text});
+                livingArtifactEvent(artifact,text,town);
+            }
+            return false;
+        }
+        const record=livingWorldState().whispers.find(w=>w.id===offer.whisper);
+        returnLivingArtifact(artifact,town,person,record);
+        logMessage(escapeLivingText(artifact.events.at(-1).text),'milestone');
+        refreshLivingPersonView();return true;
+    }
+    function openTravelerReturn() {
+        stopAutoplay('manual');
+        const traveler=travelerState();
+        const items=[{text:'← Back to the Traveler',func:()=>openTravelerMemory()},
+            {text:'You can reach the beginning again. The world will be young, and the people you knew will belong to another history.'},
+            {text:traveler.pack.length?'Only what is in your hands will come with you.':'You will arrive empty-handed. Everything you left behind stays in this history.'}];
+        for(const object of traveler.pack) items.push({text:escapeLivingText(artifactTitle(object))});
+        items.push({text:'Return to the beginning',danger:true,func:()=>doPrompt({type:'confirm',title:'Return to the beginning?',message:'Begin again with what you carry?\n\nThis history will remain within reach through Lore.',func:yes=>{if(yes) beginTravelerPassage();}})});
+        populateExecutive(items,'The way back');markLivingStoryControls();openExecutive();
+    }
+    function beginTravelerPassage() {
+        stopAutoplay('manual');
+        const traveler=JSON.parse(JSON.stringify(travelerState()));
+        const previous=generateSave();
+        // Keep a reversible complete snapshot without nesting every earlier snapshot.
+        if(previous.paultendoUniverse?.traveler) delete previous.paultendoUniverse.traveler.previous;
+        const objects=[];
+        for(const world of Object.values(getUniverse().worlds)) for(const artifact of world.state?.planet?._paultendoLife?.artifacts || []) {
+            const p=world.state.planet;
+            if(!p._paultendoFog?.explored?.[artifact.place]) continue;
+            objects.push({lineage:artifact.lineage || artifact.origin?.lineage,title:artifactTitle(artifact),world:p.name,status:artifact.status,maker:artifact.origin?.maker,parent:artifact.parent,events:JSON.parse(JSON.stringify(artifact.events.filter(e=>!e.town||e.knownTown)))});
+        }
+        traveler.echoes.push({passage:traveler.passage,world:planet.name,day:planet.day,carried:traveler.pack.map(a=>({lineage:a.lineage,title:artifactTitle(a)})),objects});
+        traveler.previous=previous;traveler.passage++;
+        const oldUniverse=window._paultendoUniverse;
+        try {
+            closePopups();closeExecutive();currentEvents={};livingPersonView=null;livingArtifactView=null;livingDecisionCaptures.clear();
+            window._paultendoUniverse=null;
+            planet=generatePlanet({...traveler.beginning.config});reg=planet.reg;
+            planet.name=traveler.beginning.name;
+            updateBiomes();calculateLandmasses();initGame();
+            const universe=getUniverse();universe.traveler=traveler;
+            renderTravelerOpening();updateStats();renderMap();updateCanvas();syncLogToPlanet();autosave();
+            openLivingArtifactKit();
+        } catch(error) {
+            window._paultendoUniverse=oldUniverse;
+            parseSave(JSON.parse(JSON.stringify(previous)));
+            logMessage('The way back closes. Your history is still here.','warning');
+            console.warn('[paultendo-mod] Traveler return failed:',error);
+        }
+    }
+    function revisitTravelerHistory() {
+        const previous=travelerState().previous;
+        if(!previous) return;
+        stopAutoplay('manual');closePopups();closeExecutive();
+        parseSave(JSON.parse(JSON.stringify(previous)));autosave();openTravelerMemory();
+    }
+    function openTravelerEchoes() {
+        stopAutoplay('manual');
+        const traveler=travelerState();
+        const items=[{text:'← Back to the Traveler',func:()=>openTravelerMemory()}];
+        for(const echo of traveler.echoes) {
+            items.push({heading:true,text:`${escapeLivingText(echo.world)} · Day ${echo.day}`});
+            items.push({text:echo.carried.length?`You carried ${escapeLivingText(echo.carried.map(a=>a.title).join(', '))} through the dark.`:'You came through the dark empty-handed.'});
+            for(const object of echo.objects || []) items.push({text:`Remember ${escapeLivingText(object.title)}`,func:()=>openTravelerObjectEcho(object)});
+        }
+        if(traveler.previous) items.push({text:'Revisit the last history',func:()=>doPrompt({type:'confirm',title:'Revisit your last history?',message:'Return to the world you left?\n\nThis beginning will be set aside. You can save it to a file first.',func:yes=>{if(yes) revisitTravelerHistory();}})});
+        populateExecutive(items,'Other histories');markLivingStoryControls();openExecutive();
+    }
+    function openTravelerObjectEcho(object) {
+        const items=[{text:'← Back to other histories',func:()=>openTravelerEchoes()},{text:`Its story belongs to ${escapeLivingText(object.world)}.`}];
+        if(object.maker) items.push({text:`Made by ${escapeLivingText(object.maker.name)} in ${escapeLivingText(object.maker.town)}.`});
+        if(object.parent) items.push({text:`The work grew from ${escapeLivingText(object.parent.phrase || object.parent.title)}.`});
+        for(const event of object.events) items.push({text:`Day ${event.day} · ${escapeLivingText(event.text)}`});
+        populateExecutive(items,escapeLivingText(object.title));markLivingStoryControls();openExecutive();
+    }
+
     function livingArtifactRandom(artifact,reason) {
         return mulberry32(fnv1a32(`${planet.config?.seed || planet.id}:${artifact.id}:${reason}`));
     }
     function livingArtifactSpent(kind) {
-        return livingWorldState().artifacts.some(a=>a.kind===kind) || Object.values(getUniverse(false)?.worlds || {}).some(w=>w.state?.planet !== planet && w.state?.planet?._paultendoLife?.artifacts?.some(a=>a.kind===kind));
+        return !travelerState().pack.some(a=>a.kind===kind);
     }
     function livingArtifactKnown(artifact) {
         return !!artifact && livingPlaceKnown(livingWorldState().places[artifact.place]);
     }
     function livingArtifactHolder(artifact,town,person) {
-        return livingArtifactKnown(artifact) && artifact.town === town?.id && artifact.person === person?.id && !['waiting','broken'].includes(artifact.status) && livingPersonAvailable(person,town);
+        return livingArtifactKnown(artifact) && artifact.town === town?.id && artifact.person === person?.id && !['waiting','broken','returned'].includes(artifact.status) && livingPersonAvailable(person,town);
     }
     function livingArtifactEvent(artifact,text,town,changes,silent=false) {
         artifact.events.push({day:planet.day,text,town:town?.id,knownTown:livingTownKnown(town),changes});
         if (artifact.events.length > 30) artifact.events.splice(1,artifact.events.length-30);
         if (!silent && livingArtifactKnown(artifact) && (!town || livingTownKnown(town))) logMessage(escapeLivingText(text),changes?.happy < 0 ? 'warning' : 'milestone');
     }
-    function leaveLivingArtifact(kind,chunk) {
-        if (!LIVING_ARTIFACTS[kind] || livingArtifactSpent(kind) || !chunk || !isChunkExplored(chunk.x,chunk.y) || ['water','mountain'].includes(chunk.b)) return false;
+    function leaveLivingArtifact(kind,chunk,lineage) {
+        const pack=travelerState().pack,index=pack.findIndex(a=>a.kind===kind&&(!lineage||a.lineage===lineage));
+        if (index<0 || !chunk || !isChunkExplored(chunk.x,chunk.y) || ['water','mountain'].includes(chunk.b)) return false;
         const state=livingWorldState(),place=ensureLivingPlace(chunk);
-        const artifact={id:`artifact:${state.nextId++}`,kind,place:place.id,status:'waiting',placedDay:planet.day,events:[],searches:0,shared:false,uses:{},origin:{passage:0,lineage:`first-inheritance:${kind}`,history:[]}};
+        const artifact={...pack[index],id:`artifact:${state.nextId++}`,place:place.id,status:'waiting',placedDay:planet.day,events:[],searches:0,shared:false,uses:{}};
+        pack.splice(index,1);
         state.artifacts.push(artifact);
-        livingArtifactEvent(artifact,`You leave the ${LIVING_ARTIFACTS[kind].name.toLowerCase()} at ${place.name}.`);
+        livingArtifactEvent(artifact,`You leave ${artifactPhrase(artifact)} at ${place.name}.`);
         syncLogToPlanet();autosave();openLivingArtifact(artifact);return true;
     }
     function livingArtifactFinder(town,rand) {
@@ -5312,6 +5586,7 @@
         return person;
     }
     function carryLivingArtifact(artifact,town,person,text) {
+        if(artifact.returnOffer) endLivingArtifactPromise(artifact,'The promise belonged to another pair of hands. You will have to ask its new bearer.',town);
         artifact.town=town.id;artifact.townName=town.name;artifact.person=person.id;artifact.name=person.name;
         artifact.status='carried';artifact.due=planet.day+2;artifact.context=null;
         artifact.anchor=[...getTownCenter(town)];
@@ -5327,7 +5602,7 @@
             const rand=livingArtifactRandom(artifact,`search:${artifact.searches++}`);
             if(rand()>0.7) continue;
             const person=livingArtifactFinder(town,rand),place=livingWorldState().places[artifact.place];
-            carryLivingArtifact(artifact,town,person,`${person.name}, a ${livingPersonLabel(person).toLowerCase()} from ${town.name}, finds the ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()} at ${place.name} and brings it home.`);
+            carryLivingArtifact(artifact,town,person,`${person.name}, a ${livingPersonLabel(person).toLowerCase()} from ${town.name}, finds ${artifactPhrase(artifact)} at ${place.name} and brings it home.`);
         }
     }
     function livingArtifactUse(artifact,town,person) {
@@ -5352,7 +5627,7 @@
         if(artifact.uses[key]) return;
         artifact.uses[key]=planet.day;
         let changes;
-        if(use.effects){const before={...town.influences};happen('Influence',null,town,{...use.effects,temp:true});changes=Object.fromEntries(Object.keys(town.influences).map(k=>[k,town.influences[k]-(before[k]||0)]).filter(([,v])=>v));}
+        if(use.effects){const before={...town.influences};const effects=Object.fromEntries(Object.entries(use.effects).map(([k,v])=>[k,v*(artifact.quality || 1)]));happen('Influence',null,town,{...effects,temp:true});changes=Object.fromEntries(Object.keys(town.influences).map(k=>[k,town.influences[k]-(before[k]||0)]).filter(([,v])=>v));}
         livingArtifactEvent(artifact,use.text,town,changes);
     }
     function livingArtifactExpert(artifact,town,holder) {
@@ -5366,7 +5641,7 @@
     }
     function advanceLivingArtifacts() {
         for(const artifact of livingWorldState().artifacts) {
-            if(artifact.status==='broken') continue;
+            if(['broken','returned'].includes(artifact.status)) continue;
             if(artifact.status==='waiting') {
                 const place=livingWorldState().places[artifact.place],chunk=chunkAt(place?.x,place?.y),town=chunk?.v?.s&&regGet('town',chunk.v.s);
                 if(livingTownKnown(town)&&livingArtifactRandom(artifact,`workers:${planet.day}`)()<Math.min(0.15,0.015+town.pop/3000)) discoverLivingArtifacts(town,[chunk]);
@@ -5375,19 +5650,20 @@
             const town=regGet('town',artifact.town);
             if(!town||town.end) {
                 const chunk=artifact.anchor&&chunkAt(...artifact.anchor);
-                if(chunk){artifact.place=ensureLivingPlace(chunk).id;artifact.status='waiting';artifact.cached=true;artifact.person=null;artifact.shared=false;artifact.context=null;livingArtifactEvent(artifact,`The ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()} is left among the remains of ${artifact.townName}.`);}
+                if(chunk){if(artifact.returnOffer) endLivingArtifactPromise(artifact,'The town is gone. The promised object lies among its remains.');artifact.place=ensureLivingPlace(chunk).id;artifact.status='waiting';artifact.cached=true;artifact.person=null;artifact.shared=false;artifact.context=null;livingArtifactEvent(artifact,`${artifactPhrase(artifact).replace(/^./,c=>c.toUpperCase())} is left among the remains of ${artifact.townName}.`);}
                 continue;
             }
             if(!livingTownKnown(town)) continue;
             const anchor=artifact.anchor&&chunkAt(...artifact.anchor),occupier=anchor?.v?.s&&regGet('town',anchor.v.s);
             if(artifact.status!=='hoarded'&&livingTownKnown(occupier)&&occupier.id!==town.id) {
                 const person=livingArtifactFinder(occupier,livingArtifactRandom(artifact,`capture:${occupier.id}:${planet.day}`));
-                carryLivingArtifact(artifact,occupier,person,`${person.name} takes the ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()} after ${occupier.name} gains the ground where it was kept.`);continue;
+                carryLivingArtifact(artifact,occupier,person,`${person.name} takes ${artifactPhrase(artifact)} after ${occupier.name} gains the ground where it was kept.`);continue;
             }
             artifact.anchor=[...getTownCenter(town)];
-            if(hasIssue(town,'war')&&livingArtifactRandom(artifact,`war:${planet.day}`)()<(artifact.status==='hoarded'?0.002:0.008)) {artifact.status='broken';livingArtifactEvent(artifact,`The ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()} is broken in the fighting at ${town.name}.`,town);continue;}
+            if(hasIssue(town,'war')&&livingArtifactRandom(artifact,`war:${planet.day}`)()<(artifact.status==='hoarded'?0.002:0.008)) {if(artifact.returnOffer) endLivingArtifactPromise(artifact,'The fighting breaks the object before it can reach you.',town);artifact.status='broken';livingArtifactEvent(artifact,`${artifactPhrase(artifact).replace(/^./,c=>c.toUpperCase())} is broken in the fighting at ${town.name}.`,town);continue;}
             let person=findLivingPerson(town,artifact.person);
             if(!person||!livingPersonAvailable(person,town)) {person=livingArtifactFinder(town,livingArtifactRandom(artifact,`successor:${planet.day}`));carryLivingArtifact(artifact,town,person,`${person.name} takes care of the object after ${artifact.name} leaves it behind.`);continue;}
+            if(advanceLivingArtifactPromise(artifact,town,person)) continue;
             if(planet.day<(artifact.due||0)||artifact.status==='hoarded') continue;
             if(artifact.shared&&!livingArtifactUse(artifact,town,person)) {
                 const other=livingArtifactExpert(artifact,town,person);
@@ -5399,47 +5675,72 @@
     function actOnArtifactWhisper(town,person,record) {
         const artifact=livingWorldState().artifacts.find(a=>a.id===record.artifact);
         if(!livingArtifactHolder(artifact,town,person)) return {acted:false,reason:'The object is no longer in their hands.'};
+        if(record.topic==='return') return promiseLivingArtifact(artifact,town,person,record);
+        if(record.topic==='hurry') return returnLivingArtifact(artifact,town,person,record,true);
+        if(record.topic==='craft') return startLivingArtifactWork(town,person,record,artifact);
         artifact.shared=record.topic==='share';artifact.context=null;
         artifact.status=artifact.shared?'carried':'hoarded';artifact.due=planet.day+2;
-        record.steps.push({day:planet.day,text:artifact.shared?`${person.name} agrees to let others handle the ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()}. What they make of it remains to be seen.`:`${person.name} hides the ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()}. Others lose their chance to learn from it.`});
+        record.steps.push({day:planet.day,text:artifact.shared?`${person.name} agrees to let others handle ${artifactPhrase(artifact)}. What they make of it remains to be seen.`:`${person.name} hides ${artifactPhrase(artifact)}. Others lose their chance to learn from it.`});
         livingArtifactEvent(artifact,record.steps.at(-1).text,town,null,true);
         return {acted:true};
     }
     function openLivingArtifact(artifact) {
         if(!livingArtifactKnown(artifact)) return;
         livingPersonView=null;
+        livingArtifactView={planet,id:artifact.id,lastEvent:artifact.events.at(-1),status:artifact.status};
         const def=LIVING_ARTIFACTS[artifact.kind],place=livingWorldState().places[artifact.place],town=regGet('town',artifact.town),person=town&&findLivingPerson(town,artifact.person);
-        const items=[{text:'← Back to what you carried',func:()=>openLivingArtifactKit()},{text:def.description},{text:'You cannot remember who made it.'}];
-        items.push({text:artifact.status==='waiting'?(artifact.cached?'It lies among the remains, waiting to be found again.':'It is still waiting where you left it.'):artifact.status==='broken'?'The object is broken. Its story remains.':livingTownKnown(town)?`${escapeLivingText(artifact.name)} keeps it in ${escapeLivingText(town.name)}.`:'Its bearer has passed beyond your notice.'});
+        const items=[{text:'← Back to what you carried',func:()=>openLivingArtifactKit()},{text:escapeLivingText(artifactDescription(artifact))},{text:artifact.origin?.maker?`Made by ${escapeLivingText(artifact.origin.maker.name)} in ${escapeLivingText(artifact.origin.maker.town)}.`:'You cannot remember who made it.'}];
+        items.push({text:artifact.status==='returned'?'You carry it now.':artifact.status==='waiting'?(artifact.cached?'It lies among the remains, waiting to be found again.':'It is still waiting where you left it.'):artifact.status==='broken'?'The object is broken. Its story remains.':livingTownKnown(town)?`${escapeLivingText(artifact.name)} keeps it in ${escapeLivingText(town.name)}.`:'Its bearer has passed beyond your notice.'});
+        if(artifact.returnOffer&&livingTownKnown(town)&&person) items.push({text:`${escapeLivingText(person.name)} has promised it to you. ${escapeLivingText(livingArtifactReturnNeed(artifact,town,person) || 'They are not ready to part with it yet.')}`});
+        if(artifact.origin?.maker&&!artifact.named) items.push({text:'Give it a name',func:()=>nameLivingArtifact(artifact)});
+        if(artifact.parent) items.push({text:`Its maker learned from ${escapeLivingText(artifact.parent.phrase || artifact.parent.title)}.`});
         items.push({text:`Visit ${escapeLivingText(place.name)}`,func:()=>openLivingPlace(place,town?.id)});
         if(livingArtifactHolder(artifact,town,person)) items.push({text:`Speak to ${escapeLivingText(person.name)} about it`,func:()=>openLivingPerson(town,person,null,artifact.id)});
         items.push({heading:true,text:'What became of it'});
+        for(const past of artifact.origin?.history || []) {
+            items.push({heading:true,text:past.passage<travelerState().passage?'Before this beginning':`Earlier in ${escapeLivingText(past.world)}`});
+            for(const event of past.events || []) if(!event.town||event.knownTown) items.push({text:`Day ${event.day} · ${escapeLivingText(event.text)}`});
+        }
         for(const event of artifact.events) {
             if(event.town&&!event.knownTown&&!livingTownKnown(regGet('town',event.town))) continue;
             items.push({text:`Day ${event.day} · ${escapeLivingText(event.text)}`});
             for(const line of livingInfluencePhrases(event.changes||{},4)) items.push({text:line+'.'});
         }
-        populateExecutive(items,def.name);markLivingStoryControls();openExecutive();
+        populateExecutive(items,escapeLivingText(artifactTitle(artifact)));markLivingStoryControls();openExecutive();
     }
     function openLivingArtifactKit(place) {
-        livingPersonView=null;
-        const items=[{text:'← Back to the Traveler',func:()=>openTravelerMemory()},{text:place?`What will you leave at ${escapeLivingText(place.name)}?`:'Three small objects survived the journey. Once you leave one behind, its future belongs to whoever finds it.'}];
-        for(const [kind,def] of Object.entries(LIVING_ARTIFACTS)) {
-            const artifact=livingWorldState().artifacts.find(a=>a.kind===kind);
-            if(artifact){if(livingArtifactKnown(artifact)) items.push({text:`${def.name} · Its story`,func:()=>openLivingArtifact(artifact)});continue;}
-            if(livingArtifactSpent(kind)){items.push({text:`${def.name} · Left in another world`});continue;}
-            items.push({text:place?`Leave the ${def.name.toLowerCase()} here`:def.name,func:()=>place?leaveLivingArtifact(kind,chunkAt(place.x,place.y)):openLivingArtifactPlacement(kind)});
-            items.push({text:def.description});
+        livingPersonView=null;livingArtifactView=null;
+        const traveler=travelerState();
+        const items=[{text:'← Back to the Traveler',func:()=>openTravelerMemory()},{text:place?`What will you leave at ${escapeLivingText(place.name)}?`:traveler.passage===0?'Once you leave an object behind, its future belongs to whoever finds it.':'These objects came through the dark with you. Their stories began before this world was young.'}];
+        for(const object of traveler.pack) {
+            items.push({text:place?`Leave ${escapeLivingText(artifactTitle(object))} here`:escapeLivingText(artifactTitle(object)),func:()=>place?leaveLivingArtifact(object.kind,chunkAt(place.x,place.y),object.lineage):openLivingArtifactPlacement(object)});
+            items.push({text:escapeLivingText(artifactDescription(object))});
+            if(object.origin?.history?.length) items.push({text:'Remember its story',func:()=>openCarriedArtifactStory(object)});
         }
+        if(!traveler.pack.length) items.push({text:'Your hands are empty. Someone may yet entrust an object to you.'});
+        const left=livingWorldState().artifacts.filter(a=>a.status!=='returned'&&livingArtifactKnown(a));
+        if(left.length) items.push({heading:true,text:'What you left behind'});
+        for(const object of left) items.push({text:`${escapeLivingText(artifactTitle(object))} · Its story`,func:()=>openLivingArtifact(object)});
+        for(const world of Object.values(getUniverse().worlds)) if(world.id!==getUniverse().currentWorldId) for(const object of world.state?.planet?._paultendoLife?.artifacts || []) if(object.status!=='returned') items.push({text:`${escapeLivingText(artifactTitle(object))} · Left in another world`});
         populateExecutive(items,'What you carried');markLivingStoryControls();openExecutive();
     }
-    function openLivingArtifactPlacement(kind) {
+    function openCarriedArtifactStory(object) {
+        const items=[{text:'← Back to what you carried',func:()=>openLivingArtifactKit()},{text:escapeLivingText(artifactDescription(object))}];
+        if(object.origin?.maker) items.push({text:`Made by ${escapeLivingText(object.origin.maker.name)} in ${escapeLivingText(object.origin.maker.town)}.`});
+        for(const past of object.origin?.history || []) {
+            items.push({heading:true,text:past.passage<travelerState().passage?'Before this beginning':`Earlier in ${escapeLivingText(past.world)}`});
+            for(const event of past.events || []) if(!event.town||event.knownTown) items.push({text:`Day ${event.day} · ${escapeLivingText(event.text)}`});
+        }
+        populateExecutive(items,escapeLivingText(artifactTitle(object)));markLivingStoryControls();openExecutive();
+    }
+    function openLivingArtifactPlacement(object) {
+        const kind=object.kind;
         const sites=new Map(Object.values(livingWorldState().places).filter(livingPlaceKnown).map(p=>[p.id,{chunk:chunkAt(p.x,p.y),name:p.name}]));
         for(const town of regToArray('town').filter(livingTownKnown)){const center=getTownCenter(town),id=center.join(',');if(!sites.has(id)) sites.set(id,{chunk:chunkAt(...center),name:`Near ${town.name}`});}
-        const items=[{text:'← Back to what you carried',func:()=>openLivingArtifactKit()},{text:LIVING_ARTIFACTS[kind].description},{text:'Choose ground you know. It may be found by a worker nearby or by someone passing on an expedition.'}];
-        for(const {chunk,name} of sites.values()) if(chunk&&!['water','mountain'].includes(chunk.b)) items.push({text:`Leave it at ${escapeLivingText(name)}`,func:()=>leaveLivingArtifact(kind,chunk)});
+        const items=[{text:'← Back to what you carried',func:()=>openLivingArtifactKit()},{text:escapeLivingText(artifactDescription(object))},{text:'Choose ground you know. It may be found by a worker nearby or by someone passing on an expedition.'}];
+        for(const {chunk,name} of sites.values()) if(chunk&&!['water','mountain'].includes(chunk.b)) items.push({text:`Leave it at ${escapeLivingText(name)}`,func:()=>leaveLivingArtifact(kind,chunk,object.lineage)});
         if(!sites.size) items.push({text:'There is no known ground to leave it on yet.'});
-        populateExecutive(items,LIVING_ARTIFACTS[kind].name);markLivingStoryControls();openExecutive();
+        populateExecutive(items,escapeLivingText(artifactTitle(object)));markLivingStoryControls();openExecutive();
     }
 
     function observeLivingPlaces() {
@@ -5486,7 +5787,7 @@
         const road = chunk.v?.road;
         if (road?.level > 0) items.push({text:`Travellers have worn a ${['','track','road','highway'][road.level] || 'route'} through here.`});
         const artifacts = livingWorldState().artifacts.filter(a=>a.place===place.id);
-        for(const artifact of artifacts) items.push({text:`${LIVING_ARTIFACTS[artifact.kind].name} · Its story`,func:()=>openLivingArtifact(artifact)});
+        for(const artifact of artifacts) items.push({text:`${escapeLivingText(artifactTitle(artifact))} · Its story`,func:()=>openLivingArtifact(artifact)});
         if(Object.keys(LIVING_ARTIFACTS).some(kind=>!livingArtifactSpent(kind))) items.push({text:'Leave something from your time',func:()=>openLivingArtifactKit(place)});
         items.push({heading:true,text:'Journeys remembered'});
         for (const visit of place.visits) {
@@ -5538,6 +5839,8 @@
             {text:'Meet people through their settlement. Whisper what you believe might help, or what you want them to fear. Their response takes time. The world keeps moving while they decide.'},
             {text:'No memory tells you how this history should end.'}];
         items.push({text:'What you carried',func:()=>openLivingArtifactKit()});
+        if(planet.day>1 || planet.settled) items.push({text:'The way back',func:()=>openTravelerReturn()});
+        if(travelerState().echoes.length) items.push({text:'Other histories',func:()=>openTravelerEchoes()});
         const towns = regToArray('town').filter(livingTownKnown);
         if (towns.length === 1) items.push({text:`Meet the people of ${escapeLivingText(towns[0].name)}`,func:() => openLivingPeople(towns[0])});
         populateExecutive(items,'The Traveler'); markLivingStoryControls(); openExecutive();
@@ -5595,40 +5898,43 @@
     }
 
     function livingWhisperAvailable(town, topic, artifact) {
-        if (['share','hoard'].includes(topic)) return !!artifact && artifact.town===town.id && !['waiting','broken'].includes(artifact.status);
+        if(topic==='return'&&artifact?.returnOffer) return false;
+        if(topic==='hurry'&&!artifact?.returnOffer) return false;
+        if (['share','hoard','return','hurry','craft'].includes(topic)) return !!artifact && artifact.town===town.id && !['waiting','broken','returned'].includes(artifact.status);
         if (topic === 'learn') return planet.unlocks?.education >= 10;
         if (topic === 'defy') return planet.unlocks?.government >= 10 && town.gov && town.gov !== 'anarchy';
         if (topic === 'conquer') return planet.unlocks?.military >= 10 && livingConflictNeighbours(town).length > 0;
         return true;
     }
 
-    function livingWhisperWait(person) {
+    function livingWhisperWait(person,topic,artifact) {
         const mind = livingPersonMind(person), state = livingWorldState();
         if (state.whispers.some(record => !record.resolved && record.person === person.id)) return 'Your last words are still with them.';
-        if (mind.lastWhisper !== undefined && planet.day - mind.lastWhisper < 12) return 'Give them time before speaking again.';
+        if (mind.lastWhisper !== undefined && planet.day - mind.lastWhisper < (topic==='hurry'&&artifact?.returnOffer?.person===person.id?4:12)) return 'Give them time before speaking again.';
         if (state.lastWhisper !== undefined && planet.day - state.lastWhisper < 2) return 'Let your last words settle.';
         return null;
     }
 
-    function sendLivingWhisper(town, person, topic, placeId, artifactId) {
+    function sendLivingWhisper(town, person, topic, placeId, artifactId, projectKind) {
         const definition = LIVING_WHISPERS[topic];
-        if (!definition || !livingPersonAvailable(person, town) || livingWhisperWait(person)) return false;
         const artifact = artifactId && livingWorldState().artifacts.find(a=>a.id===artifactId);
-        if (artifactId && (!['share','hoard'].includes(topic) || !livingArtifactHolder(artifact,town,person))) return false;
-        if (!livingWhisperAvailable(town, topic, artifact)) return false;
+        if (!definition || !livingPersonAvailable(person, town) || livingWhisperWait(person,topic,artifact)) return false;
+        if (artifactId && (!['share','hoard','return','hurry','craft'].includes(topic) || !livingArtifactHolder(artifact,town,person))) return false;
+        if (topic==='craft' ? !livingArtifactWorkAvailable(town,person,artifact?.kind || projectKind,artifact) : !livingWhisperAvailable(town, topic, artifact)) return false;
         const place = placeId && livingWorldState().places[placeId];
         const rival = place && topic === 'conquer' && livingPlaceRival(town,place);
         if (placeId && !(topic === 'explore' && livingPlaceReturn(town,place)) && !rival) return false;
         const state = livingWorldState(), mind = livingPersonMind(person);
         const roll = mulberry32(livingPersonSeed(town, `${person.id}:${topic}:${planet.day}`))();
-        const record = { id:`whisper:${state.nextId++}`, topic, title:definition.title, words:definition.words, person:person.id, name:person.name, town:town.id, day:planet.day, due:planet.day + 2, roll, resolved:false, steps:[] };
+        const record = { id:`whisper:${state.nextId++}`, topic, title:definition.title, words:definition.words, person:person.id, name:person.name, town:town.id, day:planet.day, due:planet.day + LIVING_PACE.reply, roll, resolved:false, steps:[] };
         if (place) {
             record.destination = place.id;
             record.words = rival ? `They have no right to hold ${place.name}.` : `There is still something to learn at ${place.name}.`;
             record.title = rival ? `A claim on ${place.name}` : `A return to ${place.name}`;
             if (rival) record.claimedOwner = rival.id;
         }
-        if(artifact){record.artifact=artifact.id;record.title=`${definition.title}: ${LIVING_ARTIFACTS[artifact.kind].name}`;}
+        if(artifact){record.artifact=artifact.id;record.title=`${definition.title}: ${artifactTitle(artifact)}`;}
+        if(projectKind){record.projectKind=projectKind;record.words=`Try making a ${LIVING_ARTIFACTS[projectKind].name.toLowerCase()} of your own.`;}
         state.whispers.push(record);
         state.lastWhisper = mind.lastWhisper = planet.day;
         // Keep pending words even when trimming an older world's history.
@@ -5644,6 +5950,7 @@
 
     function livingWhisperReception(town, person, record) {
         const mind = livingPersonMind(person);
+        if(['return','hurry'].includes(record.topic)&&((mind.outlook==='guarded'&&mind.trust<85)||(mind.outlook==='steadfast'&&mind.trust<70))) return {accepted:false,reason:'They will not part with what has become theirs.'};
         const war = hasIssue(town, 'war') || hasIssue(town, 'revolution');
         if(record.topic==='share'&&mind.outlook==='guarded'&&mind.trust<75) return {accepted:false,reason:'They will not put the object into other hands.'};
         const food = (town.resources?.crop || 0) + (town.resources?.livestock || 0);
@@ -5653,6 +5960,7 @@
         if (record.topic === 'learn' && !(planet.unlocks?.education >= 10)) return {accepted:false, reason:'The teaching you had in mind has no foothold here yet.'};
         if (record.topic === 'conquer' && hungry) return {accepted:false,reason:'There are hungry people at home. They will not spend those lives on a conquest.'};
         let affinity = mind.outlook === 'guarded' ? -0.18 : mind.outlook === 'curious' && record.topic !== 'care' ? 0.15 : mind.outlook === 'generous' && record.topic === 'care' ? 0.18 : mind.outlook === 'steadfast' && record.topic === 'explore' ? -0.1 : 0;
+        if(record.topic==='hurry') affinity-=0.2;
         if (record.topic === 'conquer' && mind.outlook === 'generous') affinity -= 0.3;
         if (record.topic === 'defy' && mind.outlook === 'steadfast') affinity -= 0.25;
         if (record.topic === 'defy' && (town.influences?.happy || 0) < -3) affinity += 0.15;
@@ -5687,6 +5995,7 @@
 
     function actOnLivingWhisper(town, person, record) {
         if(record.artifact) return actOnArtifactWhisper(town,person,record);
+        if(record.topic==='craft') return startLivingArtifactWork(town,person,record);
         const before = {...town.influences};
         let effects = null;
         if (record.topic === 'explore') {
@@ -5786,8 +6095,7 @@
             const action = reception.accepted ? actOnLivingWhisper(town, person, record) : {acted:false,reason:reception.reason};
             if (action.acted) {
                 record.reception = record.reshaped ? 'reshaped' : 'heard';
-                mind.trust = clampValue(mind.trust + 3, 0, 100);
-                adjustGuidanceTrust(town, 0.3, 'whisper:heard');
+                if(record.topic!=='hurry') {mind.trust = clampValue(mind.trust + 3, 0, 100);adjustGuidanceTrust(town, 0.3, 'whisper:heard');}
             } else {
                 record.reception = reception.accepted ? 'stalled' : 'refused';
                 record.steps.push({day:planet.day,text:`${person.name} did not take up your suggestion. ${action.reason}`});
@@ -5795,13 +6103,21 @@
             }
             if (livingTownKnown(town)) logMessage(escapeLivingText(record.steps.at(-1).text), action.acted ? ['defy','conquer'].includes(record.topic) ? 'warning' : 'milestone' : undefined);
         }
-        if (responded) {
-            updateStats();
-            const view = livingPersonView;
-            const town = view?.planet === planet && regGet('town',view.town);
-            const person = town && findLivingPerson(town,view.person);
-            if (person && currentExecutive === escapeLivingText(person.name).toLowerCase()) openLivingPerson(town,person,view.place,view.artifact);
-        }
+        if (responded) {updateStats();refreshLivingPersonView();}
+    }
+
+    function refreshLivingArtifactView() {
+        const view=livingArtifactView;
+        if(view?.planet!==planet) return;
+        const artifact=livingWorldState().artifacts.find(a=>a.id===view.id);
+        if(artifact&&currentExecutive===escapeLivingText(artifactTitle(artifact)).toLowerCase()&&(view.lastEvent!==artifact.events.at(-1)||view.status!==artifact.status)) openLivingArtifact(artifact);
+    }
+
+    function refreshLivingPersonView() {
+        const view = livingPersonView;
+        const town = view?.planet === planet && regGet('town',view.town);
+        const person = town && findLivingPerson(town,view.person);
+        if (person && currentExecutive === escapeLivingText(person.name).toLowerCase()) openLivingPerson(town,person,view.place,view.artifact);
     }
 
     function openLivingWhisperStory(town, record) {
@@ -5812,7 +6128,7 @@
         for (const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
         if (record.changes) for (const line of livingInfluencePhrases(record.changes, 6)) items.push({text:line + '.'});
         const artifact = record.artifact && livingWorldState().artifacts.find(a=>a.id===record.artifact);
-        if(livingArtifactKnown(artifact)) items.push({text:`Follow the ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()}`,func:()=>openLivingArtifact(artifact)});
+        if(livingArtifactKnown(artifact)) items.push({text:`Follow ${escapeLivingText(artifactTitle(artifact))}`,func:()=>openLivingArtifact(artifact)});
         if (record.hostility && (record.hostility.relation < 0 || record.hostility.pressure > 0)) items.push({text:'Their claim left a lasting strain between the towns.'});
         const placeId = record.mission?.place || record.destination;
         const place = placeId && livingWorldState().places[placeId];
@@ -5821,28 +6137,37 @@
         if (livingTownKnown(partner)) items.push({text:`Visit ${escapeLivingText(partner.name)}`,func:() => {closePopups();closeExecutive();openRegBrowser(partner,'town');}});
         const person = findLivingPerson(town, record.person);
         if (person) items.push({text:`Visit ${escapeLivingText(person.name)}`,func:() => openLivingPerson(town, person)});
-        populateExecutive(items, record.title); markLivingStoryControls(); openExecutive();
+        populateExecutive(items, escapeLivingText(record.title)); markLivingStoryControls(); openExecutive();
     }
 
     function openLivingPerson(town, person, placeId, artifactId) {
         if (!livingTownKnown(town)) return;
+        livingArtifactView=null;
         livingPersonView = {planet,town:town.id,person:person.id,place:placeId,artifact:artifactId};
         const artifact = artifactId && livingWorldState().artifacts.find(a=>a.id===artifactId);
         const mind = livingPersonMind(person);
         const items = [artifactId ? {text:'← Back to the object',func:()=>openLivingArtifact(artifact)} : {text:'← Back to the people',func:() => openLivingPeople(town,placeId)}, {text:`${escapeLivingText(livingPersonLabel(person))} of ${escapeLivingText(town.name)}.`}, {text:`${escapeLivingText(titleCase(mind.outlook))}. ${LIVING_OUTLOOKS[mind.outlook] || ''}`}];
         if (person.figure) for (const deed of (person.figure.deeds || []).slice(-2)) items.push({text:escapeLivingText(deed)});
+        if(artifact?.returnOffer) items.push({text:`They have promised it to you. ${escapeLivingText(livingArtifactReturnNeed(artifact,town,person) || 'They still want time with it.')}`});
         const available = livingPersonAvailable(person, town);
         if (!available) items.push({text:person.figure?.died ? 'Their part in this town’s story has ended.' : 'They are no longer at this work.'});
         else {
             items.push({text:mind.trust < 35 ? 'They hold your voice at arm’s length.' : mind.trust > 70 ? 'Your voice has come to mean something to them.' : 'They are still making sense of your voice.'});
             const wait = livingWhisperWait(person);
-            if (wait) items.push({text:wait});
+            if (wait) {
+                items.push({text:wait});
+                if(artifactId&&livingArtifactHolder(artifact,town,person)&&artifact.returnOffer&&!livingWhisperWait(person,'hurry',artifact)) {
+                    items.push({text:'You can press them to hurry. It will cost their trust and cut short their work.'});
+                    items.push({text:'“I need it now.”',danger:true,func:()=>{sendLivingWhisper(town,person,'hurry',null,artifactId);openLivingPerson(town,person,null,artifactId);}});
+                }
+            }
             else if (placeId && !livingPlaceReturn(town,livingWorldState().places[placeId]) && !livingPlaceRival(town,livingWorldState().places[placeId])) items.push({text:'That place is beyond the paths they can manage now.'});
             else {
+                if(artifact?.returnOffer) items.push({text:'Pressing them to hurry will cost their trust and cut short their work.'});
                 items.push({heading:true,text:'Whisper'});
                 for (const [topic, definition] of Object.entries(LIVING_WHISPERS)) {
-                    if (!livingWhisperAvailable(town,topic,artifact)) continue;
-                    if(artifactId){if(!['share','hoard'].includes(topic)||!livingArtifactHolder(artifact,town,person)) continue;items.push({text:`“${definition.words}”`,func:()=>{sendLivingWhisper(town,person,topic,null,artifactId);openLivingPerson(town,person,null,artifactId);}});continue;}
+                    if(topic==='craft'&&artifactId ? !livingArtifactWorkAvailable(town,person,artifact.kind,artifact) : !livingWhisperAvailable(town,topic,artifact)) continue;
+                    if(artifactId){if(!['share','hoard','return','hurry','craft'].includes(topic)||!livingArtifactHolder(artifact,town,person)) continue;items.push({text:`“${definition.words}”`,danger:topic==='hurry',func:()=>{sendLivingWhisper(town,person,topic,null,artifactId);openLivingPerson(town,person,null,artifactId);}});continue;}
                     if (placeId) {
                         const place = livingWorldState().places[placeId];
                         const words = topic === 'explore' && livingPlaceReturn(town,place) ? `There is still something to learn at ${place.name}.` : topic === 'conquer' && livingPlaceRival(town,place) ? `They have no right to hold ${place.name}.` : null;
@@ -5850,12 +6175,13 @@
                         items.push({text:`“${escapeLivingText(words)}”`,func:() => {sendLivingWhisper(town,person,topic,placeId); openLivingPerson(town,person,placeId);}});
                     } else items.push({text:`“${definition.words}”`,func:() => {if (sendLivingWhisper(town, person, topic)) openLivingPerson(town, person);}});
                 }
+                if(!artifactId&&!placeId&&Object.keys(LIVING_ARTIFACTS).some(kind=>livingArtifactWorkAvailable(town,person,kind))) items.push({text:'“Make something of your own.”',func:()=>openLivingWorkshop(town,person)});
             }
         }
         const whispers = livingWorldState().whispers.filter(record => record.person === person.id && record.town === town.id).slice(-4).reverse();
         if (whispers.length) items.push({heading:true,text:'What they carried'});
-        for (const record of whispers) items.push({text:`Day ${record.day} · ${record.title}`,func:() => openLivingWhisperStory(town, record)});
-        for(const object of livingWorldState().artifacts.filter(a=>a.person===person.id&&livingArtifactKnown(a))) items.push({text:`${LIVING_ARTIFACTS[object.kind].name} · Its story`,func:()=>openLivingArtifact(object)});
+        for (const record of whispers) items.push({text:`Day ${record.day} · ${escapeLivingText(record.title)}`,func:() => openLivingWhisperStory(town, record)});
+        for(const object of livingWorldState().artifacts.filter(a=>a.person===person.id&&livingArtifactKnown(a))) items.push({text:`${escapeLivingText(artifactTitle(object))} · Its story`,func:()=>openLivingArtifact(object)});
         populateExecutive(items, escapeLivingText(person.name)); markLivingStoryControls(); openExecutive();
     }
 
@@ -6297,7 +6623,10 @@
     }
 
     function markLivingStoryControls() {
+        const list=document.getElementById('actionSubList');
+        if(list) list.scrollTop=0;
         for (const button of document.querySelectorAll('#actionSubList [role="button"]')) button.classList.add('paultendoStoryLink');
+        for (const line of document.querySelectorAll('#actionSubList .actionItem:not([role="button"])')) line.classList.add(line.style.color==='yellow'?'paultendoStoryHeading':'paultendoStoryProse');
         document.querySelector('#actionSubList .panelTitle')?.classList.add('paultendoStoryTitle');
     }
 
@@ -6385,7 +6714,7 @@
             people.addEventListener('click', () => { closePopups(); openLivingPeople(town); }); section.appendChild(people);
         }
         const objects=livingWorldState().artifacts.filter(a=>a.town===town.id&&livingArtifactKnown(a));
-        for(const object of objects){const button=document.createElement('button');button.textContent=`${LIVING_ARTIFACTS[object.kind].name} · Its story`;button.addEventListener('click',()=>{closePopups();openLivingArtifact(object);});section.appendChild(button);}
+        for(const object of objects){const button=document.createElement('button');button.textContent=`${artifactTitle(object)} · Its story`;button.addEventListener('click',()=>{closePopups();openLivingArtifact(object);});section.appendChild(button);}
         appendLivingTownSpecies(town, section);
         const places = livingPlaceItems(town);
         if (places.length) {
@@ -6522,6 +6851,10 @@
             .logMessage[done] .paultendoDecisionPreview, .logMessage.faded .paultendoDecisionPreview { display: none; }
             .paultendoDecisionEcho { display: block; font-size: 0.8em; color: #e5dc98; margin-top: 0.3em; }
             #actionSubList .paultendoStoryLink { min-height: 44px; box-sizing: border-box; overflow-wrap: anywhere; align-content: center; }
+            #actionSubList .paultendoStoryProse { font-size: 0.82em; color: #bfc1b3; line-height: 1.35; border-bottom: none; padding-block: 0.2em 0.4em; }
+            #actionSubList .paultendoStoryHeading { border-bottom: none; margin-top: 0.65em; }
+            #actionSubList .paultendoStoryLink:has(+ .paultendoStoryProse) { color: #eee4aa; border-bottom: none; padding-bottom: 0; }
+            #actionSubList .paultendoStoryLink:focus-visible { outline: 2px solid #fff1a0; outline-offset: -2px; }
             #paultendoFieldsKey { font-size: 0.75em; margin: 0 0.6em; color: #d0db9a; white-space: nowrap; }
             #paultendoFieldsKey::before { content: ''; display: inline-block; width: 0.75em; height: 0.75em; margin-right: 0.25em; background: repeating-linear-gradient(#a38743 0 2px, #c5d873 2px 4px); vertical-align: middle; }
             #paultendoFieldsKey[hidden] { display: none; }
@@ -12341,7 +12674,7 @@
                 if (dayBefore !== dayAfter) {
                     try { updateSeasonState(); } catch {}
                     try { advanceLivingWhispers(); } catch (error) { console.warn("[paultendo-mod] Whisper follow-up failed:", error); }
-                    try { advanceLivingArtifacts(); } catch (error) { console.warn("[paultendo-mod] Artifact follow-up failed:", error); }
+                    try { advanceLivingArtifactWork(); advanceLivingArtifacts(); refreshLivingArtifactView(); } catch (error) { console.warn("[paultendo-mod] Artifact follow-up failed:", error); }
                     try { observeLivingPlaces(); } catch (error) { console.warn("[paultendo-mod] Place follow-up failed:", error); }
                     try { observeLivingWorld(); } catch (error) { console.warn("[paultendo-mod] Settlement follow-up failed:", error); }
                     try { renderLivingFields(); updateCanvas(); } catch {}
@@ -12479,6 +12812,7 @@
             worldSaves: {},
             spaceRoutes: universe.spaceRoutes || [],
             spaceWars: universe.spaceWars || [],
+            traveler: universe.traveler || null,
             colonization: universe._paultendoColonization || null
         };
 
@@ -12537,6 +12871,7 @@
         universe.relations = saved.relations || {};
         universe.spaceRoutes = saved.spaceRoutes || [];
         universe.spaceWars = saved.spaceWars || [];
+        universe.traveler = saved.traveler || null;
         if (saved.colonization) {
             universe._paultendoColonization = saved.colonization;
         }
