@@ -10,7 +10,7 @@ function check(g,warnings){assert.deepEqual(g.errors,[]);assert.deepEqual(warnin
 
 test('native resize before planet creation is safe without the local launcher guard',async t=>{
  let startupPlanet;
- const g=await makeGame({localBoot:false,afterMod:w=>{startupPlanet=w.planet;assert.equal(startupPlanet,null);w.dispatchEvent(new w.Event('resize'));}});t.after(g.close);
+ const g=await makeGame({localBoot:false,afterMod:w=>{startupPlanet=w.planet;assert.equal(startupPlanet,null);w.dispatchEvent(new w.Event('resize'));assert.doesNotThrow(()=>w.fitToScreen());}});t.after(g.close);
  assert.ok(g.window.planet.config);g.window.dispatchEvent(new g.window.Event('resize'));assert.deepEqual(g.errors,[]);
 });
 test('inactive settlements eat actual food, harvest and mine through native daily events',async t=>{

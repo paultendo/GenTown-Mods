@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.58/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.59/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.58";
+    const MOD_VERSION = "1.6.59";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -57,6 +57,16 @@
         window.addEventListener("resize", event => {
             if (typeof planet === "undefined" || !planet?.config) event.stopImmediatePropagation();
         }, true);
+    }
+    // Protect direct calls and the native resize listener that was registered
+    // before this mod. Both need to wait for a saved planet.
+    if (typeof fitToScreen === "function" && !fitToScreen._paultendoStartupFit) {
+        const baseFitToScreen = fitToScreen;
+        fitToScreen = function(...args) {
+            if (typeof planet === "undefined" || !planet?.config) return;
+            return baseFitToScreen.apply(this, args);
+        };
+        fitToScreen._paultendoStartupFit = true;
     }
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
