@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.56/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.57/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.56";
+    const MOD_VERSION = "1.6.57";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -4624,6 +4624,10 @@
             const registry=getColonizationRegistry(),charter=[...(registry?.charters || []),...(registry?.history || [])].find(c=>String(c.id)===String(ref.id));
             return frontierKnown(charter)?{label:'Follow the settlers',open:()=>openFrontierCharter(charter)}:null;
         }
+        if(ref.kind==='courier') {
+            const route=getUniverse(false)?.spaceRoutes?.find(r=>String(r.id)===String(ref.id));
+            return spaceRouteKnown(route)?{label:'Follow the cargo',open:()=>openSpaceRoute(route)}:null;
+        }
         if(ref.kind==='sky'||ref.kind==='flight') {
             const flight=ref.kind==='flight'&&planet._paultendoSky?.flights?.find(f=>f.id===ref.id);
             const town=regGet('town',flight?flight.town:Number(ref.id));
@@ -4662,13 +4666,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['craft','material','storage','tools','sky','flight','charter','exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
+        if (!['craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['craft','material','storage','tools','sky','flight','charter','exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
+        if (!ref || !['craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -6112,7 +6116,8 @@
         steel_tools:{label:'steel handtools',role:'farmer',description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'},
         telescope:{label:'telescopes',role:'scholar',description:'Glass and metal fitted into a steady frame. A scholar can use one to chart the lights above the horizon.'},
         sky_vessel:{label:'sky vessels',singular:'sky vessel',role:'miner',description:'A powered vessel carrying instruments instead of passengers. Each flight takes a real vessel from the workshop.'},
-        colony_vessel:{label:'passenger vessels',singular:'passenger vessel',role:'miner',description:'A sky vessel rebuilt with living quarters and cargo space for up to twelve settlers. Its cabins come from a real workshop.'}
+        colony_vessel:{label:'passenger vessels',singular:'passenger vessel',role:'miner',description:'A sky vessel rebuilt with living quarters and cargo space for up to twelve settlers. Its cabins come from a real workshop.'},
+        cargo_vessel:{label:'cargo vessels',singular:'cargo vessel',role:'miner',description:'A sky vessel rebuilt around a small hold. It carries goods to another world and brings payment home. Each journey needs fuel and leaves this vessel unavailable until it returns.'}
     };
     // Recipe durations, sample sizes and first-trial risks are game calibration.
     // Knowledge is local. Global milestones open possibilities, never award stock.
@@ -6127,7 +6132,8 @@
         steel_tools:{cost:{steel:2},output:2,days:6,needs:{smith:50},sample:'steel',established:{smith:50},roles:['miner','farmer'],risk:0.1,method:'shaping',success:'The blades hold their shape. They are ready for work in the fields.',failure:'The blanks split as they are worked. The blades cannot be used.'},
         telescope:{cost:{glass:2,metal:2,lumber:1},output:1,days:8,needs:{astronomy:20,smith:30},sample:'glass',established:{astronomy:20},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The instrument holds its focus. Distant lights keep their shape as the scholar watches.',failure:'The frame will not hold its focus. The instrument needs another attempt.'},
         sky_vessel:{cost:{steel:8,glass:2,charcoal:4},output:1,days:12,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'steel',established:{smith:80},roles:['miner','scholar'],risk:0.2,method:'assembly',success:'The engine and instruments pass their tests. The vessel is ready for a flight.',failure:'The engine breaks its mount in the test. This vessel cannot fly.'},
-        colony_vessel:{cost:{sky_vessel:1,steel:4,lumber:4,glass:2},output:1,days:10,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The cabins and cargo holds pass their tests. The vessel can carry settlers.',failure:'The cabin seals fail their test. This vessel cannot carry people.'}
+        colony_vessel:{cost:{sky_vessel:1,steel:4,lumber:4,glass:2},output:1,days:10,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The cabins and cargo holds pass their tests. The vessel can carry settlers.',failure:'The cabin seals fail their test. This vessel cannot carry people.'},
+        cargo_vessel:{cost:{sky_vessel:1,steel:4,lumber:4},output:1,days:8,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The hold and engine pass their tests. The vessel can carry goods between worlds.',failure:'The hold breaks its seal in the test. This vessel cannot carry goods.'}
     };
     // Capacity and the thirty-day harvest memory are initial game calibration.
     // Vessels become durable local fixtures only when actual stock is installed.
@@ -6363,13 +6369,13 @@
     }
     function materialDirectNeed(town,type) {
         if(type==='brick')return Math.ceil(materialConstructionNeed(town)/2);
-        const promised=commodityWorkClaims(town).filter(c=>['craft','storage','equipment','sky','flight','charter'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        const promised=commodityWorkClaims(town).filter(c=>['craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
         return Math.max(0,promised-commodityStock(town,type));
     }
     function materialIntent(town,type) {
         const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type))return null;
         const actual=materialDirectNeed(town,type)>0;
-        if((type==='pottery'||FARM_TOOLS[type]||type==='telescope'||type==='sky_vessel'||type==='colony_vessel')&&!actual)return null;
+        if((type==='pottery'||FARM_TOOLS[type]||type==='telescope'||type==='sky_vessel'||type==='colony_vessel'||type==='cargo_vessel')&&!actual)return null;
         const practiced=town._paultendoMaterials?.[type]?.technique;
         if(type==='steel'&&!actual&&livingResearchPriority(town.research)!=='education'&&!(livingResearchPriority(town.research)==='military'&&town.jobs?.soldier>0))return null;
         const sample=commodityStock(town,recipe.sample)>0||town._paultendoMaterials?.[recipe.sample];
@@ -6614,6 +6620,8 @@
         if(skyInstrumentWanted(town))claims.push({kind:'sky',id:`sky:${town.id}`,cost:{telescope:1}});
         for(const flight of skyState().flights)if(flight.town===town.id&&flight.status==='preparing')claims.push({kind:'flight',id:flight.id,cost:flight.cost});
         for(const charter of getColonizationRegistry()?.charters || [])if(charter.originWorldId===skyWorldId()&&charter.originTownId===town.id&&charter.stage==='preparing'&&charter.supplyVersion===1)claims.push({kind:'charter',id:`charter:${charter.id}`,cost:frontierCargoCost(charter,town)});
+        const courier=(getUniverse(false)?.spaceRoutes || []).filter(route=>route.active&&route.status==='preparing'&&route.seller?.worldId===skyWorldId()&&route.seller.townId===town.id).sort((a,b)=>a.id-b.id)[0];
+        if(courier)claims.push({kind:'courier',id:`courier:${courier.id}`,cost:{cargo_vessel:1,charcoal:SPACE_ROUTE_CONFIG.fuel}});
         // Native construction spends two units of progress per rock or one per lumber.
         for(const project of regToArray('process')) if(project.town===town.id&&project.type==='project'&&!project.done&&!project.end&&Number.isFinite(project.cost)) {
             claims.push({kind:'construction',id:project.id,cost:Math.max(0,project.cost)});
@@ -6695,7 +6703,7 @@
         for(const lot of lots) {
             const count=Math.min(lot.count,removed);if(count<=0)continue;
             lot.count-=count;removed-=count;
-            const input={exchange:lot.exchange,from:lot.from,type,count,day:planet.day,...(lot.production?{production:structuredClone(lot.production)}:{})};
+            const input={exchange:lot.exchange,courier:lot.courier,from:lot.from,type,count,day:planet.day,...(lot.production?{production:structuredClone(lot.production)}:{})};
             const context=PAULTENDO_STATE.commodityUse;
             if(context?.inputs)context.inputs.push(input);
             else if(context)rememberCommodityUse(town,input,context);
@@ -6703,6 +6711,17 @@
         town._paultendoCommodityLots[type]=lots.filter(lot=>lot.count>0);
     }
     function rememberCommodityUse(town,input,context) {
+        if(input.courier) {
+            const route=getUniverse(false)?.spaceRoutes?.find(r=>r.journey?.id===input.courier||r.journeys?.some(j=>j.id===input.courier));
+            const trip=route?.journey?.id===input.courier?route.journey:route?.journeys?.find(j=>j.id===input.courier);
+            if(trip) {
+                const ref={worldId:skyWorldId(),townId:town.id},uses=trip.uses ||= [];
+                let use=uses.find(u=>getTownRefKey(u.town)===getTownRefKey(ref)&&u.kind===context.kind&&u.id===context.id&&u.type===input.type);
+                if(!use){use={town:ref,kind:context.kind,id:context.id,type:input.type,count:0,day:spaceDay()};uses.push(use);}
+                use.count+=input.count;
+                if(uses.length>32)uses.shift();
+            }
+        }
         const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(!record)return;
         const uses=record.uses ||= [];
         let use=uses.find(u=>u.type===input.type&&u.town===town.id&&u.kind===context.kind&&u.id===context.id);
@@ -6724,14 +6743,9 @@
         if(use.kind==='craft')return `${town} uses ${goods} from this exchange to make a ${(LIVING_ARTIFACTS[use.name]?.name || 'new object').toLowerCase()}.`;
         return '';
     }
-    function commodityTerms(buyer,seller,person,path,type='crop',offer={}) {
-        const demand=commodityDemand(buyer,type,path),spare=offer.spare ?? commoditySpare(seller,type,path,offer.exchange);
-        const count=Math.floor(Math.min(spare,demand,Math.max(0,commodityCapacity(buyer,type)-commodityStock(buyer,type))));
-        if(count<=0) return {kind:'refuse',reason:'stores'};
-        const memory=exchangeMemory(seller,buyer),relation=getRelations(seller,buyer);
-        const practice=livingWorldState().teachings.some(t=>t.town===seller.id&&t.active&&['care','food'].includes(t.meaning));
-        const religion=getTownReligion(seller),faithful=(seller.influences.faith || 0)>4;
-        const insular=faithful&&religion?.tenets?.includes('insular')&&buyer.religion!==seller.religion;
+    function commodityOfferPolicy(seller,person,{memory,relation,practice,religion,sameFaith},count) {
+        const faithful=(seller.influences.faith || 0)>4;
+        const insular=faithful&&religion?.tenets?.includes('insular')&&!sameFaith;
         const closed=insular||(seller.values?.openness || 0)<=-4;
         const sharedFaith=faithful&&religion?.tenets?.includes('egalitarian')&&!insular;
         const communal=(seller.values?.justice || 0)>=4&&(seller.values?.openness || 0)>=2;
@@ -6739,6 +6753,14 @@
         const helped=Object.values(memory.received).some(n=>n>0);
         const reason=helped?'remembered':relation>=6?'welcome':!closed&&practice?'practice':!closed&&sharedFaith?'belief':!closed&&communal?'shared':!closed&&person?.outlook==='generous'?'generous':null;
         const aid=relation>=-2&&reason?{kind:'aid',count,reason,previousHelp:memory?.lastHelpReceived || null}:null;
+        return {aid,mercantile,closed};
+    }
+    function commodityTerms(buyer,seller,person,path,type='crop',offer={}) {
+        const demand=commodityDemand(buyer,type,path),spare=offer.spare ?? commoditySpare(seller,type,path,offer.exchange);
+        const count=Math.floor(Math.min(spare,demand,Math.max(0,commodityCapacity(buyer,type)-commodityStock(buyer,type))));
+        if(count<=0) return {kind:'refuse',reason:'stores'};
+        const relation=getRelations(seller,buyer);
+        const {aid,mercantile,closed}=commodityOfferPolicy(seller,person,{memory:exchangeMemory(seller,buyer),relation,practice:livingWorldState().teachings.some(t=>t.town===seller.id&&t.active&&['care','food'].includes(t.meaning)),religion:getTownReligion(seller),sameFaith:buyer.religion===seller.religion},count);
         // A mercantile community tries an exchange first, but can still honour
         // remembered help when the hungry neighbour has nothing it can use.
         if(aid&&!mercantile)return aid;
@@ -12047,11 +12069,11 @@
         outer: 80
     };
     const SPACE_ROUTE_CONFIG = {
-        minTech: 45,
-        routeChance: 0.012,
         maxRoutes: 18,
         baseTravel: 8,
-        orbitTravel: 4
+        orbitTravel: 4,
+        // Small holds, fuel, retries and loading time are initial game calibration.
+        capacity:48, fuel:4, loadingDays:2, retryDays:8
     };
     const SPACE_WAR_CONFIG = {
         minTech: 55,
@@ -13382,6 +13404,8 @@
             items.push({heading:true,text:'Settlers beyond home'});
             for(const charter of charters)items.push({text:`${escapeLivingText(charter.originName)} → ${escapeLivingText(charter.targetName)}<span class="paultendoStoryProse">${{preparing:'Preparing the journey',enroute:'On their way',completed:'A settlement founded',returning:'Coming home',returned:'Returned home',stranded:'Searching for landing',failed:'Journey ended'}[charter.stage] || 'An earlier journey'}</span>`,func:()=>openFrontierCharter(charter)});
         }
+        const routes=(universe.spaceRoutes || []).filter(spaceRouteKnown);
+        if(routes.length){items.push({heading:true,text:'Cargo between worlds'});for(const route of routes.slice(-6).reverse())items.push({text:`${spaceTownLabel(route.from)} ↔ ${spaceTownLabel(route.to)}<span class="paultendoStoryProse">${route.journey?(route.journey.status==='outbound'?'Cargo on the way':'Vessel coming home'):route.status==='preparing'?'Preparing a shipment':'Waiting for a useful exchange'}</span>`,func:()=>openSpaceRoute(route)});}
         populateExecutive(items,'The sky');markLivingStoryControls();attachSolarMapHandlers();openExecutive();
     }
 
@@ -13498,117 +13522,182 @@
         });
     }
 
-    function createSpaceRoute(refA, refB) {
-        const universe = getUniverse(false);
-        if (!universe) return null;
-        if (isSpaceRouteBetween(refA, refB)) return null;
-        if (universe.spaceRoutes.length >= SPACE_ROUTE_CONFIG.maxRoutes) return null;
-
-        const worldA = getWorldById(refA.worldId);
-        const worldB = getWorldById(refB.worldId);
-        if (!worldA || !worldB) return null;
-
-        const orbitDistance = Math.abs((worldA.orbitIndex || 0) - (worldB.orbitIndex || 0)) + 1;
-        const travelTime = SPACE_ROUTE_CONFIG.baseTravel + orbitDistance * SPACE_ROUTE_CONFIG.orbitTravel;
-
-        const route = {
-            id: universe.nextSpaceRouteId++,
-            from: refA,
-            to: refB,
-            established: getUniverseDay(),
-            travelTime,
-            nextArrivalDay: getUniverseDay() + travelTime,
-            active: true,
-            deliveries: 0
-        };
-        universe.spaceRoutes.push(route);
-        addSpaceWarRelation(refA, refB, 1);
-        const labelA = formatTownRef(refA);
-        const labelB = formatTownRef(refB);
-        noteSpaceEvent(`A space trade lane opens between ${labelA} and ${labelB}.`);
-        return route;
+    function spaceDay() {const u=getUniverse(false);return u?.worlds?.[u.currentWorldId]?.state?.planet?.day || getUniverseDay();}
+    function spaceTownKnown(ref) {
+        const world=getWorldById(ref?.worldId),town=getTownByRef(ref);
+        return !!world?.discovered&&!!town&&withWorldState(world,()=>livingTownKnown(town),{silent:true});
     }
-
-    function applySpaceRouteDelivery(route) {
-        if (!route) return;
-        const fromTown = getTownByRef(route.from);
-        const toTown = getTownByRef(route.to);
-        if (!fromTown || !toTown) return;
-
-        const fromWorld = getWorldById(route.from.worldId);
-        const toWorld = getWorldById(route.to.worldId);
-        if (!fromWorld || !toWorld) return;
-
-        const applyInfluence = (world, town) => {
-            withWorldState(world, () => {
-                happen("Influence", null, town, { trade: 0.3, happy: 0.1, temp: true });
-                town.wealth = (town.wealth || 0) + 1;
-            }, { silent: world.id !== getCurrentWorldId() });
-        };
-
-        applyInfluence(fromWorld, fromTown);
-        applyInfluence(toWorld, toTown);
-        route.deliveries = (route.deliveries || 0) + 1;
-        addSpaceWarRelation(route.from, route.to, 0.2);
+    function spaceRouteKnown(route) {return !!route&&[route.from,route.to].some(spaceTownKnown);}
+    function spaceTownLabel(ref) {
+        return spaceTownKnown(ref)?escapeLivingText(getTownByRef(ref).name):'another settlement';
     }
-
-    function processSpaceRoutes() {
-        const universe = getUniverse(false);
-        if (!universe || !Array.isArray(universe.spaceRoutes)) return;
-        const day = getUniverseDay();
-
-        universe.spaceRoutes.forEach(route => {
-            if (!route || !route.active) return;
-            const fromTown = getTownByRef(route.from);
-            const toTown = getTownByRef(route.to);
-            if (!fromTown || !toTown) {
-                route.active = false;
-                return;
+    function spaceRouteStep(route,text,important=false) {
+        route.steps ||= [];route.steps.push({day:spaceDay(),text});if(route.steps.length>32)route.steps.shift();
+        // World callbacks can temporarily suppress logs and use a foreign registry.
+        // Publish these plain-text reports once, after restoring the active world.
+        (PAULTENDO_STATE.cargoReports ||= []).push({route:route.id,text,important});
+    }
+    function createSpaceRoute(refA,refB) {
+        const universe=getUniverse(false),a=getWorldById(refA?.worldId),b=getWorldById(refB?.worldId);
+        const ta=getTownByRef(refA),tb=getTownByRef(refB);
+        if(!universe||!a?.reached||!b?.reached||!a.state||!b.state||!ta||ta.end||!tb||tb.end||a.id===b.id||isSpaceRouteBetween(refA,refB)||universe.spaceRoutes.length>=SPACE_ROUTE_CONFIG.maxRoutes)return null;
+        const route={id:universe.nextSpaceRouteId++,from:{...refA},to:{...refB},established:getUniverseDay(),travelTime:SPACE_ROUTE_CONFIG.baseTravel+(Math.abs((a.orbitIndex || 0)-(b.orbitIndex || 0))+1)*SPACE_ROUTE_CONFIG.orbitTravel,active:true,physical:1,status:'waiting',deliveries:0,journeys:[],steps:[],nextAttempt:getUniverseDay()};
+        universe.spaceRoutes.push(route);return route;
+    }
+    function spaceCommodityFacts(ref,days) {
+        const world=getWorldById(ref?.worldId),town=getTownByRef(ref);
+        if(!world?.reached||!town||town.end||town.pop<=0)return null;
+        return withWorldState(world,()=>{
+            const religion=getTownReligion(town),stocks={},demands={},spares={},room={},values={};
+            for(const type of Object.keys(COMMODITIES)) {
+                stocks[type]=commodityStock(town,type);room[type]=Math.max(0,commodityCapacity(town,type)-stocks[type]);
+                demands[type]=COMMODITIES[type].edible?Math.max(0,foodBuffer(town,days*2+EXCHANGE_PACE.retryDays)-mealStock(town)):commodityDemand(town,type);
+                spares[type]=COMMODITIES[type].edible?Math.max(0,Math.floor(stocks[type]-Math.max(commodityCommittedStock(town,type),foodBuffer(town,days*2)-(mealStock(town)-stocks[type])))):commoditySpare(town,type);
+                values[type]=COMMODITIES[type].edible?foodCommodityValue(town,spares[type],demands[type],days):Math.max(.1,(commodityCommittedStock(town,type)+demands[type]+days)/Math.max(1,stocks[type]));
             }
-            if (day >= (route.nextArrivalDay || day)) {
-                applySpaceRouteDelivery(route);
-                route.nextArrivalDay = day + (route.travelTime || SPACE_ROUTE_CONFIG.baseTravel);
-                const activeWorldId = getCurrentWorldId();
-                if (route.from.worldId === activeWorldId || route.to.worldId === activeWorldId) {
-                    if (fromTown && toTown) {
-                        const fromLabel = formatTownRef(route.from);
-                        const toLabel = formatTownRef(route.to);
-                        logMessage(`Interworld shipments arrive between ${fromLabel} and ${toLabel}.`);
-                    }
-                }
-            }
-        });
+            const person=(town._paultendoPeople || []).find(p=>livingTeachingPersonAvailable(p,town));
+            return {town,stocks,demands,spares,room,values,cash:commodityStock(town,'cash'),trade:planet.unlocks.trade || 0,knowledge:materialTechniqueAvailable('cargo_vessel'),worker:!!materialWorker(town,MATERIAL_RECIPES.cargo_vessel),war:hasIssue(town,'war'),fed:mealStock(town)>=foodBuffer(town),person,religion,faithKey:religion?(religion._paultendoOrigin || `${ref.worldId}:${religion.id}`):null,practice:livingWorldState().teachings.some(t=>t.town===town.id&&t.active&&['care','food'].includes(t.meaning))};
+        },{silent:true});
     }
-
-    function maybeCreateSpaceRoute() {
-        const universe = getUniverse(false);
-        if (!universe) return;
-        if ((universe.spaceTech || 0) < SPACE_ROUTE_CONFIG.minTech) return;
-        if (universe.spaceRoutes && universe.spaceRoutes.length >= SPACE_ROUTE_CONFIG.maxRoutes) return;
-        if (Math.random() > SPACE_ROUTE_CONFIG.routeChance) return;
-
-        const candidates = getWorldTownRefs((town, world) => {
-            if (!world.discovered) return false;
-            if ((town.influences?.trade || 0) < 4) return false;
-            if (town.pop < 40) return false;
-            return true;
-        });
-
-        if (candidates.length < 2) return;
-        const refA = choose(candidates);
-        const refB = choose(candidates.filter(r => r.worldId !== refA.worldId));
-        if (!refB) return;
-
-        const route = createSpaceRoute(refA, refB);
-        if (route) {
-            const townA = getTownByRef(refA);
-            const townB = getTownByRef(refB);
-            if (townA && townB) {
-                const labelA = formatTownRef(refA);
-                const labelB = formatTownRef(refB);
-                logMessage(`A space trade lane opens between ${labelA} and ${labelB}.`, "milestone");
+    function spaceCommodityTerms(route,buyer,seller,type,buyerRef,sellerRef) {
+        const count=Math.floor(Math.min(SPACE_ROUTE_CONFIG.capacity,seller.spares[type],buyer.demands[type],buyer.room[type]));
+        if(count<=0)return null;
+        const relation=getSpaceWarRelation(sellerRef,buyerRef),key=getTownRefKey(sellerRef),memory=route.help?.[key] || {received:{}};
+        const {aid,mercantile,closed}=commodityOfferPolicy(seller.town,seller.person,{memory,relation,practice:seller.practice,religion:seller.religion,sameFaith:!!seller.faithKey&&seller.faithKey===buyer.faithKey},count);
+        if(aid&&!mercantile)return aid;
+        if(relation>=-4&&Math.min(buyer.trade,seller.trade)>=30) {
+            const unit=Math.max(1,Math.ceil(seller.values[type]*(1+route.travelTime/EXCHANGE_PACE.chunksPerDay))),n=Math.min(count,Math.floor(buyer.cash/unit));
+            if(n>0)return {kind:'trade',count:n,payment:{type:'cash',count:n*unit},quote:{unit}};
+        }
+        if(relation>=-4&&Math.min(buyer.trade,seller.trade)>=10) {
+            for(const other of Object.keys(COMMODITIES).filter(t=>t!==type&&seller.demands[t]>0).sort((a,b)=>seller.demands[b]-seller.demands[a])) {
+                const available=Math.min(buyer.spares[other],Math.ceil(seller.demands[other]),seller.room[other],SPACE_ROUTE_CONFIG.capacity),rate=Math.max(.25,Math.min(8,seller.values[other]/seller.values[type])),n=Math.min(count,Math.floor(available*rate));
+                if(n>0)return {kind:'barter',count:n,payment:{type:other,count:Math.ceil(n/rate)},quote:{goodsPerPayment:rate}};
             }
         }
+        return aid || {kind:'refuse',reason:relation<-4?'rivalry':closed?'outsiders':'terms'};
+    }
+    function spaceRoutePause(route,reason,text) {
+        if(route.pause!==reason){route.pause=reason;spaceRouteStep(route,text);}
+    }
+    function spaceTake(town,cost,context) {
+        const before=structuredClone(town.resources),lots=structuredClone(town._paultendoCommodityLots || {}),flow=structuredClone(town._paultendoCashFlow || null);
+        withCommodityUse(context,()=>{for(const [type,count] of Object.entries(cost))removeCommodityStock(town,type,count);});
+        if(Object.entries(cost).every(([type,count])=>(before[type] || 0)-commodityStock(town,type)===count))return true;
+        town.resources=before;town._paultendoCommodityLots=lots;town._paultendoCashFlow=flow;delete town._paultendoEconomy;context.inputs=[];return false;
+    }
+    function spaceAddLots(town,type,count,lots,trip,from) {
+        if(type==='cash'||count<=0)return;
+        const store=(town._paultendoCommodityLots ||= {})[type] ||= [];
+        let remaining=count;
+        while(remaining>0&&lots?.length){const lot=lots[0],n=Math.min(remaining,lot.count);store.push({courier:trip.id,from:{...from},count:n,...(lot.production?{production:structuredClone(lot.production)}:{})});remaining-=n;lot.count-=n;if(lot.count<=0)lots.shift();}
+        if(remaining>0)store.push({courier:trip.id,from:{...from},count:remaining});
+    }
+    function spaceUnload(town,type,count,lots,trip,from) {
+        if(type==='cash'){applyTownCashDelta(town,count,'trade');return count;}
+        const n=Math.min(count,Math.max(0,Math.floor(commodityCapacity(town,type)-commodityStock(town,type))));
+        if(n<=0)return 0;
+        const before=commodityStock(town,type);happen('AddResource',null,town,{type,count:n});const added=commodityStock(town,type)-before;
+        spaceAddLots(town,type,added,lots,trip,from);return added;
+    }
+    function dispatchSpaceCargo(route,buyer,seller,terms) {
+        const ref=route.seller,world=getWorldById(ref.worldId),town=seller.town;
+        return withWorldState(world,()=>{
+            const other=commodityWorkClaims(town).filter(c=>c.id!==`courier:${route.id}`),cost={cargo_vessel:1,charcoal:SPACE_ROUTE_CONFIG.fuel,[route.type]:terms.count};
+            // Charcoal can itself be cargo. Assembly fuel and cargo share the same stock.
+            if(route.type==='charcoal')cost.charcoal+=SPACE_ROUTE_CONFIG.fuel;
+            if(Object.entries(cost).some(([type,n])=>commodityStock(town,type)-other.reduce((sum,c)=>sum+(c.cost[type] || 0),0)<n))return false;
+            const trip={id:`courier:${route.id}:${(route.sequence || 0)+1}`,seller:{...route.seller},buyer:{...route.buyer},type:route.type,terms:structuredClone(terms),count:terms.count,cargo:terms.count,inputs:[],day:spaceDay(),arrival:spaceDay()+route.travelTime,status:'outbound',uses:[]};
+            if(!spaceTake(town,cost,trip))return false;
+            route.sequence=(route.sequence || 0)+1;trip.lots=commodityCargoLots(trip.count,trip.inputs.filter(i=>i.type===trip.type));trip.vesselLots=commodityCargoLots(1,trip.inputs.filter(i=>i.type==='cargo_vessel'));
+            route.journey=trip;route.status='outbound';delete route.pause;
+            spaceRouteStep(route,`${spaceTownLabel(route.seller)} sends ${trip.count} ${COMMODITIES[trip.type].label} to ${spaceTownLabel(route.buyer)}. Arrival is expected around Day ${trip.arrival}.`,true);return true;
+        },{silent:world.id!==getCurrentWorldId()});
+    }
+    function finishSpaceCargo(route) {
+        const trip=route.journey,world=getWorldById(trip.seller.worldId),town=getTownByRef(trip.seller);
+        if(!town||town.end||town.pop<=0){spaceRoutePause(route,'home',`The cargo vessel cannot find its home. Its remaining cargo stays aboard.`);return;}
+        withWorldState(world,()=>{
+            if(hasIssue(town,'war')){spaceRoutePause(route,'war',`Fighting prevents the cargo vessel from landing at ${spaceTownLabel(trip.seller)}.`);return;}
+            if(trip.cargo>0){trip.cargo-=spaceUnload(town,trip.type,trip.cargo,trip.lots,trip,trip.seller);if(trip.cargo>0){spaceRoutePause(route,'room','The vessel waits for room in the home stores.');return;}}
+            if(trip.paymentCargo>0){trip.paymentCargo-=spaceUnload(town,trip.terms.payment.type,trip.paymentCargo,trip.paymentLots,trip,trip.buyer);if(trip.paymentCargo>0){spaceRoutePause(route,'room','The vessel waits for room to unload its payment.');return;}}
+            if(!trip.vesselReturned){if(spaceUnload(town,'cargo_vessel',1,trip.vesselLots,trip,trip.seller)<1){spaceRoutePause(route,'room','The vessel waits for a place in the home workshop.');return;}trip.vesselReturned=true;}
+            trip.status=trip.delivered?'completed':'returned';trip.finished=spaceDay();route.journeys.push(trip);if(route.journeys.length>8)route.journeys.shift();delete route.journey;delete route.pause;route.status='waiting';route.nextAttempt=spaceDay()+SPACE_ROUTE_CONFIG.retryDays;
+            spaceRouteStep(route,trip.delivered?`The cargo vessel returns to ${spaceTownLabel(trip.seller)}${trip.terms.payment?` with ${trip.terms.payment.count} ${COMMODITIES[trip.terms.payment.type]?.label || 'coin'}`:''}. It can serve another journey.`:`The vessel brings the undelivered ${COMMODITIES[trip.type].label} home.`,true);
+        },{silent:world.id!==getCurrentWorldId()});
+    }
+    function applySpaceRouteDelivery(route) {
+        const trip=route.journey,day=getUniverseDay();if(!trip||day<trip.arrival)return;
+        if(trip.status==='returning'){finishSpaceCargo(route);return;}
+        const world=getWorldById(trip.buyer.worldId),town=getTownByRef(trip.buyer);
+        const turnHome=reason=>{trip.status='returning';trip.arrival=day+route.travelTime;route.status='returning';delete route.pause;spaceRouteStep(route,reason);};
+        if(!town||town.end||town.pop<=0){turnHome('The destination is gone. The vessel turns home with its cargo.');return;}
+        if(isSpaceWarBetween(trip.seller,trip.buyer)){spaceRoutePause(route,'war','The towns are at war. The vessel holds its cargo beyond the landing grounds.');return;}
+        withWorldState(world,()=>{
+            if(hasIssue(town,'war')){spaceRoutePause(route,'war',`Fighting prevents the cargo vessel from landing at ${spaceTownLabel(trip.buyer)}.`);return;}
+            const payment=trip.terms.payment;
+            if(payment&&(commodityStock(town,payment.type)<payment.count||payment.type!=='cash'&&commoditySpare(town,payment.type)<payment.count)){turnHome(`${spaceTownLabel(trip.buyer)} can no longer spare the agreed payment. The goods return home.`);return;}
+            if(commodityCapacity(town,trip.type)-commodityStock(town,trip.type)<trip.cargo){spaceRoutePause(route,'room',`${spaceTownLabel(trip.buyer)} has no room for the shipment. The goods stay aboard.`);return;}
+            const before=structuredClone(town.resources),lots=structuredClone(town._paultendoCommodityLots || {}),flow=structuredClone(town._paultendoCashFlow || null),paymentContext={inputs:[]};
+            if(payment&&!spaceTake(town,{[payment.type]:payment.count},paymentContext))return;
+            if(spaceUnload(town,trip.type,trip.cargo,trip.lots,trip,trip.seller)!==trip.cargo){town.resources=before;town._paultendoCommodityLots=lots;town._paultendoCashFlow=flow;delete town._paultendoEconomy;trip.lots=commodityCargoLots(trip.count,trip.inputs.filter(i=>i.type===trip.type));return;}
+            trip.delivered=trip.cargo;trip.cargo=0;trip.deliveredDay=day;
+            if(payment){trip.paymentCargo=payment.count;trip.paymentInputs=paymentContext.inputs;trip.paymentLots=commodityCargoLots(payment.count,paymentContext.inputs);}
+            route.deliveries++;addSpaceWarRelation(trip.seller,trip.buyer,.2);
+            if(trip.terms.kind==='aid'){const memory=((route.help ||= {})[getTownRefKey(trip.buyer)] ||= {received:{}});memory.received[trip.type]=(memory.received[trip.type] || 0)+trip.delivered;memory.lastHelpReceived={day,type:trip.type,count:trip.delivered,source:trip.id};}
+            turnHome(`${spaceTownLabel(trip.buyer)} receives ${trip.delivered} ${COMMODITIES[trip.type].label}.${payment?' The vessel carries their payment home.':' The shipment was a gift.'}`);
+        },{silent:world.id!==getCurrentWorldId()});
+    }
+    function processSpaceRoutes() {
+        const universe=getUniverse(false);if(!universe?.spaceRoutes)return;
+        const day=getUniverseDay();
+        for(const route of universe.spaceRoutes) {
+            if(!route?.active)continue;
+            if(route.physical!==1){route.physical=1;route.legacyDeliveries=route.deliveries || 0;route.deliveries=0;route.status='waiting';route.journeys=[];route.steps=[];route.nextAttempt=day;delete route.nextArrivalDay;}
+            if(route.journey){applySpaceRouteDelivery(route);continue;}
+            const a=spaceCommodityFacts(route.from,route.travelTime),b=spaceCommodityFacts(route.to,route.travelTime);
+            if(!a||!b){route.active=false;continue;}
+            if(day<(route.nextAttempt || 0))continue;
+            if(isSpaceWarBetween(route.from,route.to)||a.war||b.war){spaceRoutePause(route,'war','Fighting closes the landing grounds. No cargo leaves.');continue;}
+            let selected,refusal;
+            for(const [buyer,seller,buyerRef,sellerRef] of [[b,a,route.to,route.from],[a,b,route.from,route.to]]) {
+                if(!seller.knowledge||!seller.worker||!seller.fed)continue;
+                for(const type of Object.keys(COMMODITIES).filter(type=>!['cargo_vessel','colony_vessel','sky_vessel'].includes(type)&&buyer.demands[type]>0).sort((x,y)=>buyer.demands[y]-buyer.demands[x])) {
+                    const terms=spaceCommodityTerms(route,buyer,seller,type,buyerRef,sellerRef);if(!terms)continue;
+                    if(terms.kind==='refuse'){refusal=terms.reason;continue;}
+                    selected={buyer,seller,buyerRef,sellerRef,type,terms};break;
+                }
+                if(selected)break;
+            }
+            if(!selected){route.status='waiting';delete route.seller;delete route.buyer;route.loading=0;route.nextAttempt=day+SPACE_ROUTE_CONFIG.retryDays;spaceRoutePause(route,refusal || 'need',refusal==='rivalry'?'The towns refuse to exchange goods with their rivals.':refusal==='outsiders'?'The stores remain closed to outsiders.':refusal?'The towns have not found terms they both accept.':'No shipment can be spared for a need across this route.');continue;}
+            const {buyer,seller,buyerRef,sellerRef,type,terms}=selected;
+            if(route.type!==type||getTownRefKey(route.seller)!==getTownRefKey(sellerRef))route.loading=0;
+            route.seller={...sellerRef};route.buyer={...buyerRef};route.type=type;route.status='preparing';
+            if(!seller.stocks.cargo_vessel||seller.stocks.charcoal<SPACE_ROUTE_CONFIG.fuel){spaceRoutePause(route,'vessel',`${spaceTownLabel(buyerRef)} needs ${COMMODITIES[type].label}. The journey waits for a cargo vessel and ${SPACE_ROUTE_CONFIG.fuel} charcoal.`);continue;}
+            route.loading=(route.loading || 0)+1;
+            if(route.loading<SPACE_ROUTE_CONFIG.loadingDays){spaceRoutePause(route,'loading',`The workshop in ${spaceTownLabel(sellerRef)} is loading ${COMMODITIES[type].label} for ${spaceTownLabel(buyerRef)}.`);continue;}
+            if(!dispatchSpaceCargo(route,buyer,seller,terms))spaceRoutePause(route,'supplies','Other work needs these stores. The cargo journey waits.');
+        }
+        const reports=PAULTENDO_STATE.cargoReports || [];PAULTENDO_STATE.cargoReports=[];
+        for(const report of reports){const route=universe.spaceRoutes.find(r=>r.id===report.route);if(spaceRouteKnown(route)&&[route.from,route.to].some(r=>r.worldId===getCurrentWorldId()))logMessage(report.text,null,{_paultendoStory:{kind:'courier',id:route.id},_paultendoHighlight:report.important});}
+    }
+    function maybeCreateSpaceRoute() {
+        // A real settlement journey establishes contact, rather than an abstract
+        // space score or a random encounter between unvisited worlds.
+        for(const charter of getColonizationRegistry()?.history || [])if(charter.stage==='completed'&&charter.colony)createSpaceRoute({worldId:charter.originWorldId,townId:charter.originTownId},charter.colony);
+    }
+    function openSpaceRoute(route) {
+        if(!spaceRouteKnown(route))return;
+        const trip=route.journey,items=[{text:'← Back to Solar',func:openSolarPanel},{heading:true,text:`${spaceTownLabel(route.from)} ↔ ${spaceTownLabel(route.to)}`}];
+        items.push({text:trip?`${trip.status==='outbound'?'Cargo on the way':'Vessel coming home'} · Expected around Day ${trip.arrival}`:route.status==='preparing'?'The workshop is preparing a cargo journey.':'The towns look for goods they need and terms they can accept.'});
+        if(trip){items.push({heading:true,text:`${trip.count} ${COMMODITIES[trip.type].label}`},{text:trip.terms.payment?`Agreed payment: ${trip.terms.payment.count} ${COMMODITIES[trip.terms.payment.type]?.label || 'coin'}. It reaches the supplier when the vessel returns.`:'Sent as help. No payment is expected.'});}
+        for(const journey of [...(route.journeys || []),...(trip?[trip]:[])].reverse()) {
+            if(journey!==trip)items.push({heading:true,text:`${journey.delivered || 0} ${COMMODITIES[journey.type].label} delivered · Day ${journey.deliveredDay || journey.finished}`});
+            for(const input of journey.inputs || [])if(input.production?.world===skyWorldId()&&input.production.passage===travelerState().passage){const work=livingWorldState().materialWork.find(w=>w.id===input.production.work);if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'Visit the cargo vessel’s workshop',func:()=>openMaterialWork(work)});}
+            for(const use of journey.uses || [])if(spaceTownKnown(use.town))items.push({text:`Day ${use.day} · ${spaceTownLabel(use.town)} ${use.kind==='meals'?'feeds people':use.kind==='material'?'works at the workshop':use.kind==='tools'?'works its fields':'uses its shipment'} with ${use.count} ${COMMODITIES[use.type].label}.`});
+        }
+        for(const step of (route.steps || []).slice(-6))items.push({text:`Day ${step.day} · ${step.text}`});
+        populateExecutive(items,'Cargo between worlds');markLivingStoryControls();openExecutive();
     }
 
     function initSpaceWars() {
@@ -14040,7 +14129,7 @@
                     try { maybeCreateSpaceRoute(); } catch {}
                     try { maybeStartSpaceWar(); } catch {}
                     try { tickInactiveWorlds(); } catch {}
-                    try { processSpaceRoutes(); } catch {}
+                    try { processSpaceRoutes(); } catch(error) {console.warn('[paultendo-mod] Cargo journey failed:',error);}
                     try { processSpaceWars(); } catch {}
                     try { processFrontierCharters(); } catch {}
                     if (isFastAdvanceActive() && typeof window !== "undefined") {
