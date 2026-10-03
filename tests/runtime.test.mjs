@@ -16,7 +16,7 @@ test('bundled game and overhaul boot without uncaught errors', async t => {
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.54');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.55');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));
@@ -206,13 +206,13 @@ test('legacy gt3 dimensions migrate without losing the town or terrain', async t
   assert.deepEqual(reloaded.errors, []);
 });
 
-test('discovering, switching, and reloading worlds preserves each planet and its dimensions', async t => {
+test('switching and reloading already reached worlds preserves each planet and its dimensions', async t => {
   const game = await makeGame();
   t.after(game.close);
   settleGame(game);
   const { window } = game;
   const universe = window._paultendoUniverse;
-  universe.spaceTech = 100;
+  window.planet.unlocks.astronomy = 10;
   const home = window.planet;
   const homeConfig = JSON.stringify(home.config);
   const other = Object.values(universe.worlds).find(world => world.id !== universe.currentWorldId);
@@ -221,9 +221,9 @@ test('discovering, switching, and reloading worlds preserves each planet and its
     assert.ok(button, `Missing ${text}`);
     button.click();
   };
+  other.discovered=true;other.reached=true;
   window.document.getElementById('actionItem-solar').click();
   window.document.querySelector(`[data-world-id="${other.id}"]`).click();
-  clickText('Launch mission');
   assert.equal(window.planet, home);
   assert.equal(JSON.stringify(home.config), homeConfig);
   clickText('Switch to world');
@@ -319,7 +319,7 @@ test('mod management receives complete URLs and can remove an installation', asy
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.54/paultendo-mod.js';
+  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.55/paultendo-mod.js';
   window.userSettings.mods = [url];
   window.showMods();
   window.handlePrompt(url);
@@ -333,7 +333,7 @@ test('adding an updated URL replaces older URLs before the duplicate guard retur
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.54/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.55/paultendo-mod.js';
   window.userSettings.mods = ['https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js', current, 'example_mod.js'];
   window._paultendoState.loadedVersion = '1.6.27';
   Object.defineProperty(window.document, 'currentScript', { configurable: true, get: () => ({ src: current }) });
@@ -346,7 +346,7 @@ test('an update survives an older startup script pruning the new URL before it r
   const game = await makeGame(); t.after(game.close);
   const {window} = game;
   const old = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.35/paultendo-mod.js';
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.54/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.55/paultendo-mod.js';
   // This is the observed live race: the old script has already saved only itself.
   window.userSettings.mods = [old, 'example_mod.js'];
   window.saveSettings();

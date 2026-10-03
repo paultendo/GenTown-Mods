@@ -110,10 +110,11 @@ test('an object hidden by its bearer can resist a claim and its history remains 
 
 test('travel to another world cannot replenish an object left behind, including after reload',async t=>{
  const g=await makeGame();t.after(g.close);const w=g.window,town=prepare(g),a=leave(w,town);
- const universe=w._paultendoUniverse;universe.spaceTech=100;
+ const universe=w._paultendoUniverse;w.planet.unlocks.astronomy=10;
  const other=Object.values(universe.worlds).find(world=>world.id!==universe.currentWorldId);
+ other.discovered=true;other.reached=true;
  w.document.getElementById('actionItem-solar').click();w.document.querySelector(`[data-world-id="${other.id}"]`).click();
- click(w,'Launch mission');click(w,'Switch to world');
+ click(w,'Switch to world');
  w.document.getElementById('actionItem-annals').click();click(w,'The Traveler');click(w,'What you carried');
  assert.match(panel(w).textContent,/Clear lens · Left in another world/);
  assert.equal([...panel(w).querySelectorAll('[role="button"]')].some(b=>b.textContent==='Clear lens'),false);

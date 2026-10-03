@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.54/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.55/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.54";
+    const MOD_VERSION = "1.6.55";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -4620,6 +4620,11 @@
     function resolveChronicleStory(ref) {
         const state = planet?._paultendoLife;
         if (!state || !ref) return null;
+        if(ref.kind==='sky'||ref.kind==='flight') {
+            const flight=ref.kind==='flight'&&planet._paultendoSky?.flights?.find(f=>f.id===ref.id);
+            const town=regGet('town',flight?flight.town:Number(ref.id));
+            return livingTownKnown(town)&&(flight||planet._paultendoSky?.surveys?.[town.id])?{label:flight?'Follow the flight':'Visit the night charts',open:()=>openSkyStudy(town,flight || null)}:null;
+        }
         if(ref.kind==='tools') {
             const town=regGet('town',Number(ref.id));
             return livingTownKnown(town)&&town._paultendoFarmTools?{label:'Visit the fields',open:()=>openFarmTools(town)}:null;
@@ -4653,13 +4658,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['craft','material','storage','tools','exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
+        if (!['craft','material','storage','tools','sky','flight','exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['craft','material','storage','tools','exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
+        if (!ref || !['craft','material','storage','tools','sky','flight','exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -6100,7 +6105,9 @@
         pottery:{label:'clay vessels',role:'miner',description:'Clay shaped into vessels and fired hard. Set beside the grain stores, each can hold eight more grain.'},
         stone_tools:{label:'stone handtools',role:'farmer',description:'Stone chipped into hand-sized edges. Farmers can work their fields with them. Repeated use wears the edges away.'},
         metal_tools:{label:'metal handtools',role:'farmer',description:'Metal worked into small blades and fitted for fieldwork. Their edges serve longer than chipped stone, but still wear with use.'},
-        steel_tools:{label:'steel handtools',role:'farmer',description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'}
+        steel_tools:{label:'steel handtools',role:'farmer',description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'},
+        telescope:{label:'telescopes',role:'scholar',description:'Glass and metal fitted into a steady frame. A scholar can use one to chart the lights above the horizon.'},
+        sky_vessel:{label:'sky vessels',singular:'sky vessel',role:'miner',description:'A powered vessel carrying instruments instead of passengers. Each flight takes a real vessel from the workshop.'}
     };
     // Recipe durations, sample sizes and first-trial risks are game calibration.
     // Knowledge is local. Global milestones open possibilities, never award stock.
@@ -6112,7 +6119,9 @@
         pottery:{cost:{clay:2,charcoal:1},output:2,days:5,needs:{fire:20,smith:10},sample:'clay',established:{fire:40},roles:['miner','farmer'],risk:0.25,success:'The vessels keep their shape and hold their contents. There may be room for more of the harvest now.',failure:'The vessels crack in the heat. Grain would spill through their sides.'},
         stone_tools:{cost:{rock:2},output:2,days:4,needs:{smith:10},sample:'rock',established:{smith:20},roles:['farmer','miner'],risk:0.15,method:'shaping',success:'The stone holds a working edge. The farmers can take these tools into their fields.',failure:'The stone splits where the working edge should be. These pieces cannot serve as tools.'},
         metal_tools:{cost:{metal:2},output:2,days:5,needs:{smith:40},sample:'metal',established:{smith:40},roles:['miner','farmer'],risk:0.2,method:'shaping',success:'The metal holds a working edge. The farmers can fit these blades for work in the fields.',failure:'The blades split as they are shaped. The pieces cannot serve as tools.'},
-        steel_tools:{cost:{steel:2},output:2,days:6,needs:{smith:50},sample:'steel',established:{smith:50},roles:['miner','farmer'],risk:0.1,method:'shaping',success:'The blades hold their shape. They are ready for work in the fields.',failure:'The blanks split as they are worked. The blades cannot be used.'}
+        steel_tools:{cost:{steel:2},output:2,days:6,needs:{smith:50},sample:'steel',established:{smith:50},roles:['miner','farmer'],risk:0.1,method:'shaping',success:'The blades hold their shape. They are ready for work in the fields.',failure:'The blanks split as they are worked. The blades cannot be used.'},
+        telescope:{cost:{glass:2,metal:2,lumber:1},output:1,days:8,needs:{astronomy:20,smith:30},sample:'glass',established:{astronomy:20},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The instrument holds its focus. Distant lights keep their shape as the scholar watches.',failure:'The frame will not hold its focus. The instrument needs another attempt.'},
+        sky_vessel:{cost:{steel:8,glass:2,charcoal:4},output:1,days:12,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'steel',established:{smith:80},roles:['miner','scholar'],risk:0.2,method:'assembly',success:'The engine and instruments pass their tests. The vessel is ready for a flight.',failure:'The engine breaks its mount in the test. This vessel cannot fly.'}
     };
     // Capacity and the thirty-day harvest memory are initial game calibration.
     // Vessels become durable local fixtures only when actual stock is installed.
@@ -6348,13 +6357,13 @@
     }
     function materialDirectNeed(town,type) {
         if(type==='brick')return Math.ceil(materialConstructionNeed(town)/2);
-        const promised=commodityWorkClaims(town).filter(c=>['craft','storage','equipment'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        const promised=commodityWorkClaims(town).filter(c=>['craft','storage','equipment','sky','flight'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
         return Math.max(0,promised-commodityStock(town,type));
     }
     function materialIntent(town,type) {
         const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type))return null;
         const actual=materialDirectNeed(town,type)>0;
-        if((type==='pottery'||FARM_TOOLS[type])&&!actual)return null;
+        if((type==='pottery'||FARM_TOOLS[type]||type==='telescope'||type==='sky_vessel')&&!actual)return null;
         const practiced=town._paultendoMaterials?.[type]?.technique;
         if(type==='steel'&&!actual&&livingResearchPriority(town.research)!=='education'&&!(livingResearchPriority(town.research)==='military'&&town.jobs?.soldier>0))return null;
         const sample=commodityStock(town,recipe.sample)>0||town._paultendoMaterials?.[recipe.sample];
@@ -6463,12 +6472,12 @@
                 }
                 work.status='working';work.started=planet.day;
                 for(const input of work.inputs)rememberCommodityUse(town,input,{kind:'material',id:work.id,name:work.type});
-                materialStep(work,`${work.name} begins the ${recipe.method==='shaping'?'shaping':work.type==='charcoal'?'covered fire':'firing'} in ${town.name}.`);
+                materialStep(work,recipe.method==='assembly'?`${work.name} begins fitting the parts together in ${town.name}.`:`${work.name} begins the ${recipe.method==='shaping'?'shaping':work.type==='charcoal'?'covered fire':'firing'} in ${town.name}.`);
                 continue;
             }
             if(--work.remaining>0)continue;
             const risk=(work.type==='brick'&&planet.unlocks.fire>=40?0.08:recipe.risk)*(work.lesson?0.4:1);
-            if(work.trial&&work.roll<risk){work.status='failed';work.finished=planet.day;materialStep(work,`${recipe.method==='shaping'?`${work.name} puts the pieces aside.`:`${work.name} opens the fire.`} ${recipe.failure}`);continue;}
+            if(work.trial&&work.roll<risk){work.status='failed';work.finished=planet.day;materialStep(work,`${recipe.method==='assembly'?`${work.name} tests the finished parts.`:recipe.method==='shaping'?`${work.name} puts the pieces aside.`:`${work.name} opens the fire.`} ${recipe.failure}`);continue;}
             const entry=encounterMaterial(town,work.type);entry.technique ||= {day:planet.day,work:work.id,person:work.person};
             const before=commodityStock(town,work.type);
             work.fired=planet.day;happen('AddResource',null,town,{type:work.type,count:work.output});const added=commodityStock(town,work.type)-before;work.cargo=work.output-added;addProducedMaterialLot(town,work,added);
@@ -6511,7 +6520,7 @@
         }
         const work=livingWorldState().materialWork.filter(w=>w.town===town.id).slice(-8).reverse();
         if(work.length)items.push({heading:true,text:'At the workshop'});
-        for(const w of work)items.push({text:`${escapeLivingText(w.name)} · ${COMMODITIES[w.type].label}<span class="paultendoStoryProse">${{waiting:'Gathering materials',working:MATERIAL_RECIPES[w.type].method==='shaping'?'Shaping the tools':'The fire is burning',made:'Finished',failed:MATERIAL_RECIPES[w.type].method==='shaping'?'The stone or metal split':'The firing failed',storing:'Waiting for room',lost:'Workshop lost',withdrawn:'Work put aside'}[w.status]}</span>`,func:()=>openMaterialWork(w)});
+        for(const w of work)items.push({text:`${escapeLivingText(w.name)} · ${COMMODITIES[w.type].label}<span class="paultendoStoryProse">${{waiting:'Gathering materials',working:MATERIAL_RECIPES[w.type].method==='assembly'?'Fitting the parts':MATERIAL_RECIPES[w.type].method==='shaping'?'Shaping the tools':'The fire is burning',made:'Finished',failed:MATERIAL_RECIPES[w.type].method==='assembly'?'The assembly failed':MATERIAL_RECIPES[w.type].method==='shaping'?'The stone or metal split':'The firing failed',storing:'Waiting for room',lost:'Workshop lost',withdrawn:'Work put aside'}[w.status]}</span>`,func:()=>openMaterialWork(w)});
         populateExecutive(items,'Materials and workshops');markLivingStoryControls();openExecutive();
     }
     const preparedExchangeStates=new WeakSet();
@@ -6596,6 +6605,8 @@
         const claims=[];
         const storage=grainStorageNeed(town);if(storage)claims.push({kind:'storage',id:`storage:${town.id}`,cost:{pottery:storage}});
         const tools=farmToolNeed(town);if(tools)claims.push({kind:'equipment',id:`tools:${town.id}`,cost:{[farmToolKind(town)]:tools}});
+        if(skyInstrumentWanted(town))claims.push({kind:'sky',id:`sky:${town.id}`,cost:{telescope:1}});
+        for(const flight of skyState().flights)if(flight.town===town.id&&flight.status==='preparing')claims.push({kind:'flight',id:flight.id,cost:flight.cost});
         // Native construction spends two units of progress per rock or one per lumber.
         for(const project of regToArray('process')) if(project.town===town.id&&project.type==='project'&&!project.done&&!project.end&&Number.isFinite(project.cost)) {
             claims.push({kind:'construction',id:project.id,cost:Math.max(0,project.cost)});
@@ -6697,6 +6708,8 @@
         if(!use.known&&!record.known?.[use.town]&&!livingTownKnown(regGet('town',use.town)))return `${town} puts ${goods} from this exchange to use.`;
         if(use.kind==='meals')return `${goods[0].toUpperCase()+goods.slice(1)} from this exchange feeds people in ${town}.`;
         if(use.kind==='tools')return `${town} takes ${goods} from this exchange into its fields.`;
+        if(use.kind==='sky')return `${town} sets up a telescope from this exchange to study the sky.`;
+        if(use.kind==='flight')return `${town} sends a sky vessel from this exchange on a flight.`;
         if(use.kind==='storage')return `${town} sets clay vessels from this exchange beside its grain stores.`;
         if(use.kind==='construction')return `${town} uses ${goods} from this exchange to build a ${(use.name || 'building').replace(/_/g,' ')}.`;
         if(use.kind==='material')return `${town} uses ${goods} from this exchange while making ${COMMODITIES[use.name]?.label || 'new materials'}.`;
@@ -8233,6 +8246,7 @@
             .paultendoDecisionPreview p { margin: 0.25em 0; line-height: 1.25; }
             .logMessage[done] .paultendoDecisionPreview, .logMessage.faded .paultendoDecisionPreview { display: none; }
             .paultendoDecisionEcho { display: block; font-size: 0.8em; color: #e5dc98; margin-top: 0.3em; }
+            #actionSubList > .paultendoStoryLink, #actionSubList > .paultendoStoryProse, #actionSubList > .paultendoStoryHeading { flex-shrink: 0; }
             #actionSubList .paultendoStoryLink { min-height: 44px; box-sizing: border-box; overflow-wrap: anywhere; align-content: center; }
             .paultendoChronicleStoryLink { display: block; width: fit-content; max-width: 100%; min-height: 44px; box-sizing: border-box; align-content: center; font-size: 0.78em; color: #cfc5a1; cursor: pointer; overflow-wrap: anywhere; }
             .paultendoChronicleStoryLink:hover { color: #fff1a0; }
@@ -9708,7 +9722,6 @@
     };
 
     const FOG_CLEAR_CONFIG = {
-        spaceTech: 20, // matches SPACE_TECH_THRESHOLDS.orbit
         requireAllDiscovered: true
     };
 
@@ -9718,8 +9731,7 @@
         if (fog.clearedDay === planet.day && fog.cleared !== undefined) return fog.cleared;
 
         let cleared = false;
-        const spaceTech = (planet.unlocks?.space || (typeof universe !== "undefined" ? universe.spaceTech : 0) || 0);
-        if (spaceTech >= FOG_CLEAR_CONFIG.spaceTech) {
+        if (planet._paultendoSky?.orbitalSurvey) {
             cleared = true;
         } else if (initDiscoveryState()) {
             const maxTier = getDiscoveryMaxTier();
@@ -9746,7 +9758,7 @@
         const prev = fog.cleared;
         fog.cleared = cleared;
         fog.clearedDay = planet.day;
-        if (cleared && !prev) {
+        if (cleared !== prev) {
             markFogDirty();
             scheduleFogRefresh();
         }
@@ -9820,6 +9832,11 @@
         }
         if (!planet._paultendoFog.explored || typeof planet._paultendoFog.explored !== "object") {
             planet._paultendoFog.explored = {};
+        }
+        if(planet._paultendoFog.skyProgressVersion!==1){
+            planet._paultendoFog.skyProgressVersion=1;
+            delete planet._paultendoFog.clearedDay;
+            planet._paultendoFog.dirty=true;
         }
         initRumorMap();
         return true;
@@ -13065,7 +13082,7 @@
         const target = universe.worlds[worldId];
         if (!target) return false;
 
-        if (!target.discovered) {
+        if (!target.discovered || !target.reached) {
             logMessage("That world remains beyond reach.");
             return false;
         }
@@ -13157,95 +13174,208 @@
         return false;
     }
 
-    function canDiscoverWorld(world, tech = null) {
+    function canDiscoverWorld(world) {
         if (!world || world.discovered) return false;
-        const universe = getUniverse(false);
-        const score = tech !== null ? tech : universe?.spaceTech || 0;
-        if (!world.discovery) return false;
-        const threshold = SPACE_TECH_THRESHOLDS[world.discovery] || 0;
-        return score >= threshold;
+        return !!skyChartSource(world);
     }
 
     function discoverWorld(worldId, reason = "observe") {
         const universe = getUniverse();
         const world = universe?.worlds?.[worldId];
         if (!world || world.discovered) return false;
-        const techScore = universe.spaceTech || 0;
-        if (!canDiscoverWorld(world, techScore)) return false;
+        if (!canDiscoverWorld(world)) return false;
 
         world.discovered = true;
         if (!world.name) world.name = generateWorldName(world);
-        ensureWorldState(world);
-
-        let note = "New celestial charts are compiled.";
-        if (reason === "mission") note = "A daring mission reaches new horizons.";
-        const msg = `Astronomers reveal {{b:${world.name}}}. ${note}`;
+        const source=skyChartSource(world);world.chart=source;
+        const msg = `${source?.known?`${escapeLivingText(source.name)} charts`:'Stargazers chart'} {{b:${world.name}}}. It is still beyond reach.`;
         logMessage(msg, "milestone");
         noteSpaceEvent(msg);
         return true;
     }
 
+    // Durations, recipe costs and chart requirements are game calibration, not
+    // a model of propulsion or orbital mechanics. Progress records real work.
+    const SKY_PACE={chartDays:{moon:3,mars:6,belt:10,outer:14},flightBase:4,flightOrbit:3};
+    function skyState() {
+        const state=planet._paultendoSky ||= {surveys:{},flights:[],nextId:1};
+        state.surveys ||= {};state.flights ||= [];state.nextId ||= 1;
+        return state;
+    }
+    function skyWorldId(){return planet?._paultendoWorldId || getCurrentWorldId();}
+    function skyScholar(town,create=false) {
+        const existing=(town._paultendoPeople || []).find(person=>person.role==='scholar'&&livingTeachingPersonAvailable(person,town));
+        return existing || (create&&town.jobs?.scholar>0?livingCommunityPerson(town,'scholar'):null);
+    }
+    function skyLens(town,person) {
+        return (planet._paultendoLife?.artifacts || []).find(a=>a.kind==='lens'&&a.town===town.id&&a.person===person?.id&&a.status==='study');
+    }
+    function skyInstrumentWanted(town) {
+        if(!town||town.end||town.pop<=0||!(planet.unlocks.astronomy>=20)||skyState().surveys[town.id]?.instrument)return false;
+        const person=skyScholar(town);
+        return !!person&&(person.outlook==='curious'||(town.research?.education || 0)>0);
+    }
+    function skyStep(town,text,flight=null) {
+        const state=flight || (skyState().surveys[town.id] ||= {count:0,observations:[],steps:[]});
+        state.steps ||= [];state.steps.push({day:planet.day,text});
+        if(state.steps.length>32)state.steps.shift();
+        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:flight?'flight':'sky',id:flight?.id || town.id},_paultendoHighlight:true});
+    }
+    function advanceSkyStudy() {
+        const state=skyState();
+        for(const town of regToArray('town')) {
+            if(town.end||town.pop<=0)continue;
+            const person=skyScholar(town,true);if(!person||!livingTeachingPersonAvailable(person,town)||!(planet.unlocks.astronomy>=10)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town))continue;
+            let survey=state.surveys[town.id];
+            if(skyInstrumentWanted(town)&&commodityStock(town,'telescope')>0) {
+                const other=commodityWorkClaims(town).filter(c=>c.kind!=='construction'&&c.id!==`sky:${town.id}`);
+                if(commodityStock(town,'telescope')-other.reduce((n,c)=>n+(c.cost.telescope || 0),0)>0) {
+                    survey=state.surveys[town.id] ||= {count:0,observations:[],steps:[]};
+                    const instrument={id:`optics:${state.nextId++}`,person:person.id,name:person.name,day:planet.day,inputs:[]};
+                    withCommodityUse({kind:'sky',id:instrument.id,name:'telescope',inputs:instrument.inputs},()=>happen('RemoveResource',null,town,{type:'telescope',count:1}));
+                    survey.instrument=instrument;
+                    for(const input of instrument.inputs)rememberCommodityUse(town,input,{kind:'sky',id:instrument.id,name:'telescope'});
+                    skyStep(town,`${person.name} sets up a telescope in ${town.name}. The lights above the horizon come into focus.`);
+                }
+            }
+            const lens=skyLens(town,person);
+            if(!survey?.instrument&&!lens)continue;
+            survey ||= state.surveys[town.id]={count:0,observations:[],steps:[]};
+            if(survey.lastDay===planet.day)continue;
+            survey.lastDay=planet.day;survey.count++;
+            const observation={day:planet.day,person:person.id,name:person.name,optics:survey.instrument?.id || lens.id,type:survey.instrument?'telescope':'lens',astronomy:planet.unlocks.astronomy};
+            survey.observations.push(observation);if(survey.observations.length>32)survey.observations.shift();
+            if(survey.count===1)skyStep(town,`${person.name} begins a chart of the night sky in ${town.name}.`);
+        }
+    }
+    function skyChartSource(world) {
+        const universe=getUniverse(false);if(!universe||!world?.discovery)return null;
+        for(const origin of Object.values(universe.worlds)) {
+            const p=origin.id===skyWorldId()?planet:origin.state?.planet;if(!p)continue;
+            if((p.unlocks?.astronomy || 0)<(world.discovery==='moon'?10:20))continue;
+            for(const [id,survey] of Object.entries(p._paultendoSky?.surveys || {})) {
+                const observations=(survey.observations || []).filter(o=>o.astronomy>=(world.discovery==='moon'?10:20));
+                if(observations.length<(SKY_PACE.chartDays[world.discovery] || Infinity))continue;
+                const last=observations.at(-1),town=p.reg?.town?.[id];
+                // A chart is knowledge retained from observations. Its maker can
+                // later stop working without erasing what they already saw.
+                if(last)return {world:origin.id,town:Number(id),name:last.name,person:last.person,day:last.day,observations:observations.length,optics:last.optics,known:origin.id===universe.currentWorldId&&livingTownKnown(town)};
+            }
+        }
+        return null;
+    }
+    function skyFlightKnowledge() {return Object.entries(MATERIAL_RECIPES.sky_vessel.needs).every(([key,level])=>(planet.unlocks[key] || 0)>=level);}
+    function skyFlightTargets() {
+        const universe=getUniverse(false);if(!universe)return [];
+        if(!skyState().orbitalSurvey)return [{id:null,name:'the home sky',orbitIndex:0}];
+        return getWorldOrder().filter(w=>w.id!==skyWorldId()&&w.discovered&&!w.reached);
+    }
+    function planSkyFlight(town,targetId=null,requested=false) {
+        if(!town||town.end||town.pop<=0||!skyFlightKnowledge()||hasIssue(town,'war')||mealStock(town)<foodBuffer(town))return null;
+        const person=skyScholar(town);if(!person||!livingTeachingPersonAvailable(person,town))return null;
+        if(!requested&&person.outlook!=='curious'&&livingResearchPriority(town.research)!=='education')return null;
+        const state=skyState(),target=skyFlightTargets().find(w=>w.id===targetId);
+        if(!target||state.flights.some(f=>['preparing','enroute'].includes(f.status)))return null;
+        // Autonomous plans need an actual workshop sample, rather than growing
+        // a new demand only because a global discovery was selected.
+        if(!requested&&(!(state.surveys[town.id]?.count>=3)||commodityStock(town,'steel')<MATERIAL_RECIPES.sky_vessel.cost.steel&&commodityStock(town,'sky_vessel')<1))return null;
+        const origin=getWorldById(skyWorldId()),distance=targetId==null?0:Math.abs(origin.orbitIndex-target.orbitIndex)+1;
+        const flight={id:`flight:${state.nextId++}`,town:town.id,world:origin.id,target:targetId,name:targetId==null?'Survey satellite':`Probe to ${target.name}`,person:person.id,scholar:person.name,created:planet.day,status:'preparing',days:SKY_PACE.flightBase+distance*SKY_PACE.flightOrbit,cost:{sky_vessel:1},inputs:[],steps:[],requested};
+        state.flights.push(flight);
+        skyStep(town,targetId==null?`${person.name} wants to chart ${planet.name} from above. The workshop begins preparing a survey flight.`:`${person.name} wants to send instruments to ${target.name}. The workshop begins preparing a probe.`,flight);
+        return flight;
+    }
+    function advanceSkyFlights(background=false) {
+        const state=skyState();
+        if(!background&&!state.flights.some(f=>['preparing','enroute'].includes(f.status))) {
+            const target=skyFlightTargets()[0];
+            if(target)for(const town of regToArray('town'))if(planSkyFlight(town,target.id))break;
+        }
+        for(const flight of state.flights.filter(f=>['preparing','enroute'].includes(f.status))) {
+            if(flight.lastDay===planet.day)continue;flight.lastDay=planet.day;
+            const town=regGet('town',flight.town);
+            if(flight.status==='enroute') {
+                if(planet.day<flight.arrival)continue;
+                flight.status='arrived';flight.finished=planet.day;
+                if(flight.target==null) {
+                    state.orbitalSurvey={day:planet.day,flight:flight.id,town:flight.town};
+                    if(planet._paultendoFog)delete planet._paultendoFog.clearedDay;
+                    skyStep(town,`The survey satellite sends back charts of ${planet.name}. The world beyond the scouts' paths becomes visible.`,flight);
+                } else {
+                    const target=getWorldById(flight.target);
+                    if(target){target.reached=true;target.arrival={day:planet.day,world:flight.world,town:flight.town,flight:flight.id};ensureWorldState(target);}
+                    skyStep(town,`The probe reaches ${target?.name || 'its destination'}. Its first reports return to ${town?.name || 'the homeworld'}.`,flight);
+                }
+                continue;
+            }
+            if(background)continue;
+            if(!town||town.end||town.pop<=0){flight.status='lost';flight.finished=planet.day;continue;}
+            const person=(town._paultendoPeople || []).find(p=>p.id===flight.person);
+            const blocked=!skyFlightKnowledge()?'knowledge':!livingTeachingPersonAvailable(person,town)?'hands':hasIssue(town,'war')?'war':mealStock(town)<foodBuffer(town)?'food':null;
+            if(blocked) {
+                if(flight.pause!==blocked)skyStep(town,{knowledge:'The workshop needs more knowledge before this vessel can fly.',hands:`The flight waits for ${flight.scholar} to return to the work.`,war:'Fighting draws people away from the flight preparations.',food:'The flight waits. Feeding the town comes first.'}[blocked],flight);
+                flight.pause=blocked;continue;
+            }
+            delete flight.pause;
+            const other=commodityWorkClaims(town).filter(c=>c.kind!=='construction'&&c.id!==flight.id);
+            if(Object.entries(flight.cost).some(([type,n])=>commodityStock(town,type)-other.reduce((sum,c)=>sum+(c.cost[type] || 0),0)<n))continue;
+            const before={...town.resources},lots=structuredClone(town._paultendoCommodityLots || {});
+            withCommodityUse({kind:'flight',id:flight.id,name:flight.name,inputs:flight.inputs},()=>{for(const [type,count] of Object.entries(flight.cost))happen('RemoveResource',null,town,{type,count});});
+            if(Object.entries(flight.cost).some(([type,count])=>(before[type] || 0)-commodityStock(town,type)!==count)){town.resources=before;town._paultendoCommodityLots=lots;flight.inputs=[];continue;}
+            for(const input of flight.inputs)rememberCommodityUse(town,input,{kind:'flight',id:flight.id,name:flight.name});
+            flight.status='enroute';flight.launched=planet.day;flight.arrival=planet.day+flight.days;
+            skyStep(town,flight.target==null?`A survey satellite lifts off from ${town.name}. Its first charts will take time to return.`:`A probe leaves ${town.name}, bound for ${getWorldById(flight.target)?.name || 'another world'}.`,flight);
+        }
+    }
+    function openSkyStudy(town,flight=null) {
+        if(!livingTownKnown(town))return;
+        const state=skyState(),survey=state.surveys[town.id],items=[{text:'← Back to Solar',func:openSolarPanel}];
+        if(flight) {
+            items.push({heading:true,text:escapeLivingText(flight.name)});
+            items.push({text:flight.status==='enroute'?`The instruments are still on their journey. Reports are expected around Day ${flight.arrival}.`:flight.status==='arrived'?'Its reports have reached the town.':flight.status==='lost'?'The preparations were lost with the settlement.':'The workshop is preparing the flight.'});
+            for(const [type,count] of Object.entries(flight.cost))items.push({text:`${count} ${count===1?(COMMODITIES[type].singular || COMMODITIES[type].label):COMMODITIES[type].label}${flight.launched?(count===1?' was used for the flight.':' were used for the flight.'):(count===1?' is needed for the flight.':' are needed for the flight.')}`});
+            for(const input of flight.inputs) {
+                const work=input.production?.world===getCurrentWorldId()&&input.production.passage===travelerState().passage&&livingWorldState().materialWork.find(w=>w.id===input.production.work);
+                if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'Visit the vessel’s workshop',func:()=>openMaterialWork(work)});
+            }
+        } else {
+            items.push({text:survey?.count?`${survey.observations.at(-1)?.name} has made ${survey.count} observations here.`:'The town has not made a sky chart yet.'});
+            if(survey?.instrument){
+                items.push({text:'A telescope is set up for the work.'});
+                for(const input of survey.instrument.inputs || []){
+                    const work=input.production?.world===getCurrentWorldId()&&input.production.passage===travelerState().passage&&livingWorldState().materialWork.find(w=>w.id===input.production.work);
+                    if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'Visit the telescope maker',func:()=>openMaterialWork(work)});
+                }
+            }
+        }
+        for(const step of (flight?.steps || survey?.steps || []))items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        populateExecutive(items,flight?`${town.name} · The flight`:`${town.name} · The sky`);markLivingStoryControls();openExecutive();
+    }
     function computeSpaceTechScore(planetObj) {
-        if (!planetObj || !planetObj.unlocks) return 0;
-        const edu = planetObj.unlocks.education || 0;
-        const smith = planetObj.unlocks.smith || 0;
-        const fire = planetObj.unlocks.fire || 0;
-        const travel = planetObj.unlocks.travel || 0;
-        const trade = planetObj.unlocks.trade || 0;
-        const military = planetObj.unlocks.military || 0;
-        const avg = (edu + smith + fire + travel + trade + military) / 6;
-        return Math.round(avg);
+        const sky=planetObj?._paultendoSky;let score=sky?.orbitalSurvey?SPACE_TECH_THRESHOLDS.orbit:0;
+        for(const flight of sky?.flights || [])if(flight.status==='arrived'&&flight.target!=null)score=Math.max(score,SPACE_TECH_THRESHOLDS[getWorldById(flight.target)?.discovery] || 0);
+        return score;
     }
-
     function noteSpaceEvent(text) {
-        const universe = getUniverse(false);
-        if (!universe || !text) return;
-        universe.lastSpaceEvent = {
-            day: getUniverseDay(),
-            text: text
-        };
+        const universe=getUniverse(false);if(universe&&text)universe.lastSpaceEvent={day:getUniverseDay(),text};
     }
-
     function updateSpaceTech() {
-        const universe = getUniverse(false);
-        if (!universe) return 0;
-        let maxScore = 0;
-        for (const world of Object.values(universe.worlds)) {
-            if (!world || !world.state || !world.state.planet) continue;
-            const score = computeSpaceTechScore(world.state.planet);
-            if (score > maxScore) maxScore = score;
+        const universe=getUniverse(false);if(!universe)return 0;
+        let score=0;
+        for(const world of Object.values(universe.worlds)) {
+            if(world.id===universe.homeWorldId||world.id===universe.currentWorldId||getWorldTownStats(world).towns>0)world.reached=true;
+            const p=world.id===universe.currentWorldId?planet:world.state?.planet;
+            score=Math.max(score,computeSpaceTechScore(p));
+            // Existing colonies and the currently visited world remain reachable
+            // on upgrade. A generated but unvisited map is not a past voyage.
+            if(world.reached&&world.discovery)score=Math.max(score,SPACE_TECH_THRESHOLDS[world.discovery] || 0);
         }
-        if (maxScore > universe.spaceTech) {
-            universe.spaceTech = maxScore;
-            if (maxScore >= SPACE_TECH_THRESHOLDS.orbit && !universe._spaceOrbitNoted) {
-                universe._spaceOrbitNoted = true;
-                const msg = "Signals reach for the skies. The first satellites rise.";
-                logMessage(msg, "milestone");
-                noteSpaceEvent(msg);
-            }
-            if (maxScore >= SPACE_TECH_THRESHOLDS.moon && !universe._spaceMoonNoted) {
-                universe._spaceMoonNoted = true;
-                const msg = "A lunar mission becomes possible.";
-                logMessage(msg, "milestone");
-                noteSpaceEvent(msg);
-            }
-        }
-        if (planet && planet.unlocks) {
-            planet.unlocks.space = Math.max(planet.unlocks.space || 0, universe.spaceTech);
-        }
-        return universe.spaceTech;
+        universe.spaceTech=score;
+        if(planet?.unlocks)planet.unlocks.space=score;
+        return score;
     }
-
     function updateSpaceDiscovery() {
-        const universe = getUniverse(false);
-        if (!universe) return;
-        const tech = universe.spaceTech || 0;
-        getWorldOrder().forEach(world => {
-            if (!world || world.id === universe.homeWorldId) return;
-            if (!world.discovered && canDiscoverWorld(world, tech)) {
-                discoverWorld(world.id, "observe");
-            }
-        });
+        for(const world of getWorldOrder())if(!world.discovered&&skyChartSource(world))discoverWorld(world.id,'observe');
     }
 
     function ensureSolarStyles() {
@@ -13314,14 +13444,16 @@
         let html = `<div class="paultendo-solar-map" style="width:${size}px;height:${size}px">`;
         html += `<div class="paultendo-solar-star"></div>`;
 
-        const worlds = getWorldOrder();
+        const worlds = getWorldOrder().filter(world=>world.discovered);
+        const outer=Math.max(...worlds.map(world=>SOLAR_SYSTEM_CONFIG.orbitStart+world.orbitIndex*SOLAR_SYSTEM_CONFIG.orbitGap));
+        const scale=Math.min(1,(center-12)/outer);
         worlds.forEach(world => {
-            const radius = SOLAR_SYSTEM_CONFIG.orbitStart + world.orbitIndex * SOLAR_SYSTEM_CONFIG.orbitGap;
+            const radius = (SOLAR_SYSTEM_CONFIG.orbitStart + world.orbitIndex * SOLAR_SYSTEM_CONFIG.orbitGap)*scale;
             html += `<div class="paultendo-solar-orbit" style="--orbit:${radius}px"></div>`;
         });
 
         worlds.forEach(world => {
-            const radius = SOLAR_SYSTEM_CONFIG.orbitStart + world.orbitIndex * SOLAR_SYSTEM_CONFIG.orbitGap;
+            const radius = (SOLAR_SYSTEM_CONFIG.orbitStart + world.orbitIndex * SOLAR_SYSTEM_CONFIG.orbitGap)*scale;
             const angle = ((world.orbitAngle || 0) * Math.PI) / 180;
             const sizePx = Math.max(6, Math.round(6 + world.orbitIndex * 1.2));
             const x = center + radius * Math.cos(angle) - sizePx / 2;
@@ -13337,79 +13469,35 @@
     }
 
     function formatWorldListItem(world) {
-        if (!world) return "{{none}}";
-        const stats = getWorldTownStats(world);
-        const name = world.discovered ? (world.name || "Unknown") : "???";
-        const status = world.discovered ? `${stats.towns} town${stats.towns === 1 ? "" : "s"}` : "Undiscovered";
-        const day = world.state?.planet?.day || (planet?.day || 1);
-        return `<span class="paultendo-solar-label">${name}</span> <span style="opacity:0.7">(${status}, Day ${day})</span>`;
+        const stats=getWorldTownStats(world),status=world.reached?`${stats.towns} ${stats.towns===1?'settlement':'settlements'}`:'Charted · Beyond reach';
+        return `${escapeLivingText(world.name || world.label)}<span class="paultendoStoryProse">${status}</span>`;
     }
-
-    const SPACE_UNLOCK_LABELS = {
-        orbit: "Orbital Satellites",
-        moon: "Lunar Missions",
-        mars: "Red Planet",
-        belt: "Asteroid Belt",
-        outer: "Outer Planet"
-    };
-
-    function getNextSpaceThreshold(tech) {
-        const entries = Object.entries(SPACE_TECH_THRESHOLDS)
-            .sort((a, b) => a[1] - b[1]);
-        for (const [key, value] of entries) {
-            if (tech < value) return { key, value, label: SPACE_UNLOCK_LABELS[key] || key };
-        }
-        return null;
-    }
-
-    function openSolarWorldDetail(worldId) {
-        const universe = getUniverse(false);
-        const world = universe?.worlds?.[worldId];
-        if (!world) return;
-
-        const items = [];
-        const stats = getWorldTownStats(world);
-        const name = world.discovered ? (world.name || "Unknown World") : "Unknown World";
-        const typeLabel = world.label || "World";
-        const habitability = world.habitable ? "Habitable" : "Harsh";
-        const status = world.discovered ? `${stats.towns} town${stats.towns === 1 ? "" : "s"}, ${stats.pop} people` : "Undiscovered";
-
-        items.push({ text: `{{b:${name}}}` });
-        items.push({ text: `Type: ${typeLabel}` });
-        items.push({ text: `Environment: ${habitability}` });
-        items.push({ text: `Status: ${status}` });
-        items.push({ spacer: true });
-
-        if (!world.discovered && canDiscoverWorld(world)) {
-            items.push({
-                text: "Launch mission",
-                func: () => {
-                    discoverWorld(world.id, "mission");
-                    openSolarWorldDetail(world.id);
-                }
-            });
-        }
-
-        if (world.discovered && world.state) {
-            if (world.id === universe.currentWorldId) {
-                items.push({ text: "Currently active" });
-            } else {
-                items.push({
-                    text: "Switch to world",
-                    func: () => {
-                        switchWorld(world.id);
-                    }
-                });
-            }
-        }
-
-        items.push({ spacer: true });
-        items.push({
-            text: "◁ Back to Solar System",
-            func: () => openSolarPanel()
+    function skyFlightItems(targetId) {
+        if(!skyFlightKnowledge())return [];
+        const active=skyState().flights.find(f=>['preparing','enroute'].includes(f.status));
+        if(active)return [{text:'Another flight is already underway.'}];
+        const towns=regToArray('town').filter(livingTownKnown).filter(t=>skyScholar(t)&&!t.end&&t.pop>0);
+        if(!towns.length)return [{text:'An available scholar must lead the flight.'}];
+        return towns.map(town=>{
+            if(hasIssue(town,'war'))return {text:`${escapeLivingText(town.name)} is fighting. Its flight preparations must wait.`};
+            if(mealStock(town)<foodBuffer(town))return {text:`${escapeLivingText(town.name)} needs enough food for its people before preparing a flight.`};
+            return {text:`Ask ${escapeLivingText(skyScholar(town).name)} to prepare ${targetId==null?'a survey satellite':'a probe'}`,func:()=>{const flight=planSkyFlight(town,targetId,true);if(flight)openSkyStudy(town,flight);else openSolarPanel();}};
         });
-
-        populateExecutive(items, "World Details");
+    }
+    function openSolarWorldDetail(worldId) {
+        const universe=getUniverse(false),world=universe?.worlds?.[worldId];if(!world?.discovered)return;
+        const items=[{text:'← Back to Solar',func:openSolarPanel}];
+        items.push({text:world.reached?`${world.label || 'World'} · ${world.habitable?'Habitable':'Harsh'}`:'Only its light has reached us.'});
+        if(world.chart?.known&&world.chart.world===getCurrentWorldId()&&livingTownKnown(regGet('town',world.chart.town)))items.push({text:`${escapeLivingText(world.chart.name)} charted it on Day ${world.chart.day}.`});
+        const flight=skyState().flights.findLast(f=>f.target===worldId);
+        if(flight&&livingTownKnown(regGet('town',flight.town)))items.push({text:'Follow the probe',func:()=>openSkyStudy(regGet('town',flight.town),flight)});
+        if(world.reached) {
+            const stats=getWorldTownStats(world);items.push({text:`${stats.towns} ${stats.towns===1?'settlement':'settlements'} · ${stats.pop} people`});
+            if(world.id===universe.currentWorldId)items.push({text:'You are here.'});
+            else items.push({text:'Switch to world',func:()=>switchWorld(world.id)});
+        } else if(skyState().orbitalSurvey)items.push(...skyFlightItems(worldId));
+        else items.push({text:'A survey flight above the homeworld comes first.'});
+        populateExecutive(items,escapeLivingText(world.name || world.label));markLivingStoryControls();openExecutive();
     }
 
     function attachSolarMapHandlers() {
@@ -13425,34 +13513,31 @@
     }
 
     function openSolarPanel() {
-        ensureSolarStyles();
-        const universe = getUniverse(false);
-        if (!universe) return;
-
-        const items = [];
-        items.push({ spacer: true, text: buildSolarMapHTML() });
-        const tech = universe.spaceTech || 0;
-        const nextUnlock = getNextSpaceThreshold(tech);
-        items.push({ spacer: true, text: `Space Tech: ${tech}` });
-        if (nextUnlock) {
-            items.push({ text: `Next: ${nextUnlock.label} (${tech}/${nextUnlock.value})` });
-        } else {
-            items.push({ text: "All known thresholds reached." });
+        ensureSolarStyles();const universe=getUniverse(false);if(!universe)return;
+        const state=skyState(),items=[{spacer:true,text:buildSolarMapHTML()}];
+        items.push({text:'Charts grow from observations. Reaching another world takes a vessel, a workshop and a journey.'});
+        for(const town of regToArray('town').filter(livingTownKnown)) {
+            const survey=state.surveys[town.id];
+            if(survey)items.push({text:`${escapeLivingText(town.name)} · The night charts`,func:()=>openSkyStudy(town)});
         }
-        if (universe.lastSpaceEvent && universe.lastSpaceEvent.text) {
-            items.push({ spacer: true, text: `Recent: ${universe.lastSpaceEvent.text} (Day ${universe.lastSpaceEvent.day || getUniverseDay()})` });
+        const worlds=getWorldOrder().filter(world=>world.discovered);
+        items.push({heading:true,text:'On the charts'});
+        for(const world of worlds)items.push({text:formatWorldListItem(world),func:()=>openSolarWorldDetail(world.id)});
+        if(worlds.length===1)items.push({text:'No other world has been charted yet. An available scholar needs real optics and time to watch the sky.'});
+        items.push({heading:true,text:'Beyond the sky'});
+        const active=state.flights.find(f=>['preparing','enroute'].includes(f.status));
+        for(const flight of state.flights.slice(-4).reverse()) {
+            const town=regGet('town',flight.town);
+            if(livingTownKnown(town))items.push({text:escapeLivingText(flight.name),func:()=>openSkyStudy(town,flight)});
         }
-        items.push({ spacer: true, text: `Worlds (${getWorldOrder().length})` });
-
-        getWorldOrder().forEach(world => {
-            items.push({
-                text: formatWorldListItem(world),
-                func: () => openSolarWorldDetail(world.id)
-            });
-        });
-
-        populateExecutive(items, "Solar System");
-        attachSolarMapHandlers();
+        if(!active&&!state.orbitalSurvey)items.push(...skyFlightItems(null));
+        if(!skyFlightKnowledge()) {
+            const missing=Object.entries(MATERIAL_RECIPES.sky_vessel.needs).filter(([key,level])=>(planet.unlocks[key] || 0)<level);
+            const branches=livingDiscoveryBranches();
+            const names=missing.map(([key,level])=>branches[key]?.levels.find(item=>item.level===level)?.name || titleCase(key));
+            items.push({text:`A powered survey vessel needs ${commaList(names)}. Its workshop must also have steel, glass and fuel.`});
+        }
+        populateExecutive(items,'The sky');markLivingStoryControls();attachSolarMapHandlers();openExecutive();
     }
 
     function addSolarButton() {
@@ -13475,7 +13560,7 @@
         if (id === "stance") return !!planet.religions?.length;
         if (id === "festivals") return !!planet._paultendoFestivals?.length;
         if (id === "solar") return (planet.unlocks?.astronomy || 0) >= 10
-            || (getUniverse(false)?.spaceTech || 0) >= SPACE_TECH_THRESHOLDS.orbit;
+            || Object.values(getUniverse(false)?.worlds || {}).some(world=>world.reached&&world.id!==getUniverse(false)?.homeWorldId);
         return true;
     }
 
@@ -14009,6 +14094,8 @@
             withWorldState(world, () => {
                 planet.day = (planet.day || 1) + 1;
 
+                advanceSkyFlights(true);
+
                 // lightweight background growth
                 const towns = getActiveTowns();
                 towns.forEach(town => {
@@ -14070,6 +14157,7 @@
         initSpaceRoutes();
         initSpaceWars();
         initColonization(universe);
+        updateSpaceTech();
     }
 
     function wrapNextDayForUniverse() {
@@ -14097,13 +14185,13 @@
                     try { advanceLivingWhispers(); } catch (error) { console.warn("[paultendo-mod] Whisper follow-up failed:", error); }
                     try { advanceLivingArtifactWork(); advanceLivingArtifacts(); refreshLivingArtifactView(); } catch (error) { console.warn("[paultendo-mod] Artifact follow-up failed:", error); }
                     try { observeLivingInventions(); } catch(error) { console.warn('[paultendo-mod] Invention follow-up failed:',error); }
+                    try { advanceSkyStudy(); } catch(error) { console.warn('[paultendo-mod] Sky study failed:',error); }
                     try { advanceCommodityJourneys(); advanceFarmTools(); advanceMaterialWork(); advanceFarmTools(); advanceGrainStores(); observeCommodityNeeds(); advanceLivingTeachings(); } catch (error) { console.warn('[paultendo-mod] Words carried by the road failed:',error); }
                     try { observeLivingPlaces(); } catch (error) { console.warn("[paultendo-mod] Place follow-up failed:", error); }
                     try { observeLivingWorld(); } catch (error) { console.warn("[paultendo-mod] Settlement follow-up failed:", error); }
                     try { renderLivingFields(); updateCanvas(); } catch {}
                     try { syncLogToPlanet(); } catch {}
-                    try { updateSpaceTech(); } catch {}
-                    try { updateSpaceDiscovery(); } catch {}
+                    try { updateSpaceDiscovery(); advanceSkyFlights(); updateSpaceTech(); } catch(error) { console.warn('[paultendo-mod] Sky flight failed:',error); }
                     try { maybeCreateSpaceRoute(); } catch {}
                     try { maybeStartSpaceWar(); } catch {}
                     try { tickInactiveWorlds(); } catch {}
@@ -14263,6 +14351,9 @@
                 discovery: world.discovery,
                 name: world.name,
                 discovered: world.discovered,
+                reached: !!world.reached,
+                chart: world.chart || null,
+                arrival: world.arrival || null,
                 orbitAngle: world.orbitAngle,
                 createdDay: world.createdDay
             };
@@ -19517,7 +19608,13 @@
             }
         }
         const visits=Object.values(livingWorldState().places).flatMap(p=>(p.visits || []).filter(v=>v.town===town.id&&planet.day-v.day<=30&&v.pathLength>=6));
-        if(visits.length)add('travel',Math.min(2,visits.length/2),'Scouts have been making long journeys.',{journeys:visits.slice(-4).map(v=>({day:v.day,length:v.pathLength}))});
+        if(visits.length){
+            const journeys=visits.slice(-4).map(v=>({day:v.day,length:v.pathLength}));
+            add('travel',Math.min(2,visits.length/2),'Scouts have been making long journeys.',{journeys});
+            if(!(planet.unlocks.astronomy>=10))add('astronomy',1,'Scouts want a way to find their bearings after dark.',{through:10,journeys});
+        }
+        const scholar=skyScholar(town),lens=scholar&&skyLens(town,scholar);
+        if(scholar&&(lens||commodityStock(town,'glass')>0)&&(planet.unlocks.astronomy || 0)<20&&mealStock(town)>=nativeMealNeed(town)&&!hasIssue(town,'war'))add('astronomy',1.5,lens?`${scholar.name} is using a lens to study the sky. A steadier instrument could show more.`:'There is glass in the stores. The scholars want to fit it into an instrument for studying the sky.',{through:20,...(lens?{artifact:lens.id}:{material:'glass'})});
         if(town.jobs?.doctor>0&&(town.influences?.disease || 0)>0)add('education',(town.influences.disease || 0)/4,'The healers have sick people to care for.',{disease:town.influences.disease});
         if(hasIssue(town,'war'))add('military',2,'The town is fighting a war.',{war:town.issues.war});
         if(hasIssue(town,'revolution'))add('government',2,'The town is in revolt.',{revolution:town.issues.revolution});
@@ -33269,10 +33366,6 @@
                 break;
             case "observatory":
                 region.forEach(t => happen("Influence", null, t, { travel: 0.3, education: 0.2, temp: true }));
-                try {
-                    const universe = getUniverse(false);
-                    if (universe) universe.spaceTech = (universe.spaceTech || 0) + 1;
-                } catch {}
                 break;
             case "cathedral":
                 region.forEach(t => happen("Influence", null, t, { faith: 0.4, happy: 0.2, temp: true }));

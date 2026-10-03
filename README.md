@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.54**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
+Version **1.6.55**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.54/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.55/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.54)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.55)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -70,6 +70,8 @@ Actual shipments can carry a maker's guidance, if they choose to share it and so
 A practiced workshop can now accept a neighbour’s request even when it has no finished stock. Actual inputs, free workers, food and local commitments decide whether it can offer the work. The existing beliefs and remembered relationships decide whether it helps, asks for payment or refuses. Paid work keeps its quoted price. Payment moves only when actual goods leave, and the usual journey carries them to their destination. Hunger can pause production, blocked roads hold finished goods, and a vanished need withdraws the request. Already paid work can still finish into local stores. No request grants manufacturing knowledge to either town.
 
 People can now begin instruments without a Traveler whisper. Persistent illness, leading research priorities, repeated long expeditions, military drills or unhappiness can supply a reason. Actual jobs, technical knowledge, outlook, food and uncommitted materials decide whether work can begin. Competing reasons use the town's current pressures, research shares and values. A useful accessible instrument meets its particular need, while a hoarded object may leave others without one. A gathering idea can lapse when its need passes. Autonomous work records its own maker and cause, with Chronicle and settlement links, rather than inventing player instructions. These objects can be named, used, entrusted and carried into another beginning. Object production and custody continue beyond explored land, with undiscovered identities kept out of visible reports.
+
+Sky charts now grow from actual observations by available scholars using a real telescope or a lens they are studying. Learning Telescopes creates no finished instrument. Shared workshops must make it from glass, metal and timber. Charts distinguish a distant light from a world that has been reached. Powered survey vessels require late technical knowledge, eight steel, two glass and four charcoal, followed by twelve work days and a separate journey. Charcoal represents assembly fuel in this game recipe. Orbital reports reveal the wider map only after an actual survey flight arrives. Probes make other worlds reachable on arrival. Hunger, war and missing workers pause preparations, and curious scholars can initiate flights after genuine sky work and access to a workshop sample. Materials, makers, flights and observations survive reloads. Knowledge no longer launches free satellites or instantly opens worlds. These costs and durations are game calibration, not a propulsion simulation. The current world and existing colonies remain reachable. Colony transport and the older interworld economy still need a fuller physical supply model.
 
 Story descriptions now use smaller, softer text, with clearer actions and fewer dividing lines. Opening a story returns its scroll position to the heading.
 
