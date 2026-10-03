@@ -99,3 +99,12 @@ test('metal handtools need actual metal and shaping knowledge, then complement u
 test('native Metal Tools knowledge awards no gear and available stone remains a real alternative while metal cannot yet be shaped',async t=>{
  const g=await makeGame();t.after(g.close);const {w,town}=setup(g);prime(w,town);Object.assign(w.planet.unlocks,{smith:30,fire:10});add(w,town,'metal',2);add(w,town,'rock',2);next(w);const batch=work(w,town);assert.equal(batch.type,'stone_tools');finish(w,batch,town);assert.equal(tools(town),2);assert.equal(town.resources.metal,2);w.planet.unlocks.smith=40;next(w);assert.equal(town.resources.metal_tools,undefined,'The discovery has no manufactured output');assert.equal(work(w,town,'metal_tools'),undefined,'Actual finished work still has its recovery interval');w.planet.day+=8;prime(w,town);next(w);assert.equal(work(w,town,'metal_tools').status,'waiting');errors(g);
 });
+
+test('repeated successful toolmaking supplies an actual reason to teach, while a gift or unavailable maker supplies none',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);town.jobs={farmer:10,miner:10};prime(w,town);add(w,town,'rock',4);next(w);finish(w,work(w,town));w.planet.day+=8;prime(w,town);next(w);finish(w,work(w,town));
+ const random=w.Math.random;let proposals=[];try{for(let n=0;n<200;n++){w.Math.random=()=> (n+.5)/200;proposals.push(w.gameEvents.unlockLevel.value(w.regGet('player',1),town));}}finally{w.Math.random=random;}
+ const education=proposals.find(p=>p.type==='education');assert.ok(education?.need);assert.match(education.need.text,/learned to make stone handtools.*teach others/);assert.equal(education.need.practice.length,2);
+ for(const proof of education.need.practice){const made=life(w).materialWork.find(b=>b.id===proof.id);assert.equal(made.status,'made');assert.equal(made.person,proof.person);assert.equal(made.finished,proof.day);}
+ assert.equal(w.planet.unlocks.education,undefined);const stocks=plain(town.resources),workCount=life(w).materialWork.length;assert.equal(proposals.some(p=>p.need?.practice?.some(x=>!life(w).materialWork.find(b=>b.id===x.id))),false);assert.deepEqual(plain(town.resources),stocks);assert.equal(life(w).materialWork.length,workCount);
+ town.jobs={lumberer:20};proposals=[];try{for(let n=0;n<200;n++){w.Math.random=()=> (n+.5)/200;proposals.push(w.gameEvents.unlockLevel.value(w.regGet('player',1),town));}}finally{w.Math.random=random;}assert.equal(proposals.find(p=>p.type==='education')?.need,undefined,'The makers must still be available to teach');errors(g);
+});

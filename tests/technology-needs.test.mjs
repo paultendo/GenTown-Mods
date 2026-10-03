@@ -62,3 +62,32 @@ test('an actual metal sample and unmet fieldwork favour metal shaping without gr
  const g=await makeGame();t.after(g.close);const {w,town}=setup(g);town.resources.crop=100;town.research={farm:100};town.legal.farm=true;Object.assign(w.planet.unlocks,{smith:30,fire:10});town._paultendoFoodFlow=[{day:28,harvest:4},{day:29,harvest:4},{day:30,harvest:4}];const before=samples(w,town);add(w,town,'metal',2);const after=samples(w,town);assert.ok(after.counts.smith>before.counts.smith);const value=after.values.find(v=>v.type==='smith');assert.equal(value.need.purpose,'metal_tools');assert.equal(value.levelData.name,'Metal Tools');assert.match(w.gameEvents.unlockLevel.message(null,town,{value}),/farmers need more working tools/);assert.equal(town.resources.metal,2);assert.equal(town.resources.metal_tools,undefined);assert.equal(town._paultendoMaterials?.metal_tools,undefined);
  town.resources.crop=w.$c.maxResource(town);assert.equal(samples(w,town).values.find(v=>v.type==='smith').need,undefined,'Full stores leave no current reason for more field equipment');errors(g);
 });
+
+function nativeWeight(w){let weight;const choose=w.chooseEvent;w.chooseEvent=()=>{weight=w.randomEvents.unlockLevel.weight;return null;};try{w.nextDay();}finally{w.chooseEvent=choose;}return weight;}
+
+test('sustained eligible needs gain bounded attention in the existing event slot and relief removes it immediately',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);quiet(w);town.resources.crop=0;
+ const base=w.randomEvents.unlockLevel.weight,first=nativeWeight(w),second=nativeWeight(w),third=nativeWeight(w);
+ assert.ok(first>base);assert.ok(second>first);assert.ok(third>second);assert.ok(third<=base*4);
+ assert.equal(w.randomEvents.unlockLevel.weight,base,'Temporary weights restore after the day');
+ const question=town._paultendoResearchQuestions.farm;assert.equal(question.days,3);const before=plain(question);samples(w,town);samples(w,town);assert.deepEqual(plain(question),before,'Reading or sampling questions is not progress');
+ assert.equal(w.planet.unlocks.farm,10,'Noticing a need does not award a discovery');assert.equal(w.planet._paultendoLife.decisions.length,0,'No extra proposal was inserted into the day');
+ town.resources.crop=1000;assert.equal(nativeWeight(w),base);w.planet.unlocksRejected.farm=w.planet.day;town.resources.crop=0;assert.equal(nativeWeight(w),base,'A refused eligible branch is not used to boost a different proposal');errors(g);
+});
+
+test('saved research attention keeps genuine observations, pauses without means, and retires after discovery or a long gap',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);quiet(w);town.resources.crop=100;town.legal.farm=true;add(w,town,'rock',20);town._paultendoFoodFlow=[{day:28,harvest:4},{day:29,harvest:4},{day:30,harvest:4}];town._paultendoFarmTools={sets:[{id:'used',type:'stone_tools',count:2,uses:20}],steps:[],credit:0,extra:0};nativeWeight(w);nativeWeight(w);
+ const saved=plain(w.generateSave()),restored=await makeGame({save:saved});t.after(restored.close);const rw=restored.window,rt=rw.regGet('town',town.id);quiet(rw);assert.deepEqual(plain(rt._paultendoResearchQuestions),plain(town._paultendoResearchQuestions));rt.resources.rock=0;const base=rw.randomEvents.unlockLevel.weight;assert.equal(nativeWeight(rw),base,'Knowledge without a usable sample does not sustain this question');
+ rw.planet.day+=9;nativeWeight(rw);assert.equal(rt._paultendoResearchQuestions.smith,undefined);rt.resources.rock=20;rt._paultendoFoodFlow=[{day:rw.planet.day-2,harvest:4},{day:rw.planet.day-1,harvest:4},{day:rw.planet.day,harvest:4}];nativeWeight(rw);assert.equal(rt._paultendoResearchQuestions.smith.days,1,'The new need has a new observation history');
+ rw.planet.unlocks.smith=20;nativeWeight(rw);assert.equal(rt._paultendoResearchQuestions.smith.level,30);assert.equal(rt._paultendoResearchQuestions.smith.days,1,'A harder question does not inherit the completed question’s attention');errors(g);errors(restored);
+});
+
+test('the native proposal targets a settlement facing a sustained need without awarding an extra choice or revealing hidden identities',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g);quiet(w);town.resources.crop=0;town._hidden=true;
+ const chunk=w.filterChunks(c=>!c.v.s&&c.b!=='water'&&c.b!=='mountain')[0],other=w.happen('Create',null,null,{x:chunk.x,y:chunk.y},'town');other.pop=20;other.resources={crop:1000};other.jobs={farmer:20};other.research={};other.start=1;
+ for(let n=0;n<3;n++)nativeWeight(w);
+ const counts={},random=w.Math.random;
+ try{for(let n=0;n<200;n++){let index=0;w.Math.random=()=>index++===0?(n+.5)/200:.01;const caller=w.readyEvent('unlockLevel');assert.ok(caller);counts[caller.target.id]=(counts[caller.target.id] || 0)+1;if(caller.target===town){assert.equal(caller.args.value.need.known,false);assert.doesNotMatch(caller.message,/Claybank|running short/);}}}finally{w.Math.random=random;}
+ assert.ok(counts[town.id]>counts[other.id]*3,JSON.stringify(counts));
+ const caller=w.readyEvent('unlockLevel',w.regGet('player',1),other);assert.equal(caller.target,other,'Explicit native callers keep their actual settlement');errors(g);
+});

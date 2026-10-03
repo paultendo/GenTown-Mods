@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.53**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
+Version **1.6.54**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.53/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.54/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.53)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.54)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -91,3 +91,5 @@ The regression tests cover startup, late installation and redraw, overlay creati
 Local samples can now favour the technical discoveries needed to work them. Actual purposes, a curious available worker or existing research interests determine whether a sample is worth investigating. Clay needed for overflowing grain stores can favour basic fire and shaping knowledge. Sand with an interested worker can favour hotter furnaces. The same recipe requirements guide these priorities, and the actual sample remains in store. Research never awards stock or local manufacturing mastery. Hunger, journeys, building work, illness, war and revolt also influence which eligible native branch gets proposed, alongside the town's research priorities. Refusals, prerequisites and native choice effects remain intact. Material research cannot promote Firebombing. Extended furnace weights stay within the existing bounded weighting model. Full progression and human pacing balance remain unverified.
 
 Today’s news appears above the day controls on desktop and in a compact disclosure on phones. Town flags retain their colours after reload, events link back to their full stories, and quiet days leave the space clear. Completed or failed workshops and distinct field outcomes make useful work and its consequences visible.
+
+Persistent needs now give eligible native research more attention within the usual daily event, with a bounded effect and no extra popup stream. Proposals favour the settlement facing the problem, retain their reason through choice and reload, and still respect prerequisites and refusals. Repeated successful workshop practice can give available makers a reason to teach their skills, opening education through actual work. Resolving the need removes its extra attention.

@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.53/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.54/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.53";
+    const MOD_VERSION = "1.6.54";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -14089,7 +14089,7 @@
             let completed = false;
             PAULTENDO_STATE.advancingDay = true;
             try {
-                try { restoreTechBias = applyTechWeightBias(); } catch {}
+                try { observeNativeResearchNeeds(); restoreTechBias = applyTechWeightBias(); } catch {}
                 const result = baseNextDay.apply(this, args);
                 const dayAfter = (typeof planet !== "undefined") ? planet.day : undefined;
                 if (dayBefore !== dayAfter) {
@@ -19449,7 +19449,7 @@
     }
 
     // =========================================================================
-    // TECH BIAS (problem-driven weighting, normalized to keep overall rate stable)
+    // TECH BIAS (persistent native needs, bounded extended discovery weights)
     // =========================================================================
 
     const PAULTENDO_TECH_EVENT_IDS = new Set([
@@ -19521,6 +19521,16 @@
         if(town.jobs?.doctor>0&&(town.influences?.disease || 0)>0)add('education',(town.influences.disease || 0)/4,'The healers have sick people to care for.',{disease:town.influences.disease});
         if(hasIssue(town,'war'))add('military',2,'The town is fighting a war.',{war:town.issues.war});
         if(hasIssue(town,'revolution'))add('government',2,'The town is in revolt.',{revolution:town.issues.revolution});
+        const practice=(livingWorldState().materialWork || []).filter(work=>work.town===town.id&&work.status==='made'&&planet.day-work.finished<=30);
+        const available=practice.filter(work=>(town._paultendoPeople || []).some(person=>person.id===work.person&&livingTeachingPersonAvailable(person,town)));
+        const skills=new Set(available.map(work=>work.type));
+        if(available.length>=2&&mealStock(town)>=nativeMealNeed(town)&&!hasIssue(town,'war')) {
+            const current=planet.unlocks.education || 0,through=current<10?10:skills.size>=2?20:10;
+            if(current<through) {
+                const work=available.at(-1);
+                add('education',1.5,`Workers have learned to make ${COMMODITIES[work.type].label}. They want to teach others.`,{through,practice:available.slice(-4).map(work=>({id:work.id,person:work.person,day:work.finished,type:work.type}))});
+            }
+        }
         const demand=commodityWorkDemand(town);
         if(regToArray('town').some(other=>{
             const path=commodityPath(town,other);if(!path)return false;
@@ -19528,26 +19538,58 @@
         }))add('trade',1,'Goods the town needs can be brought from neighbours.');
         return needs;
     }
+    // Persistent problems compete for the existing daily event, not a second
+    // stream of research popups. These three observations and the fourfold cap
+    // are pacing calibration; neither observations nor weights grant knowledge.
+    const RESEARCH_ATTENTION={observations:3,memoryDays:8,maxMultiplier:4};
+    function nativeTechChoices(subject,town) {
+        if(!town||town.end||town.pop<=0)return [];
+        const needs=nativeTechNeeds(town),research=town.research || {},total=Object.values(research).reduce((n,v)=>n+Math.max(0,v),0),choices=[];
+        for(const [type,branch] of Object.entries(unlockTree)) {
+            if(planet.unlocksRejected[type]&&planet.day-planet.unlocksRejected[type]<=10)continue;
+            const levelData=branch.levels.find(level=>level.level>(planet.unlocks[type] || -1));
+            if(!levelData||Object.entries(levelData.needsUnlock || {}).some(([key,level])=>!planet.unlocks[key]||planet.unlocks[key]<level)||levelData.check&&!levelData.check(subject,town))continue;
+            const study=Math.max(0,research[type] || 0)/Math.max(1,total),candidate=needs[type];
+            const need=candidate&&(!candidate.through||levelData.level<=candidate.through)?candidate:null;
+            const question=town._paultendoResearchQuestions?.[type];
+            const observations=need&&question?.level===levelData.level&&planet.day-question.last<=RESEARCH_ATTENTION.memoryDays?{since:question.since,last:question.last,days:question.days}:null;
+            const attention=need&&observations?need.pressure/2*Math.min(1,observations.days/RESEARCH_ATTENTION.observations):0;
+            choices.push({type,levelData,attention,weight:1+(need?.pressure || 0)*3+study*2+attention*4,...(need?{need:{...need,town:town.id,day:planet.day,known:livingTownKnown(town),...(observations?{observations}:{})}}:{})});
+        }
+        return choices;
+    }
+    function observeNativeResearchNeeds() {
+        const player=regGet('player',1);
+        for(const town of regToArray('town')) {
+            if(town.end||town.pop<=0)continue;
+            const candidates=nativeTechChoices(player,town).filter(choice=>choice.need);
+            if(!candidates.length&&!town._paultendoResearchQuestions)continue;
+            const questions=town._paultendoResearchQuestions ||= {};
+            for(const choice of candidates) {
+                let question=questions[choice.type];
+                if(!question||question.level!==choice.levelData.level||planet.day-question.last>RESEARCH_ATTENTION.memoryDays) {
+                    question=questions[choice.type]={level:choice.levelData.level,since:planet.day,last:null,days:0};
+                }
+                if(question.last!==planet.day){question.last=planet.day;question.days=Math.min(RESEARCH_ATTENTION.observations,question.days+1);}
+            }
+            for(const [type,question] of Object.entries(questions)) {
+                if(planet.day-question.last>RESEARCH_ATTENTION.memoryDays||(planet.unlocks[type] || 0)>=question.level)delete questions[type];
+            }
+        }
+    }
+    function townResearchAttention(town) {
+        return nativeTechChoices(regGet('player',1),town).reduce((best,choice)=>Math.max(best,choice.attention),0);
+    }
     function installNativeTechNeeds() {
         const info=gameEvents.unlockLevel;if(!info?.value||info.value._paultendoNeeds)return;
         const base=info.value,message=info.message;
         info.value=function(subject,town) {
             if(!town||town.end||town.pop<=0)return base.apply(this,arguments);
-            const needs=nativeTechNeeds(town),research=town.research || {},total=Object.values(research).reduce((n,v)=>n+Math.max(0,v),0);
-            if(!Object.keys(needs).length&&!total)return base.apply(this,arguments);
-            const choices=[];
-            for(const [type,branch] of Object.entries(unlockTree)) {
-                if(planet.unlocksRejected[type]&&planet.day-planet.unlocksRejected[type]<=10)continue;
-                const levelData=branch.levels.find(l=>l.level>(planet.unlocks[type] || -1));
-                if(!levelData||Object.entries(levelData.needsUnlock || {}).some(([key,level])=>!planet.unlocks[key]||planet.unlocks[key]<level)||levelData.check&&!levelData.check(subject,town))continue;
-                const study=Math.max(0,research[type] || 0)/Math.max(1,total),candidate=needs[type];
-                const need=candidate&&(!candidate.through||levelData.level<=candidate.through)?candidate:null;
-                choices.push({type,levelData,weight:1+(need?.pressure || 0)*3+study*2,...(need?{need:{...need,town:town.id,day:planet.day,known:livingTownKnown(town)}}:{})});
-            }
+            const choices=nativeTechChoices(subject,town);
+            if(!choices.some(choice=>choice.need)&&!Object.values(town.research || {}).some(value=>value>0))return base.apply(this,arguments);
             if(!choices.length)return false;
-            let roll=Math.random()*choices.reduce((n,c)=>n+c.weight,0);
-            for(const choice of choices){roll-=choice.weight;if(roll<0){const {weight,...value}=choice;return value;}}
-            const {weight,...value}=choices.at(-1);return value;
+            const choice=weightedChoice(choices,c=>c.weight);
+            const {weight,attention,...value}=choice;return value;
         };
         info.value._paultendoNeeds=true;
         info.message=function(subject,town,args) {
@@ -19555,6 +19597,18 @@
             const need=args.value?.need;
             return need?.known&&livingTownKnown(town)?`${townRef(town.id)}: ${escapeLivingText(need.text)} ${original}`:original;
         };
+        if(typeof readyEvent==='function'&&!readyEvent._paultendoResearchTown) {
+            const ready=readyEvent;
+            readyEvent=function(eventClass,subject=null,target=null) {
+                if(eventClass==='unlockLevel'&&!target) {
+                    const towns=regToArray('town').filter(town=>!town.end&&town.pop>0&&(!town.start||planet.day-town.start>1));
+                    const scores=towns.map(town=>({town,attention:townResearchAttention(town)}));
+                    if(scores.some(item=>item.attention>0))target=weightedChoice(scores,item=>1+item.attention*8).town;
+                }
+                return ready.apply(this,[eventClass,subject,target]);
+            };
+            readyEvent._paultendoResearchTown=true;
+        }
     }
 
     function getTechPressureSignals() {
@@ -19633,7 +19687,14 @@
             eligible.push({ eventId, info, baseWeight, raw });
         }
 
-        if (eligible.length === 0) return null;
+        const restore = {};
+        const native = randomEvents.unlockLevel;
+        if(native) {
+            const baseWeight=native._paultendoBaseWeight ||= native.weight;
+            const attention=regToArray('town').reduce((best,town)=>Math.max(best,townResearchAttention(town)),0);
+            restore.unlockLevel=baseWeight;
+            native.weight=baseWeight*(1+attention*(RESEARCH_ATTENTION.maxMultiplier-1));
+        }
 
         let sumBase = 0;
         let sumBiased = 0;
@@ -19643,7 +19704,6 @@
         }
 
         const normalize = sumBiased > 0 ? (sumBase / sumBiased) : 1;
-        const restore = {};
 
         for (const e of eligible) {
             const finalMult = clampValue(e.raw * normalize, TECH_BIAS_LIMITS.min, TECH_BIAS_LIMITS.max);
