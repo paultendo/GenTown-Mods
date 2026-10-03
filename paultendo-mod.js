@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.35/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.36/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.35";
+    const MOD_VERSION = "1.6.36";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -3255,7 +3255,11 @@
             if (action === "Influence" && args && typeof args === "object") {
                 try { softenFaithLoss(args, target); } catch {}
             }
+            const speciesRate = action === 'Boost' && target?._reg === 'species' ? (target.rate || 1) : null;
             const result = baseHappen(action, subject, target, args, targetClass);
+            if (speciesRate !== null && target.rate > speciesRate) {
+                try { recordLivingSpeciesUse(target, subject, target.type === 'plant' ? 'cultivation' : 'breeding'); } catch {}
+            }
             if (action === "Create" && result && result.type === "war" && !result._paultendoCasusSet) {
                 const instigator = subject && subject._reg === "town" ? subject : regGet("town", result.initiator || result.towns?.[0]);
                 const defenderId = result.defender || (result.towns || []).find(id => id !== instigator?.id);
@@ -5202,8 +5206,125 @@
         state.discoveries ||= {};
         state.decisions ||= [];
         state.moments ||= [];
+        state.species ||= {};
         state.nextId ||= 1;
         return state;
+    }
+
+    function livingSpeciesKnown(species) {
+        return species && species.named !== false && !species._hidden && ['plant', 'animal'].includes(species.type);
+    }
+
+    function livingSpeciesNotes(species) {
+        return livingWorldState().species[species.id] ||= { uses: {} };
+    }
+
+    // Eligibility checks populate traits for candidates that may never be shown.
+    // An encounter begins only when the native event has actually reached the log.
+    function observeLivingSpeciesEncounters() {
+        if (!planet || typeof currentEvents === 'undefined') return;
+        for (const caller of Object.values(currentEvents)) {
+            if (caller.eventClass !== 'speciesDiscover' || !caller.logID) continue;
+            const entry = document.getElementById(`logMessage-${caller.logID}`);
+            if (entry?.getAttribute('data-eventid') !== caller.eventID) continue;
+            const species = regGet('species', caller.args?.speciesID);
+            if (!species || !livingTownKnown(caller.target) || regGet('town', caller.target.id) !== caller.target) continue;
+            const day = Number(entry.querySelector('.logDay')?.getAttribute('data-day'));
+            if (!Number.isFinite(day)) continue;
+            const notes = livingSpeciesNotes(species);
+            notes.encounter ||= { day, town: caller.target.id, biome: species.biome };
+        }
+    }
+
+    function recordLivingSpeciesUse(species, town, kind) {
+        if (!planet || !livingSpeciesKnown(species) || !livingTownKnown(town)) return;
+        const notes = livingSpeciesNotes(species);
+        notes.uses ||= {};
+        const uses = notes.uses[town.id] ||= {};
+        if (kind === 'emblem') uses.emblem ||= { day: planet.day };
+        else {
+            const method = uses[kind] ||= { day: planet.day, lastDay: planet.day, improvements: 0 };
+            method.lastDay = planet.day;
+            method.improvements++;
+        }
+    }
+
+    function livingSpeciesDescription(species) {
+        const biome = species.biome === 'water' ? 'aquatic' : String(species.biome || '').replace(/_/g, ' ');
+        const texture = ({fur:'furry', feather:'feathered', scale:'scaled'})[species.texture];
+        const appearance = [species.sized, texture].filter(Boolean).join(', ');
+        const home = biomes[species.biome]?.name || biome;
+        const kind = species.type === 'plant' ? [biome, species.subtype || 'plant'].filter(Boolean).join(' ') : `${appearance ? appearance + ' ' : ''}${species.biome === 'water' ? 'aquatic animal' : `animal${home ? ' of the ' + home : ''}`}`;
+        const lines = [`${/^[aeiou]/i.test(kind) ? 'An' : 'A'} ${kind}.`];
+        if (species.type === 'plant') {
+            if (species.produce) lines.push(`It bears ${({fruit:'fruit', berry:'berries', flower:'flowers', herb:'herbs'})[species.produce] || species.produce}.`);
+            if (species.offspring === 'seed') lines.push('It spreads by seed.');
+            if (species.offspring === 'spore') lines.push('It spreads by spores.');
+            if (species.diet === 'animal') lines.push('It feeds on animals.');
+        } else {
+            if (species.time === 'night') lines.push('It is active at night.');
+            if (species.time === 'day') lines.push('It is active during the day.');
+            if (species.diet) lines.push(({plant:'It feeds on plants.', animal:'It feeds on other animals.', any:'It eats both plants and animals.'})[species.diet] || '');
+            if (species.habitat === 'any') lines.push('It lives on land and in water.');
+            if (species.habitat === 'water') lines.push('It lives in water.');
+            const ability = ({fly:'It can fly.', dig:'It can burrow.', mimic:'It can mimic sounds.', smell:'It has a keen sense of smell.', camo:'It can blend into its surroundings.'})[species.ability];
+            if (ability) lines.push(ability);
+        }
+        return lines.filter(Boolean).join(' ');
+    }
+
+    function livingSpeciesTownIds(species, notes) {
+        return [...new Set([notes?.encounter?.town, ...Object.keys(notes?.uses || {}), ...regToArray('town').filter(t => t.animal === species.id).map(t => t.id)].filter(id => id !== undefined && id !== null).map(String))]
+            .filter(id => livingTownKnown(regGet('town', id)));
+    }
+
+    function appendLivingSpeciesView(species) {
+        const content = document.getElementById('regContent');
+        if (!content || !livingSpeciesKnown(species)) return;
+        const notes = livingWorldState().species[species.id];
+        const section = document.createElement('section');
+        section.className = 'paultendoTownLife paultendoFieldNotes';
+        const heading = document.createElement('h3'); heading.textContent = 'Field notes'; section.appendChild(heading);
+        const addLine = text => { const p = document.createElement('p'); p.textContent = text; section.appendChild(p); };
+        addLine(livingSpeciesDescription(species));
+        const encounterTown = notes?.encounter && regGet('town', notes.encounter.town);
+        const sameDay = livingTownKnown(encounterTown) && notes?.describedDay === notes.encounter.day;
+        if (livingTownKnown(encounterTown)) addLine(`Day ${notes.encounter.day} · A resident of ${encounterTown.name} encountered this species.${sameDay ? ' It was given a name that day.' : ''}`);
+        if (notes?.describedDay !== undefined && !sameDay) addLine(`Day ${notes.describedDay} · It was given a name.`);
+        const towns = livingSpeciesTownIds(species, notes);
+        if (towns.length) {
+            const title = document.createElement('h3'); title.textContent = 'In town life'; section.appendChild(title);
+            const links = document.createElement('div'); links.className = 'paultendoLifeDiscoveries';
+            for (const id of towns) {
+                const town = regGet('town', id), uses = notes?.uses?.[id];
+                for (const kind of ['cultivation', 'breeding']) {
+                    const method = uses?.[kind];
+                    if (method) {
+                        addLine(`Day ${method.day} · ${town.name} found a better way to ${kind === 'cultivation' ? 'grow' : 'breed'} it.`);
+                        if (method.improvements > 1) addLine(`They improved their methods again on day ${method.lastDay}.`);
+                    }
+                }
+                if (uses?.emblem) addLine(`Day ${uses.emblem.day} · ${town.name} chose it as their town animal.`);
+                else if (town.animal === species.id) addLine(`${town.name} honours it as their town animal.`);
+                const button = document.createElement('button'); button.textContent = `Visit ${town.name}`;
+                button.addEventListener('click', () => { closePopups(); closeExecutive(); openRegBrowser(town, 'town'); }); links.appendChild(button);
+            }
+            section.appendChild(links);
+        }
+        content.querySelector('.regSubTitle')?.closest('.regSection')?.after(section);
+    }
+
+    function appendLivingTownSpecies(town, section) {
+        const state = livingWorldState();
+        const local = regToArray('species').filter(species => livingSpeciesKnown(species) && (town.animal === species.id || state.species[species.id]?.encounter?.town === town.id || state.species[species.id]?.uses?.[town.id]));
+        if (!local.length) return;
+        const title = document.createElement('h3'); title.textContent = 'Plants and animals'; section.appendChild(title);
+        const links = document.createElement('div'); links.className = 'paultendoLifeDiscoveries';
+        for (const species of local) {
+            const button = document.createElement('button'); button.textContent = species.name;
+            button.addEventListener('click', () => { closePopups(); closeExecutive(); openRegBrowser(species, 'species'); }); links.appendChild(button);
+        }
+        section.appendChild(links);
     }
 
     function livingTownSnapshot(town) {
@@ -5585,6 +5706,7 @@
             links.appendChild(button);
         }
         section.appendChild(links);
+        appendLivingTownSpecies(town, section);
         const places = livingPlaceItems(town);
         if (places.length) {
             const heading = document.createElement('h3'); heading.textContent = 'Places and neighbours'; section.appendChild(heading);
@@ -5643,6 +5765,33 @@
 
     function initLivingWorld() {
         seedLivingDiscoveries();
+        const discoveryPrompt = gameEvents.speciesDiscover?.value;
+        if (discoveryPrompt && !discoveryPrompt._paultendoFieldNotes) {
+            const baseMessage = discoveryPrompt.message;
+            discoveryPrompt.message = function(subject, target, args) {
+                const message = baseMessage.apply(this, arguments);
+                const species = regGet('species', args.speciesID);
+                return species ? `${message}\n\n${escapeLivingText(livingSpeciesDescription(species))}` : message;
+            };
+            discoveryPrompt._paultendoFieldNotes = true;
+        }
+        for (const eventClass of ['speciesDiscover', 'townAnimal']) {
+            const info = gameEvents[eventClass];
+            if (!info?.func || info.func._paultendoFieldNotes) continue;
+            const base = info.func;
+            info.func = function(subject, target, args) {
+                const species = regGet('species', eventClass === 'speciesDiscover' ? args.speciesID : args.value);
+                const unnamed = species?.named === false;
+                const oldAnimal = target?.animal;
+                const result = base.apply(this, arguments);
+                try {
+                    if (eventClass === 'speciesDiscover' && unnamed && livingSpeciesKnown(species)) livingSpeciesNotes(species).describedDay = planet.day;
+                    if (eventClass === 'townAnimal' && target?.animal !== oldAnimal && target?.animal === species?.id) recordLivingSpeciesUse(species, target, 'emblem');
+                } catch (error) { console.warn('[paultendo-mod] Field notes update failed:', error); }
+                return result;
+            };
+            info.func._paultendoFieldNotes = true;
+        }
         for (const discovery of EXTENDED_DISCOVERIES) {
             if (gameEvents[discovery.event]) gameEvents[discovery.event]._paultendoDiscovery = discovery;
         }
@@ -5665,7 +5814,7 @@
         }
         if (typeof openRegBrowser === 'function' && !openRegBrowser._paultendoLife) {
             const base = openRegBrowser;
-            openRegBrowser = function(obj, registry) { const result = base.apply(this, arguments); if (registry === 'town') appendLivingTownView(obj); return result; };
+            openRegBrowser = function(obj, registry) { const result = base.apply(this, arguments); if (registry === 'town') appendLivingTownView(obj); if (registry === 'species') appendLivingSpeciesView(obj); return result; };
             openRegBrowser._paultendoLife = true;
         }
     }
@@ -5678,7 +5827,7 @@
             .paultendoTownLife { padding: 0.6em 0 0.9em; border-bottom: 1px solid #77745f; text-align: left; }
             .paultendoTownLife h3 { color: #e5dc98; font: inherit; margin: 0 0 0.4em; }
             .paultendoTownLife p { margin: 0.3em 0; line-height: 1.25; overflow-wrap: anywhere; }
-            .paultendoTownLife button { font: inherit; color: #e5dc98; background: #26251c; border: 1px solid #888260; padding: 0.3em 0.45em; cursor: pointer; text-align: left; }
+            .paultendoTownLife button { font: inherit; color: #e5dc98; background: #26251c; border: 1px solid #888260; padding: 0.3em 0.45em; cursor: pointer; text-align: left; min-height: 44px; max-width: 100%; overflow-wrap: anywhere; }
             .paultendoTownLife button:hover { color: #fff1a0; background: #373326; }
             .paultendoTownLife button:focus-visible, .paultendoDecisionPreview summary:focus-visible { outline: 2px solid #fff1a0; outline-offset: 3px; }
             .paultendoLifeDiscoveries { display: flex; flex-wrap: wrap; gap: 0.35em; margin: 0.65em 0; }
@@ -11491,6 +11640,7 @@
                 const result = baseNextDay.apply(this, args);
                 const dayAfter = (typeof planet !== "undefined") ? planet.day : undefined;
                 if (dayBefore !== dayAfter) {
+                    try { updateSeasonState(); } catch {}
                     try { observeLivingWorld(); } catch (error) { console.warn("[paultendo-mod] Settlement follow-up failed:", error); }
                     try { renderLivingFields(); updateCanvas(); } catch {}
                     try { syncLogToPlanet(); } catch {}
@@ -28659,7 +28809,7 @@
             const baseUpdateStats = updateStats;
             updateStats = function(...args) {
                 const result = baseUpdateStats.apply(this, args);
-                try { finishLivingDecisions(); seedLivingDiscoveries(); updateLivingDecisionPreviews(); } catch (error) { console.warn("[paultendo-mod] Settlement update failed:", error); }
+                try { finishLivingDecisions(); seedLivingDiscoveries(); observeLivingSpeciesEncounters(); updateLivingDecisionPreviews(); } catch (error) { console.warn("[paultendo-mod] Settlement update failed:", error); }
                 updateAutoplayUI();
                 updateProgressMenus();
                 return result;

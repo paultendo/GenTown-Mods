@@ -10,9 +10,11 @@ This is the first step toward visible consequences, not a complete causal model.
 
 ## Exploration reveals a place worth knowing
 
-Next, give newly encountered species and places a discoverable history: the first known encounter, habitat, local uses and their actual part in settlement life. Let an exploration discovery lead back to its location, neighbours and people. Preserve the fog and unknown identities until an encounter actually happens. A discovery should offer curiosity and possibility rather than a checklist reward.
+Species now have a discoverable history: new encounters remember the resident’s town and date, habitat and traits appear in naming prompts and species pages, and native cultivation, breeding and town-animal adoption leave dated notes. Settlement and species pages link to each other. Historical facts are not invented for old saves. The engine aggregates crop yields, so these pages do not claim particular harvest quantities for particular species.
 
-Proof: an isolated run encounters a new species or place through the real simulation, its page shows the recorded encounter and known habitat, and a reload retains that history without exposing undiscovered regions.
+Next, give expedition destinations a similar history. Let an exploration discovery lead back to its location, neighbours and people. Preserve the fog and unknown identities until an encounter actually happens. A discovery should offer curiosity and possibility rather than a checklist reward.
+
+Species proof: native encounter, naming, cultivation and town-animal callbacks are exercised with reload and visibility checks. The existing three seeded 300-day simulations also record encounters during normal play. Expedition destination history remains to be built.
 
 ## People carry the consequences
 

@@ -16,7 +16,7 @@ test('bundled game and overhaul boot without uncaught errors', async t => {
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.35');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.36');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));
@@ -319,7 +319,7 @@ test('mod management receives complete URLs and can remove an installation', asy
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.35/paultendo-mod.js';
+  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.36/paultendo-mod.js';
   window.userSettings.mods = [url];
   window.showMods();
   window.handlePrompt(url);
@@ -333,7 +333,7 @@ test('adding an updated URL replaces older URLs before the duplicate guard retur
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.35/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.36/paultendo-mod.js';
   window.userSettings.mods = ['https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js', current, 'example_mod.js'];
   window._paultendoState.loadedVersion = '1.6.27';
   Object.defineProperty(window.document, 'currentScript', { configurable: true, get: () => ({ src: current }) });
@@ -594,6 +594,13 @@ for (const seed of [7, 42, 123]) {
       }
     }
     assert.equal(game.window.planet.day, 301);
+    assert.equal(game.window.planet._paultendoSeason.dayOfYear, 61);
+    const speciesNotes = Object.values(game.window.planet._paultendoLife.species);
+    assert.ok(speciesNotes.some(note => note.encounter), 'Normal play must record actual encounters');
+    for (const note of speciesNotes) {
+      if (note.encounter) assert.ok(note.encounter.day >= 1 && note.encounter.day <= 301);
+      if (note.describedDay !== undefined) assert.ok(note.describedDay >= note.encounter.day);
+    }
     assert.ok(JSON.stringify(game.window.generateSave()).length > 0);
     for (const town of game.window.regToArray('town', true)) {
       assert.ok(Number.isFinite(town.pop) && town.pop >= 0, `Invalid population in town ${town.id}`);
