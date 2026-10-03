@@ -1,6 +1,6 @@
 {
   "name": "gentown-paultendo",
-  "version": "1.6.38",
+  "version": "1.6.39",
   "private": true,
   "description": "Local GenTown playground with the paultendo overhaul",
   "scripts": {

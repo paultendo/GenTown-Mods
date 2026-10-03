@@ -12,9 +12,11 @@ This is the first step toward visible consequences, not a complete causal model.
 
 Species now have a discoverable history: new encounters remember the resident’s town and date, habitat and traits appear in naming prompts and species pages, and native cultivation, breeding and town-animal adoption leave dated notes. Settlement and species pages link to each other. Historical facts are not invented for old saves. The engine aggregates crop yields, so these pages do not claim particular harvest quantities for particular species.
 
-Next, give expedition destinations a similar history. Let an exploration discovery lead back to its location, neighbours and people. Preserve the fog and unknown identities until an encounter actually happens. A discovery should offer curiosity and possibility rather than a checklist reward.
+Completed expeditions now retain a named destination, the actual arrival and journey date, known origin, person carrying a whisper, and the terrain revealed. The settlement and temporary expedition marker lead to the place. The page shows current terrain, actual roads and later ownership changes, and lets the player ask a person to return. A rival’s claim can become hostile words aimed at that specific owner. These words can worsen relations and war pressure, but cannot silently target somebody else if the ground changes hands. Merely considering an expedition creates no historical visit. Fog and unknown identities remain protected.
 
-Species proof: native encounter, naming, cultivation and town-animal callbacks are exercised with reload and visibility checks. The existing three seeded 300-day simulations also record encounters during normal play. Expedition destination history remains to be built.
+Further exploration needs discoveries and local practices that make a return worthwhile beyond charting and road use. Artifacts, competing interpretations and transmission between people remain to be built.
+
+Species proof: native encounter, naming, cultivation and town-animal callbacks are exercised with reload and visibility checks. The existing three seeded 300-day simulations also record encounters during normal play. Six destination tests cover native acceptance, refusal and failed paths, marker expiry, persistent visits, saved return whispers and actual traffic, known lost origins, visibility, actual ownership changes and a delayed hostile claim. The three seeded 300-day runs exercise the existing expedition systems alongside normal play.
 
 ## People carry the consequences
 
@@ -32,6 +34,6 @@ Proof: multiple seeds yield different chains through normal play. Removing an en
 
 ## The Traveler frame reaches the game
 
-Introduce the fragmented memory and uncertain role in the playable opening, then connect visions, whispers and artifacts to existing simulation actors. Preserve ongoing saves and familiar controls while that framing develops. The game should gradually make the player feel like a visitor influencing history rather than an administrator confirming every popup.
+The fresh-world opening now introduces the fragmented memory and uncertain role beside the Chronicle without blocking the first camp. Lore retains that memory and leads to known people. Ongoing saves receive no fabricated arrival event. Next, connect visions and artifacts to existing simulation actors and remembered places. Preserve ongoing saves and familiar controls while that framing develops. The game should gradually make the player feel like a visitor influencing history rather than an administrator confirming every popup.
 
 Proof: the opening establishes the role in natural game language, interventions have limits and reception, and the world can continue without turning unanswered proposals into silent approval.

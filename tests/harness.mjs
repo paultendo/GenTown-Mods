@@ -11,6 +11,11 @@ export async function makeGame({ seed = 42, settings = {}, save, mod = true } = 
   const html = readFileSync(new URL('index.html', root), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '');
   const dom = new JSDOM(html, { url: 'http://localhost:4173', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: console });
   const { window } = dom;
+  // GenTown capitalises an affix through innerText. jsdom does not implement
+  // this browser property, so provide its plain-text subset for logic tests.
+  if (!('innerText' in window.HTMLElement.prototype)) Object.defineProperty(window.HTMLElement.prototype, 'innerText', {
+    get() { return this.textContent; }, set(value) { this.textContent = value; }
+  });
   window.structuredClone = structuredClone;
   let randomState = seed;
   window.Math.random = () => {

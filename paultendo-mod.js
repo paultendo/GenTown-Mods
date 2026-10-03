@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.38/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.39/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.38";
+    const MOD_VERSION = "1.6.39";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -3277,6 +3277,7 @@
                 try { markTownExplored(result); } catch {}
                 try { markFogDirty(); } catch {}
                 try { scheduleFogRefresh(true); } catch {}
+                try { renderTravelerOpening(); } catch {}
             }
             if (action === "Unlock") { try { recordLivingDiscovery(subject, args); } catch {} }
             try { handleAutoplayEventForHappen(action, subject, target, result); } catch {}
@@ -5212,6 +5213,7 @@
         state.moments ||= [];
         state.species ||= {};
         state.whispers ||= [];
+        state.places ||= {};
         state.nextId ||= 1;
         return state;
     }
@@ -5231,6 +5233,127 @@
     };
     const LIVING_FIGURE_ROLES = { SCHOLAR:'scholar', INVENTOR:'scholar', GENERAL:'soldier', HERO:'soldier', TYRANT:'soldier', PROPHET:'priest', HEALER:'doctor', ARTIST:'musician' };
     let livingPersonView = null;
+
+    function livingPlaceKnown(place) {
+        return !!place && !!chunkAt(place.x,place.y) && isChunkExplored(place.x,place.y);
+    }
+
+    function recordLivingJourney(town, mission, path, revealed, carrier) {
+        const last = path?.at(-1);
+        const target = last && chunkAt(last.x,last.y);
+        if (!target || !path?.length || !isChunkExplored(target.x,target.y)) return null;
+        const state = livingWorldState(), id = `${target.x},${target.y}`;
+        let place = state.places[id];
+        if (!place) {
+            // The name is a scout's landmark, never a claim about an ancient history.
+            const rand = mulberry32(fnv1a32(`${planet.config?.seed || planet.id}:${id}:place`));
+            const suffix = chooseSeeded(rand,['Reach','Hollow','Rest','Watch']);
+            const biome = titleCase(target.b);
+            place = state.places[id] = {id,x:target.x,y:target.y,name:`${biome} ${suffix}`,biome:target.b,firstDay:planet.day,visits:[],changes:[],owner:target.v?.s || null};
+        }
+        const visit = {day:planet.day,town:town.id,originName:town.name,knownOrigin:livingTownKnown(town),type:mission.type,purpose:mission.label,revealed,pathLength:path.length,tag:mission.tag || null};
+        if (carrier) {visit.person = carrier.person; visit.name = carrier.name; visit.whisper = carrier.id;}
+        place.visits.push(visit);
+        if (place.visits.length > 24) place.visits.splice(1,place.visits.length-24);
+        return place;
+    }
+
+    function observeLivingPlaces() {
+        for (const place of Object.values(livingWorldState()?.places || {})) {
+            const chunk = chunkAt(place.x,place.y);
+            if (!chunk) continue;
+            const owner = chunk.v?.s || null;
+            if (owner === place.owner) continue;
+            place.owner = owner;
+            const town = owner && regGet('town',owner);
+            place.changes.push({day:planet.day,owner,ownerName:town?.name,knownOwner:livingTownKnown(town)});
+            if (place.changes.length > 12) place.changes.shift();
+            if (livingPlaceKnown(place) && livingTownKnown(town)) logMessage(`${townRef(town.id)} now holds the ground at {{b:${escapeLivingText(place.name)}}}.`,'milestone');
+        }
+    }
+
+    function livingPlaceReturn(town, place) {
+        if (!livingTownKnown(town) || !livingPlaceKnown(place)) return false;
+        const center = getTownCenter(town);
+        return center && Math.hypot(center[0]-place.x,center[1]-place.y) <= getExplorationRange(town);
+    }
+
+    function livingPlaceRival(town, place) {
+        if (!livingPlaceKnown(place) || !livingWhisperAvailable(town,'conquer')) return null;
+        const owner = chunkAt(place.x,place.y)?.v?.s;
+        return livingConflictNeighbours(town).find(other=>other.id === owner) || null;
+    }
+
+    function openLivingPlace(place, townId) {
+        if (!livingPlaceKnown(place)) return;
+        livingPersonView = null;
+        const chunk = chunkAt(place.x,place.y), town = regGet('town',townId);
+        const items = [];
+        if (livingTownKnown(town)) items.push({text:'← Back to settlement',func:() => {closeExecutive();openRegBrowser(town,'town');}});
+        items.push({text:`${escapeLivingText(titleCase(chunk.b))} · ${place.x}, ${place.y}`});
+        const features = [];
+        if (isChunkSuitableForTag(chunk,'coastal')) features.push('The shore is close enough to reach on foot.');
+        if (biomes[chunk.b]?.hasLumber) features.push('Trees grow here.');
+        if (isChunkSuitableForTag(chunk,'fertile')) features.push('The ground can support crops.');
+        if (isChunkSuitableForTag(chunk,'mineral')) features.push('The exposed rock offers ground for mineral surveys.');
+        if (features.length) items.push({text:features.join(' ')});
+        const owner = chunk.v?.s && regGet('town',chunk.v.s);
+        if (livingTownKnown(owner)) items.push({text:`This ground is now held by ${escapeLivingText(owner.name)}.`,func:() => {closeExecutive();openRegBrowser(owner,'town');}});
+        const road = chunk.v?.road;
+        if (road?.level > 0) items.push({text:`Travellers have worn a ${['','track','road','highway'][road.level] || 'route'} through here.`});
+        items.push({heading:true,text:'Journeys remembered'});
+        for (const visit of place.visits) {
+            const origin = regGet('town',visit.town);
+            if (!livingTownKnown(origin) && !visit.knownOrigin) continue;
+            items.push({text:`Day ${visit.day} · ${escapeLivingText(visit.name || `Scouts from ${visit.originName || origin.name}`)} reached this place on a ${escapeLivingText(visit.purpose)}.${visit.revealed ? ' They brought more of the surrounding land into the known world.' : ' They travelled the known route.'}`});
+            if (visit.whisper) {
+                const words = livingWorldState().whispers.find(w=>w.id===visit.whisper);
+                if (words && livingTownKnown(origin)) items.push({text:'The words they carried',func:() => openLivingWhisperStory(origin,words)});
+            }
+            if (livingTownKnown(origin)) items.push({text:`Visit ${escapeLivingText(origin.name)}`,func:() => {closeExecutive();openRegBrowser(origin,'town');}});
+        }
+        for (const change of place.changes) {
+            const nextOwner = change.owner && regGet('town',change.owner);
+            if (!change.owner || change.knownOwner || livingTownKnown(nextOwner)) items.push({text:`Day ${change.day} · ${change.owner ? `${escapeLivingText(change.ownerName || nextOwner.name)} claimed this ground.` : 'The ground passed out of settled hands.'}`});
+        }
+        items.push({text:'Look at this place',func:() => {
+            if (!livingPlaceKnown(place)) return;
+            closeExecutive(); closePopups(); selectedChunk = chunkAt(place.x,place.y);
+            document.querySelector('#statsPanel .panelX').style.display = 'flex';
+            updateStats(); renderCursor(); updateCanvas();
+        }});
+        if (livingPlaceReturn(town,place)) items.push({text:'Whisper about this place',func:() => openLivingPeople(town,place.id)});
+        else if (livingPlaceRival(town,place)) items.push({text:'Speak of this ground',func:() => openLivingPeople(town,place.id)});
+        populateExecutive(items,escapeLivingText(place.name)); markLivingStoryControls(); openExecutive();
+    }
+
+    function renderTravelerOpening() {
+        const universe = getUniverse(false);
+        const show = !!planet && planet.day === 1 && !planet.settled && regCount('town') === 0 && (!universe || universe.currentWorldId === universe.homeWorldId);
+        let opening = document.getElementById('paultendoTravelerOpening');
+        if (!show) {opening?.remove(); return;}
+        if (opening) return;
+        const log = document.getElementById('logMessages');
+        if (!log) return;
+        opening = document.createElement('section'); opening.id = 'paultendoTravelerOpening'; opening.className = 'paultendoTownLife';
+        const heading = document.createElement('h3'); heading.textContent = 'The Traveler'; opening.appendChild(heading);
+        for (const text of ['You remember the last sky. No birds. No voices. Then the light failed.', 'Now there is earth beneath your feet. Humanity is beginning again. You came back to change what follows.', 'Choose a place for the first camp. Meet its people to whisper. They may listen, refuse or carry a different meaning.']) {
+            const line = document.createElement('p'); line.textContent = text; opening.appendChild(line);
+        }
+        log.before(opening);
+    }
+
+    function openTravelerMemory() {
+        const items = [{text:'← Back to Lore',func:() => openAnnalsPanel()},
+            {text:'You came from the end of time. The world could no longer hold human life. You remember the silence more clearly than the reason.'},
+            {text:'A black sky. An empty room. Someone saying there was still a chance. You cannot tell which memories belong together.'},
+            {text:'You have returned to the beginning. Your words can reach people, but their lives and fears give those words a shape of their own.'},
+            {text:'Meet people through their settlement. Whisper what you believe might help, or what you want them to fear. Their response takes time. The world keeps moving while they decide.'},
+            {text:'No memory tells you how this history should end.'}];
+        const towns = regToArray('town').filter(livingTownKnown);
+        if (towns.length === 1) items.push({text:`Meet the people of ${escapeLivingText(towns[0].name)}`,func:() => openLivingPeople(towns[0])});
+        populateExecutive(items,'The Traveler'); markLivingStoryControls(); openExecutive();
+    }
 
     function livingPersonSeed(town, id) {
         return fnv1a32(`${planet.config?.seed || planet.id || planet.name}:${town.id}:${id}`);
@@ -5298,13 +5421,22 @@
         return null;
     }
 
-    function sendLivingWhisper(town, person, topic) {
+    function sendLivingWhisper(town, person, topic, placeId) {
         const definition = LIVING_WHISPERS[topic];
         if (!definition || !livingPersonAvailable(person, town) || livingWhisperWait(person)) return false;
         if (!livingWhisperAvailable(town, topic)) return false;
+        const place = placeId && livingWorldState().places[placeId];
+        const rival = place && topic === 'conquer' && livingPlaceRival(town,place);
+        if (placeId && !(topic === 'explore' && livingPlaceReturn(town,place)) && !rival) return false;
         const state = livingWorldState(), mind = livingPersonMind(person);
         const roll = mulberry32(livingPersonSeed(town, `${person.id}:${topic}:${planet.day}`))();
         const record = { id:`whisper:${state.nextId++}`, topic, title:definition.title, words:definition.words, person:person.id, name:person.name, town:town.id, day:planet.day, due:planet.day + 2, roll, resolved:false, steps:[] };
+        if (place) {
+            record.destination = place.id;
+            record.words = rival ? `They have no right to hold ${place.name}.` : `There is still something to learn at ${place.name}.`;
+            record.title = rival ? `A claim on ${place.name}` : `A return to ${place.name}`;
+            if (rival) record.claimedOwner = rival.id;
+        }
         state.whispers.push(record);
         state.lastWhisper = mind.lastWhisper = planet.day;
         // Keep pending words even when trimming an older world's history.
@@ -5313,7 +5445,7 @@
             if (index < 0) break;
             state.whispers.splice(index, 1);
         }
-        logMessage(`You whisper to {{b:${escapeLivingText(person.name)}}} of ${townRef(town.id)}: “${definition.words}”`);
+        logMessage(`You whisper to {{b:${escapeLivingText(person.name)}}} of ${townRef(town.id)}: “${escapeLivingText(record.words)}”`);
         syncLogToPlanet(); autosave();
         return true;
     }
@@ -5365,11 +5497,18 @@
         let effects = null;
         if (record.topic === 'explore') {
             if (!canTownExplore(town, false)) return {acted:false,reason:'They could not gather an expedition. The journey waits for another time.'};
-            const mission = person.role === 'priest' ? buildPilgrimageMission(town) || buildFrontierMission(town) : ['farmer','miner','lumberer'].includes(person.role) ? buildResourceSurveyMission(town) || buildFrontierMission(town) : buildFrontierMission(town);
+            let mission;
+            if (record.destination) {
+                const place = livingWorldState().places[record.destination];
+                if (!livingPlaceReturn(town,place)) return {acted:false,reason:'The place you spoke of is beyond their reach now.'};
+                const target = chunkAt(place.x,place.y);
+                const tag = {farmer:'fertile',miner:'mineral',lumberer:'lumber'}[person.role];
+                mission = {type:tag && isChunkSuitableForTag(target,tag) ? 'resource' : 'frontier',tag:tag && isChunkSuitableForTag(target,tag) ? tag : null,target,radius:EXPLORATION_CONFIG.revealRadius,label:`return journey to ${place.name}`};
+            } else mission = person.role === 'priest' ? buildPilgrimageMission(town) || buildFrontierMission(town) : ['farmer','miner','lumberer'].includes(person.role) ? buildResourceSurveyMission(town) || buildFrontierMission(town) : buildFrontierMission(town);
             const known = new Set(Object.keys(planet._paultendoFog?.explored || {}));
-            if (!mission || !executeExplorationMission(town, mission, {silent:true})) return {acted:false,reason:'They found no safe route out. Your words did not become a journey.'};
+            if (!mission || !executeExplorationMission(town, mission, {silent:true,carrier:record})) return {acted:false,reason:'They found no safe route out. Your words did not become a journey.'};
             const revealed = Object.keys(planet._paultendoFog?.explored || {}).filter(key => !known.has(key)).length;
-            record.mission = {type:mission.type,label:mission.label,revealed, target:mission.target ? [mission.target.x,mission.target.y] : null};
+            record.mission = {type:mission.type,label:mission.label,revealed,place:mission.placeId, target:mission.target ? [mission.target.x,mission.target.y] : null};
             record.reshaped = mission.type !== 'frontier';
             record.steps.push({day:planet.day,text:`${person.name} led ${mission.type === 'pilgrimage' ? 'pilgrims' : 'scouts'} on a ${mission.label}.${revealed > 0 ? ' More of the surrounding land is known now.' : ' They charted the route.'}`});
         } else if (record.topic === 'learn') {
@@ -5396,7 +5535,10 @@
                 record.steps.push({day:planet.day,text:`${person.name} began questioning the rulers in public. Resentment grew and obedience weakened.`});
             }
         } else if (record.topic === 'conquer') {
-            const neighbour = livingConflictNeighbours(town).find(other => getCachedPath(town,other,40)?.length);
+            const place = record.destination && livingWorldState().places[record.destination];
+            const rival = place && livingPlaceRival(town,place);
+            if (record.destination && (!rival || rival.id !== record.claimedOwner)) return {acted:false,reason:'The ground has changed hands. The claim you urged no longer fits.'};
+            const neighbour = (rival ? [rival] : livingConflictNeighbours(town)).find(other => getCachedPath(town,other,40)?.length);
             if (!neighbour) return {acted:false,reason:'There is no neighbour they can reach to turn your words against.'};
             record.partner = neighbour.id;
             if (areAtWar(town,neighbour)) {
@@ -5464,7 +5606,7 @@
             const view = livingPersonView;
             const town = view?.planet === planet && regGet('town',view.town);
             const person = town && findLivingPerson(town,view.person);
-            if (person && currentExecutive === escapeLivingText(person.name).toLowerCase()) openLivingPerson(town,person);
+            if (person && currentExecutive === escapeLivingText(person.name).toLowerCase()) openLivingPerson(town,person,view.place);
         }
     }
 
@@ -5476,6 +5618,9 @@
         for (const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
         if (record.changes) for (const line of livingInfluencePhrases(record.changes, 6)) items.push({text:line + '.'});
         if (record.hostility && (record.hostility.relation < 0 || record.hostility.pressure > 0)) items.push({text:'Their claim left a lasting strain between the towns.'});
+        const placeId = record.mission?.place || record.destination;
+        const place = placeId && livingWorldState().places[placeId];
+        if (livingPlaceKnown(place)) items.push({text:`Visit ${escapeLivingText(place.name)}`,func:() => openLivingPlace(place,town.id)});
         const partner = record.partner && regGet('town', record.partner);
         if (livingTownKnown(partner)) items.push({text:`Visit ${escapeLivingText(partner.name)}`,func:() => {closePopups();closeExecutive();openRegBrowser(partner,'town');}});
         const person = findLivingPerson(town, record.person);
@@ -5483,11 +5628,11 @@
         populateExecutive(items, record.title); markLivingStoryControls(); openExecutive();
     }
 
-    function openLivingPerson(town, person) {
+    function openLivingPerson(town, person, placeId) {
         if (!livingTownKnown(town)) return;
-        livingPersonView = {planet,town:town.id,person:person.id};
+        livingPersonView = {planet,town:town.id,person:person.id,place:placeId};
         const mind = livingPersonMind(person);
-        const items = [{text:'← Back to the people',func:() => openLivingPeople(town)}, {text:`${escapeLivingText(livingPersonLabel(person))} of ${escapeLivingText(town.name)}.`}, {text:`${escapeLivingText(titleCase(mind.outlook))}. ${LIVING_OUTLOOKS[mind.outlook] || ''}`}];
+        const items = [{text:'← Back to the people',func:() => openLivingPeople(town,placeId)}, {text:`${escapeLivingText(livingPersonLabel(person))} of ${escapeLivingText(town.name)}.`}, {text:`${escapeLivingText(titleCase(mind.outlook))}. ${LIVING_OUTLOOKS[mind.outlook] || ''}`}];
         if (person.figure) for (const deed of (person.figure.deeds || []).slice(-2)) items.push({text:escapeLivingText(deed)});
         const available = livingPersonAvailable(person, town);
         if (!available) items.push({text:person.figure?.died ? 'Their part in this town’s story has ended.' : 'They are no longer at this work.'});
@@ -5495,11 +5640,17 @@
             items.push({text:mind.trust < 35 ? 'They hold your voice at arm’s length.' : mind.trust > 70 ? 'Your voice has come to mean something to them.' : 'They are still making sense of your voice.'});
             const wait = livingWhisperWait(person);
             if (wait) items.push({text:wait});
+            else if (placeId && !livingPlaceReturn(town,livingWorldState().places[placeId]) && !livingPlaceRival(town,livingWorldState().places[placeId])) items.push({text:'That place is beyond the paths they can manage now.'});
             else {
                 items.push({heading:true,text:'Whisper'});
                 for (const [topic, definition] of Object.entries(LIVING_WHISPERS)) {
                     if (!livingWhisperAvailable(town,topic)) continue;
-                    items.push({text:`“${definition.words}”`,func:() => {if (sendLivingWhisper(town, person, topic)) openLivingPerson(town, person);}});
+                    if (placeId) {
+                        const place = livingWorldState().places[placeId];
+                        const words = topic === 'explore' && livingPlaceReturn(town,place) ? `There is still something to learn at ${place.name}.` : topic === 'conquer' && livingPlaceRival(town,place) ? `They have no right to hold ${place.name}.` : null;
+                        if (!words) continue;
+                        items.push({text:`“${escapeLivingText(words)}”`,func:() => {sendLivingWhisper(town,person,topic,placeId); openLivingPerson(town,person,placeId);}});
+                    } else items.push({text:`“${definition.words}”`,func:() => {if (sendLivingWhisper(town, person, topic)) openLivingPerson(town, person);}});
                 }
             }
         }
@@ -5509,12 +5660,14 @@
         populateExecutive(items, escapeLivingText(person.name)); markLivingStoryControls(); openExecutive();
     }
 
-    function openLivingPeople(town) {
+    function openLivingPeople(town, placeId) {
         if (!livingTownKnown(town)) return;
         livingPersonView = null;
         const people = livingPeople(town, true);
-        const items = [{text:'← Back to settlement',func:() => {closePopups();closeExecutive();openRegBrowser(town,'town');}}];
-        for (const person of people) items.push({text:`${escapeLivingText(person.name)} · ${escapeLivingText(livingPersonLabel(person))}${livingPersonAvailable(person,town) ? '' : ' · Remembered'}`,func:() => openLivingPerson(town, person)});
+        const place = placeId && livingWorldState().places[placeId];
+        const items = [livingPlaceKnown(place) ? {text:`← Back to ${escapeLivingText(place.name)}`,func:()=>openLivingPlace(place,town.id)} : {text:'← Back to settlement',func:() => {closePopups();closeExecutive();openRegBrowser(town,'town');}}];
+        if (placeId && livingPlaceKnown(livingWorldState().places[placeId])) items.push({text:`Who might listen to your words about ${escapeLivingText(livingWorldState().places[placeId].name)}?`});
+        for (const person of people) items.push({text:`${escapeLivingText(person.name)} · ${escapeLivingText(livingPersonLabel(person))}${livingPersonAvailable(person,town) ? '' : ' · Remembered'}`,func:() => openLivingPerson(town, person,placeId)});
         populateExecutive(items, `${escapeLivingText(town.name)} · People`); markLivingStoryControls(); openExecutive();
         autosave();
     }
@@ -5782,6 +5935,10 @@
             const title = level?.name || (caller.eventClass === 'townLaw' ? `${titleCase(caller.args.name || livingLawName(caller.args.value))} law` : caller.eventClass === 'establishHealthcare' ? 'Care for the sick' : caller.eventClass === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : caller.eventClass === 'townProjectStart' ? `A new ${String(caller.args.value).replace(/_/g, ' ')}` : 'A choice for the town');
             const projects = regToArray('process').filter(p => p.type === 'project' && !capture.processes.has(p.id)).map(p => ({ id: p.id, town: p.town, subtype: p.subtype, reported: false }));
             const record = { id: state.nextId++, day: planet.day, title, question: capture.question, automated: capture.automated, outcome: (selected.innerText || selected.textContent).trim(), text: capture.entry.querySelector('.logText')?.textContent || capture.question, towns, changes, projects, traces, received: typeof caller.args?.success === 'boolean' ? caller.args.success : null, logId: caller.logID };
+            if (caller.eventClass === 'explorationExpeditionPrompt') {
+                record.title = 'Beyond the town';
+                if (caller.args?.success && caller.args.mission?.placeId) record.place = caller.args.mission.placeId;
+            }
             if (level && (capture.unlocks[caller.args.value.type] || 0) < level.level) {
                 const discovery = state.discoveries[`${caller.args.value.type}:${level.level}`];
                 if (discovery?.day === planet.day && discovery.decision == null) discovery.decision = record.id;
@@ -5903,6 +6060,7 @@
     function livingPlaceItems(town, key) {
         const { markers, partners } = livingTownPlaces(town, key);
         return [
+            ...Object.values(livingWorldState().places).filter(place=>livingPlaceKnown(place) && place.visits.some(visit=>visit.town===town.id)).slice(-4).reverse().map(place=>({label:`Visit ${place.name}`,text:`Visit ${escapeLivingText(place.name)}`,func:() => {closePopups();openLivingPlace(place,town.id);}})),
             ...markers.slice(0, 4).map(marker => ({ text: `Visit the ${marker.subtype?.replace(/_/g, ' ') || marker.name}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(marker, 'marker'); } })),
             ...partners.slice(0, 4).map(partner => ({ text: `Visit ${partner.name}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(partner, 'town'); } }))
         ];
@@ -5954,6 +6112,10 @@
         if (decision.received === false) items.push({ text: 'The nudge did not take hold.' });
         if (decision.text !== decision.question) items.push({ text: escapeLivingText(decision.text) });
         for (const change of decision.changes.filter(c => c.town === town.id)) items.push({ text: escapeLivingText(change.text) });
+        if (livingPlaceKnown(state.places[decision.place])) {
+            const place = state.places[decision.place];
+            items.push({text:`Visit ${escapeLivingText(place.name)}`,func:() => openLivingPlace(place,town.id)});
+        }
         const moments = state.moments.filter(m => m.town === town.id && m.source === decision.id).sort((a, b) => a.day - b.day);
         if (moments.length) {
             items.push({ heading: true, text: 'What followed' });
@@ -6028,7 +6190,7 @@
         if (places.length) {
             const heading = document.createElement('h3'); heading.textContent = 'Places and neighbours'; section.appendChild(heading);
             const visits = document.createElement('div'); visits.className = 'paultendoLifeDiscoveries';
-            for (const place of places) { const button = document.createElement('button'); button.textContent = place.text; button.addEventListener('click', place.func); visits.appendChild(button); }
+            for (const place of places) { const button = document.createElement('button'); button.textContent = place.label || place.text; button.addEventListener('click', place.func); visits.appendChild(button); }
             section.appendChild(visits);
         }
         const state = livingWorldState();
@@ -6125,13 +6287,14 @@
             info.func._paultendoLife = true;
         }
         ensureLivingWorldStyles();
+        renderTravelerOpening();
         if (!PAULTENDO_STATE.livingDecisionBound && document.getElementById('logMessages')) {
             document.getElementById('logMessages').addEventListener('click', captureLivingDecision, true);
             PAULTENDO_STATE.livingDecisionBound = true;
         }
         if (typeof openRegBrowser === 'function' && !openRegBrowser._paultendoLife) {
             const base = openRegBrowser;
-            openRegBrowser = function(obj, registry) { const result = base.apply(this, arguments); if (registry === 'town') appendLivingTownView(obj); if (registry === 'species') appendLivingSpeciesView(obj); return result; };
+            openRegBrowser = function(obj, registry) { const result = base.apply(this, arguments); if (registry === 'town') appendLivingTownView(obj); if (registry === 'species') appendLivingSpeciesView(obj); if (registry === 'marker' && obj._paultendoPlace) { const place = livingWorldState().places[obj._paultendoPlace]; if (livingPlaceKnown(place)) {closePopups();openLivingPlace(place,place.visits.at(-1)?.town);} } return result; };
             openRegBrowser._paultendoLife = true;
         }
     }
@@ -8583,7 +8746,7 @@
             target,
             range,
             radius: EXPLORATION_CONFIG.surveyRadius,
-            label: `survey for scarce ${tag} resources`
+            label: `survey for ${{mineral:'ground for mining',lumber:'woodlands',fertile:'land for crops',coastal:'the coast',arid:'dry country'}[tag] || tag}`
         };
     }
 
@@ -8639,6 +8802,13 @@
         return buildFrontierMission(town);
     }
 
+    function explorationReturnMessage(town,args) {
+        if (!args.success) return 'The scouts find no route through. The journey must wait.';
+        const place = livingWorldState().places[args.mission?.placeId];
+        const visit = place?.visits.at(-1);
+        return `Scouts from ${townRef(town.id)} return from ${place ? `{{b:${escapeLivingText(place.name)}}}` : 'their journey'}.${visit?.revealed ? ' Their notes bring more of the surrounding land into the known world.' : ' They bring back notes on the route.'}`;
+    }
+
     function executeExplorationMission(town, mission, opts = {}) {
         if (!town || !mission) return false;
         let path = mission.path || null;
@@ -8650,6 +8820,9 @@
             }
         }
         if (!path || !path.length) return false;
+        const arrival = path.at(-1);
+        if (mission.target && (arrival.x !== mission.target.x || arrival.y !== mission.target.y)) return false;
+        if (mission.destination && chunkAt(arrival.x,arrival.y)?.v?.s !== mission.destination.id) return false;
 
         const traffic = mission.type === "pilgrimage" ? 0.7 : 0.5;
         recordTraffic(path, traffic);
@@ -8658,15 +8831,18 @@
             discoverLandmass(mission.target.v.g, town, "reach");
         }
 
+        const before = new Set(Object.keys(planet._paultendoFog?.explored || {}));
         revealPathFog(path, mission.radius || EXPLORATION_CONFIG.revealRadius, 0.9);
         town._paultendoExplorationDay = planet.day;
+        const revealed = Object.keys(planet._paultendoFog?.explored || {}).filter(key=>!before.has(key)).length;
+        const place = recordLivingJourney(town,mission,path,revealed,opts.carrier);
+        if (place) mission.placeId = place.id;
 
         const markerMeta = getExplorationMarkerMeta(town, mission);
-        if (mission.destination) {
-            try { createTempMarker(mission.destination, EXPLORATION_MARKER_DEF, 12, markerMeta); } catch {}
-        } else if (mission.target) {
-            try { createTempMarkerAt(mission.target.x, mission.target.y, EXPLORATION_MARKER_DEF, 12, markerMeta); } catch {}
-        }
+        try {
+            const marker = createTempMarkerAt(arrival.x,arrival.y,EXPLORATION_MARKER_DEF,12,markerMeta);
+            if (marker && place) marker._paultendoPlace = place.id;
+        } catch {}
 
         if (!opts.silent) {
             const townName = `{{regname:town|${town.id}}}`;
@@ -9680,13 +9856,13 @@
         },
         func: (subject, target, args) => {
             const mission = args.mission;
-            executeExplorationMission(subject, mission);
+            args.success = executeExplorationMission(subject, mission, {silent:true});
         },
         funcNo: (subject) => {
             subject._paultendoExplorationDeclinedDay = planet.day;
         },
-        messageDone: "The expedition departs under your blessing.",
-        messageNo: "You hold them back; the borders remain quiet."
+        messageDone: (subject,target,args) => explorationReturnMessage(subject,args),
+        messageNo: 'The scouts stay close to home.'
     });
 
     modEvent("explorationExpeditionAuto", {
@@ -9728,8 +9904,9 @@
                 subject._paultendoExplorationDeclinedDay = planet.day;
                 return;
             }
-            executeExplorationMission(subject, args.mission);
-        }
+            args.success = executeExplorationMission(subject, args.mission, {silent:true});
+        },
+        messageDone: (subject,target,args) => args.choice === 'yes' ? explorationReturnMessage(subject,args) : `${townRef(subject.id)} keeps its explorers close for now.`
     });
 
     modEvent("swayDiscoveryExpedition", {
@@ -11962,6 +12139,7 @@
                 if (dayBefore !== dayAfter) {
                     try { updateSeasonState(); } catch {}
                     try { advanceLivingWhispers(); } catch (error) { console.warn("[paultendo-mod] Whisper follow-up failed:", error); }
+                    try { observeLivingPlaces(); } catch (error) { console.warn("[paultendo-mod] Place follow-up failed:", error); }
                     try { observeLivingWorld(); } catch (error) { console.warn("[paultendo-mod] Settlement follow-up failed:", error); }
                     try { renderLivingFields(); updateCanvas(); } catch {}
                     try { syncLogToPlanet(); } catch {}
@@ -12025,6 +12203,7 @@
                     syncLogToPlanet();
                 }
                 try { rebuildFogVisibility(); } catch {}
+                try { renderTravelerOpening(); } catch {}
             } catch {}
             return result;
         };
@@ -29056,7 +29235,7 @@
         const focusSetting = getLoreFocusSetting();
         const focusLabel = (focusOptions.find(o => o.id === focusSetting) || focusOptions[0]).label;
 
-        const items = [];
+        const items = [{text:'The Traveler',func:() => openTravelerMemory()}];
         items.push({
             text: `Era: ${eraLabel}`,
             func: () => chooseAnnalsFilter("era", eraOptions)
@@ -29130,7 +29309,7 @@
             const baseUpdateStats = updateStats;
             updateStats = function(...args) {
                 const result = baseUpdateStats.apply(this, args);
-                try { finishLivingDecisions(); seedLivingDiscoveries(); observeLivingSpeciesEncounters(); updateLivingDecisionPreviews(); } catch (error) { console.warn("[paultendo-mod] Settlement update failed:", error); }
+                try { finishLivingDecisions(); seedLivingDiscoveries(); observeLivingSpeciesEncounters(); updateLivingDecisionPreviews(); renderTravelerOpening(); } catch (error) { console.warn("[paultendo-mod] Settlement update failed:", error); }
                 updateAutoplayUI();
                 updateProgressMenus();
                 return result;
