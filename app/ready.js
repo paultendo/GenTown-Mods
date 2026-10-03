@@ -3,11 +3,16 @@
   // Native file import replaces the current world but leaves browser storage
   // unchanged. Keep a successfully imported world without advancing its day.
   const localParseSave = parseSave;
-  parseSave = Object.assign(function(...args) {
+  const persistLocalImport = () => { if (gameLoaded && planet?.config) autosave(); };
+  const localParser = function(...args) {
+    const alreadyLoaded = gameLoaded;
     const result = localParseSave.apply(this, args);
-    if (gameLoaded && planet?.config) autosave();
+    // Startup must retain the source save until a late mod can read its worlds.
+    // A later wrapper invokes our persistence hook after its own restoration.
+    if (alreadyLoaded && parseSave === localParser) persistLocalImport();
     return result;
-  }, localParseSave);
+  };
+  parseSave = Object.assign(localParser, localParseSave, {_paultendoLocalPersist:persistLocalImport});
 
   // Span controls supplied by the base game retain their click handlers and gain keyboard access.
   document.addEventListener('keydown', event => {

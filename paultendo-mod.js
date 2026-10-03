@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.55/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.56/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.55";
+    const MOD_VERSION = "1.6.56";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -4620,6 +4620,10 @@
     function resolveChronicleStory(ref) {
         const state = planet?._paultendoLife;
         if (!state || !ref) return null;
+        if(ref.kind==='charter') {
+            const registry=getColonizationRegistry(),charter=[...(registry?.charters || []),...(registry?.history || [])].find(c=>String(c.id)===String(ref.id));
+            return frontierKnown(charter)?{label:'Follow the settlers',open:()=>openFrontierCharter(charter)}:null;
+        }
         if(ref.kind==='sky'||ref.kind==='flight') {
             const flight=ref.kind==='flight'&&planet._paultendoSky?.flights?.find(f=>f.id===ref.id);
             const town=regGet('town',flight?flight.town:Number(ref.id));
@@ -4658,13 +4662,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['craft','material','storage','tools','sky','flight','exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
+        if (!['craft','material','storage','tools','sky','flight','charter','exchange','food','teaching','whisper','artifact','decision'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['craft','material','storage','tools','sky','flight','exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
+        if (!ref || !['craft','material','storage','tools','sky','flight','charter','exchange','food','teaching','whisper','artifact','decision'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -6107,7 +6111,8 @@
         metal_tools:{label:'metal handtools',role:'farmer',description:'Metal worked into small blades and fitted for fieldwork. Their edges serve longer than chipped stone, but still wear with use.'},
         steel_tools:{label:'steel handtools',role:'farmer',description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'},
         telescope:{label:'telescopes',role:'scholar',description:'Glass and metal fitted into a steady frame. A scholar can use one to chart the lights above the horizon.'},
-        sky_vessel:{label:'sky vessels',singular:'sky vessel',role:'miner',description:'A powered vessel carrying instruments instead of passengers. Each flight takes a real vessel from the workshop.'}
+        sky_vessel:{label:'sky vessels',singular:'sky vessel',role:'miner',description:'A powered vessel carrying instruments instead of passengers. Each flight takes a real vessel from the workshop.'},
+        colony_vessel:{label:'passenger vessels',singular:'passenger vessel',role:'miner',description:'A sky vessel rebuilt with living quarters and cargo space for up to twelve settlers. Its cabins come from a real workshop.'}
     };
     // Recipe durations, sample sizes and first-trial risks are game calibration.
     // Knowledge is local. Global milestones open possibilities, never award stock.
@@ -6121,7 +6126,8 @@
         metal_tools:{cost:{metal:2},output:2,days:5,needs:{smith:40},sample:'metal',established:{smith:40},roles:['miner','farmer'],risk:0.2,method:'shaping',success:'The metal holds a working edge. The farmers can fit these blades for work in the fields.',failure:'The blades split as they are shaped. The pieces cannot serve as tools.'},
         steel_tools:{cost:{steel:2},output:2,days:6,needs:{smith:50},sample:'steel',established:{smith:50},roles:['miner','farmer'],risk:0.1,method:'shaping',success:'The blades hold their shape. They are ready for work in the fields.',failure:'The blanks split as they are worked. The blades cannot be used.'},
         telescope:{cost:{glass:2,metal:2,lumber:1},output:1,days:8,needs:{astronomy:20,smith:30},sample:'glass',established:{astronomy:20},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The instrument holds its focus. Distant lights keep their shape as the scholar watches.',failure:'The frame will not hold its focus. The instrument needs another attempt.'},
-        sky_vessel:{cost:{steel:8,glass:2,charcoal:4},output:1,days:12,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'steel',established:{smith:80},roles:['miner','scholar'],risk:0.2,method:'assembly',success:'The engine and instruments pass their tests. The vessel is ready for a flight.',failure:'The engine breaks its mount in the test. This vessel cannot fly.'}
+        sky_vessel:{cost:{steel:8,glass:2,charcoal:4},output:1,days:12,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'steel',established:{smith:80},roles:['miner','scholar'],risk:0.2,method:'assembly',success:'The engine and instruments pass their tests. The vessel is ready for a flight.',failure:'The engine breaks its mount in the test. This vessel cannot fly.'},
+        colony_vessel:{cost:{sky_vessel:1,steel:4,lumber:4,glass:2},output:1,days:10,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The cabins and cargo holds pass their tests. The vessel can carry settlers.',failure:'The cabin seals fail their test. This vessel cannot carry people.'}
     };
     // Capacity and the thirty-day harvest memory are initial game calibration.
     // Vessels become durable local fixtures only when actual stock is installed.
@@ -6357,13 +6363,13 @@
     }
     function materialDirectNeed(town,type) {
         if(type==='brick')return Math.ceil(materialConstructionNeed(town)/2);
-        const promised=commodityWorkClaims(town).filter(c=>['craft','storage','equipment','sky','flight'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        const promised=commodityWorkClaims(town).filter(c=>['craft','storage','equipment','sky','flight','charter'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
         return Math.max(0,promised-commodityStock(town,type));
     }
     function materialIntent(town,type) {
         const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type))return null;
         const actual=materialDirectNeed(town,type)>0;
-        if((type==='pottery'||FARM_TOOLS[type]||type==='telescope'||type==='sky_vessel')&&!actual)return null;
+        if((type==='pottery'||FARM_TOOLS[type]||type==='telescope'||type==='sky_vessel'||type==='colony_vessel')&&!actual)return null;
         const practiced=town._paultendoMaterials?.[type]?.technique;
         if(type==='steel'&&!actual&&livingResearchPriority(town.research)!=='education'&&!(livingResearchPriority(town.research)==='military'&&town.jobs?.soldier>0))return null;
         const sample=commodityStock(town,recipe.sample)>0||town._paultendoMaterials?.[recipe.sample];
@@ -6607,6 +6613,7 @@
         const tools=farmToolNeed(town);if(tools)claims.push({kind:'equipment',id:`tools:${town.id}`,cost:{[farmToolKind(town)]:tools}});
         if(skyInstrumentWanted(town))claims.push({kind:'sky',id:`sky:${town.id}`,cost:{telescope:1}});
         for(const flight of skyState().flights)if(flight.town===town.id&&flight.status==='preparing')claims.push({kind:'flight',id:flight.id,cost:flight.cost});
+        for(const charter of getColonizationRegistry()?.charters || [])if(charter.originWorldId===skyWorldId()&&charter.originTownId===town.id&&charter.stage==='preparing'&&charter.supplyVersion===1)claims.push({kind:'charter',id:`charter:${charter.id}`,cost:frontierCargoCost(charter,town)});
         // Native construction spends two units of progress per rock or one per lumber.
         for(const project of regToArray('process')) if(project.town===town.id&&project.type==='project'&&!project.done&&!project.end&&Number.isFinite(project.cost)) {
             claims.push({kind:'construction',id:project.id,cost:Math.max(0,project.cost)});
@@ -6643,7 +6650,7 @@
     }
     function commoditySpare(town,type,path,excludeExchange) {
         const held=commodityStock(town,type);
-        const reserve=COMMODITIES[type]?.edible?Math.max(0,foodBuffer(town,path?commodityTravelDays(path)*2:0)-(mealStock(town)-held)):commodityCommittedStock(town,type,excludeExchange);
+        const reserve=COMMODITIES[type]?.edible?Math.max(commodityCommittedStock(town,type,excludeExchange),foodBuffer(town,path?commodityTravelDays(path)*2:0)-(mealStock(town)-held)):commodityCommittedStock(town,type,excludeExchange);
         return Math.max(0,Math.floor(held-reserve));
     }
     function commodityDemand(town,type,path) {
@@ -6709,6 +6716,7 @@
         if(use.kind==='meals')return `${goods[0].toUpperCase()+goods.slice(1)} from this exchange feeds people in ${town}.`;
         if(use.kind==='tools')return `${town} takes ${goods} from this exchange into its fields.`;
         if(use.kind==='sky')return `${town} sets up a telescope from this exchange to study the sky.`;
+        if(use.kind==='charter')return `${town} packs ${goods} from this exchange for its settlers’ journey.`;
         if(use.kind==='flight')return `${town} sends a sky vessel from this exchange on a flight.`;
         if(use.kind==='storage')return `${town} sets clay vessels from this exchange beside its grain stores.`;
         if(use.kind==='construction')return `${town} uses ${goods} from this exchange to build a ${(use.name || 'building').replace(/_/g,' ')}.`;
@@ -12053,23 +12061,13 @@
         peaceChance: 0.02,
         maxActive: 3
     };
+    // Initial game calibration. Preparation counts real work days, while
+    // provisions scale with the cohort, route and destination conditions.
     const FRONTIER_CHARTER_CONFIG = {
-        minDay: 700,
-        minSpaceTech: 38,
-        minTownPop: 55,
-        maxActive: 3,
-        townCooldownDays: 120,
-        worldCooldownDays: 160,
-        prepDays: { min: 10, max: 22 },
-        travelBase: 6,
-        travelOrbit: 3,
-        launchPopShare: 0.06,
-        launchPopMin: 6,
-        launchPopMax: 28,
-        launchWealthCost: 3,
-        baseSuccess: 0.65,
-        harshPenalty: 0.22,
-        routeChance: 0.6
+        minTownPop: 55, maxActive: 3, townCooldownDays: 120,
+        worldCooldownDays: 160, loadingDays: 3, passengerCapacity: 12,
+        travelBase: 6, travelOrbit: 3, launchPopShare: 0.06,
+        launchPopMin: 6, landingDays: 7, harshLandingDays: 14
     };
 
     const SOLAR_WORLD_TEMPLATES = [
@@ -12461,418 +12459,257 @@
         return initColonization(uni);
     }
 
-    function getFrontierSpaceTech() {
-        const universe = getUniverse(false);
-        const uniTech = universe?.spaceTech || 0;
-        const local = planet?.unlocks?.space || 0;
-        return Math.max(uniTech, local);
-    }
-
     function formatWorldName(world, fallback = "Unknown World") {
-        if (!world) return fallback;
-        if (world.name) return world.name;
-        if (world.label) return world.label;
-        return fallback;
+        return world?.name || world?.label || fallback;
     }
-
     function getFrontierMotives(town) {
-        const influences = town.influences || {};
-        const pop = town.pop || 0;
-        const size = Math.max(1, town.size || 1);
-        const density = pop / size;
-        const popPressure = Math.max(0, density - 14) / 6;
-        const unrest = town.unrest || 0;
-        const prestige = typeof getTownPrestige === "function" ? getTownPrestige(town) : 0;
-
+        const influences=town.influences || {},day=planet.day;
+        const recentRefuge=['_paultendoDisasterRefugeeDay','_paultendoWarRefugeeDay'].some(key=>Number.isFinite(town[key])&&day-town[key]<=30);
+        const religion=getTownReligion(town);
         return [
-            {
-                id: "frontier",
-                label: "seek new horizons",
-                weight: 1 + popPressure
-            },
-            {
-                id: "trade",
-                label: "open new trade horizons",
-                weight: 0.6 + (influences.trade || 0) * 0.12 + (town.wealth || 0) / 40
-            },
-            {
-                id: "faith",
-                label: "carry their faith to the stars",
-                weight: 0.5 + (influences.faith || 0) * 0.14
-            },
-            {
-                id: "refuge",
-                label: "escape mounting turmoil",
-                weight: 0.4 + unrest / 30 +
-                    (town._paultendoDisasterRefugeeDay ? 0.5 : 0) +
-                    (town._paultendoWarRefugeeDay ? 0.5 : 0)
-            },
-            {
-                id: "prestige",
-                label: "seek renown among the stars",
-                weight: 0.4 + prestige / 35
-            }
+            {id:'frontier',label:'find room to grow',weight:Math.max(0,(town.pop || 0)/Math.max(1,town.size || 0)-14)},
+            {id:'trade',label:'build a trading foothold',weight:Math.max(0,(influences.trade || 0)-2)},
+            {id:'faith',label:'carry their faith to another world',weight:religion?Math.max(0,(influences.faith || 0)-2):0},
+            {id:'refuge',label:'leave the turmoil behind',weight:Math.max(0,(town.unrest || 0)-20)/10+(recentRefuge?2:0)},
+            {id:'prestige',label:'make a name beyond their homeworld',weight:Math.max(0,getTownPrestige(town)-10)/10}
         ];
     }
-
-    function pickFrontierMotive(town) {
-        const motives = getFrontierMotives(town).filter(m => m.weight > 0);
-        if (motives.length === 0) return null;
-        return weightedChoice(motives, m => m.weight);
+    function getFrontierCandidateWorlds(originWorld,motive,registry) {
+        return getWorldOrder().filter(world=>world?.discovered&&world.reached&&world.state&&world.id!==originWorld?.id&&world.habitable!==false
+            &&getUniverseDay()-(registry?.worldLastColony?.[world.id] ?? -999)>=FRONTIER_CHARTER_CONFIG.worldCooldownDays);
     }
-
-    function getFrontierCandidateWorlds(originWorld, motive, registry) {
-        const day = getUniverseDay();
-        return getWorldOrder().filter(world => {
-            if (!world || !world.discovered) return false;
-            if (originWorld && world.id === originWorld.id) return false;
-            if (world.habitable === false) return false;
-            const lastColony = registry?.worldLastColony?.[world.id];
-            if (lastColony && (day - lastColony) < FRONTIER_CHARTER_CONFIG.worldCooldownDays) return false;
-            return true;
-        });
+    function frontierTownReady(town,registry=getColonizationRegistry()) {
+        return !!town&&!town.end&&town.pop>=FRONTIER_CHARTER_CONFIG.minTownPop&&skyFlightKnowledge()
+            &&registry&&registry.charters.length<FRONTIER_CHARTER_CONFIG.maxActive
+            &&getUniverseDay()-(town._paultendoCharterDay ?? -999)>=FRONTIER_CHARTER_CONFIG.townCooldownDays
+            &&!registry.charters.some(c=>c.originWorldId===skyWorldId()&&c.originTownId===town.id)
+            &&getFrontierMotives(town).some(m=>m.weight>0);
     }
-
-    function scoreFrontierWorld(world, motive) {
-        if (!world) return 0;
-        const stats = getWorldTownStats(world);
-        let score = 1;
-        if (stats.towns === 0) score += 0.6;
-        else score += Math.max(-0.4, 0.2 - stats.towns * 0.12);
-        if (isWorldHarsh(world)) score -= 0.25;
-        if (motive?.id === "trade") score += stats.towns > 0 ? 0.25 : 0.1;
-        if (motive?.id === "refuge") score += isWorldHarsh(world) ? -0.3 : 0.25;
-        if (motive?.id === "faith") score += isWorldHarsh(world) ? 0.2 : 0;
-        return Math.max(0.1, score);
+    function planFrontierCharter(town,targetId=null) {
+        const registry=getColonizationRegistry();if(!frontierTownReady(town,registry))return null;
+        const origin=getWorldById(skyWorldId()),motives=getFrontierMotives(town).filter(m=>m.weight>0);
+        const motive=weightedChoice(motives,m=>m.weight),candidates=getFrontierCandidateWorlds(origin,motive,registry);
+        const target=targetId==null?weightedChoice(candidates,w=>motive.id==='refuge'&&isWorldHarsh(w)?0.25:1):candidates.find(w=>w.id===targetId);
+        if(!target)return null;
+        return {originWorldId:origin.id,originTownId:town.id,originName:town.name,targetWorldId:target.id,targetName:formatWorldName(target),motive:motive.id,motiveLabel:motive.label};
     }
-
-    function planFrontierCharter(town) {
-        if (!town || town.end || town.pop <= 0) return null;
-        try { ensureTownState(town); } catch {}
-        try { initUnrest(town); } catch {}
-        const universe = getUniverse(false);
-        if (!universe) return null;
-        const registry = getColonizationRegistry(universe);
-        if (!registry) return null;
-        const day = getUniverseDay();
-        if (day < FRONTIER_CHARTER_CONFIG.minDay) return null;
-        if (getFrontierSpaceTech() < FRONTIER_CHARTER_CONFIG.minSpaceTech) return null;
-        if ((town.pop || 0) < FRONTIER_CHARTER_CONFIG.minTownPop) return null;
-        if (registry.charters.length >= FRONTIER_CHARTER_CONFIG.maxActive) return null;
-        if (town._paultendoCharterDay && (day - town._paultendoCharterDay) < FRONTIER_CHARTER_CONFIG.townCooldownDays) {
-            return null;
+    function computeFrontierTravelDays(origin,target) {
+        return FRONTIER_CHARTER_CONFIG.travelBase+(Math.abs((origin?.orbitIndex || 0)-(target?.orbitIndex || 0))+1)*FRONTIER_CHARTER_CONFIG.travelOrbit;
+    }
+    function frontierCargoCost(charter,town) {
+        const target=getWorldById(charter.targetWorldId),days=charter.travelDays+(isWorldHarsh(target)?FRONTIER_CHARTER_CONFIG.harshLandingDays:FRONTIER_CHARTER_CONFIG.landingDays);
+        const meals=charter.dailyMeals*(days+charter.travelDays);
+        const grain=Math.min(meals,Math.max(commodityStock(town,'crop'),meals-commodityStock(town,'livestock')));
+        return {colony_vessel:1,...(grain?{crop:grain}:{}),...(meals-grain?{livestock:meals-grain}:{}),lumber:isWorldHarsh(target)?12:6,rock:6,[charter.toolType]:2};
+    }
+    function frontierKnown(charter) {
+        if(!charter)return false;
+        if(!charter.known) {
+            const world=getWorldById(charter.originWorldId),town=getTownByRef({worldId:charter.originWorldId,townId:charter.originTownId});
+            charter.known=!!world?.discovered&&!!town&&withWorldState(world,()=>livingTownKnown(town),{silent:true});
+            charter.originName ||= town?.name || 'An earlier settlement';
         }
-
-        const motive = pickFrontierMotive(town);
-        if (!motive) return null;
-        const originWorld = getWorldById(getCurrentWorldId());
-        if (!originWorld) return null;
-        const candidates = getFrontierCandidateWorlds(originWorld, motive, registry);
-        if (candidates.length === 0) return null;
-        const targetWorld = weightedChoice(candidates, world => scoreFrontierWorld(world, motive));
-        if (!targetWorld) return null;
-
-        return {
-            originWorldId: originWorld.id,
-            originTownId: town.id,
-            originName: town.name,
-            targetWorldId: targetWorld.id,
-            targetName: formatWorldName(targetWorld),
-            motive: motive.id,
-            motiveLabel: motive.label
-        };
+        return charter.known&&!!getWorldById(charter.targetWorldId)?.discovered;
     }
-
-    function scheduleFrontierBeats(charter, originLabel) {
-        if (!charter || !originLabel) return;
-        const beats = [];
-        const mid = charter.createdDay + Math.max(1, Math.floor((charter.launchDay - charter.createdDay) * 0.5));
-        const near = charter.launchDay - 1;
-        beats.push({
-            day: mid,
-            text: `${originLabel} looks to the stars; shipwrights test hulls and charts.`,
-            type: null
-        });
-        if (near > charter.createdDay) {
-            beats.push({
-                day: near,
-                text: `Supplies are sealed in ${originLabel}'s frontier vessels.`,
-                type: null
-            });
-        }
-        charter.beats = beats;
+    function frontierStep(charter,text,type=null) {
+        const steps=charter.steps ||= [];steps.push({day:getUniverseDay(),text});if(steps.length>40)steps.shift();
+        if(frontierKnown(charter))logMessage(escapeLivingText(text),type,{_paultendoStory:{kind:'charter',id:charter.id}});
     }
-
-    function logFrontierEvent(text, type = null) {
-        if (!text || typeof logMessage !== "function") return;
-        logMessage(text, type);
+    function prepareFrontierSupplies(charter,town) {
+        if(charter.supplyVersion===1)return;
+        charter.supplyVersion=1;charter.loading=0;charter.inputs=[];charter.cargo={};charter.cargoLots={};
+        charter.emigrants=Math.min(FRONTIER_CHARTER_CONFIG.passengerCapacity,Math.max(FRONTIER_CHARTER_CONFIG.launchPopMin,Math.round(town.pop*FRONTIER_CHARTER_CONFIG.launchPopShare)));
+        charter.dailyMeals=Math.max(1,Math.ceil(nativeMealNeed(town)*charter.emigrants/Math.max(1,town.pop)));
+        charter.travelDays=computeFrontierTravelDays(getWorldById(charter.originWorldId),getWorldById(charter.targetWorldId));
+        charter.toolType=farmToolKind(town);delete charter.launchDay;delete charter.beats;
     }
-
-    function startFrontierCharter(plan, options = {}) {
-        if (!plan) return null;
-        const universe = getUniverse(false);
-        if (!universe) return null;
-        const registry = getColonizationRegistry(universe);
-        if (!registry) return null;
-
-        const originWorld = getWorldById(plan.originWorldId);
-        const originTown = originWorld ? getTownByRef({ worldId: plan.originWorldId, townId: plan.originTownId }) : null;
-        if (!originTown) return null;
-
-        const edu = originTown.influences?.education || 0;
-        const trade = originTown.influences?.trade || 0;
-        const basePrep = randRange(FRONTIER_CHARTER_CONFIG.prepDays.min, FRONTIER_CHARTER_CONFIG.prepDays.max);
-        const prepReduction = Math.floor((edu + trade) / 5);
-        const prepDays = clampValue(basePrep - prepReduction, FRONTIER_CHARTER_CONFIG.prepDays.min, FRONTIER_CHARTER_CONFIG.prepDays.max + 6);
-
-        const day = getUniverseDay();
-        const charter = {
-            id: registry.nextId++,
-            originWorldId: plan.originWorldId,
-            originTownId: plan.originTownId,
-            originName: plan.originName || originTown.name,
-            targetWorldId: plan.targetWorldId,
-            targetName: plan.targetName || "Unknown World",
-            motive: plan.motive || "frontier",
-            motiveLabel: plan.motiveLabel || "seek new horizons",
-            createdDay: day,
-            launchDay: day + prepDays,
-            arrivalDay: null,
-            stage: "preparing",
-            endorsed: !!options.endorsed
-        };
-
-        registry.charters.push(charter);
-        originTown._paultendoCharterDay = getUniverseDay();
-        originTown._paultendoCharterId = charter.id;
-
-        const originLabel = formatTownRef({ worldId: charter.originWorldId, townId: charter.originTownId });
-        const targetLabel = charter.targetName;
-        const starter = options.endorsed
-            ? `${originLabel} signs a frontier charter to ${targetLabel}.`
-            : `${originLabel} drafts a frontier charter to ${targetLabel}.`;
-        logFrontierEvent(starter, "milestone");
-
-        scheduleFrontierBeats(charter, originLabel);
-        return charter;
+    function startFrontierCharter(plan,options={}) {
+        const registry=getColonizationRegistry(),world=getWorldById(plan?.originWorldId),target=getWorldById(plan?.targetWorldId);
+        const town=world&&getTownByRef({worldId:world.id,townId:plan.originTownId});
+        if(!town||!target||!withWorldState(world,()=>frontierTownReady(town,registry),{silent:true})||!getFrontierCandidateWorlds(world,null,registry).includes(target))return null;
+        const charter={id:registry.nextId++,...plan,createdDay:getUniverseDay(),stage:'preparing',endorsed:!!options.endorsed,steps:[]};
+        withWorldState(world,()=>{prepareFrontierSupplies(charter,town);charter.known=livingTownKnown(town);},{silent:true});
+        registry.charters.push(charter);town._paultendoCharterDay=getUniverseDay();town._paultendoCharterId=charter.id;
+        frontierStep(charter,`${town.name} plans a settlement on ${target.name}, hoping to ${charter.motiveLabel}. The workshop needs a passenger vessel.`,'milestone');return charter;
     }
-
-    function computeFrontierTravelDays(originWorld, targetWorld) {
-        const orbitDistance = Math.abs((originWorld?.orbitIndex || 0) - (targetWorld?.orbitIndex || 0)) + 1;
-        return FRONTIER_CHARTER_CONFIG.travelBase + orbitDistance * FRONTIER_CHARTER_CONFIG.travelOrbit + randRange(0, 2);
-    }
-
-    function applyFrontierLaunchCost(town) {
-        if (!town) return 0;
-        const pop = town.pop || 0;
-        if (pop <= 0) return 0;
-        const emigrants = clampValue(
-            Math.round(pop * FRONTIER_CHARTER_CONFIG.launchPopShare),
-            FRONTIER_CHARTER_CONFIG.launchPopMin,
-            FRONTIER_CHARTER_CONFIG.launchPopMax
-        );
-        town.pop = Math.max(1, pop - emigrants);
-        if (town.wealth !== undefined) {
-            town.wealth = Math.max(0, (town.wealth || 0) - FRONTIER_CHARTER_CONFIG.launchWealthCost);
-        }
-        return emigrants;
-    }
-
     function findColonySite() {
-        if (typeof filterChunks !== "function") return null;
-        const candidates = filterChunks(c => {
-            if (!c || c.b === "water" || c.b === "mountain") return false;
-            if (c.v && c.v.s) return false;
-            return true;
-        });
-        if (!candidates || candidates.length === 0) return null;
-
-        if (typeof adjacentCoords !== "undefined") {
-            const coastal = candidates.filter(c => {
-                return adjacentCoords.some(coord => {
-                    const neighbor = chunkAt(c.x + coord[0], c.y + coord[1]);
-                    return neighbor && neighbor.b === "water";
-                });
-            });
-            if (coastal.length > 0) return choose(coastal);
-        }
-
-        return choose(candidates);
+        const candidates=filterChunks(c=>c&&c.b!=='water'&&c.b!=='mountain'&&!c.v?.s);if(!candidates.length)return null;
+        // Settlers choose actual growing ground first. Barren destinations still
+        // permit a foothold, but the packed food must last until they adapt.
+        const fertile=candidates.filter(c=>biomes[c.b]?.plant);return choose(fertile.length?fertile:candidates);
     }
-
-    function createFrontierColonyTown(charter, emigrants) {
-        const targetWorld = getWorldById(charter.targetWorldId);
-        if (!targetWorld) return null;
-        ensureWorldState(targetWorld);
-        let created = null;
-        withWorldState(targetWorld, () => {
-            const site = findColonySite();
-            if (!site) return;
-            const pop = Math.max(5, Math.round(emigrants * 0.7));
-            const newTown = happen("Create", null, null, { x: site.x, y: site.y, pop }, "town");
-            if (!newTown) return;
-            ensureTownState(newTown);
-            newTown._paultendoColony = {
-                originWorldId: charter.originWorldId,
-                originTownId: charter.originTownId,
-                motive: charter.motive,
-                charterId: charter.id,
-                day: planet.day
-            };
-            if (charter.motive === "faith") {
-                happen("Influence", null, newTown, { faith: 0.6, happy: 0.2 });
-            } else if (charter.motive === "trade") {
-                happen("Influence", null, newTown, { trade: 0.6, education: 0.2 });
-            } else if (charter.motive === "refuge") {
-                happen("Influence", null, newTown, { happy: 0.3, justice: 0.2 });
-            } else if (charter.motive === "prestige") {
-                happen("Influence", null, newTown, { education: 0.3, military: 0.2 });
-            } else {
-                happen("Influence", null, newTown, { travel: 0.2, trade: 0.2 });
+    function rememberFrontierWork(charter) {
+        const records=charter.workshops ||= [],seen=new Set(records.map(w=>`${w.world}:${w.id}`));
+        const follow=(input,depth=0)=>{
+            const p=input.production;if(!p||depth>4||p.passage!==travelerState().passage||seen.has(`${p.world}:${p.work}`))return;
+            const work=getWorldById(p.world)?.state?.planet?._paultendoLife?.materialWork?.find(w=>w.id===p.work);if(!work)return;
+            seen.add(`${p.world}:${p.work}`);records.push({world:p.world,...structuredClone(work),known:!!p.known});
+            for(const used of work.inputs || [])follow(used,depth+1);
+        };
+        for(const input of charter.inputs)follow(input);
+    }
+    function unloadFrontierCargo(charter,town) {
+        for(const [type,count] of Object.entries(charter.cargo)) {
+            const before=commodityStock(town,type);happen('AddResource',null,town,{type,count});const added=commodityStock(town,type)-before;
+            charter.cargo[type]-=added;
+            const lots=(town._paultendoCommodityLots ||= {})[type] ||= [];
+            let remaining=added;
+            for(const lot of charter.cargoLots[type] || []) {
+                const n=Math.min(remaining,lot.count);if(n>0)lots.push({count:n,charter:charter.id,originWorld:charter.originWorldId,originTown:charter.originTownId,...(lot.production?{production:structuredClone(lot.production)}:{})});
+                lot.count-=n;remaining-=n;
             }
-            try { markTownExplored(newTown); } catch {}
-            created = newTown;
-        }, { silent: true });
-        return created;
+        }
     }
-
-    function computeFrontierSuccessChance(charter, originTown, targetWorld) {
-        let chance = FRONTIER_CHARTER_CONFIG.baseSuccess;
-        const influences = originTown.influences || {};
-        chance += (getFrontierSpaceTech() - FRONTIER_CHARTER_CONFIG.minSpaceTech) * 0.004;
-        chance += (influences.education || 0) * 0.02;
-        chance += (influences.trade || 0) * 0.02;
-        chance += (influences.travel || 0) * 0.025;
-        chance += (influences.military || 0) * 0.012;
-        if (charter.motive === "faith") chance += (influences.faith || 0) * 0.02;
-        if (charter.motive === "refuge") chance -= 0.03;
-        if (isWorldHarsh(targetWorld)) chance -= FRONTIER_CHARTER_CONFIG.harshPenalty;
-        const unrest = originTown.unrest || 0;
-        chance -= Math.max(0, unrest - 15) * 0.002;
-        return clampValue(chance, 0.15, 0.9);
+    function createFrontierColonyTown(charter) {
+        const world=getWorldById(charter.targetWorldId);
+        if(world?.discovered&&charter.supplyVersion!==1){world.reached=true;ensureWorldState(world);}
+        if(!world?.reached||!world.state||world.habitable===false||!(charter.emigrants>0))return null;
+        return withWorldState(world,()=>{
+            const site=findColonySite();if(!site)return null;
+            const town=happen('Create',null,null,{x:site.x,y:site.y,pop:charter.emigrants},'town');if(!town)return null;
+            // Native founding grants grain from the surrounding chunks. Colonists
+            // bring their actual hold instead; their later harvests are native work.
+            town.resources={};town._paultendoCommodityLots={};town.jobs={...charter.jobs};town.wealth=charter.wealth || 0;
+            town.influences={...charter.influences};town.values={...charter.values};town.research={...charter.research};
+            // Native knowledge is planet-wide. Only branches backed by the
+            // actual departing workers travel with this cohort.
+            for(const [key,level] of Object.entries(charter.knowledge || {}))planet.unlocks[key]=Math.max(planet.unlocks[key] || 0,level);
+            ensureTownState(town);unloadFrontierCargo(charter,town);
+            town._paultendoColony={originWorldId:charter.originWorldId,originTownId:charter.originTownId,motive:charter.motive,charterId:charter.id,day:planet.day};
+            // Faith does not become a new religion merely because a ship lands.
+            // Preserve the existing creed when it can be copied into this world.
+            if(charter.creed) {
+                initReligions();
+                let creed=planet.religions.find(r=>r._paultendoOrigin===charter.creed.origin);
+                if(!creed) {
+                    const data=charter.creed.data;
+                    creed={id:Math.max(0,...planet.religions.map(r=>r.id))+1,name:data.name,archetype:data.archetype,influences:{...data.influences},tenets:[...(data.tenets || [])],tenetNames:[...(data.tenetNames || [])],practices:data.practices,deityType:data.deityType,foundingTown:town.id,founded:planet.day,followers:[town.id],parent:null,reformed:false,extinct:false,cohesion:data.cohesion ?? 60,_paultendoOrigin:charter.creed.origin,_paultendoHomeland:{world:charter.originWorldId,foundingTown:data.foundingTown,founded:data.founded}};
+                    planet.religions.push(creed);
+                }
+                if(!creed.followers.includes(town.id))creed.followers.push(town.id);
+                town.religion=creed.id;
+            }
+            markTownExplored(town);return town;
+        },{silent:true});
     }
-
-    function resolveFrontierCharter(charter, registry) {
-        if (!charter || !registry) return;
-        const originTown = getTownByRef({ worldId: charter.originWorldId, townId: charter.originTownId });
-        const originWorld = getWorldById(charter.originWorldId);
-        const targetWorld = getWorldById(charter.targetWorldId);
-        if (!originTown || !originWorld || !targetWorld) {
-            charter.stage = "failed";
-            charter.outcome = "lost";
-            archiveFrontierCharter(charter, registry);
+    function archiveFrontierCharter(charter,registry) {
+        charter.finished=getUniverseDay();registry.history.push(structuredClone(charter));
+        if(registry.history.length>40)registry.history.shift();registry.charters=registry.charters.filter(c=>c.id!==charter.id);
+    }
+    function resolveFrontierCharter(charter,registry) {
+        const town=createFrontierColonyTown(charter);
+        if(town) {
+            charter.stage='completed';charter.outcome='success';charter.colony={worldId:charter.targetWorldId,townId:town.id,name:town.name};
+            registry.worldLastColony[charter.targetWorldId]=getUniverseDay();
+            frontierStep(charter,`${charter.emigrants} settlers from ${charter.originName} found ${town.name} on ${charter.targetName}. Their remaining supplies are in its stores.`,'milestone');
+            // Contact is remembered, but a profitable route must be earned by
+            // actual exchanges. Founding does not mint trade or a relation bonus.
+        } else {
+            const home=getTownByRef({worldId:charter.originWorldId,townId:charter.originTownId});
+            if(home&&!home.end&&home.pop>0&&charter.supplyVersion===1) {
+                charter.stage='returning';charter.outcome='no_landing';charter.returnDay=getUniverseDay();charter.arrivalDay=getUniverseDay()+charter.travelDays;
+                frontierStep(charter,`There is no unclaimed ground on ${charter.targetName}. The settlers turn back with their remaining cargo.`,'warning');return;
+            }
+            const wasWaiting=charter.stage==='stranded';charter.stage='stranded';charter.outcome='no_landing';
+            if(!wasWaiting)frontierStep(charter,`The settlers reach ${charter.targetName}, but find no unclaimed ground to land on. Their remaining supplies are aboard the vessel.`,'warning');
             return;
         }
-        try { initUnrest(originTown); } catch {}
-
-        const chance = computeFrontierSuccessChance(charter, originTown, targetWorld);
-        if (Math.random() <= chance) {
-            const emigrants = charter.emigrants || Math.max(6, Math.round((originTown.pop || 0) * 0.04));
-            const newTown = createFrontierColonyTown(charter, emigrants);
-            if (newTown) {
-                charter.stage = "completed";
-                charter.outcome = "success";
-                registry.worldLastColony[targetWorld.id] = getUniverseDay();
-
-                const originLabel = formatTownRef({ worldId: charter.originWorldId, townId: charter.originTownId });
-                const worldName = formatWorldName(targetWorld, charter.targetName);
-                logFrontierEvent(`A colony from ${originLabel} establishes {{b:${newTown.name}}} on ${worldName}.`, "milestone");
-                try {
-                    recordAnnalsEntry({
-                        theme: "discovery",
-                        title: `${newTown.name} Founded`,
-                        body: `${originLabel} plants a new settlement on ${worldName}.`,
-                        sourceType: "frontier_charter",
-                        sourceId: charter.id,
-                        day: getUniverseDay(),
-                        townId: newTown.id
-                    });
-                } catch {}
-
-                const originRef = { worldId: charter.originWorldId, townId: charter.originTownId };
-                const newRef = { worldId: charter.targetWorldId, townId: newTown.id };
-                try { addSpaceWarRelation(originRef, newRef, 1.2); } catch {}
-                if (Math.random() < FRONTIER_CHARTER_CONFIG.routeChance) {
-                    try { createSpaceRoute(originRef, newRef); } catch {}
-                }
-            } else {
-                charter.stage = "failed";
-                charter.outcome = "landing_failed";
-                logFrontierEvent(`The frontier flotilla from {{regname:town|${charter.originTownId}}} fails to establish a foothold on ${formatWorldName(targetWorld, charter.targetName)}.`, "warning");
-            }
-        } else {
-            charter.stage = "failed";
-            charter.outcome = "lost";
-            const originLabel = formatTownRef({ worldId: charter.originWorldId, townId: charter.originTownId });
-            logFrontierEvent(`A frontier expedition from ${originLabel} is lost en route to ${formatWorldName(targetWorld, charter.targetName)}.`, "warning");
-            try {
-                recordAnnalsEntry({
-                    theme: "hardship",
-                    title: "A Frontier Charter Lost",
-                    body: `${originLabel} sent a charter toward ${formatWorldName(targetWorld, charter.targetName)}, but no settlers returned.`,
-                    sourceType: "frontier_charter",
-                    sourceId: charter.id,
-                    day: getUniverseDay()
-                });
-            } catch {}
-        }
-
-        archiveFrontierCharter(charter, registry);
+        archiveFrontierCharter(charter,registry);
     }
-
-    function archiveFrontierCharter(charter, registry) {
-        if (!registry) return;
-        if (!registry.history) registry.history = [];
-        registry.history.push({
-            id: charter.id,
-            originWorldId: charter.originWorldId,
-            originTownId: charter.originTownId,
-            targetWorldId: charter.targetWorldId,
-            targetName: charter.targetName,
-            motive: charter.motive,
-            outcome: charter.outcome || charter.stage,
-            day: getUniverseDay()
-        });
-        if (registry.history.length > 40) registry.history.shift();
-        registry.charters = registry.charters.filter(c => c && c.id !== charter.id);
-    }
-
     function processFrontierCharters() {
-        const registry = getColonizationRegistry();
-        if (!registry || registry.charters.length === 0) return;
-        const day = getUniverseDay();
-        registry.charters.slice().forEach(charter => {
-            if (!charter || charter.stage === "completed" || charter.stage === "failed") return;
-            if (Array.isArray(charter.beats)) {
-                charter.beats.forEach(beat => {
-                    if (beat && !beat.done && day >= beat.day) {
-                        logFrontierEvent(beat.text, beat.type || null);
-                        beat.done = true;
+        const registry=getColonizationRegistry();if(!registry)return;const day=getUniverseDay();
+        for(const charter of registry.charters.slice()) {
+            if(charter.lastDay===day)continue;const previous=charter.lastDay;charter.lastDay=day;
+            if(['enroute','returning','stranded'].includes(charter.stage)) {
+                // Already launched legacy saves keep their passengers. Never
+                // invent a vessel or receipts for costs the older mod did not pay.
+                if(charter.supplyVersion===1) {
+                    const elapsed=Math.max(0,(charter.stage==='stranded'?day:Math.min(day,charter.arrivalDay))-Math.max(previous ?? charter.launchedDay,charter.launchedDay));
+                    let due=elapsed*charter.dailyMeals,ate=0;
+                    for(const type of ['crop','livestock']) {
+                        const count=Math.min(charter.cargo[type] || 0,due);charter.cargo[type]=(charter.cargo[type] || 0)-count;due-=count;ate+=count;
+                        let used=count;for(const lot of charter.cargoLots[type] || []){const n=Math.min(lot.count,used);lot.count-=n;used-=n;}
                     }
-                });
+                    charter.mealsEaten=(charter.mealsEaten || 0)+ate;
+                    if(due>0){charter.stage='failed';charter.outcome='lost_contact';frontierStep(charter,'The vessel runs out of provisions. No further signal reaches home.','warning');archiveFrontierCharter(charter,registry);continue;}
+                } else {charter.cargo ||= {};charter.jobs ||= {};}
+                if(charter.stage==='returning'&&day>=charter.arrivalDay) {
+                    const home=getTownByRef({worldId:charter.originWorldId,townId:charter.originTownId}),world=getWorldById(charter.originWorldId);
+                    const landed=home&&!home.end&&world&&withWorldState(world,()=>{
+                        if($c.maxPopulation(home)-home.pop<charter.emigrants)return false;
+                        happen('AddPop',null,home,{count:charter.emigrants});for(const [job,count] of Object.entries(charter.jobs))home.jobs[job]=(home.jobs[job] || 0)+count;
+                        home.wealth=(home.wealth || 0)+(charter.wealth || 0);unloadFrontierCargo(charter,home);return true;
+                    },{silent:true});
+                    if(landed){charter.stage='returned';charter.outcome='returned';frontierStep(charter,`The ${charter.emigrants} settlers return to ${charter.originName}. Their remaining cargo goes back into the stores.`);archiveFrontierCharter(charter,registry);}
+                    else {charter.stage='stranded';if(!charter.waitingAtHome)frontierStep(charter,'The settlers reach home, but there is nowhere left for them to land.','warning');charter.waitingAtHome=true;}
+                } else if(charter.stage==='stranded'&&charter.waitingAtHome) {
+                    charter.stage='returning';charter.arrivalDay=day;
+                } else if(day>=charter.arrivalDay)resolveFrontierCharter(charter,registry);
+                continue;
             }
-            if (charter.stage === "preparing" && day >= charter.launchDay) {
-                const originTown = getTownByRef({ worldId: charter.originWorldId, townId: charter.originTownId });
-                const originWorld = getWorldById(charter.originWorldId);
-                const targetWorld = getWorldById(charter.targetWorldId);
-                if (!originTown || !originWorld || !targetWorld) {
-                    charter.stage = "failed";
-                    charter.outcome = "abandoned";
-                    archiveFrontierCharter(charter, registry);
-                    return;
+            if(charter.stage!=='preparing')continue;
+            const world=getWorldById(charter.originWorldId),target=getWorldById(charter.targetWorldId),town=getTownByRef({worldId:charter.originWorldId,townId:charter.originTownId});
+            if(!world||!town||town.end||town.pop<=0||!target){charter.stage='failed';charter.outcome='abandoned';frontierStep(charter,'The settlement can no longer prepare the journey.','warning');archiveFrontierCharter(charter,registry);continue;}
+            withWorldState(world,()=>{
+                prepareFrontierSupplies(charter,town);
+                const costs=frontierCargoCost(charter,town),other=commodityWorkClaims(town).filter(c=>c.id!==`charter:${charter.id}`&&c.kind!=='construction');
+                const blocked=!target.reached||target.habitable===false?'destination':!skyFlightKnowledge()?'knowledge':town.pop<FRONTIER_CHARTER_CONFIG.minTownPop?'people':hasIssue(town,'war')?'war':!(town.jobs?.miner>0||town.jobs?.scholar>0)?'hands':mealStock(town)-(costs.crop || 0)-(costs.livestock || 0)<foodBuffer(town)?'food':Object.entries(costs).some(([type,n])=>commodityStock(town,type)-other.reduce((sum,c)=>sum+(c.cost[type] || 0),0)<n)?'supplies':null;
+                if(blocked) {
+                    if(charter.pause!==blocked)frontierStep(charter,{destination:'The settlers wait for reports of a place they can reach.',knowledge:'The workshop needs more knowledge before it can prepare this journey.',people:'Too few people remain to send a colony.',war:'Fighting draws people away from the colony preparations.',hands:'The colony preparations wait for workshop hands.',food:'The town cannot spare enough food for the journey yet.',supplies:'The settlers are gathering a passenger vessel, tools and building supplies.'}[blocked]);
+                    charter.pause=blocked;return;
                 }
-                const emigrants = applyFrontierLaunchCost(originTown);
-                charter.emigrants = emigrants;
-                const travelDays = computeFrontierTravelDays(originWorld, targetWorld);
-                charter.arrivalDay = day + travelDays;
-                charter.stage = "enroute";
-
-                const originLabel = formatTownRef({ worldId: charter.originWorldId, townId: charter.originTownId });
-                logFrontierEvent(`A frontier flotilla lifts off from ${originLabel}, bound for ${formatWorldName(targetWorld, charter.targetName)}.`, "milestone");
-            } else if (charter.stage === "enroute" && charter.arrivalDay && day >= charter.arrivalDay) {
-                resolveFrontierCharter(charter, registry);
-            }
-        });
+                delete charter.pause;
+                if(!(charter.loading>0))frontierStep(charter,`${town.name} has the vessel and supplies. The settlers begin loading.`);
+                charter.loading++;if(charter.loading<FRONTIER_CHARTER_CONFIG.loadingDays)return;
+                const before={...town.resources},lots=structuredClone(town._paultendoCommodityLots || {});charter.inputs=[];
+                withCommodityUse({kind:'charter',id:charter.id,name:'colony journey',inputs:charter.inputs},()=>{for(const [type,count] of Object.entries(costs))happen('RemoveResource',null,town,{type,count});});
+                if(Object.entries(costs).some(([type,n])=>(before[type] || 0)-commodityStock(town,type)!==n)){town.resources=before;town._paultendoCommodityLots=lots;charter.inputs=[];return;}
+                rememberFrontierWork(charter);
+                const removed=happen('RemovePop',null,town,{count:charter.emigrants});charter.emigrants=removed.count;charter.jobs={...removed.jobs};
+                charter.wealth=Math.min(town.wealth || 0,Math.floor((town.wealth || 0)*removed.count/(town.pop+removed.count)));town.wealth=(town.wealth || 0)-charter.wealth;
+                charter.influences={...town.influences};charter.values={...town.values};charter.research={...town.research};
+                const domains=new Set(['travel']);
+                for(const [job,count] of Object.entries(charter.jobs))if(count>0) {
+                    const branch=jobNeedsUnlock[job]?.[0];if(branch)domains.add(branch);
+                    if(job==='miner')domains.add('fire');
+                    if(job==='scholar'){domains.add('education');domains.add('astronomy');}
+                }
+                charter.knowledge=Object.fromEntries([...domains].filter(key=>planet.unlocks[key]>0).map(key=>[key,planet.unlocks[key]]));
+                const creed=getTownReligion(town);if(creed)charter.creed={origin:creed._paultendoOrigin || `${world.id}:${town.religion}`,data:structuredClone(creed)};
+                charter.packed={...costs};delete charter.packed.colony_vessel;charter.cargo={...charter.packed};
+                for(const [type,count] of Object.entries(charter.cargo))charter.cargoLots[type]=commodityCargoLots(count,charter.inputs.filter(i=>i.type===type));
+                for(const input of charter.inputs)rememberCommodityUse(town,input,{kind:'charter',id:charter.id,name:'colony journey'});
+                charter.stage='enroute';charter.launchedDay=day;charter.arrivalDay=day+charter.travelDays;
+                frontierStep(charter,`${charter.emigrants} settlers leave ${town.name} for ${target.name}. Their tools, timber and provisions go with them.`,'milestone');
+            },{silent:false});
+        }
+    }
+    function openFrontierCharter(charter) {
+        if(!frontierKnown(charter))return;
+        if(charter.stage==='preparing'&&charter.supplyVersion!==1){const world=getWorldById(charter.originWorldId),town=getTownByRef({worldId:charter.originWorldId,townId:charter.originTownId});if(town)withWorldState(world,()=>prepareFrontierSupplies(charter,town),{silent:true});}
+        const items=[{text:'← Back to Solar',func:openSolarPanel}];
+        items.push({heading:true,text:`${escapeLivingText(charter.originName)} → ${escapeLivingText(charter.targetName)}`});
+        items.push({text:{preparing:`${charter.emigrants} people hope to ${charter.motiveLabel}. Their journey begins when the workshop and stores are ready.`,enroute:`${charter.emigrants} settlers are aboard. They expect to reach ${charter.targetName} around Day ${charter.arrivalDay}.`,completed:`${charter.colony?.name || 'A new settlement'} has begun with the people and supplies they brought.`,returning:`The settlers are returning to ${charter.originName}. They expect to arrive around Day ${charter.arrivalDay}.`,returned:'The settlers have come home with their remaining supplies.',stranded:'The settlers are still aboard, searching for somewhere to land. Their provisions will not last forever.',failed:charter.outcome==='lost_contact'?'No further signal has returned from the vessel.':'The preparations came to an end.'}[charter.stage] || 'An earlier colony journey.'});
+        if(charter.stage==='preparing') {
+            const world=getWorldById(charter.originWorldId),town=getTownByRef({worldId:charter.originWorldId,townId:charter.originTownId});
+            if(town)withWorldState(world,()=>{
+                items.push({heading:true,text:'For the journey'});
+                for(const [type,count] of Object.entries(frontierCargoCost(charter,town)))items.push({text:`${Math.min(count,commodityStock(town,type))} / ${count} ${COMMODITIES[type].label}`});
+                items.push({text:`Enough food must stay behind to feed ${town.name}. Loading takes three days of work once everything is ready.`});
+            },{silent:true});
+            if(charter.originWorldId===getCurrentWorldId()&&livingTownKnown(town))items.push({text:'Visit the workshops',func:()=>openTownMaterials(town)});
+        } else if(charter.supplyVersion===1) {
+            items.push({heading:true,text:['completed','returned'].includes(charter.stage)?'Packed at departure':'In the hold'});
+            for(const [type,count] of Object.entries(['completed','returned'].includes(charter.stage)?charter.packed:charter.cargo))items.push({text:`${count} ${COMMODITIES[type].label}${charter.stage==='completed'?' packed at departure.':''}`});
+            items.push({text:charter.mealsEaten?`${charter.mealsEaten} provisions fed the settlers along the way.`:'The provisions are packed for the journey and the first days ashore.'});
+        } else items.push({text:'This vessel left before journeys kept a cargo account.'});
+        if(charter.colony&&getWorldById(charter.colony.worldId)?.discovered)items.push({text:`Visit ${escapeLivingText(charter.colony.name)}`,func:()=>switchWorld(charter.colony.worldId)});
+        if(charter.workshops?.some(w=>w.known)) {
+            items.push({heading:true,text:'Who made the vessel'});
+            for(const work of charter.workshops.filter(w=>w.known&&['sky_vessel','colony_vessel'].includes(w.type)))items.push({text:`${escapeLivingText(work.name)} made a ${COMMODITIES[work.type].singular} on Day ${work.finished}.`});
+        }
+        items.push({heading:true,text:'Along the way'});for(const step of charter.steps || [])items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        populateExecutive(items,'The settlers');markLivingStoryControls();openExecutive();
     }
 
     modEvent("frontierStirring", {
@@ -12881,9 +12718,8 @@
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
         value: (subject) => {
-            const day = getUniverseDay();
-            if (day < FRONTIER_CHARTER_CONFIG.minDay - 120) return false;
-            if (getFrontierSpaceTech() < FRONTIER_CHARTER_CONFIG.minSpaceTech - 6) return false;
+            const day=getUniverseDay();
+            if (!skyFlightKnowledge() || !skyState().flights.some(f=>f.status==='arrived')) return false;
             if ((subject.influences?.education || 0) < 3 && (subject.influences?.trade || 0) < 3) return false;
             if (subject._paultendoStarLookDay && (day - subject._paultendoStarLookDay) < 80) return false;
             return true;
@@ -12917,7 +12753,7 @@
             if (!plan) return null;
             return `Leaders in {{regname:town|${subject.id}}} propose a frontier charter to {{b:${plan.targetName}}}, hoping to ${plan.motiveLabel}. Endorse the preparations? {{should}}`;
         },
-        messageDone: "You bless the charter and release its funding.",
+        messageDone: "You encourage them to prepare the journey.",
         messageNo: "You ask them to wait a while longer.",
         func: (subject, target, args) => {
             if (!args.plan) return;
@@ -13495,6 +13331,10 @@
             const stats=getWorldTownStats(world);items.push({text:`${stats.towns} ${stats.towns===1?'settlement':'settlements'} · ${stats.pop} people`});
             if(world.id===universe.currentWorldId)items.push({text:'You are here.'});
             else items.push({text:'Switch to world',func:()=>switchWorld(world.id)});
+            if(world.id!==universe.currentWorldId&&world.habitable!==false) {
+                for(const town of regToArray('town').filter(livingTownKnown).filter(t=>frontierTownReady(t)&&getFrontierCandidateWorlds(getWorldById(skyWorldId()),null,getColonizationRegistry()).includes(world)))items.push({text:`Encourage ${escapeLivingText(town.name)} to prepare a settlement`,func:()=>{const charter=startFrontierCharter(planFrontierCharter(town,world.id),{endorsed:true});if(charter)openFrontierCharter(charter);else openSolarWorldDetail(world.id);}});
+                items.push({text:'Settlers need a passenger vessel, provisions, tools and building supplies. Their home must be able to spare them.'});
+            }
         } else if(skyState().orbitalSurvey)items.push(...skyFlightItems(worldId));
         else items.push({text:'A survey flight above the homeworld comes first.'});
         populateExecutive(items,escapeLivingText(world.name || world.label));markLivingStoryControls();openExecutive();
@@ -13536,6 +13376,11 @@
             const branches=livingDiscoveryBranches();
             const names=missing.map(([key,level])=>branches[key]?.levels.find(item=>item.level===level)?.name || titleCase(key));
             items.push({text:`A powered survey vessel needs ${commaList(names)}. Its workshop must also have steel, glass and fuel.`});
+        }
+        const charters=[...(getColonizationRegistry()?.charters || []),...(getColonizationRegistry()?.history || [])].filter(frontierKnown).slice(-4).reverse();
+        if(charters.length) {
+            items.push({heading:true,text:'Settlers beyond home'});
+            for(const charter of charters)items.push({text:`${escapeLivingText(charter.originName)} → ${escapeLivingText(charter.targetName)}<span class="paultendoStoryProse">${{preparing:'Preparing the journey',enroute:'On their way',completed:'A settlement founded',returning:'Coming home',returned:'Returned home',stranded:'Searching for landing',failed:'Journey ended'}[charter.stage] || 'An earlier journey'}</span>`,func:()=>openFrontierCharter(charter)});
         }
         populateExecutive(items,'The sky');markLivingStoryControls();attachSolarMapHandlers();openExecutive();
     }
@@ -14305,6 +14150,7 @@
                 if(logDiv&&retireRepeatedLoadGreetings(logDiv)) {
                     rebuildChronicleUiStateFromLog();syncLogToPlanet();
                 }
+                baseParseSave._paultendoLocalPersist?.();
             };
             parseSave._paultendoUniverse = true;
             parseSave._paultendoBase = baseParseSave;
