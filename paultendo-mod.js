@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.33/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.34/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.33";
+    const MOD_VERSION = "1.6.34";
     // An update URL must replace earlier installations before the duplicate
     // guard returns. Otherwise the browser keeps loading the old version first.
     const installURL = typeof document !== "undefined" ? document.currentScript?.src : null;
@@ -4891,55 +4891,36 @@
     }
 
     function openUnlocksPanelEnhanced() {
-        if (!planet || typeof populateExecutive !== "function" || typeof unlockTree === "undefined") return;
-        document.getElementById("actionItem-unlocks")?.classList.remove("notify");
-        let total = 0;
-        for (let type in unlockTree) {
-            total += unlockTree[type].levels.length;
-        }
-
-        let items = [];
+        if (!planet || typeof populateExecutive !== 'function' || typeof unlockTree === 'undefined') return;
+        document.getElementById('actionItem-unlocks')?.classList.remove('notify');
+        const items = [];
         let unlocked = 0;
-        for (let type in unlockTree) {
-            if (!planet.unlocks[type]) continue;
-            let levels = unlockTree[type].levels;
-            for (let i = 0; i < levels.length; i++) {
-                const levelData = levels[i];
-                if (planet.unlocks[type] >= levelData.level) {
-                    const meta = getTechUnlockMeta(type, levelData.level);
-                    const suffix = meta ? ` · ${formatTechUnlockMeta(meta)}` : "";
-                    items.push({
-                        text: `${levelData.name}${suffix}`,
-                        indent: i,
-                        tip: "Read the discovery's story and effects",
-                        func: () => openUnlockDetail(type, levelData)
-                    });
-                    unlocked++;
-                } else {
-                    items.push({
-                        text: levelData.name.replace(/\w/g, "?"),
-                        indent: i,
-                        opacity: 0.5
-                    });
-                    break;
-                }
+        const labels = {farm:'Farming', travel:'Travel', fire:'Fire', smith:'Craft', trade:'Trade', government:'Government', education:'Learning', military:'Military', astronomy:'The sky', faith:'Faith'};
+        for (const [type, branch] of Object.entries(livingDiscoveryBranches())) {
+            const levels = branch.levels.filter(level => (planet.unlocks[type] || 0) >= level.level);
+            if (!levels.length) continue;
+            items.push({heading:true, text:labels[type] || titleCase(type)});
+            for (const levelData of levels) {
+                items.push({text:levelData.name, tip:"Read the discovery's story and effects", func:() => openUnlockDetail(type, levelData)});
+                unlocked++;
             }
         }
         appendTechPathUnlocks(items);
-        if (!items.length) items.push("No unlocks yet..");
-        if (unlocked) items.unshift({ spacer: true, text: "Select a discovery to read its story and effects." });
-        populateExecutive(items, "Unlocks (" + Math.round(unlocked / total * 100) + "%)");
+        if (!unlocked) items.unshift({text:'No discoveries yet.'});
+        else items.unshift({spacer:true, text:'Select a discovery to read its story and effects.'});
+        populateExecutive(items, `Unlocks (${unlocked})`);
+        openExecutive();
     }
 
     function openUnlockDetail(type, levelData, townId = null) {
         const meta = getTechUnlockMeta(type, levelData.level);
         const items = [{ text: "← Back to Unlocks", func: openUnlocksPanelEnhanced }];
-        const tale = DISCOVERY_TALES[type]?.[levelData.level];
+        const tale = levelData.tale || DISCOVERY_TALES[type]?.[levelData.level];
         if (tale) items.push({ text: tale, spacer: true });
         if (levelData.messageDone) items.push({ text: levelData.messageDone });
         if (!levelData.messageDone && !levelData.messageTomorrow) items.push({ text: `The people of {{planet}} have developed ${levelData.name}.` });
         if (meta) {
-            items.push({ heading: true, text: "First heard here" });
+            items.push({ heading: true, text: "Origins" });
             items.push({ text: formatTechUnlockMeta(meta) });
         }
         const towns = regToArray('town').filter(livingTownKnown).filter(town => !townId || town.id === townId);
@@ -4960,9 +4941,20 @@
             items.push({ heading: true, text: 'From the Chronicle' });
             for (const moment of moments) items.push({ text: `Day ${moment.day} · ${moment.text}` });
         }
-        const next = unlockTree[type].levels.find(level => level.level > levelData.level);
-        if (next) items.push({ spacer: true, text: `Next in this branch: ${next.name}. Further research and prerequisites are needed.` });
+        const branches = livingDiscoveryBranches();
+        const next = branches[type]?.levels.find(level => level.level > levelData.level);
+        if (next) {
+            const missing = Object.entries(next.needsUnlock || {}).filter(([key, level]) => (planet.unlocks[key] || 0) < level);
+            const names = missing.map(([key, level]) => branches[key]?.levels.find(item => item.level >= level)?.name || titleCase(key));
+            items.push({spacer:true, text:`Next in this branch: ${next.name}.${names.length ? ` Needs ${commaList(names)}.` : ''}`});
+        }
         populateExecutive(items, levelData.name);
+        if (meta?.method || meta?.school) {
+            const details = document.createElement('details'); details.className = 'paultendoDiscoveryNotes';
+            const summary = document.createElement('summary'); summary.textContent = 'Local tradition'; details.appendChild(summary);
+            const line = document.createElement('p'); line.textContent = [meta.method, meta.school].filter(Boolean).join(' · '); details.appendChild(line);
+            document.getElementById('actionSubList').appendChild(details);
+        }
         const numbers = Object.entries(levelData.influences || {}).filter(([, value]) => typeof value === 'number' && value);
         if (numbers.length) {
             const details = document.createElement('details'); details.className = 'paultendoDiscoveryNumbers';
@@ -5136,6 +5128,62 @@
     // Settlement life connects existing simulation facts to discoveries and choices.
     // This layer observes the world; it does not add bonuses or consume random rolls.
     const livingDecisionCaptures = new Map();
+    // Display metadata for the mod’s existing events. Never extend the native random unlock tree.
+    const EXTENDED_DISCOVERIES = [
+        {"key": "farm", "level": 50, "event": "unlockFertilization", "name": "Fertilization", "needsUnlock": {"farm": 40}, "messageDone": "Fields are enriched with natural fertilizers.", "influences": {"farm": 2, "disease": 0.2}, "tale": "Last year’s waste feeds next year’s soil. Richer fields bring a little more disease pressure with them."},
+        {"key": "farm", "level": 60, "event": "unlockSelectiveBreeding", "name": "Selective Breeding", "needsUnlock": {"farm": 50, "education": 10}, "messageDone": "Each generation grows stronger than the last.", "influences": {"farm": 2, "happy": 0.5}, "tale": "The best seed is kept, and the strongest animals become parents. The next generation begins with a choice made today."},
+        {"key": "farm", "level": 70, "event": "unlockMechanizedFarming", "name": "Mechanized Farming", "needsUnlock": {"farm": 60, "smith": 50}, "messageDone": "Mechanical implements transform agriculture.", "influences": {"farm": 3, "happy": -0.5}, "influencesNo": {"happy": 0.5}, "tale": "A machine can keep working when hands need rest. The fields gain support, though the change unsettles the town."},
+        {"key": "farm", "level": 80, "event": "unlockAgriculturalScience", "name": "Agricultural Science", "needsUnlock": {"farm": 70, "education": 20}, "messageDone": "Farming becomes a science as much as a craft.", "influences": {"farm": 2, "education": 1}, "tale": "A bad harvest becomes a question to study. Farming and learning begin to draw on the same knowledge."},
+        {"key": "travel", "level": 50, "event": "unlockRoads", "name": "Roads", "needsUnlock": {"travel": 40, "smith": 10}, "messageDone": "Paved roads connect the towns.", "influences": {"travel": 2, "trade": 1}, "tale": "Stone underfoot turns a familiar trail into a lasting road. Travel and exchange gain support together."},
+        {"key": "travel", "level": 60, "event": "unlockSailingShips", "name": "Sailing Ships", "needsUnlock": {"travel": 50, "trade": 20}, "messageDone": "Tall ships sail to distant shores.", "influences": {"travel": 2, "trade": 1.5}, "tale": "The wind joins the crew. Larger vessels give travel and trade another way to grow."},
+        {"key": "travel", "level": 70, "event": "unlockNavigation", "name": "Navigation", "needsUnlock": {"travel": 60, "education": 20}, "messageDone": "Navigators guide ships by the heavens.", "influences": {"travel": 2, "education": 1}, "tale": "A sailor can lose sight of shore without losing the way. Learning to read the heavens supports journeys below them."},
+        {"key": "travel", "level": 80, "event": "unlockSteamPower", "name": "Steam Power", "needsUnlock": {"travel": 70, "smith": 50, "fire": 20}, "messageDone": "Steam engines transform travel and industry.", "influences": {"travel": 3, "farm": 1}, "influencesNo": {"happy": 0.5}, "tale": "Boiling water becomes a source of motion. Travel gains support, and the fields share in the new power."},
+        {"key": "travel", "level": 90, "event": "unlockRailways", "name": "Railways", "needsUnlock": {"travel": 80, "smith": 60}, "messageDone": "Locomotives connect distant settlements.", "influences": {"travel": 3, "trade": 2, "happy": -0.5}, "tale": "Iron tracks tie distant places together. Travel and trade grow stronger, while happiness takes a small loss."},
+        {"key": "fire", "level": 40, "event": "unlockKilns", "name": "Kilns", "needsUnlock": {"fire": 20, "smith": 20}, "messageDone": "Kilns fire pottery and bricks with precision.", "influences": {"trade": 1}, "tale": "Clay goes into the heat and comes back changed. Controlled fire gives trade a new craft to draw on."},
+        {"key": "fire", "level": 50, "event": "unlockForges", "name": "Forges", "needsUnlock": {"fire": 40, "smith": 30}, "messageDone": "Great forges produce stronger alloys.", "influences": {"military": 1, "trade": 1}, "tale": "The hottest part of the workshop becomes its heart. Stronger metal supports trade and military work."},
+        {"key": "fire", "level": 60, "event": "unlockGunpowder", "name": "Gunpowder", "needsUnlock": {"fire": 50, "military": 30, "education": 10}, "messageDone": "Gunpowder changes the nature of warfare forever.", "influences": {"military": 4, "crime": 1, "happy": -1}, "influencesNo": {"happy": 1}, "tale": "A spark can release a force no arm could match. Military strength grows, with costs to happiness and order."},
+        {"key": "fire", "level": 70, "event": "unlockEngines", "name": "Engines", "needsUnlock": {"fire": 60, "travel": 80}, "messageDone": "Combustion engines power a new age.", "influences": {"travel": 2, "farm": 1}, "tale": "A controlled explosion moves a piston instead of scattering a workshop. Travel and farming gain support."},
+        {"key": "smith", "level": 50, "event": "unlockSteel", "name": "Steel", "needsUnlock": {"smith": 40, "fire": 40}, "messageDone": "Steel transforms construction and warfare.", "influences": {"military": 2, "trade": 1}, "tale": "Iron is refined into something tougher. Better metal supports both exchange and military strength."},
+        {"key": "smith", "level": 60, "event": "unlockArchitecture", "name": "Architecture", "needsUnlock": {"smith": 50, "education": 10}, "messageDone": "Grand buildings rise across the land.", "influences": {"happy": 2, "faith": 1}, "tale": "Shelter becomes a craft of space, weight and ambition. Happiness and faith gain support."},
+        {"key": "smith", "level": 70, "event": "unlockMachinery", "name": "Machinery", "needsUnlock": {"smith": 60, "education": 20}, "messageDone": "Machines assist in labor across the land.", "influences": {"farm": 1, "trade": 1, "happy": -0.5}, "tale": "A gear passes work to another gear. Farming and trade gain support, though happiness falls a little."},
+        {"key": "smith", "level": 80, "event": "unlockPrecisionEngineering", "name": "Precision Engineering", "needsUnlock": {"smith": 70, "education": 30}, "messageDone": "Precision instruments advance all fields.", "influences": {"education": 2, "trade": 1}, "tale": "Parts are made to fit by design rather than luck. Careful craft supports learning and trade."},
+        {"key": "trade", "level": 40, "event": "unlockBanking", "name": "Banking", "needsUnlock": {"trade": 30, "government": 10}, "messageDone": "Banks manage wealth across the settlements.", "influences": {"trade": 2, "crime": 0.5}, "tale": "Wealth can wait in a vault or return to town as a loan. Trade gains support, with a little more crime pressure."},
+        {"key": "trade", "level": 50, "event": "unlockContracts", "name": "Contracts", "needsUnlock": {"trade": 40, "education": 20}, "messageDone": "Legal contracts govern trade and property.", "influences": {"trade": 1.5, "crime": -0.5}, "tale": "A promise can be read long after its witnesses have gone. Trade gains support and crime pressure eases."},
+        {"key": "trade", "level": 60, "event": "unlockMarkets", "name": "Markets", "needsUnlock": {"trade": 50}, "messageDone": "Market squares bustle with commerce.", "influences": {"trade": 2, "happy": 1}, "tale": "People know where to bring what they have and find what they lack. Exchange and happiness gain support."},
+        {"key": "trade", "level": 70, "event": "unlockGuilds", "name": "Guilds", "needsUnlock": {"trade": 60, "education": 20}, "messageDone": "Guilds regulate crafts and train apprentices.", "influences": {"trade": 1.5, "education": 1, "happy": -0.5}, "tale": "A craft becomes something to teach and protect. Trade and learning grow stronger, though not everyone welcomes the change."},
+        {"key": "trade", "level": 80, "event": "unlockCorporations", "name": "Corporations", "needsUnlock": {"trade": 70, "government": 20}, "messageDone": "Corporations pursue profit across settlements.", "influences": {"trade": 3, "happy": -1}, "tale": "A business can outlive the people who founded it. Trade grows stronger, at a cost to happiness."},
+        {"key": "government", "level": 20, "event": "unlockTaxation", "name": "Taxation", "needsUnlock": {"government": 10, "trade": 20}, "messageDone": "Taxes fund roads, defenses, and public works.", "influences": {"trade": -0.5, "military": 1, "travel": 1}, "tale": "A share of private wealth becomes a public contribution. Travel and military strength gain support while trade loses a little."},
+        {"key": "government", "level": 30, "event": "unlockBureaucracy", "name": "Bureaucracy", "needsUnlock": {"government": 20, "education": 10}, "messageDone": "Scribes and officials administer the settlements.", "influences": {"crime": -1, "happy": -0.5}, "tale": "The town’s affairs fill ledgers as well as conversations. Crime pressure eases, while happiness falls a little."},
+        {"key": "government", "level": 40, "event": "unlockCourts", "name": "Courts", "needsUnlock": {"government": 30}, "messageDone": "Courts of law deliver justice.", "influences": {"crime": -1.5, "happy": 0.5}, "tale": "A dispute can reach a judge before it becomes a feud. Crime pressure eases and spirits lift."},
+        {"key": "government", "level": 50, "event": "unlockConstitution", "name": "Constitution", "needsUnlock": {"government": 40, "education": 20}, "messageDone": "A constitution limits power and protects rights.", "influences": {"happy": 1.5, "crime": -0.5}, "tale": "Rules are written for those who govern as well as those they govern. Spirits lift and crime pressure eases."},
+        {"key": "education", "level": 30, "event": "unlockWriting", "name": "Writing", "needsUnlock": {"education": 20}, "messageDone": "Written language preserves knowledge.", "influences": {"education": 2, "trade": 0.5}, "tale": "Words no longer need a living voice to carry them. Learning and trade gain support."},
+        {"key": "education", "level": 40, "event": "unlockLibraries", "name": "Libraries", "needsUnlock": {"education": 30}, "messageDone": "Libraries preserve and share knowledge.", "influences": {"education": 2}, "tale": "Knowledge kept apart is gathered in one place. Learning gains support, and new work becomes possible."},
+        {"key": "education", "level": 50, "event": "unlockPrinting", "name": "Printing", "needsUnlock": {"education": 40, "smith": 40}, "messageDone": "The printing press spreads ideas far and wide.", "influences": {"education": 3, "happy": 0.5, "crime": 0.25}, "tale": "One page can become a hundred without a hundred scribes. Learning and happiness grow, with a little more crime pressure."},
+        {"key": "education", "level": 60, "event": "unlockUniversities", "name": "Universities", "needsUnlock": {"education": 50}, "messageDone": "Universities become centers of learning.", "influences": {"education": 3}, "tale": "Learning finds a home built around questions. Education gains support."},
+        {"key": "education", "level": 70, "event": "unlockScientificMethod", "name": "Scientific Method", "needsUnlock": {"education": 60}, "messageDone": "The scientific method transforms understanding.", "influences": {"education": 3, "farm": 1, "happy": 0.5}, "tale": "An idea must survive an experiment. Learning, farming and happiness gain support."},
+        {"key": "education", "level": 80, "event": "unlockMedicine", "name": "Medicine", "needsUnlock": {"education": 70}, "messageDone": "Medical knowledge saves lives.", "influences": {"disease": -2, "happy": 1}, "tale": "Illness becomes something to study and treat. Disease pressure eases and spirits lift."},
+        {"key": "military", "level": 60, "event": "unlockFortifications", "name": "Fortifications", "needsUnlock": {"military": 50, "smith": 50}, "messageDone": "Fortifications protect the settlements.", "influences": {"military": 2, "happy": -0.5}, "tale": "The edge of town becomes a line to defend. Military strength grows, though happiness falls a little."},
+        {"key": "military", "level": 70, "event": "unlockStandingArmies", "name": "Standing Armies", "needsUnlock": {"military": 60, "government": 30}, "messageDone": "Professional armies train and garrison.", "influences": {"military": 2, "crime": -1, "happy": -1}, "tale": "Soldiers train when there is no battle to fight. Military strength grows and crime pressure eases, at a cost to happiness."},
+        {"key": "military", "level": 80, "event": "unlockFirearms", "name": "Firearms", "needsUnlock": {"military": 70, "fire": 60}, "messageDone": "Firearms transform the battlefield.", "influences": {"military": 3}, "tale": "A small charge sends a projectile beyond the strength of a bow. Military strength gains support."},
+        {"key": "military", "level": 90, "event": "unlockArtillery", "name": "Artillery", "needsUnlock": {"military": 80}, "messageDone": "Artillery dominates the battlefield.", "influences": {"military": 3, "happy": -1}, "tale": "A distant wall can be reached by a gun. Military strength grows, while happiness falls."},
+        {"key": "faith", "level": 10, "event": "unlockRituals", "name": "Rituals", "needsUnlock": {"farm": 10}, "messageDone": "Rituals bind communities together.", "influences": {"faith": 2, "happy": 1}, "tale": "Births, deaths and seasons gain shared ceremonies. Faith and happiness gain support."},
+        {"key": "faith", "level": 20, "event": "unlockTemples", "name": "Temples", "needsUnlock": {"faith": 10, "smith": 20}, "messageDone": "Temples rise as centers of faith.", "influences": {"faith": 2, "happy": 0.5}, "tale": "Worship finds a place to gather. Faith and happiness grow stronger, and priestly work becomes possible."},
+        {"key": "faith", "level": 30, "event": "unlockPriesthood", "name": "Priesthood", "needsUnlock": {"faith": 20}, "messageDone": "Priests guide the faithful.", "influences": {"faith": 2, "education": 0.5}, "tale": "Some people devote their lives to spiritual matters. Faith and learning gain support."},
+        {"key": "faith", "level": 40, "event": "unlockScripture", "name": "Scripture", "needsUnlock": {"faith": 30, "education": 30}, "messageDone": "Holy texts preserve and spread the faith.", "influences": {"faith": 2, "education": 1}, "tale": "Sacred teachings become words that can travel and endure. Faith and learning gain support."},
+        {"key": "faith", "level": 50, "event": "unlockMonasteries", "name": "Monasteries", "needsUnlock": {"faith": 40, "education": 40}, "messageDone": "Monasteries become centers of faith and learning.", "influences": {"faith": 2, "education": 2}, "tale": "A life of study can also be a life of devotion. Faith and education gain support together."},
+    ];
+
+    function livingDiscoveryBranches() {
+        const branches = Object.fromEntries(Object.entries(unlockTree).map(([key, branch]) => [key, {...branch, levels: [...branch.levels]}]));
+        for (const discovery of EXTENDED_DISCOVERIES) {
+            if (!gameEvents[discovery.event]) continue;
+            const branch = branches[discovery.key] ||= {levels: []};
+            if (!branch.levels.some(level => level.level === discovery.level)) branch.levels.push(discovery);
+        }
+        for (const branch of Object.values(branches)) branch.levels.sort((a, b) => a.level - b.level);
+        return branches;
+    }
+
     const DISCOVERY_TALES = {
         farm: {10: 'A seed kept through winter can become a meal next season. Fields give people a reason to stay.', 20: 'A beast that once fled the camp may come back for scraps. Keeping animals brings food closer to home.', 30: 'Water need not stop at the riverbank. Carrying it to the crops changes what the land can provide.', 40: 'One harvest need not exhaust a field. Changing what grows there gives the soil a chance to recover.'},
         travel: {10: 'There is more to the world than the edge of town. Each journey brings unfamiliar places within reach.', 20: 'Footsteps leave a trail. Repeated journeys turn a route remembered by a few into a path others can follow.', 30: 'Water becomes a way forward. A shore that once ended a journey can become its beginning.', 40: 'A rolling load is easier to move than one carried on a back. Distance becomes less of a burden.'},
@@ -5171,7 +5219,7 @@
     function seedLivingDiscoveries() {
         const state = livingWorldState();
         if (!state || typeof unlockTree === 'undefined') return;
-        for (const [key, branch] of Object.entries(unlockTree)) {
+        for (const [key, branch] of Object.entries(livingDiscoveryBranches())) {
             for (const level of branch.levels) {
                 if ((planet.unlocks?.[key] || 0) < level.level) continue;
                 const id = `${key}:${level.level}`;
@@ -5418,7 +5466,7 @@
         const title = document.createElement('h3'); title.textContent = 'Life in town'; section.appendChild(title);
         for (const text of livingTownLines(town).slice(0, 6)) { const line = document.createElement('p'); line.textContent = text; section.appendChild(line); }
         const links = document.createElement('div'); links.className = 'paultendoLifeDiscoveries';
-        for (const [key, branch] of Object.entries(unlockTree)) {
+        for (const [key, branch] of Object.entries(livingDiscoveryBranches())) {
             const levels = branch.levels.filter(l => (planet.unlocks?.[key] || 0) >= l.level);
             if (!levels.length) continue;
             const level = levels[levels.length - 1];
@@ -5485,6 +5533,9 @@
 
     function initLivingWorld() {
         seedLivingDiscoveries();
+        for (const discovery of EXTENDED_DISCOVERIES) {
+            if (gameEvents[discovery.event]) gameEvents[discovery.event]._paultendoDiscovery = discovery;
+        }
         for (const [eventClass, type] of [['townFarm', 'crop'], ['townTame', 'livestock']]) {
             const info = gameEvents[eventClass];
             if (!info?.func || info.func._paultendoLife) continue;
@@ -5521,10 +5572,10 @@
             .paultendoTownLife button:hover { color: #fff1a0; background: #373326; }
             .paultendoTownLife button:focus-visible, .paultendoDecisionPreview summary:focus-visible { outline: 2px solid #fff1a0; outline-offset: 3px; }
             .paultendoLifeDiscoveries { display: flex; flex-wrap: wrap; gap: 0.35em; margin: 0.65em 0; }
-            .paultendoDiscoveryNumbers { margin: 0.75em; color: #e5dc98; font-size: 0.85em; }
-            .paultendoDiscoveryNumbers summary { cursor: pointer; min-height: 44px; display: list-item; align-content: center; }
-            .paultendoDiscoveryNumbers summary:focus-visible { outline: 2px solid #fff1a0; outline-offset: 3px; }
-            .paultendoDiscoveryNumbers p { margin: 0.3em 0; }
+            .paultendoDiscoveryNumbers, .paultendoDiscoveryNotes { margin: 0.75em; color: #e5dc98; font-size: 0.85em; }
+            .paultendoDiscoveryNumbers summary, .paultendoDiscoveryNotes summary { cursor: pointer; min-height: 44px; display: list-item; align-content: center; }
+            .paultendoDiscoveryNumbers summary:focus-visible, .paultendoDiscoveryNotes summary:focus-visible { outline: 2px solid #fff1a0; outline-offset: 3px; }
+            .paultendoDiscoveryNumbers p, .paultendoDiscoveryNotes p { margin: 0.3em 0; }
             .paultendoDecisionPreview { font-size: 0.8em; color: #e5dc98; margin: 0.45em 0 0.15em; }
             .paultendoDecisionPreview summary { cursor: pointer; width: fit-content; }
             .paultendoDecisionPreview p { margin: 0.25em 0; line-height: 1.25; }
@@ -16501,7 +16552,8 @@
             method: variant.method,
             school: variant.school,
             day: variant.discoveredDay || planet.day,
-            eventId: eventId || variant.id || null
+            eventId: eventId || variant.id || null,
+            originTownId: variant.originTownId || null
         };
     }
 
@@ -16512,14 +16564,11 @@
     }
 
     function formatTechUnlockMeta(meta) {
-        if (!meta) return "";
-        const name = meta.name ? `{{b:${meta.name}}}` : "a breakthrough";
-        const details = [];
-        if (meta.method) details.push(meta.method);
-        if (meta.school) details.push(meta.school);
-        if (meta.day) details.push(`Day ${meta.day}`);
-        const suffix = details.length ? ` (${details.join(" · ")})` : "";
-        return `{{b:Breakthrough}}: ${name}${suffix}`;
+        if (!meta) return '';
+        const town = meta.originTownId && regGet('town', meta.originTownId);
+        const where = livingTownKnown(town) ? ` in ${townRef(town.id)}` : '';
+        const when = meta.day ? ` on Day ${meta.day}` : '';
+        return where || when ? `First recorded${where}${when}.` : (meta.name || '');
     }
 
     function formatUnlockBadge(variant) {
@@ -16717,6 +16766,13 @@
 
         if (!variant) return;
         try { recordTechUnlockMapping(variant, unlockKey, unlockLevel, eventId); } catch {}
+        if (delta) {
+            const definition = EXTENDED_DISCOVERIES.find(item => item.event === eventId && item.key === unlockKey && item.level === unlockLevel);
+            if (definition) {
+                recordLivingDiscovery(regGet('town', variant.originTownId), {value:{type:unlockKey, levelData:definition}});
+                unlockExecutive('unlocks');
+            }
+        }
         args._paultendoTechVariant = variant;
 
         const state = initTechFlavorState();
