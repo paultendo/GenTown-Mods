@@ -14,7 +14,9 @@ Species now have a discoverable history: new encounters remember the resident’
 
 Completed expeditions now retain a named destination, the actual arrival and journey date, known origin, person carrying a whisper, and the terrain revealed. The settlement and temporary expedition marker lead to the place. The page shows current terrain, actual roads and later ownership changes, and lets the player ask a person to return. A rival’s claim can become hostile words aimed at that specific owner. These words can worsen relations and war pressure, but cannot silently target somebody else if the ground changes hands. Merely considering an expedition creates no historical visit. Fog and unknown identities remain protected.
 
-Further exploration needs discoveries and local practices that make a return worthwhile beyond charting and road use. Artifacts, competing interpretations and transmission between people remain to be built.
+The seeded first inheritance now supplies three finite artifacts. Placement records the actual action without inventing an earlier expedition. Finders come from actual workers and figures, and knowledge and outlook determine whether an object becomes a curiosity, a healing tool, a relic, a shared tune, a subject of study or an instrument of military discipline. A whisper can encourage sharing or secrecy. Sharing can pass an object to a worker with useful knowledge even if the player has never opened their profile. Occupation, the end of a settlement and rediscovery can change custody without discarding its history. Merely visiting another world does not replenish an object.
+
+Eight artifact tests cover finite placement, private randomness, actual paths, prerequisite-dependent use, different finders, actual influence changes, reloads, sharing and withheld knowledge, actual occupation and rediscovery, guarded refusal, fog and travel to another world. Artifacts on inactive worlds do not yet develop their histories while the player is elsewhere.
 
 Species proof: native encounter, naming, cultivation and town-animal callbacks are exercised with reload and visibility checks. The existing three seeded 300-day simulations also record encounters during normal play. Six destination tests cover native acceptance, refusal and failed paths, marker expiry, persistent visits, saved return whispers and actual traffic, known lost origins, visibility, actual ownership changes and a delayed hostile claim. The three seeded 300-day runs exercise the existing expedition systems alongside normal play.
 
@@ -34,6 +36,12 @@ Proof: multiple seeds yield different chains through normal play. Removing an en
 
 ## The Traveler frame reaches the game
 
-The fresh-world opening now introduces the fragmented memory and uncertain role beside the Chronicle without blocking the first camp. Lore retains that memory and leads to known people. Ongoing saves receive no fabricated arrival event. Next, connect visions and artifacts to existing simulation actors and remembered places. Preserve ongoing saves and familiar controls while that framing develops. The game should gradually make the player feel like a visitor influencing history rather than an administrator confirming every popup.
+The fresh-world opening now introduces the fragmented memory and uncertain role beside the Chronicle without blocking the first camp. Lore retains that memory and leads to known people. Ongoing saves receive no fabricated arrival event. Artifacts now connect remembered places to actual workers and figures. Visions remain to be built. Preserve ongoing saves and familiar controls while that framing develops. The game should gradually make the player feel like a visitor influencing history rather than an administrator confirming every popup.
 
 Proof: the opening establishes the role in natural game language, interventions have limits and reception, and the world can continue without turning unanswered proposals into silent approval.
+
+## Objects return through time
+
+Run zero begins with a small seeded inheritance. Later runs should inherit objects that actually existed in previous play, including things civilisation made. Their makers, custodians, uses, damage and legends should travel with them. There should be no guaranteed replacement for something lost or destroyed, and inheritance should require a route back into the Traveler’s hands. A useful instrument can eventually become the very object brought to an earlier beginning. The player discovers this loop through familiar details rather than a catalogue of bonuses.
+
+The first inheritance now records an origin and the history of its actual custody and use. A durable loop ledger, civilisation-made objects and the transition between runs remain to be implemented. The current release does not yet generate later starting objects from a previous run.

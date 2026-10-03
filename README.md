@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.39**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
+Version **1.6.40**, tested against the live **GenTown 1.4 / gt5** engine on 3 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.39/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.40/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.39)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.40)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -43,6 +43,8 @@ Meet the people in a known settlement to whisper through a worker or an establis
 
 Completed expeditions now keep a destination history after their map marker fades. Visit it through the settlement to see the actual terrain, journeys, roads and later claims, then choose a person to carry words about returning. A rival’s claim also opens a hostile whisper tied to that particular owner. Journeys reveal and use actual paths, delayed claims can stall when ownership changes, and reloads retain these memories. Fresh games introduce the Traveler beside the Chronicle. Lore keeps the fragmented memory accessible without adding a blocking popup or inventing an arrival for existing saves.
 
+The Traveler now carries a compass, a clear lens and a tuning fork. Leave one on known ground and a passing expedition or nearby worker may find it. Actual jobs, knowledge and outlook shape what follows: healing, study, song, worship, military use or secrecy. You can urge a bearer to share it or hide it. Sharing can bring it to another worker, occupation can change its owner, and an abandoned object can be found again. Each object keeps its dated history through reloads and cannot be replenished by switching worlds. These are the seeded first inheritance. Objects derived from earlier runs and the time-loop transition are still planned.
+
 Live decisions have a warm highlight and working buttons. Unanswered entries recede into the Chronicle without explanatory text. Advancing the day preserves GenTown's rules: most proposals lapse, while some events have a fallback, such as generating a discovery name. Autoplay pauses for decisions unless Auto-decide is enabled. GenTown does not save pending event callbacks across a reload.
 
 ```sh
@@ -50,7 +52,7 @@ npm run check
 npm test
 ```
 
-The 75 regression tests cover startup, late installation and redraw, overlay creation, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, background reports, unlock details and notifications, discovery menus, species naming, mod management, autoplay and decisions, settlement activity and lore, choice provenance, species encounters and local uses, individual whispers and their reception, actual food transfers and exploration, persistent destination histories and return journeys, ownership changes and hostile claims, the Traveler opening, unrest and war pressure, adoption and construction follow-ups, fields and visibility, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
+The 83 regression tests cover startup, late installation and redraw, overlay creation, asynchronous saved-mod restoration, the legacy gt3 dimension format, native customization, world travel and reload, Next Day dispatch, duplicate loading and URL replacement, background reports, unlock details and notifications, discovery menus, species naming, mod management, autoplay and decisions, settlement activity and lore, choice provenance, species encounters and local uses, individual whispers and their reception, actual food transfers and exploration, persistent destination histories and return journeys, ownership changes and hostile claims, the Traveler opening, finite artifacts and their provenance, finder-dependent uses, sharing and hoarding, custody and rediscovery, unrest and war pressure, adoption and construction follow-ups, fields and visibility, settings, saved Chronicle history and sanitized legacy markup, save integrity, server asset access, and three seeded 300-day simulations. Canvas calls are stubbed in these logic tests; rendering and controls are checked separately in Chrome at desktop and mobile sizes.
 
 ## Credits
 
