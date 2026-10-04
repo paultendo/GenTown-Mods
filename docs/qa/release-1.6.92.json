@@ -1,0 +1,2117 @@
+{
+  "version": "1.6.92",
+  "date": "2026-10-04",
+  "automatedTests": 677,
+  "sourceHashes": {
+    "index.html": "19eccde1a476ad46e0a2b88fb8888bef334e3506f8d42f3f7a99198f10a08159",
+    "paultendo-mod.js": "ba1bc2626a3cc16730d5cb50c9469ebc6db766ad886f344286563bb6d2166afa",
+    "vendor/gentown/load.js": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+    "vendor/gentown/perlin.js": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+    "vendor/gentown/standalone.js": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+    "vendor/gentown/gentown.js": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+    "vendor/gentown/gentown-data.js": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+    "vendor/gentown/gentown-mass.js": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+    "app/boot.js": "db769df1d0f01c9e11bf64c333f167ccb842c0ef80bd84842140b4b71540953d",
+    "app/ready.js": "52c4b776993e06f053f82cb56e9e012d962077753f1d106d2dab8a333a331a78",
+    "scripts/lib/game.mjs": "2db8895e37c4ed6ed7a7b011e53556c4a2b73d33ecccf43ba470bb33dc069b94",
+    "scripts/lib/campaign.mjs": "712261bf607f99354f95f948c13e0ce56c6cb8e74031c4bd731af69530c2acbb",
+    "scripts/simulate.mjs": "175021ff19fb9accf8e924dfc51263214ff23eb9fc46f28a9930076b8ac944de"
+  },
+  "turns": 5100,
+  "campaigns": [
+    {
+      "seed": 7,
+      "policy": "yes",
+      "days": 600,
+      "turns": 600,
+      "status": "passed",
+      "imported": false,
+      "inputHash": null,
+      "startDay": 1,
+      "terrainSeed": 0.011704753153026104,
+      "choiceCounts": {
+        "yes": 204,
+        "act": 53,
+        "choice": 3
+      },
+      "discoveryRhythm": {
+        "first30Turns": 2,
+        "turns31To150": 14,
+        "after150Turns": 12
+      },
+      "longestQuietStretch": 5,
+      "firstExtinction": {},
+      "unavailableChoices": [],
+      "errors": [],
+      "warnings": [],
+      "worlds": [
+        {
+          "id": 1,
+          "name": "Nis A c",
+          "day": 601,
+          "population": 111485,
+          "livingTowns": 12,
+          "artifacts": 3,
+          "speciesEncounters": 17
+        }
+      ],
+      "unfinishedWork": 10,
+      "stalledWork": [
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:143",
+          "town": 2,
+          "name": "Dolie",
+          "status": "waiting",
+          "started": 194,
+          "remaining": 8,
+          "pause": "Dolie puts the work aside. There is not enough food in Wayfarer 258.",
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Dolie puts the work aside. There is not enough food in Wayfarer 258.",
+          "lastChange": 601,
+          "active": true,
+          "age": 407,
+          "daysSinceStoryChange": 0,
+          "daysWithoutProgress": 407
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:303",
+          "town": 7,
+          "name": "Vezel",
+          "status": "waiting",
+          "started": 362,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Vezel returns to the work.",
+          "lastChange": 558,
+          "active": true,
+          "age": 239,
+          "daysSinceStoryChange": 43,
+          "daysWithoutProgress": 239
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:391",
+          "town": 9,
+          "name": "Nugton",
+          "status": "waiting",
+          "started": 420,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Nugton wants to try making telescopes in South 105.",
+          "lastChange": 420,
+          "active": true,
+          "age": 181,
+          "daysSinceStoryChange": 181,
+          "daysWithoutProgress": 181
+        }
+      ],
+      "discoveries": [
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 6,
+          "key": "smith",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 21,
+          "key": "farm",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 33,
+          "key": "education",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 38,
+          "key": "smith",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 45,
+          "key": "trade",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 53,
+          "key": "travel",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 56,
+          "key": "education",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 69,
+          "key": "government",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 73,
+          "key": "farm",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 82,
+          "key": "farm",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 93,
+          "key": "astronomy",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 100,
+          "key": "farm",
+          "level": 40,
+          "previous": 30.299999999999994
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 109,
+          "key": "fire",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 123,
+          "key": "smith",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 132,
+          "key": "smith",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 135,
+          "key": "travel",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 165,
+          "key": "military",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 180,
+          "key": "travel",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 185,
+          "key": "travel",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 189,
+          "key": "astronomy",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 205,
+          "key": "fire",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 221,
+          "key": "fire",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 256,
+          "key": "military",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 277,
+          "key": "trade",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 284,
+          "key": "trade",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 302,
+          "key": "military",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 312,
+          "key": "military",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 367,
+          "key": "military",
+          "level": 50,
+          "previous": 40
+        }
+      ]
+    },
+    {
+      "seed": 7,
+      "policy": "mixed",
+      "days": 600,
+      "turns": 600,
+      "status": "passed",
+      "imported": false,
+      "inputHash": null,
+      "startDay": 1,
+      "terrainSeed": 0.011704753153026104,
+      "choiceCounts": {
+        "no": 150,
+        "yes": 132,
+        "act": 54,
+        "choice": 1
+      },
+      "discoveryRhythm": {
+        "first30Turns": 2,
+        "turns31To150": 5,
+        "after150Turns": 17
+      },
+      "longestQuietStretch": 12,
+      "firstExtinction": {},
+      "unavailableChoices": [],
+      "errors": [],
+      "warnings": [],
+      "worlds": [
+        {
+          "id": 1,
+          "name": "Nis A c",
+          "day": 601,
+          "population": 48050,
+          "livingTowns": 7,
+          "artifacts": 6,
+          "speciesEncounters": 23
+        }
+      ],
+      "unfinishedWork": 4,
+      "stalledWork": [
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:603",
+          "town": 16,
+          "name": "Leman",
+          "status": "waiting",
+          "started": 478,
+          "remaining": 5,
+          "pause": "Leman cannot tend the work. It waits for them.",
+          "resolved": false,
+          "cost": {
+            "clay": 2,
+            "charcoal": 1
+          },
+          "latestStep": "Leman cannot tend the work. It waits for them.",
+          "lastChange": 495,
+          "active": true,
+          "age": 123,
+          "daysSinceStoryChange": 106,
+          "daysWithoutProgress": 123
+        }
+      ],
+      "discoveries": [
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 24,
+          "key": "travel",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 28,
+          "key": "astronomy",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 32,
+          "key": "fire",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 63,
+          "key": "smith",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 76,
+          "key": "military",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 121,
+          "key": "farm",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 149,
+          "key": "fire",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 177,
+          "key": "farm",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 194,
+          "key": "farm",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 234,
+          "key": "smith",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 251,
+          "key": "smith",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 256,
+          "key": "military",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 311,
+          "key": "fire",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 317,
+          "key": "travel",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 364,
+          "key": "government",
+          "level": 10,
+          "previous": 0.9600000000000005
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 371,
+          "key": "education",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 385,
+          "key": "travel",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 400,
+          "key": "travel",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 406,
+          "key": "education",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 409,
+          "key": "farm",
+          "level": 40,
+          "previous": 34.20000000000004
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 422,
+          "key": "smith",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 520,
+          "key": "military",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 574,
+          "key": "trade",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 596,
+          "key": "trade",
+          "level": 20,
+          "previous": 10
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "policy": "yes",
+      "days": 600,
+      "turns": 600,
+      "status": "passed",
+      "imported": false,
+      "inputHash": null,
+      "startDay": 1,
+      "terrainSeed": 0.6011037519201636,
+      "choiceCounts": {
+        "act": 47,
+        "yes": 189,
+        "choice": 3
+      },
+      "discoveryRhythm": {
+        "first30Turns": 5,
+        "turns31To150": 12,
+        "after150Turns": 11
+      },
+      "longestQuietStretch": 12,
+      "firstExtinction": {},
+      "unavailableChoices": [],
+      "errors": [],
+      "warnings": [],
+      "worlds": [
+        {
+          "id": 1,
+          "name": "Ujoris e",
+          "day": 601,
+          "population": 37691,
+          "livingTowns": 5,
+          "artifacts": 1,
+          "speciesEncounters": 16
+        }
+      ],
+      "unfinishedWork": 7,
+      "stalledWork": [
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:165",
+          "town": 2,
+          "name": "Pitein",
+          "status": "waiting",
+          "started": 202,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Pitein returns to the work.",
+          "lastChange": 588,
+          "active": true,
+          "age": 399,
+          "daysSinceStoryChange": 13,
+          "daysWithoutProgress": 399
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:448",
+          "town": 11,
+          "name": "Dapeng",
+          "status": "waiting",
+          "started": 538,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Dapeng returns to the work.",
+          "lastChange": 588,
+          "active": true,
+          "age": 63,
+          "daysSinceStoryChange": 13,
+          "daysWithoutProgress": 63
+        }
+      ],
+      "discoveries": [
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 3,
+          "key": "smith",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 13,
+          "key": "travel",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 18,
+          "key": "fire",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 23,
+          "key": "astronomy",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 26,
+          "key": "farm",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 35,
+          "key": "smith",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 44,
+          "key": "smith",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 49,
+          "key": "smith",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 55,
+          "key": "government",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 61,
+          "key": "military",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 71,
+          "key": "military",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 76,
+          "key": "education",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 98,
+          "key": "military",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 102,
+          "key": "education",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 107,
+          "key": "trade",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 111,
+          "key": "travel",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 139,
+          "key": "astronomy",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 155,
+          "key": "travel",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 158,
+          "key": "farm",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 167,
+          "key": "military",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 187,
+          "key": "travel",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 247,
+          "key": "military",
+          "level": 50,
+          "previous": 40
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 260,
+          "key": "trade",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 268,
+          "key": "farm",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 278,
+          "key": "trade",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 283,
+          "key": "fire",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 290,
+          "key": "farm",
+          "level": 40,
+          "previous": 30.53999999999999
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 296,
+          "key": "fire",
+          "level": 30,
+          "previous": 20
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "policy": "mixed",
+      "days": 600,
+      "turns": 600,
+      "status": "passed",
+      "imported": false,
+      "inputHash": null,
+      "startDay": 1,
+      "terrainSeed": 0.6011037519201636,
+      "choiceCounts": {
+        "act": 50,
+        "yes": 110,
+        "no": 139,
+        "choice": 2
+      },
+      "discoveryRhythm": {
+        "first30Turns": 3,
+        "turns31To150": 4,
+        "after150Turns": 16
+      },
+      "longestQuietStretch": 8,
+      "firstExtinction": {},
+      "unavailableChoices": [],
+      "errors": [],
+      "warnings": [],
+      "worlds": [
+        {
+          "id": 1,
+          "name": "Ujoris e",
+          "day": 601,
+          "population": 18744,
+          "livingTowns": 7,
+          "artifacts": 0,
+          "speciesEncounters": 13
+        }
+      ],
+      "unfinishedWork": 14,
+      "stalledWork": [
+        {
+          "world": 1,
+          "kind": "inquiries",
+          "id": "inquiry:545",
+          "town": 6,
+          "name": "Temples",
+          "status": "waiting",
+          "started": 561,
+          "remaining": 8,
+          "pause": "food",
+          "resolved": false,
+          "cost": {
+            "rock": 2,
+            "lumber": 2
+          },
+          "cause": {
+            "role": "priest",
+            "text": "Shared beliefs have become part of town life. People want a lasting place for them.",
+            "evidence": {
+              "priority": 0,
+              "religion": null,
+              "faith": 13.1
+            }
+          },
+          "latestStep": "Nirris puts the work aside. There is not enough food.",
+          "lastChange": 562,
+          "active": true,
+          "age": 40,
+          "daysSinceStoryChange": 39,
+          "daysWithoutProgress": 40
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:437",
+          "town": 5,
+          "name": "Lijah",
+          "status": "waiting",
+          "started": 494,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Lijah returns to the work.",
+          "lastChange": 529,
+          "active": true,
+          "age": 107,
+          "daysSinceStoryChange": 72,
+          "daysWithoutProgress": 107
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:445",
+          "town": 3,
+          "name": "Damith",
+          "status": "waiting",
+          "started": 498,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Damith returns to the work.",
+          "lastChange": 528,
+          "active": true,
+          "age": 103,
+          "daysSinceStoryChange": 73,
+          "daysWithoutProgress": 103
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:451",
+          "town": 7,
+          "name": "Yisef",
+          "status": "waiting",
+          "started": 503,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Yisef returns to the work.",
+          "lastChange": 601,
+          "active": true,
+          "age": 98,
+          "daysSinceStoryChange": 0,
+          "daysWithoutProgress": 98
+        },
+        {
+          "world": 1,
+          "kind": "seaVoyages",
+          "id": "voyage:366",
+          "town": 5,
+          "name": "coastal_boat",
+          "status": "preparing",
+          "started": 429,
+          "pause": "border",
+          "resolved": false,
+          "latestStep": "There is no open crossing to the other shore.",
+          "lastChange": 541,
+          "active": true,
+          "age": 172,
+          "daysSinceStoryChange": 60,
+          "daysWithoutProgress": 172
+        },
+        {
+          "world": 1,
+          "kind": "exchanges",
+          "id": "exchange:447",
+          "town": 7,
+          "name": "metal_tools",
+          "status": "making",
+          "started": 500,
+          "resolved": false,
+          "lastChange": 505,
+          "active": true,
+          "age": 101,
+          "daysSinceStoryChange": 96,
+          "daysWithoutProgress": 98
+        }
+      ],
+      "discoveries": [
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 3,
+          "key": "smith",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 12,
+          "key": "travel",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 19,
+          "key": "astronomy",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 43,
+          "key": "farm",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 75,
+          "key": "fire",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 108,
+          "key": "education",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 124,
+          "key": "trade",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 192,
+          "key": "farm",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 235,
+          "key": "government",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 260,
+          "key": "smith",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 284,
+          "key": "smith",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 306,
+          "key": "travel",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 313,
+          "key": "smith",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 320,
+          "key": "fire",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 343,
+          "key": "travel",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 348,
+          "key": "trade",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 376,
+          "key": "astronomy",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 461,
+          "key": "farm",
+          "level": 30,
+          "previous": 26.659999999999858
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 473,
+          "key": "farm",
+          "level": 40,
+          "previous": 30.299999999999994
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 481,
+          "key": "travel",
+          "level": 40,
+          "previous": 33.14999999999996
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 488,
+          "key": "education",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 493,
+          "key": "fire",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 571,
+          "key": "trade",
+          "level": 30,
+          "previous": 24.319999999999908
+        }
+      ]
+    },
+    {
+      "seed": 123,
+      "policy": "yes",
+      "days": 600,
+      "turns": 600,
+      "status": "passed",
+      "imported": false,
+      "inputHash": null,
+      "startDay": 1,
+      "terrainSeed": 0.7872516233474016,
+      "choiceCounts": {
+        "yes": 223,
+        "act": 44,
+        "choice": 2
+      },
+      "discoveryRhythm": {
+        "first30Turns": 3,
+        "turns31To150": 6,
+        "after150Turns": 19
+      },
+      "longestQuietStretch": 20,
+      "firstExtinction": {},
+      "unavailableChoices": [],
+      "errors": [],
+      "warnings": [],
+      "worlds": [
+        {
+          "id": 1,
+          "name": "Gnus c",
+          "day": 601,
+          "population": 72797,
+          "livingTowns": 7,
+          "artifacts": 1,
+          "speciesEncounters": 20
+        }
+      ],
+      "unfinishedWork": 10,
+      "stalledWork": [
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:300",
+          "town": 2,
+          "name": "Lafer",
+          "status": "waiting",
+          "started": 441,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Lafer returns to the work.",
+          "lastChange": 565,
+          "active": true,
+          "age": 160,
+          "daysSinceStoryChange": 36,
+          "daysWithoutProgress": 160
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:305",
+          "town": 3,
+          "name": "Zucie",
+          "status": "waiting",
+          "started": 445,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Zucie returns to the work.",
+          "lastChange": 565,
+          "active": true,
+          "age": 156,
+          "daysSinceStoryChange": 36,
+          "daysWithoutProgress": 156
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:330",
+          "town": 12,
+          "name": "Japer",
+          "status": "waiting",
+          "started": 458,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Japer returns to the work. The town has food again.",
+          "lastChange": 505,
+          "active": true,
+          "age": 143,
+          "daysSinceStoryChange": 96,
+          "daysWithoutProgress": 143
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:334",
+          "town": 1,
+          "name": "Cipatra",
+          "status": "waiting",
+          "started": 461,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Cipatra returns to the work.",
+          "lastChange": 565,
+          "active": true,
+          "age": 140,
+          "daysSinceStoryChange": 36,
+          "daysWithoutProgress": 140
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:463",
+          "town": 14,
+          "name": "Mucy",
+          "status": "waiting",
+          "started": 526,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Mucy wants to try making telescopes in Otania.",
+          "lastChange": 526,
+          "active": true,
+          "age": 75,
+          "daysSinceStoryChange": 75,
+          "daysWithoutProgress": 75
+        }
+      ],
+      "discoveries": [
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 4,
+          "key": "farm",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 14,
+          "key": "fire",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 25,
+          "key": "trade",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 63,
+          "key": "military",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 70,
+          "key": "farm",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 74,
+          "key": "military",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 98,
+          "key": "fire",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 105,
+          "key": "travel",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 149,
+          "key": "government",
+          "level": 10,
+          "previous": 0.38000000000000006
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 180,
+          "key": "education",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 184,
+          "key": "military",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 187,
+          "key": "military",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 208,
+          "key": "education",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 226,
+          "key": "farm",
+          "level": 30,
+          "previous": 23.479999999999926
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 239,
+          "key": "farm",
+          "level": 40,
+          "previous": 30.359999999999992
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 265,
+          "key": "fire",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 300,
+          "key": "travel",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 329,
+          "key": "smith",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 334,
+          "key": "travel",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 343,
+          "key": "smith",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 348,
+          "key": "smith",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 352,
+          "key": "smith",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 355,
+          "key": "trade",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 366,
+          "key": "travel",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 374,
+          "key": "trade",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 386,
+          "key": "astronomy",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 405,
+          "key": "military",
+          "level": 50,
+          "previous": 40
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 438,
+          "key": "astronomy",
+          "level": 20,
+          "previous": 10
+        }
+      ]
+    },
+    {
+      "seed": 123,
+      "policy": "mixed",
+      "days": 600,
+      "turns": 600,
+      "status": "passed",
+      "imported": false,
+      "inputHash": null,
+      "startDay": 1,
+      "terrainSeed": 0.7872516233474016,
+      "choiceCounts": {
+        "no": 132,
+        "act": 48,
+        "yes": 134,
+        "choice": 1
+      },
+      "discoveryRhythm": {
+        "first30Turns": 0,
+        "turns31To150": 6,
+        "after150Turns": 18
+      },
+      "longestQuietStretch": 12,
+      "firstExtinction": {},
+      "unavailableChoices": [],
+      "errors": [],
+      "warnings": [],
+      "worlds": [
+        {
+          "id": 1,
+          "name": "Gnus c",
+          "day": 601,
+          "population": 42535,
+          "livingTowns": 5,
+          "artifacts": 0,
+          "speciesEncounters": 22
+        }
+      ],
+      "unfinishedWork": 10,
+      "stalledWork": [
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:555",
+          "town": 3,
+          "name": "Sajah",
+          "status": "waiting",
+          "started": 511,
+          "remaining": 8,
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Sajah returns to the work.",
+          "lastChange": 601,
+          "active": true,
+          "age": 90,
+          "daysSinceStoryChange": 0,
+          "daysWithoutProgress": 90
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:556",
+          "town": 14,
+          "name": "Mucy",
+          "status": "waiting",
+          "started": 511,
+          "remaining": 8,
+          "pause": "Mucy cannot tend the work. It waits for them.",
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Mucy cannot tend the work. It waits for them.",
+          "lastChange": 556,
+          "active": true,
+          "age": 90,
+          "daysSinceStoryChange": 45,
+          "daysWithoutProgress": 90
+        },
+        {
+          "world": 1,
+          "kind": "materialWork",
+          "id": "material:564",
+          "town": 1,
+          "name": "Puverie",
+          "status": "waiting",
+          "started": 515,
+          "remaining": 8,
+          "pause": "Puverie cannot tend the work. It waits for them.",
+          "resolved": false,
+          "cost": {
+            "glass": 2,
+            "metal": 2,
+            "lumber": 1
+          },
+          "latestStep": "Puverie cannot tend the work. It waits for them.",
+          "lastChange": 600,
+          "active": true,
+          "age": 86,
+          "daysSinceStoryChange": 1,
+          "daysWithoutProgress": 86
+        }
+      ],
+      "discoveries": [
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 36,
+          "key": "farm",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 44,
+          "key": "farm",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 61,
+          "key": "military",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 112,
+          "key": "trade",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 144,
+          "key": "travel",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 149,
+          "key": "military",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 182,
+          "key": "travel",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 188,
+          "key": "travel",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 247,
+          "key": "smith",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 282,
+          "key": "government",
+          "level": 10,
+          "previous": 2.3000000000000016
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 286,
+          "key": "astronomy",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 352,
+          "key": "smith",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 361,
+          "key": "military",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 384,
+          "key": "fire",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 385,
+          "key": "farm",
+          "level": 30,
+          "previous": 29.959999999999788
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 397,
+          "key": "education",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 414,
+          "key": "military",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 432,
+          "key": "smith",
+          "level": 30,
+          "previous": 20
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 437,
+          "key": "smith",
+          "level": 40,
+          "previous": 30
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 467,
+          "key": "astronomy",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 492,
+          "key": "farm",
+          "level": 40,
+          "previous": 33.19999999999979
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 505,
+          "key": "education",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 581,
+          "key": "trade",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 585,
+          "key": "fire",
+          "level": 20,
+          "previous": 10
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "policy": "skip",
+      "days": 1000,
+      "turns": 1000,
+      "status": "passed",
+      "imported": false,
+      "inputHash": null,
+      "startDay": 1,
+      "terrainSeed": 0.6011037519201636,
+      "choiceCounts": {
+        "skip": 376
+      },
+      "discoveryRhythm": {
+        "first30Turns": 0,
+        "turns31To150": 0,
+        "after150Turns": 4
+      },
+      "longestQuietStretch": 63,
+      "firstExtinction": {},
+      "unavailableChoices": [],
+      "errors": [],
+      "warnings": [],
+      "worlds": [
+        {
+          "id": 1,
+          "name": "Ujoris e",
+          "day": 1001,
+          "population": 4042,
+          "livingTowns": 6,
+          "artifacts": 0,
+          "speciesEncounters": 16
+        }
+      ],
+      "unfinishedWork": 0,
+      "stalledWork": [],
+      "discoveries": [
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 358,
+          "key": "fire",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 364,
+          "key": "farm",
+          "level": 10,
+          "previous": 0
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 385,
+          "key": "fire",
+          "level": 20,
+          "previous": 10
+        },
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 536,
+          "key": "education",
+          "level": 10,
+          "previous": 0
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "policy": "skip",
+      "days": 200,
+      "turns": 200,
+      "status": "passed",
+      "imported": true,
+      "inputHash": "b560e24681c06a4e690c7dbfe365bc34be491f66cf2f4df7ad3094d868232279",
+      "startDay": 418,
+      "terrainSeed": 0.6011037519201636,
+      "choiceCounts": {
+        "skip": 48
+      },
+      "discoveryRhythm": {
+        "first30Turns": 1,
+        "turns31To150": 0,
+        "after150Turns": 0
+      },
+      "longestQuietStretch": 51,
+      "firstExtinction": {},
+      "unavailableChoices": [],
+      "errors": [],
+      "warnings": [],
+      "worlds": [
+        {
+          "id": 1,
+          "name": "Ujoris e",
+          "day": 618,
+          "population": 1920,
+          "livingTowns": 6,
+          "artifacts": 0,
+          "speciesEncounters": 16
+        }
+      ],
+      "unfinishedWork": 0,
+      "stalledWork": [],
+      "discoveries": [
+        {
+          "kind": "discovery",
+          "world": 1,
+          "day": 446,
+          "key": "farm",
+          "level": 10,
+          "previous": 0
+        }
+      ]
+    },
+    {
+      "seed": 123,
+      "policy": "no",
+      "days": 300,
+      "turns": 300,
+      "status": "passed",
+      "imported": false,
+      "inputHash": null,
+      "startDay": 1,
+      "terrainSeed": 0.7872516233474016,
+      "choiceCounts": {
+        "act": 5,
+        "no": 6
+      },
+      "discoveryRhythm": {
+        "first30Turns": 0,
+        "turns31To150": 0,
+        "after150Turns": 0
+      },
+      "longestQuietStretch": 267,
+      "firstExtinction": {
+        "1": 24
+      },
+      "unavailableChoices": [],
+      "errors": [],
+      "warnings": [],
+      "worlds": [
+        {
+          "id": 1,
+          "name": "Gnus c",
+          "day": 301,
+          "population": 0,
+          "livingTowns": 0,
+          "artifacts": 0,
+          "speciesEncounters": 2
+        }
+      ],
+      "unfinishedWork": 0,
+      "stalledWork": [],
+      "discoveries": []
+    }
+  ]
+}

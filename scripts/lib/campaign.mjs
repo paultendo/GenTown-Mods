@@ -70,6 +70,7 @@ export function campaignSnapshot(window) {
 }
 
 export function checkInvariants(window) {
+  if (window.GenTownLocal?.errors?.length) throw new Error(window.GenTownLocal.errors.join('\n'));
   for (const { id, planet } of planets(window)) {
     if (!Number.isSafeInteger(planet.day) || planet.day < 1) throw new Error(`World ${id} has an invalid day: ${planet.day}`);
     for (const town of Object.values(planet.reg.town || {})) {
@@ -79,6 +80,8 @@ export function checkInvariants(window) {
         // Debt can be negative. People, occupations and physical goods cannot.
         if (value < 0 && key !== 'wealth' && key !== 'resource.cash') throw new Error(`World ${id}, town ${town.id}: ${key} is negative (${value})`);
       }
+      const employed = Object.values(town.jobs || {}).reduce((sum, count) => sum + count, 0);
+      if (employed > town.pop + 1e-9) throw new Error(`World ${id}, town ${town.id}: ${employed} workers exceed its ${town.pop} inhabitants`);
     }
   }
 }
@@ -192,7 +195,7 @@ export async function runCampaign(options = {}) {
     report.terrainSeed = w.planet.config.seed;
     exportSave('initial.planet');
     initial = campaignSnapshot(w); snapshots.push(initial);
-    for (const world of initial.worlds) for (const work of world.work) workProgress.set(`${world.id}:${work.kind}:${work.id}`, { signature: JSON.stringify([work.status, work.remaining, work.pause, work.resolved]), day: world.day });
+    for (const world of initial.worlds) for (const work of world.work) workProgress.set(`${world.id}:${work.kind}:${work.id}`, { signature: JSON.stringify([work.status, work.remaining, work.resolved]), day: world.day });
     let previous = initial;
     const random = policyRandom(config.seed);
     const baseEvent = w.doEvent;
@@ -246,10 +249,10 @@ export async function runCampaign(options = {}) {
           }
         }
         for (const work of world.work) {
-          const key = `${world.id}:${work.kind}:${work.id}`, signature = JSON.stringify([work.status, work.remaining, work.pause, work.resolved]);
+          const key = `${world.id}:${work.kind}:${work.id}`, signature = JSON.stringify([work.status, work.remaining, work.resolved]);
           if (workProgress.get(key)?.signature !== signature) workProgress.set(key, { signature, day: world.day });
           const held = old.work.find(item => item.id === work.id && item.kind === work.kind);
-          if (!held || held.status !== work.status || held.pause !== work.pause || held.resolved !== work.resolved) {
+          if (!held || held.status !== work.status || JSON.stringify(held.pause) !== JSON.stringify(work.pause) || held.resolved !== work.resolved) {
             record({ kind: 'work', world: world.id, work }); meaningful = true;
           }
         }

@@ -53,7 +53,7 @@ test('a shipment can detour around hostile ground, and coalition allies can stil
   const g=await makeGame();t.after(g.close);const {w,a,b,enemy,war}=provisionPair(g,{gap:true});
   if(kind==='ally'){war.towns.push(b.id);war.sides[0].push(b.id);war._paultendoSideMap=undefined;b.issues.war=war.id;}
   w.gameEvents.townMarketPurchase.func(a,null,{seller:b,goodsType:'crop'});const exchange=w.planet._paultendoLife.exchanges.find(r=>r.buyer===a.id);assert.ok(exchange);due(w,exchange);assert.equal(exchange.status,'carrying');const cargo=exchange.cargo;
-  if(kind==='detour'){const path=w.planet._paultendoPathCache[`town:${a.id}->town:${b.id}`].path,interior=path.find(chunk=>!chunk.v.s&&chunk.b!=='water');assert.ok(interior);interior.v.s=enemy.id;assert.ok(path.some(chunk=>chunk.v.s===enemy.id),'The normal cached path is now hostile');}
+  if(kind==='detour'){const travelled=w.filterChunks(chunk=>chunk.v.road?.traffic>0),interior=travelled.find(chunk=>!chunk.v.s&&chunk.b!=='water');assert.ok(interior,'The departing shipment left traffic on its actual route');interior.v.s=enemy.id;assert.ok(travelled.some(chunk=>chunk.v.s===enemy.id),'The travelled route is now hostile');}
   for(let n=0;n<12&&!exchange.resolved;n++){a.resources.crop=1;due(w,exchange);}assert.equal(exchange.status,'arrived');assert.equal(exchange.delivered,cargo);assert.ok(!exchange.steps.some(step=>step.kind==='blocked'));check(g);
  }
 });

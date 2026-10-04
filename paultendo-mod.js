@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.91/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.92/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.91";
+    const MOD_VERSION = "1.6.92";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -2652,9 +2652,28 @@
     // EVENT WRAPPER (daily + subject/target all safe per-entity value/check)
     // =========================================================================
 
+    // GenTown puts every non-daily, non-meta event into its random pool,
+    // including retired events explicitly marked random:false.
+    if(!finalizeEvents._paultendoInactiveEvents) {
+        const finalize=finalizeEvents;
+        finalizeEvents=function(...args) {
+            const result=finalize.apply(this,args);
+            for(const [id,info] of Object.entries(randomEvents))if(info.random===false)delete randomEvents[id];
+            return result;
+        };
+        finalizeEvents._paultendoInactiveEvents=true;
+    }
+
     const _paultendoEvent = Mod.event;
     function modEvent(id, data) {
         if (!data || typeof data !== "object") return _paultendoEvent(id, data);
+
+        // These events report their own consequences from func. Without auto,
+        // GenTown creates an invisible Yes/No proposal and never runs them.
+        // An explicit question or input dialog keeps its normal player choice.
+        if (data.random === true && data.auto === undefined && !data.message &&
+            !data.value?.ask && !data.value?.choose && !data.funcNo &&
+            !data.messageNo && !data.influencesNo) data.auto = true;
 
         const isUnlockPrompt = id && id.startsWith("unlock") &&
             data.random === true &&
@@ -3045,7 +3064,10 @@
             data.funcNo._paultendoContext = true;
         }
 
-        return _paultendoEvent(id, data);
+        const result = _paultendoEvent(id, data);
+        // Mod.event inserts directly, without calling finalizeEvents.
+        if (data.random === false) delete randomEvents[id];
+        return result;
     }
 
     // =========================================================================
@@ -3236,6 +3258,9 @@
 
     function ensurePlanetState() {
         if (typeof planet === "undefined" || !planet) return;
+        // Old route caches contain detached copies of map tiles after reload.
+        // Routes can be rebuilt from terrain; they are never historical data.
+        delete planet._paultendoPathCache;
         if (!planet.unlocks || typeof planet.unlocks !== "object") {
             planet.unlocks = {};
         }
@@ -5586,7 +5611,7 @@
             if(localDiscoveryKnown(town,discovery)){work.status='superseded';work.finished=planet.day;inquiryStep(work,`${work.name} puts the work aside. The town already knows this way.`);continue;}
             if(work.status==='waiting')work.cost=workshopFuelCost(town,{...(work.prototypeCost || work.cost)},work);
             if(work.status==='waiting'&&!inquiryCause(town,discovery,person)){work.status='abandoned';work.finished=planet.day;inquiryStep(work,`${work.name} leaves the question for another time. The town has other concerns now.`);continue;}
-            const occupied=state.materialWork.some(w=>w.town===town.id&&materialWorkHasHand(w,work.person)&&['waiting','working'].includes(w.status))||state.artifactWork.some(w=>w.town===town.id&&w.person===work.person&&['gathering','working'].includes(w.status))||state.inquiries.some(w=>w.id!==work.id&&w.town===town.id&&w.person===work.person&&w.status==='working')||state.surfaceMarks.some(w=>w.town===town.id&&w.person===work.person&&w.status==='working'&&w.phase==='working')||state.clues.some(c=>c.town===town.id&&c.study?.person===work.person&&c.study.status==='working'&&!c.study.pause);
+            const occupied=state.materialWork.some(w=>w.town===town.id&&materialWorkHoldsHand(w,town,work.person)&&['waiting','working'].includes(w.status))||state.artifactWork.some(w=>w.town===town.id&&w.person===work.person&&['gathering','working'].includes(w.status))||state.inquiries.some(w=>w.id!==work.id&&w.town===town.id&&w.person===work.person&&w.status==='working')||state.surfaceMarks.some(w=>w.town===town.id&&w.person===work.person&&w.status==='working'&&w.phase==='working')||state.clues.some(c=>c.town===town.id&&c.study?.person===work.person&&c.study.status==='working'&&!c.study.pause);
             const surveying=state.sampling.some(w=>w.town===town.id&&w.person===work.person&&['outbound','collecting','returning'].includes(w.status));
             const blocked=!livingTeachingPersonAvailable(person,town)||occupied||surveying||seaCrewBusy(town,work.person)||politicalLaborStopped(town,person?.role)?'hands':Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(town,key)<level)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
             if(blocked) {
@@ -7976,6 +8001,10 @@
         populateExecutive(items,`Looking for ${COMMODITIES[work.type].label}`);markLivingStoryControls();rememberLivingStoryView(()=>openMaterialSurvey(work));openExecutive();
     }
     function materialWorkHasHand(work,id) {return work.person===id||work.apprentice?.person===id&&!work.apprentice.learned;}
+    function materialWorkHoldsHand(work,town,id) {
+        return materialWorkHasHand(work,id)&&(work.status!=='waiting'||
+            Object.entries(work.cost || {}).every(([type,count])=>commodityStock(town,type)>=count));
+    }
     function materialHands(town,type) {
         const entry=town._paultendoMaterials?.[type];if(!entry)return {};
         if(!entry.hands) {
@@ -8001,7 +8030,7 @@
         return livingTeachingPersonAvailable(person,town)&&!inquiryWorkerBusy(town,person)
             &&!seaCrewBusy(town,person.id)
             &&!state.artifactWork.some(w=>w.town===town.id&&w.person===person.id&&['gathering','working'].includes(w.status))
-            &&!state.materialWork.some(w=>!exempt.has(w.id)&&w.town===town.id&&['waiting','working'].includes(w.status)&&materialWorkHasHand(w,person.id))
+            &&!state.materialWork.some(w=>!exempt.has(w.id)&&w.town===town.id&&['waiting','working'].includes(w.status)&&materialWorkHoldsHand(w,town,person.id))
             &&!state.sampling.some(w=>!exempt.has(w.id)&&w.town===town.id&&w.person===person?.id&&['outbound','collecting','returning'].includes(w.status));
     }
     function materialWorker(town,recipe,type=null) {
@@ -8086,7 +8115,7 @@
         return work;
     }
     function materialDirectNeed(town,type) {
-        let promised=commodityWorkClaims(town).filter(c=>['inscription','accounts','voyage','inquiry','craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        let promised=commodityWorkClaims(town).filter(c=>['material','inscription','accounts','voyage','inquiry','craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
         // Actual recordkeeping can give a town a reason to try a lighter
         // writing surface before it has learned to make one successfully.
         if(townAccountsMaterialImprovement(town,type))promised=Math.max(promised,1);
@@ -8115,10 +8144,16 @@
         return materialConstructionNeed(town)>0||materialDirectNeed(town,work.type)>0;
     }
     function planMaterialWork(town) {
-        if(livingWorldState().materialWork.some(w=>w.town===town.id&&['waiting','working','storing'].includes(w.status)))return;
+        const active=livingWorldState().materialWork.filter(w=>w.town===town.id&&['waiting','working','storing'].includes(w.status));
+        if(active.some(w=>w.status!=='waiting'))return;
         const recent=livingWorldState().materialWork.filter(w=>w.town===town.id&&w.status!=='withdrawn').at(-1);
-        if(recent&&planet.day-(recent.finished || recent.day)<EXCHANGE_PACE.retryDays)return;
-        const intents=Object.keys(MATERIAL_RECIPES).map(type=>materialIntent(town,type)).filter(Boolean).sort((a,b)=>Number(b.actual)-Number(a.actual)||Number(!!materialClue(town,b.type))-Number(!!materialClue(town,a.type)));
+        if(!active.length&&recent&&planet.day-(recent.finished || recent.day)<EXCHANGE_PACE.retryDays)return;
+        const served=new Map();
+        for(const work of livingWorldState().materialWork)if(work.town===town.id)
+            served.set(work.type,Math.max(served.get(work.type) || 0,work.finished ?? work.day));
+        // Recipe-list order must not keep a waiting boat behind an endless
+        // stream of farm tools. Repeated orders give other unmet needs a turn.
+        const intents=Object.keys(MATERIAL_RECIPES).map(type=>materialIntent(town,type)).filter(Boolean).sort((a,b)=>Number(b.actual)-Number(a.actual)||(served.get(a.type) || 0)-(served.get(b.type) || 0)||Number(!!materialClue(town,b.type))-Number(!!materialClue(town,a.type)));
         const prerequisite=(type,seen=new Set())=>{
             if(seen.has(type)||!materialTechniqueAvailable(type,town))return null;seen.add(type);
             for(const [input,count] of Object.entries(materialBatchCost(town,type)))if(commodityStock(town,input)<count&&MATERIAL_RECIPES[input]) {
@@ -8126,7 +8161,20 @@
             }
             return type;
         };
-        for(const intent of intents){const type=prerequisite(intent.type);if(type&&startMaterialBatch(town,type,intent))return;}
+        // A queued instrument can need glass, and glass can need charcoal.
+        // Make the missing ingredient before reserving a second finished object.
+        if(active.length) {
+            for(const work of active)for(const [input,count] of Object.entries(work.cost)) {
+                if(commodityStock(town,input)>=count||!MATERIAL_RECIPES[input])continue;
+                const type=prerequisite(input);
+                if(!type||active.some(w=>w.type===type))continue;
+                const next=startMaterialBatch(town,type,{type:work.purpose?.type || work.type,actual:true,allowed:true});
+                if(next){next.parent=work.id;return;}
+            }
+        }
+        // Unknown methods or a missing raw material can leave that ingredient
+        // waiting. They must not stop other useful work at the same workshop.
+        for(const intent of intents){const type=prerequisite(intent.type);if(type&&!active.some(w=>w.type===type)&&startMaterialBatch(town,type,intent))return;}
     }
     function addProducedMaterialLot(town,work,count) {
         if(count<=0)return;
@@ -8174,7 +8222,8 @@
             }
             if(work.status==='waiting'&&work.purpose?.exchange&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
             const surveying=state.sampling.some(w=>w.town===town.id&&w.person===work.person&&['outbound','collecting','returning'].includes(w.status));
-            const blocked=!livingTeachingPersonAvailable(person,town)||surveying||seaCrewBusy(town,work.person)||politicalLaborStopped(town,person?.role)?'hands':!materialTechniqueAvailable(work.type,town)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            const occupied=inquiryWorkerBusy(town,person || {})||state.materialWork.some(w=>w.id!==work.id&&w.town===town.id&&w.status==='working'&&materialWorkHasHand(w,work.person))||state.artifactWork.some(w=>w.town===town.id&&w.person===work.person&&w.status==='working');
+            const blocked=!livingTeachingPersonAvailable(person,town)||occupied||surveying||seaCrewBusy(town,work.person)||politicalLaborStopped(town,person?.role)?'hands':!materialTechniqueAvailable(work.type,town)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
             if(blocked){
                 const pause={hands:`${work.name} cannot tend the work. It waits for them.`,knowledge:`The workshop cannot keep working this way.`,war:`Fighting pulls ${work.name} away from the work.`,food:`${work.name} puts the work aside. There is not enough food in ${town.name}.`}[blocked];
                 if(work.delay?.reason!==blocked){work.delay={reason:blocked,day:planet.day};materialStep(work,pause);}
@@ -8298,6 +8347,85 @@
     function nativeMealNeed(town) {
         const cost=Math.floor(addInfluence(town.pop*$c.baseEatRate,town,'hunger'));
         return Math.max(1,cost || town.pop*$c.baseEatRate*0.05);
+    }
+    // Finite room follows local methods and maintained buildings. Further
+    // smithing discoveries cannot keep doubling every settlement's density.
+    const SETTLEMENT_GROWTH = {mealDays:3,stonework:100,steel:40,architecture:100};
+    function settlementMealSupport(town) {
+        const meals=(town?._paultendoFoodFlow || []).filter(meal=>meal.day<=planet.day&&
+            meal.day>planet.day-SETTLEMENT_GROWTH.mealDays&&meal.wanted>0&&Number.isFinite(meal.consumed));
+        const wanted=meals.reduce((sum,meal)=>sum+meal.wanted,0);
+        const eaten=meals.reduce((sum,meal)=>sum+Math.min(meal.wanted,Math.max(0,meal.consumed)),0);
+        return {observed:!!wanted,complete:new Set(meals.map(meal=>meal.day)).size===SETTLEMENT_GROWTH.mealDays,
+            fraction:wanted?eaten/wanted:mealStock(town)>=nativeMealNeed(town)?1:0};
+    }
+    function installSettlementGrowth() {
+        if(!$c.maxPopulation._paultendoLocalHousing) {
+            $c.maxPopulation=town=>{
+                const level=townKnowledgeLevel(town,'smith');
+                const buildings=clampValue(town.infrastructure?.buildings ?? 70,0,100)/100;
+                const methods=(level>=10?SETTLEMENT_GROWTH.stonework:0)+
+                    (level>=50?SETTLEMENT_GROWTH.steel:0)+(level>=60?SETTLEMENT_GROWTH.architecture:0);
+                return Math.floor(Math.max(0,town.size || 0)*($c.maxPopulationPerChunk+methods*buildings));
+            };
+            $c.maxPopulation._paultendoLocalHousing=true;
+        }
+        const births=gameEvents.townBirth;
+        if(births?.func&&!births.func._paultendoLocalHousing) {
+            births.func=town=>{
+                const capacity=$c.maxPopulation(town);
+                if(town.pop<2||town.pop>=capacity)return;
+                const meals=settlementMealSupport(town);
+                const room=Math.max(0,1-town.pop/capacity);
+                const rate=addInfluence($c.baseBirthRate,town,'birth')*room*meals.fraction**2;
+                const expected=Math.min(capacity-town.pop,town.pop*rate);
+                const count=Math.floor(expected)+(Math.random()<expected%1?1:0);
+                if(count){const added=happen('AddPop',null,town,{count});statsAdd('birth',added.count);}
+            };
+            births.func._paultendoLocalHousing=true;
+        }
+        const migrate=actionables.town.asTarget.Migrate;
+        if(!migrate._paultendoConserved) {
+            actionables.town.asTarget.Migrate=(source,destination,args)=>{
+                if(!source||!destination||source===destination||source.end||destination.end)return {count:0};
+                // A native surrender transfers inhabitants with their land.
+                // Crowding can deter a voluntary move, but must not erase the
+                // people of a conquered town before its original registry ends.
+                const conquered=areAtWar(source,destination);
+                const room=conquered?source.pop:$c.maxPopulation(destination)-destination.pop;
+                let count=Math.max(0,Math.floor(Math.min(args.count ?? 1,source.pop,room)));
+                if(args.job)count=Math.min(count,Math.floor(source.jobs?.[args.job] || 0));
+                if(!count)return {count:0};
+                const population=source.pop,wealth=source.wealth || 0,influences={...source.influences};
+                // Pack only what can actually enter the receiving stores.
+                const goods=Object.keys(source.resources).filter(type=>type!=='cash');
+                for(let i=0;i<count&&goods.length;i++) {
+                    const type=choose(goods),stock=commodityStock(source,type);
+                    if(stock<1||Math.random()>=stock/population||commodityCapacity(destination,type)-commodityStock(destination,type)<1)continue;
+                    const before=commodityStock(destination,type);
+                    happen('AddResource',null,destination,{type,count:1});
+                    const accepted=commodityStock(destination,type)-before;
+                    if(accepted>0)happen('RemoveResource',null,source,{type,count:accepted});
+                }
+                const jobs=source.jobs;
+                if(args.job){jobs[args.job]-=count;source.jobs={};}
+                let removed;
+                try {removed=happen('RemovePop',null,source,{count});}
+                finally {if(args.job&&!source.end)source.jobs=jobs;}
+                if(conquered)destination.pop+=removed.count;
+                else happen('AddPop',null,destination,{count:removed.count});
+                for(const [job,n] of Object.entries(removed.jobs))destination.jobs[job]=(destination.jobs[job] || 0)+n;
+                if(args.job)destination.jobs[args.job]=(destination.jobs[args.job] || 0)+count;
+                const money=wealth*count/population;
+                if(!source.end)source.wealth=wealth-money;
+                destination.wealth=(destination.wealth || 0)+money;
+                const carried=Object.fromEntries(Object.entries(influences).filter(([key])=>key!=='happy').map(([key,value])=>[key,value*0.05]));
+                happen('Influence',source,destination,carried);
+                happen('AddRelation',source,destination,{amount:0.25});
+                return {count:removed.count};
+            };
+            actionables.town.asTarget.Migrate._paultendoConserved=true;
+        }
     }
     function observeFoodFlow(town,kind,count,wanted) {
         const flow=town._paultendoFoodFlow ||= [];
@@ -8921,7 +9049,7 @@
             record.resolved=true;record.status='arrived';record.arrived=planet.day;
             if(record.kind==='seizure') {
                 const memory=exchangeMemory(buyer,seller || {id:record.seller});memory.seized ||= {};memory.seized[record.type]=(memory.seized[record.type] || 0)+record.delivered;
-                if(buyer.famine&&!buyer.famine.ended&&mealStock(buyer)>=foodBuffer(buyer))buyer.famine.ended=true;
+
                 recordTraffic(path,0.2);noteExchangeStep(record,'arrive',{count:record.delivered});continue;
             }
             // Native AddRelation already updates both towns.
@@ -8934,9 +9062,7 @@
             receiveMaterialInstructions(buyer,record.materialLesson,record);receiveMaterialInstructions(seller,record.returnLesson,record);
             receiveLocalKnowledge(buyer,record.knowledgeOffer,record);receiveLocalKnowledge(seller,record.returnKnowledge,record);
             if(!record.sea)recordTraffic(path,0.5);noteLivingExchange(seller,buyer,path,{type:record.kind==='aid'?'gift':'caravan',route:route?.id,goods:record.type});
-            // Only real meals can calm hunger. A delivered supply can end a famine
-            // when it actually provides enough for the recipient's next meal.
-            if(buyer.famine&&!buyer.famine.ended&&mealStock(buyer)>=foodBuffer(buyer)) buyer.famine.ended=true;
+            // The supplies enter the stores. Recovery follows regular meals.
             noteExchangeStep(record,'arrive',{count:record.delivered,payment:record.payment});
             if(!existingRoute&&route){record.route=route.id;noteExchangeStep(record,'route');}
         }
@@ -9888,7 +10014,7 @@
                 const marker = regGet('marker', process.marker);
                 if (!marker || marker.end || marker.process !== process.id) continue;
                 project.reported = true;
-                noteLivingMoment(town, `The ${project.subtype.replace(/_/g, ' ')} approved on Day ${decision.day} now stands in ${townRef(town.id)}.`, null, decision.id);
+                noteLivingMoment(town, `The ${livingBuildingLabel(project.subtype)} approved on Day ${decision.day} now stands in ${townRef(town.id)}.`, null, decision.id);
                 return;
             }
         }
@@ -9930,6 +10056,10 @@
         if (gained > 0) observation.firstProduce = { day: planet.day, count: gained };
     }
 
+    function livingBuildingLabel(subtype, fallback='building') {
+        return String(subtype || fallback).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase();
+    }
+
     function livingTownPlaces(town, key) {
         const markers = regToArray('marker').filter(m => !m.end && !m._hidden && m.town === town.id && m.type === 'landmark' && isChunkExplored(m.x, m.y) && (!key || actionables.process._projectSubtypes[m.subtype]?.needsUnlock?.[key]));
         const partners = (!key || key === 'trade' || key === 'travel') ? getTradePartners(town).filter(livingTownKnown) : [];
@@ -9940,7 +10070,7 @@
         const { markers, partners } = livingTownPlaces(town, key);
         return [
             ...Object.values(livingWorldState().places).filter(place=>livingPlaceKnown(place) && place.visits.some(visit=>visit.town===town.id)).slice(-4).reverse().map(place=>({label:`Visit ${place.name}`,text:`Visit ${escapeLivingText(place.name)}`,func:() => {closePopups();openLivingPlace(place,town.id);}})),
-            ...markers.slice(0, 4).map(marker => ({ text: `Visit the ${marker.subtype?.replace(/_/g, ' ') || marker.name}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(marker, 'marker'); } })),
+            ...markers.slice(0, 4).map(marker => ({ text: `Visit the ${livingBuildingLabel(marker.subtype,marker.name)}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(marker, 'marker'); } })),
             ...partners.slice(0, 4).map(partner => ({ text: `Visit ${partner.name}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(partner, 'town'); } }))
         ];
     }
@@ -9966,9 +10096,9 @@
         }
         const { markers: buildings, partners } = livingTownPlaces(town, key);
         if (partners.length) lines.push(`Trade routes link here with ${commaList(partners.map(partner => partner.name))}.`);
-        if (buildings.length) lines.push(`Built here: ${commaList([...new Set(buildings.map(m => m.subtype?.replace(/_/g, ' ') || m.name).filter(Boolean))].slice(0, 3))}.`);
+        if (buildings.length) lines.push(`Built here: ${commaList([...new Set(buildings.map(m => livingBuildingLabel(m.subtype,m.name)).filter(Boolean))].slice(0, 3))}.`);
         const projects = regToArray('process').filter(p => p.town === town.id && p.type === 'project' && !p.done && (!key || actionables.process._projectSubtypes[p.subtype]?.needsUnlock?.[key]));
-        if (projects.length) lines.push(`Under construction: ${commaList(projects.map(p => p.subtype.replace(/_/g, ' ')))}.`);
+        if (projects.length) lines.push(`Under construction: ${commaList(projects.map(p => livingBuildingLabel(p.subtype)))}.`);
         return lines;
     }
 
@@ -10019,7 +10149,7 @@
             const process = regGet('process', project.id);
             const marker = process && regGet('marker', process.marker);
             if (project.town !== town.id || !marker || marker.end || marker._hidden || marker.process !== process.id || !isChunkExplored(marker.x, marker.y)) continue;
-            items.push({ text: `Visit the ${project.subtype.replace(/_/g, ' ')}`, func: () => { closeExecutive(); openRegBrowser(marker, 'marker'); } });
+            items.push({ text: `Visit the ${livingBuildingLabel(project.subtype)}`, func: () => { closeExecutive(); openRegBrowser(marker, 'marker'); } });
         }
         const discovery = Object.values(state.discoveries).find(d => d.decision === decision.id);
         const level = discovery && livingDiscoveryBranches()[discovery.key]?.levels.find(l => l.level === discovery.level);
@@ -10176,6 +10306,7 @@
 
     function initLivingWorld() {
         initGroundProcesses();
+        installSettlementGrowth();
         installNativeTechNeeds();
         installLocalEconomicProposals();
         const lawEvent=gameEvents.townLaw;
@@ -16865,7 +16996,7 @@
             } else items.push({text:process?.end?'The project was abandoned.':process?.done?'The work has finished.':'The building work has not started yet.'});
             const marker=process&&regGet('marker',process.marker);
             if (marker && marker.process===process.id && !marker.end && !marker._hidden && isChunkExplored(marker.x,marker.y))
-                items.push({text:`Visit the ${record.value.replace(/_/g,' ')}`,func:()=>{closePopups();closeExecutive();openRegBrowser(marker,'marker');}});
+                items.push({text:`Visit the ${livingBuildingLabel(record.value)}`,func:()=>{closePopups();closeExecutive();openRegBrowser(marker,'marker');}});
             for (const exchange of (livingWorldState().exchanges || []).filter(e=>e.uses?.some(use=>use.kind==='construction'&&use.id===record.project)&&stateExchangeForLocalChoice(e.id)).slice(-3))
                 items.push({text:`Follow the ${COMMODITIES[exchange.type]?.label || exchange.type}`,func:()=>openCommodityJourney(exchange)});
         } else if(record.event==='townEcon'||record.event==='townTaxChange') {
@@ -22600,8 +22731,8 @@
             // Small population shift
             if (subject.pop > 10) {
                 const migrants = Math.min(3, Math.floor(subject.pop * 0.05));
-                subject.pop -= migrants;
-                target.pop += migrants;
+                const moved=happen("Migrate",subject,target,{count:migrants}).count;
+                if(!moved)return;
 
                 logMessage(`{{residents:${subject.id}}} {{c:leave for|migrate to|are drawn to}} {{regname:town|${target.id}}}, seeking the {{b:${args.spec.name}}}.`);
             }
@@ -26968,6 +27099,14 @@
     // Register new jobs by extending the global arrays
     // Jobs: merchant, priest, scholar, doctor, craftsman, builder, sailor
 
+    function employIdlePerson(town,job) {
+        if(!town||town.end||town.pop<=0)return false;
+        const employed=Object.values(town.jobs || {}).reduce((sum,count)=>sum+count,0);
+        if(employed>=Math.floor(town.pop))return false;
+        (town.jobs ||= {})[job]=(town.jobs?.[job] || 0)+1;
+        return true;
+    }
+
     function initExtendedJobs() {
         // Only add once
         if (window._paultendoJobsInit) return;
@@ -27776,8 +27915,7 @@
 
             // Attract doctors
             if (Math.random() < 0.02 && townKnowledgeLevel(subject,'education') >= 40) {
-                subject.jobs = subject.jobs || {};
-                subject.jobs.doctor = (subject.jobs.doctor || 0) + 1;
+                employIdlePerson(subject,'doctor');
             }
         }
     });
@@ -27874,11 +28012,10 @@
             args.success = success;
 
             if (success) {
-                target.jobs = target.jobs || {};
-                target.jobs.doctor = (target.jobs.doctor || 0) + 1;
-                happen("Influence", subject, target, { education: 0.5 });
+                args.success=employIdlePerson(target,'doctor');
+                if(args.success)happen("Influence",subject,target,{education:0.5});
             }
-            noteGuidance(target, "trainHealers", success);
+            noteGuidance(target, "trainHealers", args.success);
         },
         messageDone: (subject, target, args) => {
             if (args.success) {
@@ -28343,7 +28480,9 @@
 
             // Attract small population from cultural draw
             if (Math.random() < 0.02 * args.performers) {
-                subject.pop += 1;
+                const sources=regToArray('town').filter(town=>town.id!==subject.id&&!town.end&&town.pop>2&&
+                    getCulturalAttractiveness(town)<getCulturalAttractiveness(subject)&&getCachedPath(town,subject,40)?.length);
+                if(sources.length)happen('Migrate',choose(sources),subject,{count:1});
             }
         }
     });
@@ -28622,8 +28761,8 @@
             const fraction = clampValue(0.008 + diff * 0.002, 0.006, 0.02);
             const migrants = Math.min(4, Math.max(1, Math.floor(args.source.pop * fraction)));
             if (migrants > 0) {
-                args.source.pop -= migrants;
-                subject.pop += migrants;
+                const moved=happen("Migrate",args.source,subject,{count:migrants}).count;
+                if(!moved)return;
                 const reason = `drawn by the cultural traditions of {{regname:town|${subject.id}}}`;
                 try { markMigration(subject, false, { source: args.source, reason }); } catch {}
 
@@ -28632,7 +28771,7 @@
                     const traditionName = traditions.length > 0 ? traditions[0].name : "rich";
                     modLog(
                         "migration",
-                        `Drawn by {{regname:town|${subject.id}}}'s {{b:${traditionName}}} culture, ${migrants} {{c:migrate|move|relocate}} from {{regname:town|${args.source.id}}}.`,
+                        `Drawn by {{regname:town|${subject.id}}}'s {{b:${traditionName}}} culture, ${moved} {{c:migrate|move|relocate}} from {{regname:town|${args.source.id}}}.`,
                         null,
                         { town: args.source }
                     );
@@ -29163,8 +29302,7 @@
 
             // Theater attracts performers
             if (getCulturalLandmarkCount(subject, "theater") > 0 && Math.random() < 0.02) {
-                subject.jobs = subject.jobs || {};
-                subject.jobs.performer = (subject.jobs.performer || 0) + 1;
+                employIdlePerson(subject,'performer');
             }
 
             // Museum builds prestige slowly
@@ -29174,8 +29312,7 @@
 
             // Gallery attracts artists
             if (getCulturalLandmarkCount(subject, "gallery") > 0 && Math.random() < 0.02) {
-                subject.jobs = subject.jobs || {};
-                subject.jobs.artist = (subject.jobs.artist || 0) + 1;
+                employIdlePerson(subject,'artist');
             }
         }
     });
@@ -29821,11 +29958,12 @@
 
             if (refugees <= 0) return;
 
-            happen("Migrate", subject, args.destination, { count: refugees });
+            const moved=happen("Migrate", subject, args.destination, { count: refugees }).count;
+            if(!moved)return;
 
-            const prestigeGain = PRESTIGE_CONFIG.gain.refugees * Math.min(4, refugees / 25);
+            const prestigeGain = PRESTIGE_CONFIG.gain.refugees * Math.min(4, moved / 25);
             adjustPrestige(args.destination, prestigeGain, "refugees");
-            recordMigrationTraffic(subject, args.destination, refugees);
+            recordMigrationTraffic(subject, args.destination, moved);
 
             // This can strain relations if not allies
             const alliance = getTownAlliance(subject);
@@ -29839,7 +29977,7 @@
             if (Math.random() < 0.2) {
                 modLog(
                     "migration",
-                    `${refugees} refugees flee from {{regname:town|${subject.id}}} to {{regname:town|${args.destination.id}}} during the ${args.disaster.subtype}.`,
+                    `${moved} refugees flee from {{regname:town|${subject.id}}} to {{regname:town|${args.destination.id}}} during the ${args.disaster.subtype}.`,
                     null,
                     { town: subject }
                 );
@@ -29885,9 +30023,7 @@
             const jobType = subject.jobs.scholar > 0 ? "scholar" : "doctor";
             const count = 1;
 
-            subject.jobs[jobType] = Math.max(0, (subject.jobs[jobType] || 0) - count);
-            args.destination.jobs = args.destination.jobs || {};
-            args.destination.jobs[jobType] = (args.destination.jobs[jobType] || 0) + count;
+            if(!happen("Migrate",subject,args.destination,{count,job:jobType}).count)return;
 
             // Education/health impact
             if (jobType === "scholar") {
@@ -30382,11 +30518,8 @@
                 temp: true
             });
 
-            // Severe drought causes deaths
-            if (subject.drought.severity >= 3 && Math.random() < 0.1) {
-                const deaths = Math.floor(Math.random() * 5) + 1;
-                happen("Death", null, subject, { count: deaths, cause: "famine" });
-            }
+            // Missing meals cause starvation through townEat. A dry spell
+            // must not kill people again while stored or imported food feeds them.
 
             // Drought eventually ends (10-50 days based on severity)
             const endChance = 0.02 / subject.drought.severity;
@@ -30404,12 +30537,9 @@
         weight: $c.UNCOMMON,
         subject: { reg: "town", random: true },
         value: (subject) => {
-            if (!subject.drought) return false;
-            if (subject.drought.severity < 2) return false;
-            if (subject.famine) return false;
-
-            const daysSinceStart = planet.day - subject.drought.day;
-            return daysSinceStart > 20;
+            if (subject.famine && !subject.famine.ended) return false;
+            const meals=settlementMealSupport(subject);
+            return meals.complete && meals.fraction<0.5;
         },
         func: (subject) => {
             subject.famine = {
@@ -30432,23 +30562,17 @@
             return true;
         },
         func: (subject) => {
-            // Ongoing deaths
-            if (Math.random() < 0.2) {
-                const deaths = Math.floor(Math.random() * 10) + 1;
-                happen("Death", null, subject, { count: deaths, cause: "famine" });
+            const meals=settlementMealSupport(subject);
+            if(meals.complete && meals.fraction>=1-1e-9) {
+                subject.famine.ended=true;
+                subject.famine.recovered=planet.day;
+                logMessage(`People in {{regname:town|${subject.id}}} are eating regularly again. The famine has eased.`);
+                return;
             }
-
-            // Ongoing misery
-            happen("Influence", null, subject, { happy: -0.5, crime: 0.2, temp: true });
-
-            // Famine ends when drought ends and some time passes
-            if (subject.drought && subject.drought.ended) {
-                const daysSinceDroughtEnd = planet.day - subject.drought.day;
-                if (daysSinceDroughtEnd > 30) {
-                    subject.famine.ended = true;
-                    logMessage(`The famine in {{regname:town|${subject.id}}} subsides as crops begin to grow again.`);
-                }
-            }
+            // Native meals already charge actual starvation deaths. The wider
+            // social strain follows the shortfall instead of a second death roll.
+            const short=1-meals.fraction;
+            if(short>0)happen("Influence",null,subject,{happy:-0.5*short,crime:0.2*short,temp:true});
         }
     });
 
@@ -30915,15 +31039,16 @@
 
             if (migrants < 1) return;
 
-            happen("Migrate", subject, target, { count: migrants });
-            recordMigrationTraffic(subject, target, migrants);
+            const moved=happen("Migrate", subject, target, { count: migrants }).count;
+            if(!moved)return;
+            recordMigrationTraffic(subject, target, moved);
             const reason = getMigrationReason(subject, target);
             try { markMigration(target, false, { source: subject, reason }); } catch {}
 
             if (Math.random() < 0.15) {
                 const line = reason
-                    ? `${migrants} people leave {{regname:town|${subject.id}}} ${reason}.`
-                    : `${migrants} people leave {{regname:town|${subject.id}}} seeking opportunity in {{regname:town|${target.id}}}.`;
+                    ? `${moved} people leave {{regname:town|${subject.id}}} ${reason}.`
+                    : `${moved} people leave {{regname:town|${subject.id}}} seeking opportunity in {{regname:town|${target.id}}}.`;
                 modLog("migration", line, null, { town: subject });
             }
         }
@@ -30949,9 +31074,7 @@
         },
         func: (subject, target) => {
             // One scholar migrates
-            subject.jobs.scholar--;
-            target.jobs = target.jobs || {};
-            target.jobs.scholar = (target.jobs.scholar || 0) + 1;
+            if(!happen("Migrate",subject,target,{count:1,job:"scholar"}).count)return;
 
             happen("Influence", null, subject, { education: -0.3 });
             happen("Influence", null, target, { education: 0.3 });
@@ -30987,9 +31110,7 @@
             return true;
         },
         func: (subject, target) => {
-            subject.jobs.doctor--;
-            target.jobs = target.jobs || {};
-            target.jobs.doctor = (target.jobs.doctor || 0) + 1;
+            if(!happen("Migrate",subject,target,{count:1,job:"doctor"}).count)return;
 
             modLog(
                 "migration",
@@ -31034,9 +31155,7 @@
             else if (subject.jobs.musician > 0) jobType = "musician";
             else jobType = "performer";
 
-            subject.jobs[jobType]--;
-            target.jobs = target.jobs || {};
-            target.jobs[jobType] = (target.jobs[jobType] || 0) + 1;
+            if(!happen("Migrate",subject,target,{count:1,job:jobType}).count)return;
 
             modLog(
                 "migration",
@@ -31077,16 +31196,15 @@
 
             if (actualMigrants < 1) return;
 
-            happen("Migrate", subject, target, { count: actualMigrants });
-            recordMigrationTraffic(subject, target, actualMigrants);
+            const moved=happen("Migrate", subject, target, { count: actualMigrants }).count;
+            if(!moved)return;
+            recordMigrationTraffic(subject, target, moved);
             const reason = `seeking holy sites in {{regname:town|${target.id}}}`;
             try { markMigration(target, false, { source: subject, reason }); } catch {}
 
             // Priests may accompany
             if (subject.jobs && subject.jobs.priest > 0 && Math.random() < 0.2) {
-                subject.jobs.priest--;
-                target.jobs = target.jobs || {};
-                target.jobs.priest = (target.jobs.priest || 0) + 1;
+                happen("Migrate",subject,target,{count:1,job:"priest"});
             }
 
             if (Math.random() < 0.2) {
@@ -31133,8 +31251,9 @@
             const actualRefugees = calcRefugeeCount(subject.pop || 0, fraction, 1, 12, 0.08);
             if (actualRefugees <= 0) return;
 
-            happen("Migrate", subject, target, { count: actualRefugees });
-            recordMigrationTraffic(subject, target, actualRefugees);
+            const moved=happen("Migrate", subject, target, { count: actualRefugees }).count;
+            if(!moved)return;
+            recordMigrationTraffic(subject, target, moved);
             const reason = "fleeing religious strife";
             try { markMigration(target, true, { source: subject, reason }); } catch {}
 
@@ -31193,15 +31312,16 @@
             const actualRefugees = calcRefugeeCount(subject.pop || 0, fraction, 1, 12, 0.08);
             if (actualRefugees <= 0) return;
 
-            happen("Migrate", subject, target, { count: actualRefugees });
-            recordMigrationTraffic(subject, target, actualRefugees);
+            const moved=happen("Migrate", subject, target, { count: actualRefugees }).count;
+            if(!moved)return;
+            recordMigrationTraffic(subject, target, moved);
             const reason = "fleeing war";
             try { markMigration(target, true, { source: subject, reason }); } catch {}
 
             if (Math.random() < 0.2) {
                 modLog(
                     "migration",
-                    `${actualRefugees} refugees flee the war in {{regname:town|${subject.id}}} for safety in {{regname:town|${target.id}}}.`,
+                    `${moved} refugees flee the war in {{regname:town|${subject.id}}} for safety in {{regname:town|${target.id}}}.`,
                     null,
                     { town: subject }
                 );
@@ -31255,8 +31375,9 @@
 
             if (actualReturnees < 1) return;
 
-            happen("Migrate", subject, args.destination, { count: actualReturnees });
-            recordMigrationTraffic(subject, args.destination, actualReturnees);
+            const moved=happen("Migrate", subject, args.destination, { count: actualReturnees }).count;
+            if(!moved)return;
+            recordMigrationTraffic(subject, args.destination, moved);
             const reason = `returning home to {{regname:town|${args.destination.id}}}`;
             try { markMigration(args.destination, false, { source: subject, reason }); } catch {}
 
@@ -32146,8 +32267,7 @@
 
             // May gain a priest
             if (Math.random() < 0.4) {
-                subject.jobs = subject.jobs || {};
-                subject.jobs.priest = (subject.jobs.priest || 0) + 1;
+                employIdlePerson(subject,'priest');
             }
         }
     });
@@ -37534,8 +37654,9 @@
 
             const pilgrims = Math.min(4, Math.max(1, Math.floor((source.pop || 0) * 0.02)));
             if (pilgrims > 0) {
-                happen("Migrate", source, destination, { count: pilgrims });
-                recordMigrationTraffic(source, destination, pilgrims);
+                const moved=happen("Migrate", source, destination, { count: pilgrims }).count;
+                if(!moved)return;
+                recordMigrationTraffic(source, destination, moved);
                 const reason = `on pilgrimage to honor {{b:${myth.title}}} in {{regname:town|${destination.id}}}`;
                 try { markMigration(destination, false, { source, reason, name: "Pilgrims" }); } catch {}
                 try {
@@ -39068,6 +39189,7 @@
         },
         widths: { 1: 2, 2: 3, 3: 4 }
     };
+    const roadPathCaches=new WeakMap();
 
     const BASE_TERRAIN_COST = {
         grass: 1.0,
@@ -39084,7 +39206,8 @@
         if (!planet) return;
         if (!planet._paultendoRoadChunks) planet._paultendoRoadChunks = {};
         if (planet._paultendoRoadVersion === undefined) planet._paultendoRoadVersion = 0;
-        if (!planet._paultendoPathCache) planet._paultendoPathCache = {};
+        delete planet._paultendoPathCache;
+        if(!roadPathCaches.has(planet))roadPathCaches.set(planet,new Map());
         if (planet._paultendoRoadDirty === undefined) planet._paultendoRoadDirty = true;
         if (planet._paultendoRoadRegistryBuilt === undefined) planet._paultendoRoadRegistryBuilt = false;
     }
@@ -39348,7 +39471,7 @@
         const fromKey = getPathAnchorKey(from);
         const toKey = getPathAnchorKey(to);
         const cacheKey = `${fromKey}->${toKey}`;
-        const cached = planet._paultendoPathCache[cacheKey];
+        const cache=roadPathCaches.get(planet),cached=cache.get(cacheKey);
         if (cached && (planet.day - cached.day) <= maxAge && cached.version === planet._paultendoRoadVersion) {
             return cached.path;
         }
@@ -39359,17 +39482,20 @@
 
         const path = findPath(startChunk, endChunk);
         if (path && path.length) {
-            planet._paultendoPathCache[cacheKey] = {
+            cache.set(cacheKey,{
                 path,
                 day: planet.day,
                 version: planet._paultendoRoadVersion
-            };
+            });
             const reverseKey = `${toKey}->${fromKey}`;
-            planet._paultendoPathCache[reverseKey] = {
+            cache.set(reverseKey,{
                 path: [...path].reverse(),
                 day: planet.day,
                 version: planet._paultendoRoadVersion
-            };
+            });
+            // Both directions are disposable. Keep memory bounded as new
+            // settlements, quarries and landmarks change the route network.
+            while(cache.size>128)cache.delete(cache.keys().next().value);
         }
         return path;
     }

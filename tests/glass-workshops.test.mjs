@@ -40,6 +40,9 @@ test('a failed glass trial retains its roll through reload and pauses during sho
 
 test('an actual lens idea creates fuel and glass demand, then uses the glass made for it',async t=>{
  const g=await makeGame();t.after(g.close);const {w,town}=setup(g);w.planet.unlocks.fire=40;const craft=lens(w,town);assert.equal(craft.status,'gathering');assert.equal(craft.due,null);Object.assign(town.resources,{sand:3,rock:1,lumber:4});w.planet.unlocks.fire=50;
+ // Keep this supply chain in one settlement. Native expansion can send a
+ // migrating inhabitant away carrying the very charcoal this trial needs.
+ w.gameEvents.townExpand.func=()=>{};
  for(let n=0;n<70&&craft.status!=='made';n++){next(w);for(const work of life(w).materialWork)work.roll=.99;}
  assert.equal(craft.status,'made');const batches=life(w).materialWork.filter(x=>x.status==='made');assert.equal(batches.filter(x=>x.type==='charcoal').length,2);assert.equal(batches.filter(x=>x.type==='glass').length,1);assert.equal(town.resources.lumber || 0,0);assert.equal(town.resources.glass,1);assert.deepEqual(plain(craft.materials),{glass:1,metal:2});
  const made=life(w).artifacts.find(x=>x.id===craft.artifact),production=made.origin.materialProductions[0],batch=batches.find(x=>x.type==='glass');assert.equal(production.work,batch.id);assert.equal(production.name,batch.name);assert.equal(production.count,1);assert.equal(production.day,batch.fired);assert.equal(made.origin.materialSources.length,0);

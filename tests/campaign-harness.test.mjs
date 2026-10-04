@@ -8,6 +8,20 @@ import { runCampaign, campaignSnapshot, answerChoices, checkInvariants, validate
 import { parseArguments } from '../scripts/simulate.mjs';
 const plain = value => JSON.parse(JSON.stringify(value));
 
+test('unchanged saved obstacle objects do not invent work activity or conceal a quiet stretch',async()=>{
+  const {report,timeline}=await runCampaign({days:35,seed:42,save:{},gameFactory:async options=>{
+    const g=await makeGame({...options,save:undefined}),w=g.window,town=settleGame(g);
+    w.planet._paultendoLife.inquiries.push({id:'quiet-work',town:town.id,title:'An unanswered question',day:w.planet.day,status:'waiting',remaining:5,delay:{reason:'knowledge',day:w.planet.day},steps:[]});
+    // Isolate the report counter from physical events. The same object is
+    // cloned by each snapshot, but its actual obstacle has not changed.
+    w.nextDay=()=>{w.planet.day++;};return g;
+  }});
+  assert.equal(report.status,'passed',report.failure);
+  assert.equal(report.longestQuietStretch,35);
+  assert.equal(report.stalledWork[0].daysWithoutProgress,35);
+  assert.equal(timeline.filter(entry=>entry.kind==='work').length,0);
+});
+
 function propose(w, town, event, extra = {}) {
   const caller = w.readyEvent(event, w.regGet('player', 1), town);
   assert.ok(caller, `Missing eligible ${event}`);
@@ -130,6 +144,9 @@ test('invariants allow cash debt but catch impossible people, goods and nonfinit
   town.resources.clay = -1; assert.throws(() => checkInvariants(g.window), /resource.clay is negative/);
   town.resources.clay = NaN; assert.throws(() => checkInvariants(g.window), /resource.clay is not finite/);
   town.resources.clay = 0; town.pop = Infinity; assert.throws(() => checkInvariants(g.window), /population is not finite/);
+  town.pop=2;town.jobs={farmer:3};assert.throws(()=>checkInvariants(g.window),/workers exceed/);
+  town.jobs={};g.window.GenTownLocal.errors.push('Could not save to this browser (QuotaExceededError)');
+  assert.throws(()=>checkInvariants(g.window),/QuotaExceededError/);
 });
 
 test('missing live controls are reported without granting their consequence', async t => {

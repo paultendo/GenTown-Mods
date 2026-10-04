@@ -107,6 +107,9 @@ test('trust and changing conditions determine reception, rather than a guarantee
   const enemy = neighbour(window,town);
   const war = window.happen('Create',town,null,{type:'war',towns:[town.id,enemy.id]},'process');
   town.issues.war = enemy.issues.war = war.id;
+  // Keep the fighting underway while testing reception, without resolving an
+  // unrelated native battle or peace roll before the reply arrives.
+  window.gameEvents.processAll.func = () => {};
   respond(window,record);
   assert.equal(record.reception,'refused'); assert.match(record.steps[0].text,/fighting/);
   assert.equal(record.mission,undefined); assert.deepEqual(game.errors,[]);

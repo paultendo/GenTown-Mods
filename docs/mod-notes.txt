@@ -1,5 +1,21 @@
 Implementation notes
 
+Version 1.6.92
+
+Campaign-driven repairs: self-reporting random events run automatically, while real messages, naming prompts and Yes/No choices retain their controls. This prevents invisible proposals and the later native usurp/freeplay callback from trying to use a missing message. Native event-catalog rebuilds exclude retired random:false events, including the old secession and religious-schism rolls. The causal council and religious movements remain active.
+
+Population room follows territory, local stonework, steel and architecture, and maintained buildings. Further technology levels cannot repeatedly double density. Growth slows near available room and follows the fraction of recent meals actually eaten. Existing overcrowded inhabitants and stores remain. These densities and response curves are authored balance rules, not physical constants.
+
+Migration transfers actual inhabitants and occupations, finite private wealth and goods accepted by the destination. Skilled migrants no longer teleport an occupation without its person. Voluntary migration respects room, while native wartime transfers retain conquered inhabitants. Healthcare, cultural work and priesthood use available inhabitants rather than adding occupations beyond population. Performer attractiveness can draw a real migrant rather than creating someone.
+
+Famine follows three observed short-meal days and eases after three full-meal days. Native eating owns starvation deaths, avoiding an extra famine or drought death roll. A delivery does not immediately report recovery. Workers still face actual food, fighting, knowledge and labour constraints.
+
+Queued workshop work can seek manufactured ingredients recursively without reserving its maker while inputs are missing. Actual costs and local methods remain required. A telescope can wait for glass while the workshop makes it, and glass can create fuel demand. If the town does not know how to make glass, other useful work can still proceed, including fuel for a separate inquiry. Repeated orders give other unmet needs a turn instead of permanently favouring the first recipe. This keeps recurring farm-tool orders from starving a crew's boat request. Paid batches retain their inputs and provenance through reload. Active work and supplies still compete, so shortages can legitimately leave work unfinished.
+
+Road path caches now live outside world saves, with a bounded cache per planet. Legacy copies are discarded and routes rebuild from actual terrain after reload. Traffic, roads and their histories remain saved. Town building summaries use readable names such as sacred site rather than internal camel-case keys.
+
+The harness now fails on launcher-caught autosave errors and occupations exceeding population. Changing between food and fighting pauses no longer disguises stalled work as progress. Identical saved obstacle objects do not invent activity when snapshots are cloned. File imports can discard legacy cache bloat before writing to ordinary browser storage. The release verification record is in release-1.6.92.txt.
+
 Version 1.6.91
 
 Town work now brings inquiries, workshop batches, personal inventions and material surveys together. Active work is shown before six recent results. Individual stories explain current pauses, missing supplies, real makers and the histories that led to them. Long work histories fold earlier days without deleting them.

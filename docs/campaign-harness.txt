@@ -80,6 +80,10 @@ Checks and metrics
 Each existing active or inactive world must advance exactly one day per turn.
 Every registered town is checked for finite population, wealth, stores and jobs.
 Negative people, occupations or physical goods fail the run. Cash debt is allowed.
+Occupations cannot outnumber inhabitants. Browser save failures caught by the
+local launcher also fail the run, including storage-quota failures. Imported
+files enter native loading from memory so old disposable route caches can be
+removed before autosaving, without increasing the normal browser storage quota.
 Console errors, warnings and thrown exceptions fail the run. The report and last
 world are retained if export is still possible. Ctrl+C writes the current partial
 result and stops the batch, rather than discarding it.
@@ -91,9 +95,10 @@ real unlock-tree thresholds as discoveries. Small legacy technology score gains
 remain in snapshots and do not inflate the discovery count.
 
 Unfinished work includes its actual status and obstacle. --stall-after N flags
-work with no change in status, remaining work, obstacle or resolution for N days
+work with no change in status, remaining work or resolution for N days
 (default 30). This is a diagnostic threshold, not a deadline for the game. It can
 include legitimate shortages and waits. A lack of progress is not itself a crash.
+Repeated food and fighting interruptions do not reset this progress counter.
 
 The longest quiet stretch counts days without a tracked discovery, change of
 work status or obstacle, town count, artifact, place, encounter, clue or process

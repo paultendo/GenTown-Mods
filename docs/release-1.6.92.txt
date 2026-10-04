@@ -1,0 +1,99 @@
+V1.6.92 RELEASE VERIFICATION
+4 October 2026
+
+Engine compatibility
+
+The vendored GenTown 1.4 / gt5 scripts matched the current official site
+https://r74n.com/gentown/ during this finishing pass. The distributable mod
+works through the native Add mod loader. This local launcher also remains
+available for testing. This is a GenTown mod, built on R74n's engine.
+
+Final verification
+
+677 tests passed, with no failures, cancellations or skipped tests.
+Syntax: npm run check passed. Whitespace: git diff --check passed.
+9 final-source campaigns completed 5,100 native turns.
+No runtime failures, console errors, warnings or proposals without usable
+controls were recorded. Every report source hash matches the release files.
+Intermediate builds and interrupted campaigns are excluded from these totals.
+
+Commands (output directories must not already exist):
+node --test --test-concurrency=8 tests/*.test.mjs
+npm run check
+node scripts/simulate.mjs --days 600 --seeds 7,42,123 --policies yes,mixed --checkpoint 100 --out /tmp/gentown92-matrix
+node scripts/simulate.mjs --days 1000 --seed 42 --policy skip --out /tmp/gentown92-skip
+node scripts/simulate.mjs --days 300 --seed 123 --policy no --site first --out /tmp/gentown92-harsh
+node scripts/simulate.mjs --save <exported-save.planet> --days 200 --seed 42 --policy skip --out /tmp/gentown92-recovery
+
+The recovery case used the actual Day 418 save retained when the previous
+build hit a native usurp callback failure. It advanced to Day 618. The input
+SHA-256 was b560e24681c06a4e690c7dbfe365bc34be491f66cf2f4df7ad3094d868232279.
+Imported save data is reproducible with the same file and seed. A new seed
+does not reconstruct a saved campaign's earlier random sequence.
+
+Browser checks
+
+A separate test origin was used. The player's open game was not advanced.
+A 600-day campaign was loaded at 390 x 844 and 1440 x 1000. Advancing and
+reloading retained the map and day. A live proposal displayed Yes/No and
+Review decision. The work overview opened from a town and had no horizontal
+overflow on the phone. No launcher errors were recorded. On reload, native
+callbacks from the previous page become subdued history rather than fake
+pending choices. The later simulation repairs change no layout.
+
+Campaign findings and repairs
+
+Self-reporting events previously became invisible proposals and could later
+crash the native independent-rule callback. They now run once. Real questions
+keep their actual controls. A 1,000-day campaign also found that retired
+secession and schism events entered the native random pool. Both initial
+registration and catalog rebuilding now exclude them. Causal council and
+religious movement systems remain active.
+
+Population room now follows land, local methods and maintained buildings.
+Recent meals and available room restrain growth. Migration carries actual
+inhabitants, jobs, accepted goods and finite wealth. Crowding limits voluntary
+moves without erasing conquered inhabitants. Jobs require an available person.
+
+Famine follows sustained missed meals and recovery follows regular meals.
+Native eating owns starvation deaths. A shipment cannot end famine before
+people actually eat. Missing workshop ingredients create real upstream work
+without reserving a waiting maker forever. Unknown glass cannot block fuel
+needed by a separate inquiry. Costs, local knowledge and supply
+constraints still apply. Workshop orders rotate among actual unmet needs
+rather than favouring the first recipe indefinitely. This prevents recurring
+farm-tool demand from starving a crew's boat request.
+
+The final Seed 42 Yes campaign completed four crossings, with a fifth underway
+on Day 601. Its earlier crew had remained unserved behind recurring tool orders.
+The remaining telescopes in that campaign lack glass in towns whose local
+fire knowledge is still 30. They cannot manufacture an unknown glass method.
+
+Disposable route caches no longer serialize copied tiles into saves. Legacy
+copies are removed on import. Real roads, traffic and histories remain saved.
+The harness now catches occupations exceeding population, launcher autosave
+failures and genuinely unchanged work. Repeated obstacles cannot fabricate
+activity or hide stalled progress.
+
+Limits and playtesting
+
+These policies are repeatable probes, not models of a human player. The harsh
+No campaign can lose all inhabitants. A passing run means it followed the
+engine without the recorded errors, not that everyone survived or every job
+finished. Food, fighting, missing supplies and unknown methods can legitimately
+leave work waiting. All observed stalls and discovery timings are retained in
+docs/qa/release-1.6.92.json and docs/qa/campaigns-1.6.92.txt.
+
+Housing densities, response curves and other authored rules remain balance
+decisions. Native daily turns are not seconds of human play. The campaigns
+check causal consistency and progression but cannot prove enjoyable short,
+medium and long term pacing. A player playtest remains the next acceptance
+step. Old shared discoveries remain available where the save has no local
+discovery provenance. The pass does not promise recovery of arbitrary corrupt
+old saves or compatibility with other large overhaul mods.
+
+Mod SHA-256: ba1bc2626a3cc16730d5cb50c9469ebc6db766ad886f344286563bb6d2166afa
+
+Install after exporting a backup:
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.92/paultendo-mod.js
+Publication and CDN readback are checked after this record is generated.

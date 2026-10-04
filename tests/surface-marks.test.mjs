@@ -33,7 +33,13 @@ test('player words remain literal and do not become parser commands or invented 
 });
 
 test('a missing edge is a real workshop need and the mark cannot steal tools already promised elsewhere',async t=>{
- const {g,w,town,warnings}=await setup(t,{tools:1});const mark=request(w,town);life(w).materialWork.push({id:'material:other',town:town.id,type:'metal_tools',status:'waiting',person:'absent',cost:{stone_tools:1},inputs:[],steps:[],lastDay:99999});next(w,2);assert.equal(mark.phase,'tools');assert.equal(town.resources.stone_tools,1);assert.equal(town._paultendoCarvingTools,undefined);life(w).materialWork.at(-1).status='failed';finish(w,mark);assert.equal(town.resources.stone_tools || 0,0);check(g,warnings);
+ const {g,w,town,warnings}=await setup(t,{tools:1});const mark=request(w,town);
+ const reservation={id:'material:other',town:town.id,type:'metal_tools',status:'waiting',person:'absent',cost:{stone_tools:1},inputs:[],steps:[],lastDay:99999};
+ life(w).materialWork.push(reservation);next(w,2);assert.equal(mark.phase,'tools');assert.equal(town.resources.stone_tools,1);assert.equal(town._paultendoCarvingTools,undefined);
+ const output=()=>life(w).materialWork.filter(x=>x.type==='stone_tools'&&x.status==='made').reduce((sum,x)=>sum+x.output,0);
+ const stock=town.resources.stone_tools,produced=output();reservation.status='failed';finish(w,mark);
+ assert.equal(town.resources.stone_tools || 0,stock+output()-produced-1);
+ assert.equal(town._paultendoCarvingTools.length,1);assert.equal(town._paultendoCarvingTools[0].uses,38);check(g,warnings);
 });
 
 test('an actual maker can sketch a learned technique but a world milestone does not invent a source',async t=>{

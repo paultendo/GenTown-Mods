@@ -2,17 +2,17 @@
 
 A world of towns with their own needs, discoveries and beliefs. People explore, make things, trade, argue and sometimes go to war. You can lend a hand, plant an idea or stir up trouble. The consequences belong to the world.
 
-Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.91**, tested with the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
+Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.92**, tested with the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
 
 ## Install
 
 Export your existing save from **Saves** first. In GenTown, choose **Settings → Add mod** and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.91/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.92/paultendo-mod.js
 ```
 
-Reload after adding it. This replaces older paultendo mod URLs automatically. The Chronicle shows `paultendo-mod active (v1.6.91)` after settling a town and advancing a day. Use the versioned CDN URL. Raw GitHub script URLs and the mixed-case GitHub Pages path do not install reliably through GenTown’s loader. Avoid combining this with other large overhaul mods.
+Reload after adding it. This replaces older paultendo mod URLs automatically. The Chronicle shows `paultendo-mod active (v1.6.92)` after settling a town and advancing a day. Use the versioned CDN URL. Raw GitHub script URLs and the mixed-case GitHub Pages path do not install reliably through GenTown’s loader. Avoid combining this with other large overhaul mods.
 
 This addresses the installation issue reported in [GenTown-Mods #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -33,9 +33,13 @@ Objects keep their makers and histories. A rare object finished during war can g
 
 ## This finishing pass
 
-Current research, workshop batches, personal inventions and sample journeys now share one work overview. Status, obstacles and outcomes are clearer, and long histories fold their earlier days. Updating a story preserves your place and cannot repeat an instruction. Story links work with a keyboard, and pending decisions are easier to reach on phones.
+Towns now grow within the room their land, local building methods and maintained buildings provide. Recent meals matter. Hunger slows growth, and famine follows sustained missed meals. A food delivery helps, but people need to eat regularly before recovery is recorded.
 
-Council talks explain the actual law or charter change, the contribution and the closing day. Completed talks retain the votes and reason they ended. Encouragement now affects every kind of gathering and gradually fades. Recognising workers cannot repeatedly grant the same benefit. The existing consequences continue to use real workers, stores, journeys, money and local knowledge.
+Migrants carry actual inhabitants, occupations, supplies and their share of private wealth. A crowded destination can limit a voluntary move. A conquered town's people still transfer with it. Occupations cannot appear without an available inhabitant. Events that report their own consequences now happen without an invisible unanswered question.
+
+An unfinished instrument can send the workshop looking for glass, and glass can create demand for fuel. A maker waiting for missing supplies can do other work. Repeated orders share the workshop with other unmet needs, so farm tools cannot keep a crew's boat waiting forever. Ingredients still take knowledge, materials and time. Route caches rebuild from the map instead of filling saved games with copied tiles.
+
+Research, workshop batches, personal inventions and sample journeys share one work overview. Active work comes first, with smaller, muted status text and folded older histories. Council talks retain the actual obligations, votes and outcomes. Story links work with a keyboard, and pending decisions are easier to reach on phones.
 
 ## Playtesting
 

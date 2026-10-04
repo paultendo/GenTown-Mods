@@ -85,10 +85,12 @@ test('a blocked shipment keeps its actual cargo through reload and arrives once 
  const count=rw.regGet('town',a.id)._paultendoFoodMemory[b.id].received;next(rw);assert.equal(rr.delivered,cargo);assert.equal(rw.regGet('town',a.id)._paultendoFoodMemory[b.id].received,count);errors(g);errors(restored);
 });
 
-test('famine aid requires a real surplus and route, and cannot end a famine before food arrives',async t=>{
+test('famine aid requires a real surplus and route, and recovery needs regular meals after arrival',async t=>{
  const g=await makeGame();t.after(g.close);const {w,a,b}=pair(g,{outlook:'generous'});a.famine={started:2,ended:false};a.relations[b.id]=8;
  assert.equal(!!w.gameEvents.famineAid.value(a,b,{}),true);const before=b.resources.crop;w.gameEvents.famineAid.func(a,b);assert.equal(a.famine.ended,false);assert.equal(b.resources.crop,before);
- const r=records(w)[0];finish(w,r);assert.equal(r.status,'arrived');assert.equal(a.famine.ended,true);
+ const r=records(w)[0];finish(w,r);assert.equal(r.status,'arrived');assert.equal(a.famine.ended,false);
+ for(let i=0;i<3;i++){w.planet.day++;w.gameEvents.townEat.func(a);w.gameEvents.famineEffects.func(a);}
+ assert.equal(a.famine.ended,true);
  b.resources.crop=3;assert.equal(!!w.gameEvents.famineAid.value(a,b,{}),false);errors(g);
 });
 

@@ -34,10 +34,24 @@ export async function makeGame({ seed = 42, settings = {}, save, mod = true, bef
   };
   window.scrollTo = () => {};
   window.localStorage.setItem('R74nMain-GenTownSettings', JSON.stringify(settings));
-  if (save) window.localStorage.setItem('R74nMain-GenTownSave', JSON.stringify(save));
   const evaluate = path => new Script(readFileSync(new URL(path, root), 'utf8'), { filename: path }).runInContext(dom.getInternalVMContext());
   window.eval('gameVersion = "1.4"; saveVersion = "gt5";');
   for (const path of ['vendor/gentown/load.js', 'vendor/gentown/perlin.js', 'vendor/gentown/standalone.js', 'vendor/gentown/gentown-data.js', 'app/boot.js', 'vendor/gentown/gentown.js', 'vendor/gentown/gentown-mass.js']) { if (localBoot || path !== 'app/boot.js') evaluate(path); }
+  if(save) {
+    // An exported file can exceed browser storage before legacy caches are
+    // discarded on import. Feed it to native loading from memory, then keep
+    // the ordinary storage quota for every actual autosave that follows.
+    let pending=JSON.stringify(save);
+    const get=window.R74n.get,has=window.R74n.has,set=window.R74n.set;
+    window.R74n.get=function(key){return key==='GenTownSave'&&pending!==null?pending:get.call(this,key);};
+    window.R74n.has=function(key){return key==='GenTownSave'&&pending!==null?true:has.call(this,key);};
+    window.R74n.set=function(key,value){
+      const errors=window.GenTownLocal?.errors?.length || 0;
+      const result=set.call(this,key,value);
+      if(key==='GenTownSave'&&(window.GenTownLocal?.errors?.length || 0)===errors)pending=null;
+      return result;
+    };
+  }
   beforeMod?.(window);
   if (mod === true) evaluate('paultendo-mod.js');
   afterMod?.(window);

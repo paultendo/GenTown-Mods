@@ -1,0 +1,176 @@
+FINAL V1.6.92 CAMPAIGNS
+
+Only completed final-source runs are included. Interrupted and intermediate
+builds are excluded. Source hashes and configuration are in release-1.6.92.json.
+
+Seed 7, yes: PASSED
+600/600 turns, day 1 to 601, 181.40s (3.3 days/s)
+World 1: 12 living towns, 111485 people, 201 work records, 3 artifacts, 17 species encounters
+Discoveries: smith 10 on day 6, farm 10 on day 21, education 10 on day 33, smith 20 on day 38, trade 10 on day 45, travel 10 on day 53, education 20 on day 56, government 10 on day 69, farm 20 on day 73, farm 30 on day 82, astronomy 10 on day 93, farm 40 on day 100, fire 10 on day 109, smith 30 on day 123, smith 40 on day 132, travel 20 on day 135, military 10 on day 165, travel 30 on day 180, travel 40 on day 185, astronomy 20 on day 189, fire 20 on day 205, fire 30 on day 221, military 20 on day 256, trade 20 on day 277, trade 30 on day 284, military 30 on day 302, military 40 on day 312, military 50 on day 367
+Choices: yes 204, act 53, choice 3
+First extinction: none
+Longest stretch without a tracked milestone: 5 days
+Unfinished work: 10
+Work unchanged for at least 30 days: 3
+Proposals without usable controls: 0
+  inquiries Priesthood: working (food), age 8 days, remaining 1
+  inquiries Fertilization: working, age 4 days, remaining 1
+  materialWork Dolie: waiting (Dolie puts the work aside. There is not enough food in Wayfarer 258.), age 407 days, remaining 8
+  materialWork Vezel: waiting, age 239 days, remaining 8
+  materialWork Nugton: waiting, age 181 days, remaining 8
+  materialWork Wéke: working, age 3 days, remaining 1
+  materialWork Kecas: working, age 2 days, remaining 3
+  materialWork Colon: working, age 0 days, remaining 4
+  materialWork Fopher: waiting, age 0 days, remaining 4
+  materialWork Toxson: waiting, age 0 days, remaining 5
+Runtime failures: 0. Console errors: 0. Warnings: 0.
+This checks simulation behaviour. It does not judge whether a campaign is enjoyable.
+
+Seed 7, mixed: PASSED
+600/600 turns, day 1 to 601, 88.89s (6.8 days/s)
+World 1: 7 living towns, 48050 people, 197 work records, 6 artifacts, 23 species encounters
+Discoveries: travel 10 on day 24, astronomy 10 on day 28, fire 10 on day 32, smith 10 on day 63, military 10 on day 76, farm 10 on day 121, fire 20 on day 149, farm 20 on day 177, farm 30 on day 194, smith 20 on day 234, smith 30 on day 251, military 20 on day 256, fire 30 on day 311, travel 20 on day 317, government 10 on day 364, education 10 on day 371, travel 30 on day 385, travel 40 on day 400, education 20 on day 406, farm 40 on day 409, smith 40 on day 422, military 30 on day 520, trade 10 on day 574, trade 20 on day 596
+Choices: no 150, yes 132, act 54, choice 1
+First extinction: none
+Longest stretch without a tracked milestone: 12 days
+Unfinished work: 4
+Work unchanged for at least 30 days: 1
+Proposals without usable controls: 0
+  inquiries Forges: waiting, age 15 days, remaining 10
+  materialWork Leman: waiting (Leman cannot tend the work. It waits for them.), age 123 days, remaining 5
+  materialWork Gimith: working, age 3 days, remaining 1
+  materialWork Bipeng: working, age 1 days, remaining 4
+Runtime failures: 0. Console errors: 0. Warnings: 0.
+This checks simulation behaviour. It does not judge whether a campaign is enjoyable.
+
+Seed 42, yes: PASSED
+600/600 turns, day 1 to 601, 127.57s (4.7 days/s)
+World 1: 5 living towns, 37691 people, 192 work records, 1 artifacts, 16 species encounters
+Discoveries: smith 10 on day 3, travel 10 on day 13, fire 10 on day 18, astronomy 10 on day 23, farm 10 on day 26, smith 20 on day 35, smith 30 on day 44, smith 40 on day 49, government 10 on day 55, military 10 on day 61, military 20 on day 71, education 10 on day 76, military 30 on day 98, education 20 on day 102, trade 10 on day 107, travel 20 on day 111, astronomy 20 on day 139, travel 30 on day 155, farm 20 on day 158, military 40 on day 167, travel 40 on day 187, military 50 on day 247, trade 20 on day 260, farm 30 on day 268, trade 30 on day 278, fire 20 on day 283, farm 40 on day 290, fire 30 on day 296
+Choices: act 47, yes 189, choice 3
+First extinction: none
+Longest stretch without a tracked milestone: 12 days
+Unfinished work: 7
+Work unchanged for at least 30 days: 2
+Proposals without usable controls: 0
+  materialWork Pitein: waiting, age 399 days, remaining 8
+  materialWork Dapeng: waiting, age 63 days, remaining 8
+  materialWork Véjamin: waiting, age 17 days, remaining 8
+  materialWork Sémena: working, age 2 days, remaining 3
+  materialWork Tihine: waiting, age 0 days, remaining 5
+  seaVoyages Lanny: outbound, age 1 days, remaining ?
+  exchanges metal_tools: asking, age 2 days, remaining ?
+Runtime failures: 0. Console errors: 0. Warnings: 0.
+This checks simulation behaviour. It does not judge whether a campaign is enjoyable.
+
+Seed 42, mixed: PASSED
+600/600 turns, day 1 to 601, 80.37s (7.5 days/s)
+World 1: 7 living towns, 18744 people, 177 work records, 0 artifacts, 13 species encounters
+Discoveries: smith 10 on day 3, travel 10 on day 12, astronomy 10 on day 19, farm 10 on day 43, fire 10 on day 75, education 10 on day 108, trade 10 on day 124, farm 20 on day 192, government 10 on day 235, smith 20 on day 260, smith 30 on day 284, travel 20 on day 306, smith 40 on day 313, fire 20 on day 320, travel 30 on day 343, trade 20 on day 348, astronomy 20 on day 376, farm 30 on day 461, farm 40 on day 473, travel 40 on day 481, education 20 on day 488, fire 30 on day 493, trade 30 on day 571
+Choices: act 50, yes 110, no 139, choice 2
+First extinction: none
+Longest stretch without a tracked milestone: 8 days
+Unfinished work: 14
+Work unchanged for at least 30 days: 6
+Proposals without usable controls: 0
+  inquiries Temples: waiting (food), age 40 days, remaining 8
+  inquiries Priesthood: working, age 2 days, remaining 6
+  materialWork Lijah: waiting, age 107 days, remaining 8
+  materialWork Damith: waiting, age 103 days, remaining 8
+  materialWork Yisef: waiting, age 98 days, remaining 8
+  materialWork Kéwin: working, age 4 days, remaining 2
+  materialWork Bavan: working, age 4 days, remaining 1
+  materialWork Wistair: working, age 3 days, remaining 1
+  materialWork Nemiah: working, age 1 days, remaining 4
+  materialWork Yisef: working, age 0 days, remaining 5
+  artifactWork Giverie: gathering, age 24 days, remaining ?
+  seaVoyages coastal_boat: preparing (border), age 172 days, remaining ?
+  seaVoyages coastal_boat: preparing (vessel), age 15 days, remaining ?
+  exchanges metal_tools: making, age 101 days, remaining ?
+Runtime failures: 0. Console errors: 0. Warnings: 0.
+This checks simulation behaviour. It does not judge whether a campaign is enjoyable.
+
+Seed 123, yes: PASSED
+600/600 turns, day 1 to 601, 158.38s (3.8 days/s)
+World 1: 7 living towns, 72797 people, 201 work records, 1 artifacts, 20 species encounters
+Discoveries: farm 10 on day 4, fire 10 on day 14, trade 10 on day 25, military 10 on day 63, farm 20 on day 70, military 20 on day 74, fire 20 on day 98, travel 10 on day 105, government 10 on day 149, education 10 on day 180, military 30 on day 184, military 40 on day 187, education 20 on day 208, farm 30 on day 226, farm 40 on day 239, fire 30 on day 265, travel 20 on day 300, smith 10 on day 329, travel 30 on day 334, smith 20 on day 343, smith 30 on day 348, smith 40 on day 352, trade 20 on day 355, travel 40 on day 366, trade 30 on day 374, astronomy 10 on day 386, military 50 on day 405, astronomy 20 on day 438
+Choices: yes 223, act 44, choice 2
+First extinction: none
+Longest stretch without a tracked milestone: 20 days
+Unfinished work: 10
+Work unchanged for at least 30 days: 5
+Proposals without usable controls: 0
+  materialWork Lafer: waiting, age 160 days, remaining 8
+  materialWork Zucie: waiting, age 156 days, remaining 8
+  materialWork Japer: waiting, age 143 days, remaining 8
+  materialWork Cipatra: waiting, age 140 days, remaining 8
+  materialWork Mucy: waiting, age 75 days, remaining 8
+  materialWork Cilee: working, age 2 days, remaining 2
+  materialWork Zimmed: working, age 0 days, remaining 4
+  materialWork Cijah: working, age 0 days, remaining 5
+  materialWork Sajah: waiting, age 0 days, remaining 4
+  materialWork Woffer: waiting, age 0 days, remaining 5
+Runtime failures: 0. Console errors: 0. Warnings: 0.
+This checks simulation behaviour. It does not judge whether a campaign is enjoyable.
+
+Seed 123, mixed: PASSED
+600/600 turns, day 1 to 601, 89.52s (6.7 days/s)
+World 1: 5 living towns, 42535 people, 222 work records, 0 artifacts, 22 species encounters
+Discoveries: farm 10 on day 36, farm 20 on day 44, military 10 on day 61, trade 10 on day 112, travel 10 on day 144, military 20 on day 149, travel 20 on day 182, travel 30 on day 188, smith 10 on day 247, government 10 on day 282, astronomy 10 on day 286, smith 20 on day 352, military 30 on day 361, fire 10 on day 384, farm 30 on day 385, education 10 on day 397, military 40 on day 414, smith 30 on day 432, smith 40 on day 437, astronomy 20 on day 467, farm 40 on day 492, education 20 on day 505, trade 20 on day 581, fire 20 on day 585
+Choices: no 132, act 48, yes 134, choice 1
+First extinction: none
+Longest stretch without a tracked milestone: 12 days
+Unfinished work: 10
+Work unchanged for at least 30 days: 3
+Proposals without usable controls: 0
+  inquiries Libraries: waiting, age 7 days, remaining 10
+  inquiries Temples: working, age 1 days, remaining 7
+  materialWork Sajah: waiting, age 90 days, remaining 8
+  materialWork Mucy: waiting (Mucy cannot tend the work. It waits for them.), age 90 days, remaining 8
+  materialWork Puverie: waiting (Puverie cannot tend the work. It waits for them.), age 86 days, remaining 8
+  materialWork Taffany: waiting, age 23 days, remaining 8
+  materialWork Pixander: working, age 4 days, remaining 1
+  materialWork Vedro: working, age 3 days, remaining 2
+  materialWork Puverie: working, age 2 days, remaining 2
+  materialWork Sajah: working, age 0 days, remaining 5
+Runtime failures: 0. Console errors: 0. Warnings: 0.
+This checks simulation behaviour. It does not judge whether a campaign is enjoyable.
+
+Seed 42, skip: PASSED
+1000/1000 turns, day 1 to 1001, 142.53s (7 days/s)
+World 1: 6 living towns, 4042 people, 5 work records, 0 artifacts, 16 species encounters
+Discoveries: fire 10 on day 358, farm 10 on day 364, fire 20 on day 385, education 10 on day 536
+Choices: skip 376
+First extinction: none
+Longest stretch without a tracked milestone: 63 days
+Unfinished work: 0
+Work unchanged for at least 30 days: 0
+Proposals without usable controls: 0
+Runtime failures: 0. Console errors: 0. Warnings: 0.
+This checks simulation behaviour. It does not judge whether a campaign is enjoyable.
+
+Seed 42, skip: PASSED
+200/200 turns, day 418 to 618, 40.29s (5 days/s)
+World 1: 6 living towns, 1920 people, 4 work records, 0 artifacts, 16 species encounters
+Discoveries: farm 10 on day 446
+Choices: skip 48
+First extinction: none
+Longest stretch without a tracked milestone: 51 days
+Unfinished work: 0
+Work unchanged for at least 30 days: 0
+Proposals without usable controls: 0
+Runtime failures: 0. Console errors: 0. Warnings: 0.
+This checks simulation behaviour. It does not judge whether a campaign is enjoyable.
+
+Seed 123, no: PASSED
+300/300 turns, day 1 to 301, 27.74s (10.8 days/s)
+World 1: 0 living towns, 0 people, 0 work records, 0 artifacts, 2 species encounters
+Discoveries: none
+Choices: act 5, no 6
+First extinction: world 1 on day 24
+Longest stretch without a tracked milestone: 267 days
+Unfinished work: 0
+Work unchanged for at least 30 days: 0
+Proposals without usable controls: 0
+Runtime failures: 0. Console errors: 0. Warnings: 0.
+This checks simulation behaviour. It does not judge whether a campaign is enjoyable.
