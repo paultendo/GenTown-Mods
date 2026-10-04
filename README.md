@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.71**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.72**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.71/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.72/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.71)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.72)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -123,3 +123,5 @@ A town that brought home useful samples can now grow toward that source while it
 Actual shipments can carry a maker’s account of an advanced discovery. A receiver needs a current reason, an available worker and the earlier knowledge before it can try the idea. Goods may arrive while guarded makers keep their methods private, or listeners decline the account. Accepted guidance shortens the prototype work by two days, with a minimum of two working days, but supplies are still spent locally and knowledge arrives only when the trials finish. These durations are initial game calibration. Fighting and closed routes delay the actual contact. Shipment, teacher and local work histories survive reloads and remain linked in the Chronicle. Multiple communities can pursue the same question independently. This gives trade a possible consequence beyond its immediate cargo without making every visit a guaranteed unlock.
 
 Repeated completed exchanges can give available scholars a practical reason to work on writing even when the town prioritises another branch. Continued exchanges after local writing can prompt libraries. Actual workshop attempts or recent sky observations can prompt scientific method. These are questions to work on, rather than discoveries awarded by a visit. Prototypes still need the earlier knowledge, local supplies and free workers. Their stories link to the actual exchanges that raised the question. Two exchanges and a ninety-day evidence window are initial game calibration. Advanced medical knowledge now improves healing and outbreak resistance in communities that have learned it. Local writing limits the existing distortion of remembered grudges, while leaving the grievance intact. Local libraries enable the existing healthcare and cultural proposals. Older untracked discoveries keep their shared benefits without inventing a local history. Overall pacing and the remaining shared technology mechanics still need further work.
+
+Refused workshop and building supplies can now become a reason for conflict while the original work still needs that commodity. A shortage must be observed on four consecutive game days, with actual soldiers, sufficient military knowledge and an ordered government. Ambition, coercive values, military trials or a practiced militant faith can motivate a warning. Restraint and a practiced pacifist faith prevent it. A single refusal from a neutral neighbour does not earn the same escalation as repeated refusals or an existing rivalry. New unrelated work cannot inherit an old denial. Current supplies, known substitutes, cancelled projects and changed beliefs remove the supply motive from a later war. Native war pressure still decides whether fighting begins. Captured inputs can support the original trials only after the cargo returns and a worker can resume them. The theft remains in the neighbour’s memory. Today shows a short warning with the actual coloured town flags and links to the refusal, its motive and the unfinished work. Days with actual news no longer retain the native uneventful placeholder, regardless of whether the event happened before or after it. Four observed days and the ninety-day refusal memory are initial balance values, and long human playtesting remains necessary.

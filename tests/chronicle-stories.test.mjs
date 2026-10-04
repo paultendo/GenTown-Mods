@@ -186,3 +186,15 @@ test('quiet days leave space for choices and compact news stays beside the Chron
  highlights.open=true;w.dispatchEvent(new w.Event('resize'));assert.equal(highlights.open,true,'A player can keep the compact news open');
  assert.ok(proposal.querySelector('[type="yes"]'));assert.deepEqual(game.errors,[]);
 });
+
+test('uneventful days remain quiet unless an actual event has already made news that day',async t=>{
+ const g=await makeGame();t.after(g.close);const w=g.window;settleGame(g);w.planet.day=15;w.clearLog();
+ const first=w.logMessage('An uneventful day.');assert.ok(entry(w,first));
+ w.logMessage('The Sun rises on Planet '+w.planet.name+'...');w.logMessage('A visitor waits by the road.');assert.ok(w.logMessage('An uneventful day.'));
+ w.logMessage('A workshop finishes its trials.',null,{_paultendoHighlight:true});assert.equal(entry(w,first),null);assert.equal(w.logMessage('An uneventful day.'),undefined);
+ assert.equal(w.planet._paultendoChronicleUI.entriesById[first],undefined);assert.equal(w.planet._paultendoChronicleStore.byLogId[first],undefined);
+ for(const day of w.planet._paultendoChronicleStore.days){const counts={};for(const e of day.entries)counts[e.system || 'misc']=(counts[e.system || 'misc'] || 0)+1;assert.deepEqual(JSON.parse(JSON.stringify(day.counts)),counts);}
+ w.planet.day++;assert.ok(w.logMessage('An uneventful day.'),'Yesterday’s news cannot contradict a quiet day');
+ w.logMessage('An earthquake shakes the coast.','warning');assert.equal(w.logMessage('An uneventful day.'),undefined);
+ const saved=JSON.parse(JSON.stringify(w.generateSave())),restored=await makeGame({save:saved});t.after(restored.close);const rw=restored.window;assert.equal(rw.logMessage('An uneventful day.'),undefined);rw.planet.day++;assert.ok(rw.logMessage('An uneventful day.'));assert.deepEqual(g.errors,[]);assert.deepEqual(restored.errors,[]);
+});

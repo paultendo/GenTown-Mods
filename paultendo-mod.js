@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.71/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.72/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.71";
+    const MOD_VERSION = "1.6.72";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -2501,6 +2501,10 @@
         if (typeof logMessage === "function" && !logMessage._paultendoChronicle) {
             const baseLogMessage = logMessage;
             logMessage = function(text, type, args) {
+                // Native nextDay only knows whether its own event fired. A real
+                // warning or completed work can already have made this day news.
+                if(text==='An uneventful day.'&&!args?.buttons&&typeof document!=='undefined'
+                    &&planet?.[CHRONICLE_UI_KEY]?.entriesByDay?.[planet.day]?.some(entry=>entry.priority>0&&document.getElementById('logMessage-'+entry.id)))return;
                 let logText = text;
                 const eventContext = getActiveModEventContext() || consumePendingLogContext();
                 const observedStory=!!args?._paultendoObservedStory;
@@ -2544,6 +2548,7 @@
                         const tradeoffSummary = context ? getTradeoffSummaryFromContext(context) : null;
                         if (dayValue) {
                             addChronicleEntry(dayValue, uuid, type, plainText, { story, tradeoff: tradeoffSummary, highlight: !!args?._paultendoHighlight });
+                            retireUneventfulDay(dayValue);
                             scheduleChronicleDayMarkers(dayValue);
                         }
                         if (elem) {
@@ -6433,7 +6438,7 @@
     }
     // Goods are claimed by actual meals and unfinished work. Requests, supplies
     // and payment travel separately, rather than purchasing abstract bonuses.
-    const EXCHANGE_PACE = {retryDays:8, chunksPerDay:8, reserveDays:2, flowDays:8, maxHistory:128};
+    const EXCHANGE_PACE = {retryDays:8, chunksPerDay:8, reserveDays:2, flowDays:8, coercionDays:4, memoryDays:90, maxHistory:128};
     const COMMODITIES = {
         crop:{label:'grain',edible:true,role:'farmer'},
         livestock:{label:'livestock',edible:true,role:'farmer'},
@@ -7441,13 +7446,13 @@
             case 'seizure':return `Raiders from ${buyer} take ${step.count} ${goods} from ${seller}. The supplies are on the road home. ${seller} remembers the theft.`;
             case 'return':return `The road home opens. The carriers set off again with the captured ${goods}.`;
             case 'route':return `Carriers keep returning between ${buyer} and ${seller}. A regular route takes shape.`;
-            case 'war':return `${buyer} goes to war with ${seller} over the refused food request.`;
+            case 'war':return `${buyer} goes to war with ${seller} over the refused ${COMMODITIES[record.type].edible?'food':goods} request.`;
             case 'arrive':return record.kind==='seizure'?`${step.count} captured ${goods} reach ${buyer} and enter its stores.`:`${step.count} ${goods} reach ${buyer}.${step.payment?` ${seller} receives ${step.payment.count} ${payment} in return.`:''} The towns remember the exchange.`;
             case 'refuse':return step.reason==='stores'?`${seller} cannot spare ${goods} without leaving its own people or work short.`:step.reason==='rivalry'?`${seller} refuses the request from its rival.`:step.reason==='outsiders'?`${seller} keeps its stores for its own people.`:`${seller} asks for payment, but the towns cannot agree on an exchange.`;
             case 'recovered':return `${buyer} no longer needs the ${goods}. The request is withdrawn.`;
             case 'blocked':return record.kind==='seizure'?`The road home is blocked. The carriers wait with the captured ${goods}.`:`The journey between ${buyer} and ${seller} is blocked. The carriers wait with their cargo.`;
             case 'closed':return record.kind==='seizure'?`The carriers can no longer return to ${buyer}. Their cargo is lost.`:`The journey between ${buyer} and ${seller} can no longer reach its destination.`;
-            case 'threat':return `${buyer} threatens ${seller} over the food it refused to send. Relations worsen and the risk of war grows.`;
+            case 'threat':return `${buyer} threatens ${seller} over the ${COMMODITIES[record.type].edible?'food':goods} it refused to send. ${step.reason || 'Relations worsen and the risk of war grows.'}`;
             case 'used':return exchangeUseText(record,step.use);
             case 'withheld':return `${exchangeTownLabel(record,step.town)} keeps its way of making ${COMMODITIES[step.type].label} to itself.`;
             case 'lesson':return `${step.person} hears how visitors from ${step.origin} make ${COMMODITIES[step.type].label}. They will still need to try it with their own hands.`;
@@ -7464,10 +7469,13 @@
         for(const id of [record.buyer,record.seller]) if(livingTownKnown(regGet('town',id))) record.known[id]=true;
         const visibleTown=[record.buyer,record.seller].map(id=>regGet('town',id)).find(livingTownKnown);
         if(visibleTown) {
+            const town=id=>livingTownKnown(regGet('town',id))?townRef(id):'another settlement';
+            const goods=COMMODITIES[record.type].edible?'food':COMMODITIES[record.type].label;
             const message=kind==='route'
-                ? `New route: ${[record.buyer,record.seller].map(id=>livingTownKnown(regGet('town',id))?townRef(id):'another settlement').join(' and ')}.`
+                ? `New route: ${[record.buyer,record.seller].map(town).join(' and ')}.`
+                : kind==='threat'?`${goods[0].toUpperCase()+goods.slice(1)}: ${town(record.buyer)} threatens ${town(record.seller)}.`
                 : escapeLivingText(exchangeStepText(record,step));
-            modLog('memory',message,['threat','war','seizure'].includes(kind)?'warning':null,{town:visibleTown,observedStory:true,force:kind==='route',highlight:kind==='route',story:{kind:'exchange',id:record.id}});
+            modLog('memory',message,['threat','war','seizure'].includes(kind)?'warning':null,{town:visibleTown,observedStory:true,force:['route','threat'].includes(kind),highlight:['route','threat'].includes(kind),story:{kind:'exchange',id:record.id}});
         }
     }
     function newCommodityJourney(buyer,seller,path,source='need',type='crop') {
@@ -7548,13 +7556,63 @@
         if(record.returnKnowledge?.withheld)noteExchangeStep(record,'knowledgeWithheld',{town:buyer.id,title:record.returnKnowledge.title});
         return true;
     }
-    function foodRefusalCanBecomeThreat(record,buyer,seller) {
-        const hunger=buyer._paultendoCommunityWork?.hunger;
-        if(!hunger||hunger.days<4||hunger.threatened||mealStock(buyer)>=nativeMealNeed(buyer)||!(planet.unlocks.military>=10)||!(buyer.jobs?.soldier>0)||!buyer.gov||buyer.gov==='anarchy') return false;
-        if((buyer.influences.faith || 0)>4&&getTownReligion(buyer)?.tenets?.includes('pacifism')) return false;
-        if((buyer.values?.order || 0)<4||getRelations(buyer,seller)>-2&&(buyer._paultendoFoodMemory?.[seller.id]?.refused || 0)<2) return false;
-        hunger.threatened=true;worsenRelations(buyer,seller,2);worsenRelations(seller,buyer,2);bumpWarPressure(buyer,seller,3);
-        happen('Influence',null,buyer,{happy:-0.2});record.threat=true;noteExchangeStep(record,'threat');return true;
+    function sameSupplyPurpose(a,b) {return a.kind===b.kind&&a.id===b.id;}
+    function commodityRefusalNeed(record,town) {
+        if(!town||town.end||town.pop<=0||!COMMODITIES[record.type])return null;
+        if(COMMODITIES[record.type].edible) {
+            const count=Math.max(0,nativeMealNeed(town)-mealStock(town));
+            return count>0?{kind:'meals',count,purposes:[{kind:'meals'}]}:null;
+        }
+        const count=commodityWorkDemand(town)[record.type] || 0;
+        if(count<=0)return null;
+        // A later, unrelated project cannot inherit an earlier refusal.
+        const purposes=commodityWorkClaims(town).filter(claim=>(record.purposes || []).some(previous=>sameSupplyPurpose(previous,claim))
+            &&(claim.kind==='construction'?claim.cost>0&&BUILDING_MATERIALS[record.type]:claim.cost?.[record.type]>0)).map(({kind,id})=>({kind,id}));
+        return purposes.length?{kind:'work',count,purposes}:null;
+    }
+    function commodityRefusalAge(record) {
+        return planet.day-(record.reply?.day ?? record.steps.findLast(step=>step.kind==='refuse')?.day ?? record.day);
+    }
+    function watchRefusedSupply(record,need) {
+        if(!need){delete record.shortage;return;}
+        const previous=record.shortage,same=previous?.kind===need.kind&&need.purposes.some(p=>previous.purposes.some(old=>sameSupplyPurpose(p,old)));
+        const continuous=same&&(previous.lastDay===planet.day||previous.lastDay===planet.day-1);
+        record.shortage={...structuredClone(need),since:continuous?previous.since:planet.day,lastDay:planet.day,
+            days:continuous?previous.days+(previous.lastDay<planet.day?1:0):1};
+    }
+    function commodityCoercionMotive(town,need) {
+        if(!need||townKnowledgeLevel(town,'military')<10||!(town.jobs?.soldier>0)||!town.gov||town.gov==='anarchy'||(town.values?.order || 0)<4)return null;
+        const religion=getTownReligion(town),faithful=(town.influences.faith || 0)>4;
+        if(faithful&&religion?.tenets?.includes('pacifism'))return null;
+        if(need.kind==='meals')return (town._paultendoCommunityWork?.hunger?.days || 0)>=EXCHANGE_PACE.coercionDays
+            ? {kind:'survival',reason:'Their rulers will not accept another day of empty bowls.'}:null;
+        const military=need.purposes.some(p=>p.kind==='inquiry'&&livingWorldState().inquiries.find(w=>w.id===p.id)?.key==='military');
+        return faithful&&religion?.tenets?.includes('militarism')?{kind:'faith',religion:religion.id,reason:'Their rulers believe force is a rightful way to get what the town needs.'}
+            :military?{kind:'military',reason:'Their rulers want the military trials finished.'}
+            :(town.values?.justice || 0)<=-2?{kind:'taking',reason:'Their rulers are willing to take what the neighbours will not give.'}
+            :(town.values?.wealth || 0)>=4?{kind:'ambition',reason:'Their rulers will not let the neighbours stand in the way of the town’s ambitions.'}:null;
+    }
+    function commodityRefusalCanBecomeThreat(record,buyer,seller) {
+        if(record.threat||!buyer||!seller||buyer.end||seller.end)return false;
+        const need=commodityRefusalNeed(record,buyer);watchRefusedSupply(record,need);
+        if(!need||commodityStock(seller,record.type)<=0||areAtWar(buyer,seller)||!commodityPath(buyer,seller))return false;
+        const motive=commodityCoercionMotive(buyer,need),hunger=buyer._paultendoCommunityWork?.hunger;
+        if(!motive||(need.kind==='meals'?hunger.threatened:record.shortage.days<EXCHANGE_PACE.coercionDays))return false;
+        const refusals=commodityExchangeState().exchanges.filter(r=>r.buyer===buyer.id&&r.seller===seller.id&&r.type===record.type&&r.status==='refused'
+            &&commodityRefusalAge(r)>=0&&commodityRefusalAge(r)<=EXCHANGE_PACE.memoryDays
+            &&(need.kind==='meals'||need.purposes.some(p=>(r.purposes || []).some(old=>sameSupplyPurpose(p,old)))));
+        if(getRelations(buyer,seller)>-2&&refusals.length<2)return false;
+        if(refusals.some(r=>r.threat&&planet.day-(r.dispute?.day ?? r.steps.findLast(s=>s.kind==='threat')?.day ?? r.day)<=EXCHANGE_PACE.retryDays))return false;
+        if(need.kind==='meals')hunger.threatened=true;
+        // AddRelation changes both sides. A warning applies its damage once.
+        worsenRelations(buyer,seller,2);bumpWarPressure(buyer,seller,3);
+        happen('Influence',null,buyer,{happy:-0.2});record.threat=true;
+        record.dispute={day:planet.day,need:structuredClone(need),motive,values:{...buyer.values},religion:buyer.religion,faith:buyer.influences.faith};
+        noteExchangeStep(record,'threat',{reason:motive.reason});return true;
+    }
+    function observeSupplyDisputes() {
+        for(const record of commodityExchangeState().exchanges)if(record.status==='refused'&&commodityRefusalAge(record)>=0&&commodityRefusalAge(record)<=EXCHANGE_PACE.flowDays)
+            commodityRefusalCanBecomeThreat(record,regGet('town',record.buyer),regGet('town',record.seller));
     }
     function capturedSupplyPath(town,origin) {
         if(!town||town.end||town.pop<=0||!origin)return null;
@@ -7617,7 +7675,7 @@
                 const memory=exchangeMemory(buyer,seller);memory.refused++;memory.lastRefused={day:planet.day,source:record.id,type:record.type};
                 if(COMMODITIES[record.type].edible){const food=foodMemory(buyer,seller);food.refused++;food.lastRefused={...memory.lastRefused};}
                 noteExchangeStep(record,'refuse',{reason:record.refusal});
-                if(COMMODITIES[record.type].edible)foodRefusalCanBecomeThreat(record,buyer,seller);continue;
+                commodityRefusalCanBecomeThreat(record,buyer,seller);continue;
             }
             if(!path){record.status='waiting';record.due=planet.day+1;if(record.steps.at(-1)?.kind!=='blocked')noteExchangeStep(record,'blocked');continue;}
             if(record.kind==='seizure'&&record.status==='waiting'){record.status='carrying';record.due=planet.day+commodityTravelDays(path);noteExchangeStep(record,'return');continue;}
@@ -13626,6 +13684,16 @@
             discard.remove();
         }
         if(!removed.size)return;
+        forgetChronicleEntryIds(removed);
+        return removed.size;
+    }
+
+    function forgetChronicleEntryIds(removed) {
+        const state=planet[CHRONICLE_UI_KEY];
+        if(state) {
+            for(const id of removed)delete state.entriesById[id];
+            for(const day of Object.keys(state.entriesByDay))state.entriesByDay[day]=state.entriesByDay[day].filter(entry=>!removed.has(entry.id));
+        }
         const store=getChronicleStore();
         for(const day of store?.days || []) {
             day.entries=day.entries.filter(entry=>!removed.has(entry.logId));
@@ -13636,7 +13704,19 @@
             store.index=Object.fromEntries(store.days.map(day=>[String(day.day),day]));
             store.byLogId=Object.fromEntries(store.days.flatMap(day=>day.entries.filter(entry=>entry.logId).map(entry=>[entry.logId,entry])));
         }
-        return removed.size;
+    }
+
+    function retireUneventfulDay(day) {
+        const entries=planet[CHRONICLE_UI_KEY]?.entriesByDay?.[day] || [];
+        if(!entries.some(entry=>entry.priority>0&&document.getElementById('logMessage-'+entry.id)))return;
+        const removed=new Set();
+        for(const entry of entries) {
+            if(entry.text!=='An uneventful day.')continue;
+            const source=document.getElementById('logMessage-'+entry.id);
+            if(!source||source.querySelector('.logAct')||source.dataset.storyKind)continue;
+            source.remove();removed.add(entry.id);
+        }
+        if(removed.size)forgetChronicleEntryIds(removed);
     }
 
     function restoreLogFromPlanet(options = {}) {
@@ -13707,6 +13787,7 @@
             }
             retireRepeatedLoadGreetings(logDiv);
             try { rebuildChronicleUiStateFromLog(); } catch {}
+            for(const day of Object.keys(planet[CHRONICLE_UI_KEY]?.entriesByDay || {}))retireUneventfulDay(day);
         }
     }
 
@@ -15181,7 +15262,7 @@
             ["Inventions", observeLivingInventions], ["Sky study", advanceSkyStudy],
             ["Commodity journeys", advanceCommodityJourneys], ["Field tools", advanceFarmTools],
             ["Material work", advanceMaterialWork], ["New field tools", advanceFarmTools],
-            ["Grain stores", advanceGrainStores], ["Commodity needs", observeCommodityNeeds],
+            ["Grain stores", advanceGrainStores], ["Commodity needs", observeCommodityNeeds], ["Supply disputes", observeSupplyDisputes],
             ["Teachings", advanceLivingTeachings], ["Places", observeLivingPlaces],
             ["Settlement", observeLivingWorld]
         ]) {
@@ -23072,8 +23153,11 @@
         const candidates = [];
         if (!instigator || !defender) return candidates;
 
-        const refused=commodityExchangeState().exchanges.findLast(record=>record.buyer===instigator.id&&record.seller===defender.id&&record.status==='refused'&&record.threat&&COMMODITIES[record.type]?.edible&&planet.day-(record.steps.findLast(step=>step.kind==='threat')?.day ?? record.day)<=EXCHANGE_PACE.flowDays);
-        if(refused&&mealStock(instigator)<nativeMealNeed(instigator)&&commodityStock(defender,refused.type)>0)candidates.push({id:'supplies',label:'the refused food request',weight:3,source:refused.id,type:refused.type});
+        const refused=commodityExchangeState().exchanges.findLast(record=>record.buyer===instigator.id&&record.seller===defender.id&&record.status==='refused'&&record.threat
+            &&planet.day-(record.steps.findLast(step=>step.kind==='threat')?.day ?? record.day)>=0
+            &&planet.day-(record.steps.findLast(step=>step.kind==='threat')?.day ?? record.day)<=EXCHANGE_PACE.flowDays
+            &&commodityCoercionMotive(instigator,commodityRefusalNeed(record,instigator))&&commodityStock(defender,record.type)>0);
+        if(refused)candidates.push({id:'supplies',label:`the refused ${COMMODITIES[refused.type].edible?'food':COMMODITIES[refused.type].label} request`,weight:3,source:refused.id,type:refused.type});
 
         if (hasGrudge(instigator, defender.id)) {
             candidates.push({ id: "revenge", label: "revenge", weight: 3 });
@@ -23141,7 +23225,7 @@
         const defenderPop = defender?.pop || 0;
         const defenderSize = defender?.size || 0;
 
-        if(cause.id==='supplies')return {id:'seize_supplies',label:'supplies for its people',source:cause.source,type:cause.type};
+        if(cause.id==='supplies')return {id:'seize_supplies',label:COMMODITIES[cause.type]?.edible?'supplies for its people':`${COMMODITIES[cause.type]?.label || 'supplies'} for unfinished work`,source:cause.source,type:cause.type};
 
         if (cause.id === "seize_wonder") {
             return { id: "seize_wonder", label: "seize wonder", asset: cause.asset };
