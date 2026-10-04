@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.84/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.85/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.84";
+    const MOD_VERSION = "1.6.85";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -6631,12 +6631,16 @@
             text:`${person.name} brings in more grain with these handtools. The town does not know how to make them.`});
     }
     function observeUnfamiliarStorage(town,before,after) {
-        const cap=$c.maxResource(town),kept=Math.max(0,after-Math.max(before,cap));if(!kept)return;
-        const vessels=town._paultendoGrainStore?.vessels || [],vessel=vessels.find(v=>livingTeachingPersonAvailable(workingLivingPerson(town,v.person),town));
-        if(!vessel)return;
-        const person=workingLivingPerson(town,vessel.person);
-        rememberObservedEffect(town,person,{kind:'storage',type:'pottery',extra:kept,effect:{property:'capacity',activity:'storage',benefit:true,need:before<foodBuffer(town),kept},visit:{kind:'storage',id:town.id,label:'Visit the grain stores'},vessels:vessels.map(v=>({id:v.id,count:v.count,inputs:structuredClone(v.inputs)})),
-            text:`${person.name} keeps grain in the clay vessels after the old stores have filled. The town does not know how to make these vessels.`});
+        let lower=$c.maxResource(town);
+        for(const vessel of town._paultendoGrainStore?.vessels || []) {
+            const upper=lower+grainFixtureCapacity(vessel),kept=Math.max(0,Math.min(after,upper)-Math.max(before,lower));lower=upper;
+            if(!kept)continue;
+            const person=workingLivingPerson(town,vessel.person);if(!livingTeachingPersonAvailable(person,town))continue;
+            const type=grainFixtureType(vessel),label=COMMODITIES[type].label;
+            rememberObservedEffect(town,person,{kind:'storage',type,extra:kept,effect:{property:'grainCapacity',activity:'storage',benefit:true,need:before<foodBuffer(town),kept},visit:{kind:'storage',id:town.id,label:'Visit the grain stores'},
+                vessels:[{id:vessel.id,type,count:vessel.count,capacity:vessel.capacity ?? COMMODITIES[type].properties.grainCapacity,inputs:structuredClone(vessel.inputs || [])}],
+                text:`${person.name} keeps grain in the ${label} after the old stores have filled. The town does not know how to make these ${COMMODITIES[type].singular.endsWith('vessel')?'vessels':'containers'}.`});
+        }
     }
     function observeUnfamiliarRecords(town,person,book) {
         const fit=materialActivityFit(book.medium,'records',town);if(!fit)return;
@@ -6979,7 +6983,9 @@
         glass:{label:'glass',role:'miner',description:'A cooled melt of sand and minerals. It catches the light. A clear piece can be ground into a lens.'},
         coal:{label:'coal',role:'miner',form:'mineralFuel',properties:{heat:2},description:'Dark pieces dug from a seam in the ground. A workshop can use them as fuel, leaving its timber for other work.'},
         steel:{label:'steel',role:'miner',description:'Metal worked again in a hot fire. A careful maker can use it for a fork with a clearer note.'},
-        pottery:{label:'clay vessels',role:'miner',description:'Clay shaped into vessels and fired hard. Set beside the grain stores, each can hold eight more grain.'},
+        pottery:{label:'clay vessels',singular:'clay vessel',role:'miner',form:'container',properties:{grainCapacity:8},description:'Clay shaped into vessels and fired hard. Set beside the grain stores, each can hold eight more grain.'},
+        timber_bins:{label:'wooden grain bins',singular:'wooden grain bin',role:'lumberer',form:'container',properties:{grainCapacity:12},description:'Joined timber with a fitted lid. A bin keeps loose grain together and gives the stores room for twelve more grain.'},
+        glass_vessels:{label:'glass vessels',singular:'glass vessel',role:'miner',form:'container',properties:{grainCapacity:6},description:'Glass shaped around a hollow centre. Each vessel can hold six grain. A clear wall lets its contents be seen.'},
         stone_tools:{label:'stone handtools',role:'farmer',form:'handtool',properties:{workingEdge:1,edgeLife:40,impact:1},description:'Stone chipped into hand-sized edges. Farmers can work their fields with them. Repeated use wears the edges away.'},
         metal_tools:{label:'metal handtools',role:'farmer',form:'handtool',properties:{workingEdge:2,edgeLife:80,impact:2},description:'Metal worked into small blades and fitted for fieldwork. Their edges serve longer than chipped stone, but still wear with use.'},
         steel_tools:{label:'steel handtools',role:'farmer',form:'handtool',properties:{workingEdge:3,edgeLife:120,impact:3},description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'},
@@ -7005,6 +7011,7 @@
         construction:{property:'loadBearing',minimum:1,defaults:['brick','rock','lumber']},
         workshopHeat:{property:'heat',minimum:2,defaults:['charcoal','coal'],methods:{preparedFuel:{},mineralFuel:{encounter:true,needs:{fire:40}}}},
         cleanCarbon:{property:'cleanCarbon',minimum:1,defaults:['charcoal']},
+        grainStorage:{property:'grainCapacity',minimum:1,forms:['container'],defaults:['pottery','timber_bins','glass_vessels']},
         fieldwork:{property:'workingEdge',minimum:1,forms:['handtool']}
     };
     function materialActivityFit(type,activity,town,{allowUnencountered=false}={}) {
@@ -7029,6 +7036,8 @@
         glass:{cost:{sand:3,charcoal:2,rock:1},output:2,days:7,needs:{fire:50,smith:30},sample:'sand',established:{fire:50},roles:['miner','scholar'],risk:0.3,success:'The cloudy melt cools into glass. Held up to the light, its clearer patches show the world beyond.',failure:'The heat leaves a brittle, cloudy mass. It crumbles before it can be worked.'},
         steel:{cost:{metal:2,charcoal:1},output:2,days:8,needs:{fire:50,smith:40},sample:'metal',established:{smith:50},roles:['miner'],risk:0.3,success:'The metal holds a sharper edge. They set the pieces aside to learn what else they can make from them.',failure:'The pieces split under the hammer. This batch cannot be shaped into an instrument.'},
         pottery:{cost:{clay:2,charcoal:1},output:2,days:5,needs:{fire:20,smith:10},sample:'clay',established:{fire:40},roles:['miner','farmer'],risk:0.25,success:'The vessels keep their shape and hold their contents. There may be room for more of the harvest now.',failure:'The vessels crack in the heat. Grain would spill through their sides.'},
+        timber_bins:{cost:{lumber:2},output:1,days:4,needs:{smith:20},sample:'lumber',established:{smith:20},roles:['lumberer','miner'],risk:0.15,method:'assembly',success:'The lid fits and the joints hold the grain. The bin is ready for the stores.',failure:'Grain leaks through the joints. The bin will not hold a harvest.'},
+        glass_vessels:{cost:{glass:2,charcoal:1},output:2,days:6,needs:{fire:50,smith:30},sample:'glass',established:{fire:50},roles:['miner'],risk:0.25,method:'shaping',workingLabel:'Shaping the glass',failedLabel:'The glass cracked',success:'The glass cools around a hollow centre. The vessels hold their contents.',failure:'The glass cracks as it cools. These vessels cannot hold grain.'},
         stone_tools:{cost:{rock:2},output:2,days:4,needs:{smith:10},sample:'rock',established:{smith:20},roles:['farmer','miner'],risk:0.15,method:'shaping',success:'The stone holds a working edge. The farmers can take these tools into their fields.',failure:'The stone splits where the working edge should be. These pieces cannot serve as tools.'},
         metal_tools:{cost:{metal:2},output:2,days:5,needs:{smith:40},sample:'metal',established:{smith:40},roles:['miner','farmer'],risk:0.2,method:'shaping',success:'The metal holds a working edge. The farmers can fit these blades for work in the fields.',failure:'The blades split as they are shaped. The pieces cannot serve as tools.'},
         steel_tools:{cost:{steel:2},output:2,days:6,needs:{smith:50},sample:'steel',established:{smith:50},roles:['miner','farmer'],risk:0.1,method:'shaping',success:'The blades hold their shape. They are ready for work in the fields.',failure:'The blanks split as they are worked. The blades cannot be used.'},
@@ -7039,17 +7048,47 @@
         colony_vessel:{cost:{sky_vessel:1,steel:4,lumber:4,glass:2},output:1,days:10,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The cabins and cargo holds pass their tests. The vessel can carry settlers.',failure:'The cabin seals fail their test. This vessel cannot carry people.'},
         cargo_vessel:{cost:{sky_vessel:1,steel:4,lumber:4},output:1,days:8,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The hold and engine pass their tests. The vessel can carry goods between worlds.',failure:'The hold breaks its seal in the test. This vessel cannot carry goods.'}
     };
-    // Capacity and the thirty-day harvest memory are initial game calibration.
-    // Vessels become durable local fixtures only when actual stock is installed.
-    const GRAIN_STORAGE = {perVessel:8,memoryDays:30};
+    // Capacity is a property of a finished form, not a bonus on receiving a
+    // raw material. The installed capacity stays with its actual paid fixture.
+    const GRAIN_STORAGE = {memoryDays:30};
+    function grainFixtureType(vessel) {return vessel.type || 'pottery';}
+    function grainFixtureCapacity(vessel) {return vessel.count*(vessel.capacity ?? COMMODITIES[grainFixtureType(vessel)]?.properties?.grainCapacity ?? 0);}
     function commodityCapacity(town,type) {
-        const extra=type==='crop'?(town._paultendoGrainStore?.vessels || []).reduce((n,v)=>n+v.count*GRAIN_STORAGE.perVessel,0):0;
+        const extra=type==='crop'?(town._paultendoGrainStore?.vessels || []).reduce((n,v)=>n+grainFixtureCapacity(v),0):0;
         return $c.maxResource(town)+extra;
     }
-    function grainStorageNeed(town) {
+    function grainStorageShortfall(town) {
         const pressure=town._paultendoGrainStore?.pressure;
         if(!pressure||planet.day-pressure.day>GRAIN_STORAGE.memoryDays||town.end||town.pop<=0)return 0;
-        return Math.ceil(Math.max(0,pressure.target-commodityCapacity(town,'crop'))/GRAIN_STORAGE.perVessel);
+        return Math.max(0,pressure.target-commodityCapacity(town,'crop'));
+    }
+    function grainStoragePlan(town,claims=[]) {
+        let room=grainStorageShortfall(town);if(!room)return null;
+        const cost={},candidates=materialActivityCandidates(town,'grainStorage');
+        const spare=type=>Math.max(0,commodityStock(town,type)-commodityClaimedStock(town,type,claims));
+        // Use finished containers already here before commissioning another
+        // craft. Promised shipments and paid work keep their existing claims.
+        const stocked=candidates.filter(fit=>spare(fit.type)>0);
+        while(room&&stocked.length) {
+            const amount=fit=>Math.min(Math.ceil(room/fit.value),spare(fit.type)),coverage=fit=>amount(fit)*fit.value;
+            stocked.sort((a,b)=>Number(coverage(b)>=room)-Number(coverage(a)>=room)
+                ||(coverage(a)>=room?amount(a)-amount(b)||coverage(a)-coverage(b):coverage(b)-coverage(a)));
+            const fit=stocked.shift(),count=amount(fit);
+            cost[fit.type]=count;room=Math.max(0,room-count*fit.value);
+        }
+        if(room) {
+            const pending=livingWorldState().materialWork.find(w=>w.town===town.id&&['waiting','working','storing'].includes(w.status)&&candidates.some(c=>c.type===w.purpose?.type||c.type===w.type));
+            const plans=candidates.map(fit=>{
+                const recipe=MATERIAL_RECIPES[fit.type],known=!!town._paultendoMaterials?.[fit.type],able=recipe&&materialTechniqueAvailable(fit.type,town)&&recipe.roles.some(role=>town.jobs?.[role]>0);
+                const supplied=able&&Object.entries(recipe.cost).every(([type,n])=>spare(type)>=n);
+                const sampled=able&&(spare(recipe.sample)>0||town._paultendoMaterials?.[recipe.sample]);
+                const underway=pending&&(pending.purpose?.type || pending.type)===fit.type;
+                const tier=underway?0:supplied?1:known&&able?2:sampled?3:known?4:fit.type===MATERIAL_ACTIVITIES.grainStorage.defaults[0]?5:Infinity;
+                return {...fit,tier,effort:recipe?recipe.days/(recipe.output*fit.value):Infinity};
+            }).filter(fit=>Number.isFinite(fit.tier)).sort((a,b)=>a.tier-b.tier||a.effort-b.effort);
+            const choice=plans[0];if(choice)cost[choice.type]=(cost[choice.type] || 0)+Math.ceil(room/choice.value);
+        }
+        return Object.keys(cost).length?{cost,room:grainStorageShortfall(town)}:null;
     }
     function grainStorageStep(town,text) {
         const store=town._paultendoGrainStore,steps=store.steps ||= [];
@@ -7069,27 +7108,34 @@
     }
     function advanceGrainStores() {
         for(const town of regToArray('town')) {
-            const need=grainStorageNeed(town);if(!need||hasIssue(town,'war'))continue;
-            const other=commodityWorkClaims(town).filter(c=>c.kind!=='storage'&&c.kind!=='construction').reduce((n,c)=>n+(c.cost.pottery || 0),0);
-            const count=Math.min(need,Math.max(0,commodityStock(town,'pottery')-other));if(!count)continue;
+            if(!grainStorageShortfall(town)||hasIssue(town,'war'))continue;
+            const claims=commodityWorkClaims(town,null,{skipStorage:true}),plan=grainStoragePlan(town,claims);if(!plan)continue;
             const person=livingCommunityPerson(town,'farmer') || livingCommunityPerson(town,'resident');
-            if(!livingTeachingPersonAvailable(person,town))continue;
-            const vessel={id:`store:${livingWorldState().nextId++}`,count,person:person.id,name:person.name,day:planet.day,inputs:[]};
-            withCommodityUse({kind:'storage',id:vessel.id,name:'grain stores',inputs:vessel.inputs},()=>happen('RemoveResource',null,town,{type:'pottery',count}));
-            town._paultendoGrainStore.vessels.push(vessel);
-            for(const input of vessel.inputs)rememberCommodityUse(town,input,{kind:'storage',id:vessel.id,name:'grain stores'});
-            grainStorageStep(town,`${person.name} sets ${count} clay ${count===1?'vessel':'vessels'} beside the grain stores in ${town.name}. There is room for ${count*GRAIN_STORAGE.perVessel} more grain.`);
+            if(!materialHandFree(town,person))continue;
+            for(const [type,wanted] of Object.entries(plan.cost)) {
+                const fit=materialActivityFit(type,'grainStorage',town),count=Math.min(wanted,Math.max(0,commodityStock(town,type)-commodityClaimedStock(town,type,claims)));if(!fit||!count)continue;
+                const vessel={id:`store:${livingWorldState().nextId++}`,type,capacity:fit.value,count,person:person.id,name:person.name,day:planet.day,inputs:[]};
+                withCommodityUse({kind:'storage',id:vessel.id,name:'grain stores',inputs:vessel.inputs},()=>happen('RemoveResource',null,town,{type,count}));
+                town._paultendoGrainStore.vessels.push(vessel);
+                for(const input of vessel.inputs)rememberCommodityUse(town,input,{kind:'storage',id:vessel.id,name:'grain stores'});
+                const good=COMMODITIES[type];
+                grainStorageStep(town,`${person.name} sets ${count} ${count===1?good.singular:good.label} beside the grain stores in ${town.name}. There is room for ${grainFixtureCapacity(vessel)} more grain.`);
+            }
         }
     }
     function openGrainStores(town) {
         if(!livingTownKnown(town))return;
         const store=town._paultendoGrainStore,items=[{text:'← Back to materials',func:()=>openTownMaterials(town)}];
         items.push({heading:true,text:`${commodityStock(town,'crop')} grain · Room for ${commodityCapacity(town,'crop')}`});
-        const count=(store?.vessels || []).reduce((n,v)=>n+v.count,0);
-        items.push({text:count?`${count} fired clay ${count===1?'vessel holds':'vessels hold'} another ${count*GRAIN_STORAGE.perVessel} grain, ready for the next harvest.`:'The last harvest filled the stores. A fired clay vessel could hold eight more grain.'});
+        const fixtures=store?.vessels || [],types=[...new Set(fixtures.map(grainFixtureType))];
+        if(!fixtures.length)items.push({text:'The last harvest filled the stores. The town needs more room to keep its grain.'});
+        for(const type of types) {
+            const matching=fixtures.filter(v=>grainFixtureType(v)===type),count=matching.reduce((n,v)=>n+v.count,0),room=matching.reduce((n,v)=>n+grainFixtureCapacity(v),0),good=COMMODITIES[type];
+            items.push({text:`${count} ${count===1?good.singular:good.label} · Room for ${room} more grain.`});
+        }
         for(const step of store?.steps || [])items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
-        const need=grainStorageNeed(town);if(need)items.push({text:`Room for that harvest would take ${need} more clay ${need===1?'vessel':'vessels'}.`});
-        for(const input of (store?.vessels || []).flatMap(v=>v.inputs)) {
+        const plan=grainStoragePlan(town,commodityWorkClaims(town,null,{skipStorage:true}));if(plan)items.push({text:`The stores still need room for ${plan.room} grain. They are looking for ${commaList(Object.entries(plan.cost).map(([type,n])=>`${n} ${n===1?COMMODITIES[type].singular:COMMODITIES[type].label}`))}.`});
+        for(const input of fixtures.flatMap(v=>v.inputs || [])) {
             const work=input.production&&getUniverse().currentWorldId===input.production.world&&travelerState().passage===input.production.passage&&livingWorldState().materialWork.find(w=>w.id===input.production.work);
             if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'Visit the maker’s workshop',func:()=>openMaterialWork(work)});
             const exchange=input.exchange&&commodityExchangeState().exchanges.find(r=>r.id===input.exchange);
@@ -7508,7 +7554,7 @@
     function materialIntent(town,type) {
         const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type,town))return null;
         const actual=materialDirectNeed(town,type)>0;
-        if((type==='pottery'||FARM_TOOLS[type]||SEA_CRAFT[type]||type==='telescope'||type==='sky_vessel'||type==='colony_vessel'||type==='cargo_vessel')&&!actual)return null;
+        if((materialActivityFit(type,'grainStorage',town)||FARM_TOOLS[type]||SEA_CRAFT[type]||type==='telescope'||type==='sky_vessel'||type==='colony_vessel'||type==='cargo_vessel')&&!actual)return null;
         const practiced=town._paultendoMaterials?.[type]?.technique;
         if(type==='steel'&&!actual&&livingResearchPriority(town.research)!=='education'&&!(livingResearchPriority(town.research)==='military'&&town.jobs?.soldier>0))return null;
         const sample=commodityStock(town,recipe.sample)>0||town._paultendoMaterials?.[recipe.sample];
@@ -7685,7 +7731,7 @@
         }
         const work=livingWorldState().materialWork.filter(w=>w.town===town.id).slice(-8).reverse();
         if(work.length)items.push({heading:true,text:'At the workshop'});
-        for(const w of work)items.push({text:`${escapeLivingText(w.name)} · ${COMMODITIES[w.type].label}<span class="paultendoStoryProse">${{waiting:'Gathering materials',working:MATERIAL_RECIPES[w.type].method==='assembly'?'Fitting the parts':MATERIAL_RECIPES[w.type].method==='shaping'?'Shaping the tools':MATERIAL_RECIPES[w.type].method==='pulping'?'Working the fibres':'The fire is burning',made:'Finished',failed:MATERIAL_RECIPES[w.type].method==='assembly'?'The assembly failed':MATERIAL_RECIPES[w.type].method==='shaping'?'The stone or metal split':MATERIAL_RECIPES[w.type].method==='pulping'?'The sheets tore apart':'The firing failed',storing:'Waiting for room',lost:'Workshop lost',withdrawn:'Work put aside'}[w.status]}</span>`,func:()=>openMaterialWork(w)});
+        for(const w of work)items.push({text:`${escapeLivingText(w.name)} · ${COMMODITIES[w.type].label}<span class="paultendoStoryProse">${{waiting:'Gathering materials',working:MATERIAL_RECIPES[w.type].workingLabel || (MATERIAL_RECIPES[w.type].method==='assembly'?'Fitting the parts':MATERIAL_RECIPES[w.type].method==='shaping'?'Shaping the tools':MATERIAL_RECIPES[w.type].method==='pulping'?'Working the fibres':'The fire is burning'),made:'Finished',failed:MATERIAL_RECIPES[w.type].failedLabel || (MATERIAL_RECIPES[w.type].method==='assembly'?'The assembly failed':MATERIAL_RECIPES[w.type].method==='shaping'?'The stone or metal split':MATERIAL_RECIPES[w.type].method==='pulping'?'The sheets tore apart':'The firing failed'),storing:'Waiting for room',lost:'Workshop lost',withdrawn:'Work put aside'}[w.status]}</span>`,func:()=>openMaterialWork(w)});
         for(const survey of livingWorldState().sampling.filter(w=>w.town===town.id).slice(-4).reverse())items.push({text:`${escapeLivingText(survey.name)} · Looking for ${COMMODITIES[survey.type].label}<span class="paultendoStoryProse">${{outbound:'On the way',collecting:'At the source',returning:'Coming home',arrived:'Samples brought home',empty:'Returned empty-handed',lost:'Contact lost'}[survey.status]}</span>`,func:()=>openMaterialSurvey(survey)});
         populateExecutive(items,'Materials and workshops');markLivingStoryControls();openExecutive();
     }
@@ -7786,9 +7832,8 @@
         const flow=foodFlow(town),runway=available/Math.max(1,flow.consumption);
         return Math.max(0.1,flow.consumption/Math.max(1,available)+demand/Math.max(1,available)+travelDays/Math.max(1,runway));
     }
-    function commodityWorkClaims(town,excludeExchange,{skipAccounts=false,skipSurfaceMarks=false}={}) {
+    function commodityWorkClaims(town,excludeExchange,{skipAccounts=false,skipSurfaceMarks=false,skipStorage=false}={}) {
         const claims=[];
-        const storage=grainStorageNeed(town);if(storage)claims.push({kind:'storage',id:`storage:${town.id}`,cost:{pottery:storage}});
         const tools=farmToolNeed(town);if(tools)claims.push({kind:'equipment',id:`tools:${town.id}`,cost:{[farmToolKind(town)]:tools}});
         if(skyInstrumentWanted(town))claims.push({kind:'sky',id:`sky:${town.id}`,cost:{telescope:1}});
         for(const flight of skyState().flights)if(flight.town===town.id&&flight.status==='preparing')claims.push({kind:'flight',id:flight.id,cost:flight.cost});
@@ -7812,6 +7857,7 @@
             // its inputs while waiting and pays for them when work begins.
             if(work&&['made','storing'].includes(work.status))claims.push({kind:'order',id:request.id,cost:{[request.type]:Math.min(request.manufacture.count,work.output-(work.cargo || 0))}});
         }
+        if(!skipStorage){const storage=grainStoragePlan(town,claims);if(storage)claims.push({kind:'storage',id:`storage:${town.id}`,cost:storage.cost});}
         if(!skipSurfaceMarks)for(const mark of livingWorldState().surfaceMarks.filter(m=>m.town===town.id&&['waiting','working'].includes(m.status)&&!surfaceTool(town,m)))
             claims.push({kind:'inscription',id:mark.id,cost:{[surfaceToolType(town,mark)]:1}});
         if(!skipAccounts&&townAccountsWritingNeed(town)) {
@@ -7934,7 +7980,7 @@
         if(use.kind==='sky')return `${town} sets up a telescope from this exchange to study the sky.`;
         if(use.kind==='charter')return `${town} packs ${goods} from this exchange for its settlers’ journey.`;
         if(use.kind==='flight')return `${town} sends a sky vessel from this exchange on a flight.`;
-        if(use.kind==='storage')return `${town} sets clay vessels from this exchange beside its grain stores.`;
+        if(use.kind==='storage')return `${town} sets ${goods} from this exchange beside its grain stores.`;
         if(use.kind==='accounts')return `${town} uses ${goods} from this exchange to write its accounts.`;
         if(use.kind==='construction')return `${town} uses ${goods} from this exchange to build a ${(use.name || 'building').replace(/_/g,' ')}.`;
         if(use.kind==='material')return `${town} uses ${goods} from this exchange while making ${COMMODITIES[use.name]?.label || 'new materials'}.`;
@@ -22050,7 +22096,7 @@
         const study=livingResearchPriority(town.research),interests=[];
         for(const [type,recipe] of Object.entries(MATERIAL_RECIPES)) {
             const actual=materialDirectNeed(town,type)>0;
-            if((type==='pottery'||FARM_TOOLS[type])&&!actual)continue;
+            if((materialActivityFit(type,'grainStorage',town)||FARM_TOOLS[type])&&!actual)continue;
             if(type==='steel'&&!actual&&study!=='education'&&!(study==='military'&&town.jobs?.soldier>0))continue;
             if(town._paultendoMaterials?.[type]?.technique&&!actual)continue;
             if(!recipe.roles.some(role=>town.jobs?.[role]>0)||commodityStock(town,recipe.sample)<=0)continue;

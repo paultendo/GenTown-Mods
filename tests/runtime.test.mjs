@@ -34,7 +34,7 @@ test('a resize before world creation waits safely and normal resize resumes afte
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.84');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.85');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));
@@ -339,7 +339,7 @@ test('mod management receives complete URLs and can remove an installation', asy
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.84/paultendo-mod.js';
+  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.85/paultendo-mod.js';
   window.userSettings.mods = [url];
   window.showMods();
   window.handlePrompt(url);
@@ -353,7 +353,7 @@ test('adding an updated URL replaces older URLs before the duplicate guard retur
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.84/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.85/paultendo-mod.js';
   window.userSettings.mods = ['https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js', current, 'example_mod.js'];
   window._paultendoState.loadedVersion = '1.6.27';
   Object.defineProperty(window.document, 'currentScript', { configurable: true, get: () => ({ src: current }) });
@@ -366,7 +366,7 @@ test('an update survives an older startup script pruning the new URL before it r
   const game = await makeGame(); t.after(game.close);
   const {window} = game;
   const old = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.35/paultendo-mod.js';
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.84/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.85/paultendo-mod.js';
   // This is the observed live race: the old script has already saved only itself.
   window.userSettings.mods = [old, 'example_mod.js'];
   window.saveSettings();

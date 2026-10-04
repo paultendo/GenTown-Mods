@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.84**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
+Version **1.6.85**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.84/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.85/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.84)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.85)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -81,7 +81,7 @@ Two completed deliveries within ninety days can establish a regular route when b
 
 Clay, sand, charcoal, bricks, glass, coal and steel now connect discoveries to actual sources and workshop work. Better tools reveal small samples on owned wetland, desert or coal-bearing ground. Named workers can try new processes when techniques, materials and circumstances permit it. A trial can fail, and hunger, fighting or lost workers can delay it. Bricks replace stone in construction. Glass requires sand, fuel and stone, then feeds actual lens-making. A lens idea can create demand for missing glass, including imports and fuel production. Coal can replace workshop charcoal after controlled fire is known, sparing timber for other work. A waiting workshop can change fuel as supplies arrive. Once work starts, it keeps the recipe it paid for. Clay, sand and coal depletion now survive native save compression.
 
-A harvest that actually overflows the grain stores can give people a reason to fire clay vessels. Actual clay and fuel become vessels over five work days. A first firing can fail. Each vessel installed beside the stores holds eight extra grain from later harvests or deliveries. Food is never awarded by the discovery. The vessels can also come from a neighbour’s practiced workshop through the existing gift, trade or barter system. Materials and workshops links to the grain stores, their maker and the shipment that brought them. The storage quantities and timings are initial balance values.
+A harvest that actually overflows the grain stores gives people a reason to seek containers. The shared material activity checks the finished form and its grain capacity. Towns use suitable containers already in stock first, then consider work underway, usable supplies, local knowledge and familiar methods. Clay vessels hold eight grain each. Two timber become a twelve-grain wooden bin over four work days with local shaping knowledge. Two glass and one workshop fuel become two six-grain glass vessels over six work days with local shaping and furnace knowledge. Raw timber and glass provide no storage. Trials can fail, and actual workers, meals, competing material claims and war still govern the work. Installed fixtures keep their capacity and paid material history through reload, including older saved clay vessels. Mixed containers retain their own capacities. An unfamiliar container can raise a question only after it actually keeps a later harvest, with the observed quantity attributed to that container. Food is never awarded by discovery or installation. A neighbour’s practiced workshop can supply needed containers through the existing gift, trade or barter system. The grain store links to its makers and shipments. These quantities and timings remain initial balance values. Grain remains the native town-wide stock, and weather damage, spoilage and containers for other goods remain further work.
 
 Repeated actual harvests can give farmers a reason to shape stone handtools. Two stone becomes two tools over four work days after Stonework is known. Actual metal and Metal Tools knowledge enable metal handtools over five work days. Steel and later shaping knowledge enable stronger handtools over six work days. Trials, shared material claims, neighbouring workshops and shipments use the same production and exchange systems. Installed tools help actual harvests and wear through use. Usable stone tools stay in service when steel becomes available. Their makers and journeys remain attached through reloads. Working stone edges that actually wear down can favour eligible research into more durable methods. A real metal sample and unmet fieldwork can favour metal shaping. These reasons neither award discoveries nor stop useful stone production while another technique is unavailable.
 
