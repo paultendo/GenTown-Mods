@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.73/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.74/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.73";
+    const MOD_VERSION = "1.6.74";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -4680,7 +4680,7 @@
             const level=livingDiscoveryBranches()[discovery?.key]?.levels.find(item=>item.level===discovery.level);
             return level&&livingTownKnown(town)?{label:'Explore the discovery',open:()=>openUnlockDetail(discovery.key,level,town.id)}:null;
         }
-        const lists = {credit:state.credit, sampling:state.sampling, rations:state.warRations, localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
+        const lists = {voyage:state.seaVoyages, credit:state.credit, sampling:state.sampling, rations:state.warRations, localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
         const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
         if (!record) return null;
         if(ref.kind==='credit')return [record.borrower,record.lender].some(id=>livingTownKnown(regGet('town',id)))?{label:'Follow the debt',open:()=>openCreditStory(record)}:null;
@@ -4696,6 +4696,7 @@
             ? (record.towns || []).map(id=>regGet('town',id)).find(livingTownKnown)
             : regGet('town',record.town);
         if (!livingTownKnown(town)) return null;
+        if(ref.kind==='voyage')return {label:'Follow the crossing',open:()=>openSeaVoyage(record)};
         if (ref.kind === 'sampling') return {label:'Follow the survey',open:()=>openMaterialSurvey(record)};
         if (ref.kind === 'rations') return {label:'Follow the supplies',open:()=>openWarRationStory(record)};
         if (ref.kind === 'localChoice') return {label:'Their choice',open:()=>openLocalTownChoice(record)};
@@ -4710,13 +4711,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
+        if (!['voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
+        if (!ref || !['voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -5280,6 +5281,7 @@
         state.sampling ||= [];
         state.inquiries ||= [];
         state.credit ||= [];
+        state.seaVoyages ||= [];
         state.localChoices ||= [];
         state.warRations ||= [];
         state.teachings ||= [];
@@ -5406,6 +5408,7 @@
         if(!person)return true;
         const state=livingWorldState();
         return livingTeachingPersonAvailable(person,town)&&!inquiryWorkerBusy(town,person)
+            &&!seaCrewBusy(town,person.id)
             &&!state.sampling.some(w=>w.town===town.id&&w.person===person.id&&['outbound','collecting','returning'].includes(w.status))
             &&!state.materialWork.some(w=>w.town===town.id&&materialWorkHasHand(w,person.id)&&['waiting','working'].includes(w.status))
             &&!state.artifactWork.some(w=>w.town===town.id&&w.person===person.id&&['gathering','working'].includes(w.status));
@@ -5416,7 +5419,8 @@
         const priority=livingResearchPriority(town.research)===key;
         const practice=state.materialWork.filter(w=>w.town===town.id&&['made','failed'].includes(w.status)&&planet.day-w.finished<=90);
         const exchanges=commodityExchangeState().exchanges.filter(r=>(r.buyer===town.id||r.seller===town.id)&&r.delivered>0&&planet.day-r.arrived<=90);
-        const journeys=Object.values(state.places).flatMap(p=>(p.visits || []).filter(v=>v.town===town.id&&planet.day-v.day<=30&&v.pathLength>=6));
+        const journeys=Object.values(state.places).flatMap(p=>(p.visits || []).filter(v=>v.town===town.id&&planet.day-v.day<=30&&v.pathLength>=6&&(!v.voyage||state.seaVoyages.find(s=>s.id===v.voyage)?.status==='returned')));
+        const crossings=state.seaVoyages.filter(v=>v.town===town.id&&v.status==='returned'&&planet.day-v.finished<=90&&v.path.length>=6);
         const evidence={priority:priority?Math.max(0,town.research?.[key] || 0):0};
         let text,roles=INQUIRY_ROLES[key];
         if(key==='farm') {
@@ -5439,10 +5443,11 @@
             if(interest)evidence.question={type:interest.type,sample:interest.sample};
             text=trial?`${trial.name}'s ${COMMODITIES[trial.type].label} trials have shown what could be improved.`:interest?interest.text || `They have ${COMMODITIES[interest.sample].label} to experiment with.`:military?'The soldiers want a more destructive weapon.':'Workshop experience has given the makers another question to try.';
         } else if(key==='travel') {
-            if(!journeys.length&&!exchanges.length)return null;
-            if(!priority&&!journeys.length&&exchanges.length<2)return null;
+            if(!journeys.length&&!exchanges.length&&!crossings.length)return null;
+            if(!priority&&!journeys.length&&!crossings.length&&exchanges.length<2)return null;
             evidence.journeys=journeys.slice(-4).map(v=>({day:v.day,length:v.pathLength}));evidence.exchanges=exchanges.slice(-4).map(r=>r.id);
-            text='Repeated journeys have shown where travel is slow and difficult.';
+            evidence.voyages=crossings.slice(-4).map(v=>v.id);
+            text=evidence.voyages.length?'The crew is home with an account of the crossing. They want to improve the journeys ahead.':'Repeated journeys have shown where travel is slow and difficult.';
         } else if(key==='trade') {
             if(!exchanges.length||!priority&&exchanges.length<2)return null;
             evidence.exchanges=exchanges.slice(-4).map(r=>r.id);
@@ -5521,7 +5526,7 @@
             if(work.status==='waiting'&&!inquiryCause(town,discovery,person)){work.status='abandoned';work.finished=planet.day;inquiryStep(work,`${work.name} leaves the question for another time. The town has other concerns now.`);continue;}
             const occupied=state.materialWork.some(w=>w.town===town.id&&materialWorkHasHand(w,work.person)&&['waiting','working'].includes(w.status))||state.artifactWork.some(w=>w.town===town.id&&w.person===work.person&&['gathering','working'].includes(w.status))||state.inquiries.some(w=>w.id!==work.id&&w.town===town.id&&w.person===work.person&&w.status==='working');
             const surveying=state.sampling.some(w=>w.town===town.id&&w.person===work.person&&['outbound','collecting','returning'].includes(w.status));
-            const blocked=!livingTeachingPersonAvailable(person,town)||occupied||surveying?'hands':Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(town,key)<level)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            const blocked=!livingTeachingPersonAvailable(person,town)||occupied||surveying||seaCrewBusy(town,work.person)?'hands':Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(town,key)<level)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
             if(blocked) {
                 if(work.delay!==blocked){work.delay=blocked;inquiryStep(work,{hands:`${work.name} is no longer free to tend the work.`,knowledge:'The work needs knowledge the town no longer has.',war:`Fighting pulls ${work.name} away from the work.`,food:`${work.name} puts the work aside. There is not enough food.`}[blocked]);}
                 continue;
@@ -5564,6 +5569,7 @@
         for(const step of work.steps.slice(1))items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
         if(work.started!=null&&Object.keys(work.cost).length)items.push({text:`Used ${Object.entries(work.cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`).join(', ')}.`});
         for(const id of work.cause.evidence?.exchanges || []) {const exchange=commodityExchangeState().exchanges.find(r=>r.id===id);if(exchange)items.push({text:`Day ${exchange.arrived} · The exchange that raised the question`,func:()=>openCommodityJourney(exchange)});}
+        for(const id of work.cause.evidence?.voyages || []){const voyage=livingWorldState().seaVoyages.find(v=>v.id===id);if(voyage)items.push({text:'The crossing that raised the question',func:()=>openSeaVoyage(voyage)});}
         if(work.guidance){const journey=commodityExchangeState().exchanges.find(r=>r.id===work.guidance.exchange),source=livingWorldState().inquiries.find(w=>w.id===work.guidance.source);if(journey)items.push({text:'The visitors who brought the idea',func:()=>openCommodityJourney(journey)});if(source&&livingTownKnown(regGet('town',source.town)))items.push({text:'The work they learned from',func:()=>openLivingInquiry(source)});}
         for(const input of work.inputs || []){const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(record)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(record)});}
         const definition=EXTENDED_DISCOVERIES.find(d=>d.event===work.event);
@@ -6459,6 +6465,8 @@
         stone_tools:{label:'stone handtools',role:'farmer',description:'Stone chipped into hand-sized edges. Farmers can work their fields with them. Repeated use wears the edges away.'},
         metal_tools:{label:'metal handtools',role:'farmer',description:'Metal worked into small blades and fitted for fieldwork. Their edges serve longer than chipped stone, but still wear with use.'},
         steel_tools:{label:'steel handtools',role:'farmer',description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'},
+        coastal_boat:{label:'coastal boats',singular:'coastal boat',role:'lumberer',description:'A timber hull for a crew and a small load. It can cross sheltered stretches of water and returns to its home port after the journey.'},
+        sailing_vessel:{label:'sailing vessels',singular:'sailing vessel',role:'lumberer',description:'A larger timber hull with metal fittings. It can carry more cargo across wider water. Navigation learned here helps its crew venture farther.'},
         telescope:{label:'telescopes',role:'scholar',description:'Glass and metal fitted into a steady frame. A scholar can use one to chart the lights above the horizon.'},
         sky_vessel:{label:'sky vessels',singular:'sky vessel',role:'miner',description:'A powered vessel carrying instruments instead of passengers. Each flight takes a real vessel from the workshop.'},
         colony_vessel:{label:'passenger vessels',singular:'passenger vessel',role:'miner',description:'A sky vessel rebuilt with living quarters and cargo space for up to twelve settlers. Its cabins come from a real workshop.'},
@@ -6475,6 +6483,8 @@
         stone_tools:{cost:{rock:2},output:2,days:4,needs:{smith:10},sample:'rock',established:{smith:20},roles:['farmer','miner'],risk:0.15,method:'shaping',success:'The stone holds a working edge. The farmers can take these tools into their fields.',failure:'The stone splits where the working edge should be. These pieces cannot serve as tools.'},
         metal_tools:{cost:{metal:2},output:2,days:5,needs:{smith:40},sample:'metal',established:{smith:40},roles:['miner','farmer'],risk:0.2,method:'shaping',success:'The metal holds a working edge. The farmers can fit these blades for work in the fields.',failure:'The blades split as they are shaped. The pieces cannot serve as tools.'},
         steel_tools:{cost:{steel:2},output:2,days:6,needs:{smith:50},sample:'steel',established:{smith:50},roles:['miner','farmer'],risk:0.1,method:'shaping',success:'The blades hold their shape. They are ready for work in the fields.',failure:'The blanks split as they are worked. The blades cannot be used.'},
+        coastal_boat:{cost:{lumber:4},output:1,days:6,needs:{travel:30,smith:10},sample:'lumber',established:{travel:30},roles:['lumberer','merchant'],risk:0.15,method:'assembly',success:'The hull floats and holds its load. The boat is ready for a coastal crossing.',failure:'Water comes through the hull during its test. This boat cannot make the crossing.'},
+        sailing_vessel:{cost:{lumber:8,metal:2},output:1,days:10,needs:{travel:60,smith:20},sample:'lumber',established:{travel:60},roles:['lumberer','merchant'],risk:0.15,method:'assembly',success:'The hull and fittings hold through their tests. The vessel is ready to sail.',failure:'The hull twists during its test. This vessel cannot go to sea.'},
         telescope:{cost:{glass:2,metal:2,lumber:1},output:1,days:8,needs:{astronomy:20,smith:30},sample:'glass',established:{astronomy:20},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The instrument holds its focus. Distant lights keep their shape as the scholar watches.',failure:'The frame will not hold its focus. The instrument needs another attempt.'},
         sky_vessel:{cost:{steel:8,glass:2,charcoal:4},output:1,days:12,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'steel',established:{smith:80},roles:['miner','scholar'],risk:0.2,method:'assembly',success:'The engine and instruments pass their tests. The vessel is ready for a flight.',failure:'The engine breaks its mount in the test. This vessel cannot fly.'},
         colony_vessel:{cost:{sky_vessel:1,steel:4,lumber:4,glass:2},output:1,days:10,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The cabins and cargo holds pass their tests. The vessel can carry settlers.',failure:'The cabin seals fail their test. This vessel cannot carry people.'},
@@ -6847,6 +6857,7 @@
         const state=livingWorldState();
         const exempt=new Set([].concat(except || []));
         return livingTeachingPersonAvailable(person,town)&&!inquiryWorkerBusy(town,person)
+            &&!seaCrewBusy(town,person.id)
             &&!state.artifactWork.some(w=>w.town===town.id&&w.person===person.id&&['gathering','working'].includes(w.status))
             &&!state.materialWork.some(w=>!exempt.has(w.id)&&w.town===town.id&&['waiting','working'].includes(w.status)&&materialWorkHasHand(w,person.id))
             &&!state.sampling.some(w=>!exempt.has(w.id)&&w.town===town.id&&w.person===person?.id&&['outbound','collecting','returning'].includes(w.status));
@@ -6919,14 +6930,14 @@
         return work;
     }
     function materialDirectNeed(town,type) {
-        const promised=commodityWorkClaims(town).filter(c=>['inquiry','craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        const promised=commodityWorkClaims(town).filter(c=>['voyage','inquiry','craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
         if(type==='brick')return Math.ceil(materialConstructionNeed(town)/2)+Math.max(0,promised-commodityStock(town,type));
         return Math.max(0,promised-commodityStock(town,type));
     }
     function materialIntent(town,type) {
         const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type,town))return null;
         const actual=materialDirectNeed(town,type)>0;
-        if((type==='pottery'||FARM_TOOLS[type]||type==='telescope'||type==='sky_vessel'||type==='colony_vessel'||type==='cargo_vessel')&&!actual)return null;
+        if((type==='pottery'||FARM_TOOLS[type]||SEA_CRAFT[type]||type==='telescope'||type==='sky_vessel'||type==='colony_vessel'||type==='cargo_vessel')&&!actual)return null;
         const practiced=town._paultendoMaterials?.[type]?.technique;
         if(type==='steel'&&!actual&&livingResearchPriority(town.research)!=='education'&&!(livingResearchPriority(town.research)==='military'&&town.jobs?.soldier>0))return null;
         const sample=commodityStock(town,recipe.sample)>0||town._paultendoMaterials?.[recipe.sample];
@@ -7004,7 +7015,7 @@
             }
             if(work.status==='waiting'&&work.purpose?.exchange&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
             const surveying=state.sampling.some(w=>w.town===town.id&&w.person===work.person&&['outbound','collecting','returning'].includes(w.status));
-            const blocked=!livingTeachingPersonAvailable(person,town)||surveying?'hands':!materialTechniqueAvailable(work.type,town)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            const blocked=!livingTeachingPersonAvailable(person,town)||surveying||seaCrewBusy(town,work.person)?'hands':!materialTechniqueAvailable(work.type,town)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
             if(blocked){
                 const pause={hands:`${work.name} cannot tend the work. It waits for them.`,knowledge:`The workshop cannot keep working this way.`,war:`Fighting pulls ${work.name} away from the work.`,food:`${work.name} puts the work aside. There is not enough food in ${town.name}.`}[blocked];
                 if(work.delay?.reason!==blocked){work.delay={reason:blocked,day:planet.day};materialStep(work,pause);}
@@ -7081,6 +7092,7 @@
         else if(work.status==='lost')items.push({text:'The workshop was lost with the town.'});
         for(const input of work.inputs || []){const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(record)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(record)});}
         for(const support of work.relief || []){const record=commodityExchangeState().exchanges.find(r=>r.id===support.exchange);if(record)items.push({text:'Remember the food that reached them',func:()=>openCommodityJourney(record)});}
+        for(const voyage of livingWorldState().seaVoyages.filter(v=>v.town===town.id&&(v.inputs || []).some(input=>input.production?.work===work.id&&input.production.world===skyWorldId()&&input.production.passage===travelerState().passage)))items.push({text:'Follow the vessel’s crossing',func:()=>openSeaVoyage(voyage)});
         populateExecutive(items,COMMODITIES[work.type].label[0].toUpperCase()+COMMODITIES[work.type].label.slice(1));markLivingStoryControls();openExecutive();
     }
     function openTownMaterials(town) {
@@ -7208,6 +7220,7 @@
         const tools=farmToolNeed(town);if(tools)claims.push({kind:'equipment',id:`tools:${town.id}`,cost:{[farmToolKind(town)]:tools}});
         if(skyInstrumentWanted(town))claims.push({kind:'sky',id:`sky:${town.id}`,cost:{telescope:1}});
         for(const flight of skyState().flights)if(flight.town===town.id&&flight.status==='preparing')claims.push({kind:'flight',id:flight.id,cost:flight.cost});
+        for(const voyage of livingWorldState().seaVoyages)if(voyage.town===town.id&&voyage.status==='preparing')claims.push({kind:'voyage',id:voyage.id,cost:{[voyage.type]:1}});
         for(const charter of getColonizationRegistry()?.charters || [])if(charter.originWorldId===skyWorldId()&&charter.originTownId===town.id&&charter.stage==='preparing'&&charter.supplyVersion===1)claims.push({kind:'charter',id:`charter:${charter.id}`,cost:frontierCargoCost(charter,town)});
         const courier=(getUniverse(false)?.spaceRoutes || []).filter(route=>route.active&&route.status==='preparing'&&route.seller?.worldId===skyWorldId()&&route.seller.townId===town.id).sort((a,b)=>a.id-b.id)[0];
         if(courier)claims.push({kind:'courier',id:`courier:${courier.id}`,cost:{cargo_vessel:1,charcoal:SPACE_ROUTE_CONFIG.fuel}});
@@ -8558,10 +8571,11 @@
             const projects = regToArray('process').filter(p => p.type === 'project' && !capture.processes.has(p.id)).map(p => ({ id: p.id, town: p.town, subtype: p.subtype, reported: false }));
             const record = { id: state.nextId++, day: planet.day, title, question: capture.question, automated: capture.automated, outcome: (selected.innerText || selected.textContent).trim(), text: capture.entry.querySelector('.logText')?.textContent || capture.question, towns, changes, projects, traces, received: typeof caller.args?.success === 'boolean' ? caller.args.success : null, logId: caller.logID };
             if(capture.need)record.need=capture.need;
-            if (caller.eventClass === 'explorationExpeditionPrompt') {
+            if (caller.eventClass === 'explorationExpeditionPrompt'||caller.eventClass==='swayDiscoveryExpedition') {
                 record.title = 'Beyond the town';
                 if (caller.args?.success && caller.args.mission?.placeId) record.place = caller.args.mission.placeId;
                 if (caller.args?.success && caller.args.mission?.sampling) record.sampling=caller.args.mission.sampling;
+                if(caller.args?.success&&caller.args.mission?.voyage)record.voyage=caller.args.mission.voyage;
             }
             if (level && (capture.unlocks[caller.args.value.type] || 0) < level.level) {
                 const discovery = state.discoveries[`${caller.args.value.type}:${level.level}`];
@@ -8745,6 +8759,7 @@
             items.push({text:`Visit ${escapeLivingText(place.name)}`,func:() => openLivingPlace(place,town.id)});
         }
         const survey=state.sampling.find(w=>w.id===decision.sampling);if(survey)items.push({text:'Follow the survey',func:()=>openMaterialSurvey(survey)});
+        const voyage=state.seaVoyages.find(w=>w.id===decision.voyage);if(voyage)items.push({text:'Follow the crossing',func:()=>openSeaVoyage(voyage)});
         const moments = state.moments.filter(m => m.town === town.id && m.source === decision.id).sort((a, b) => a.day - b.day);
         if (moments.length) {
             items.push({ heading: true, text: 'What followed' });
@@ -8810,6 +8825,9 @@
             links.appendChild(button);
         }
         section.appendChild(links);
+        for(const voyage of livingWorldState().seaVoyages.filter(v=>v.town===town.id).slice(-2)){
+            const crossing=document.createElement('button');crossing.textContent=voyage.status==='returned'?'A crossing remembered':'Beyond the coast';crossing.addEventListener('click',()=>{closePopups();openSeaVoyage(voyage);});section.appendChild(crossing);
+        }
         if (town.pop > 0) {
             const people = document.createElement('button'); people.textContent = 'Meet the people';
             people.addEventListener('click', () => { closePopups(); openLivingPeople(town); }); section.appendChild(people);
@@ -9985,28 +10003,10 @@
         return indicator;
     }
 
-    function formatDiscoveryRequirement(req) {
-        if (!req) return "";
-        const parts = [];
-        if (req.travel) parts.push(`Travel ${req.travel}`);
-        if (req.trade) parts.push(`Trade ${req.trade}`);
-        if (req.education) parts.push(`Education ${req.education}`);
-        if (req.towns) parts.push(`${req.towns} towns`);
-        return parts.join(", ");
-    }
-
     function updateDiscoveryIndicator() {
         if (!initDiscoveryState()) return;
         const indicator = ensureStatsIndicator("paultendoDiscoveryIndicator");
-        if (!indicator) return;
-        const tier = getDiscoveryTier();
-        const maxTier = getDiscoveryMaxTier();
-        let nextText = "Maxed";
-        if (tier < maxTier) {
-            const req = DISCOVERY_TIER_REQUIREMENTS[tier + 1];
-            nextText = req ? formatDiscoveryRequirement(req) : "Unknown";
-        }
-        indicator.textContent = `Discovery · ${getDiscoveryTierName(tier)}${tier < maxTier ? ` → ${nextText}` : ""}`;
+        if (indicator) indicator.textContent = `Exploration · ${planet._paultendoDiscovery.discovered.length} lands reached`;
     }
 
     function ensureSystemStyles() {
@@ -10210,14 +10210,8 @@
         }
 
         if (initDiscoveryState()) {
-            const tier = getDiscoveryTier();
-            const maxTier = getDiscoveryMaxTier();
-            items.push({ text: `Discovery · ${getDiscoveryTierName(tier)}` });
-            if (tier < maxTier) {
-                const req = DISCOVERY_TIER_REQUIREMENTS[tier + 1];
-                const nextText = req ? formatDiscoveryRequirement(req) : "Unknown";
-                items.push({ text: `Next · ${nextText}`, indent: 1, opacity: 0.75 });
-            }
+            items.push({heading:true,text:'Beyond the known coast'},{text:'A crossing needs a vessel made here, a free crew and an open way through the water.'});
+            for(const voyage of livingWorldState().seaVoyages.filter(v=>livingTownKnown(regGet('town',v.town))).slice(-3))items.push({text:`${townRef(voyage.town)} · ${voyage.status==='returned'?'Home again':voyage.status==='preparing'?'Preparing a crossing':voyage.status==='lost'?'No vessel returned':'A crew away from home'}`,func:()=>openSeaVoyage(voyage)});
         }
 
         const currentWorld = getWorldById(getCurrentWorldId());
@@ -10651,9 +10645,7 @@
                 discovered: [],
                 tiers: null,
                 centers: null,
-                maxTier: 0,
-                boost: 0,
-                boostUntil: 0
+                maxTier: 0
             };
         }
         if (!Array.isArray(planet._paultendoDiscovery.discovered)) {
@@ -11385,6 +11377,7 @@
 
     function canTownExplore(town, prompt = false) {
         if (!town || town.end) return false;
+        if(livingWorldState().seaVoyages.some(v=>v.town===town.id&&['outbound','returning','unloading'].includes(v.status)))return false;
         if(livingWorldState().sampling.some(w=>w.town===town.id&&['outbound','collecting','returning'].includes(w.status)))return false;
         if (planet.day < EXPLORATION_CONFIG.minDay) return false;
         if ((town.pop || 0) < EXPLORATION_CONFIG.minPop) return false;
@@ -11579,6 +11572,163 @@
         };
     }
 
+    const SEA_CRAFT = {
+        coastal_boat:{water:6,range:16},
+        sailing_vessel:{water:24,range:40}
+    };
+    const SEA_ACTIVE = ['preparing','outbound','returning','unloading'];
+    function seaCrewBusy(town,id) {
+        return livingWorldState().seaVoyages.some(v=>v.town===town.id&&v.person===id&&SEA_ACTIVE.includes(v.status));
+    }
+    function seaCraftFor(town) {
+        return ['sailing_vessel','coastal_boat'].find(type=>materialTechniqueAvailable(type,town)) || null;
+    }
+    function seaCrewRole(town) {
+        return ['merchant','farmer','lumberer'].find(role=>inquiryRoleFree(town,role));
+    }
+    function seaLimit(town,type) {
+        const craft=SEA_CRAFT[type];
+        const navigated=type==='sailing_vessel'&&townKnowledgeLevel(town,'travel')>=70;
+        return craft&&{water:craft.water*(navigated?2:1),range:craft.range*(navigated?1.6:1)};
+    }
+    function seaMoveCost(chunk) {
+        return chunk.b==='water'?(getSeasonInfo()?.id==='winter'?3:2):getMovementCost(chunk);
+    }
+    function seaCanEnter(town,chunk) {
+        if(!chunk)return false;
+        const owner=chunk.v?.s&&regGet('town',chunk.v.s);
+        return !owner||owner.id===town.id||!areAtWar(town,owner)&&!hasEmbargo(owner,town)&&!hasEmbargo(town,owner)&&happen('Legality',null,owner,{law:'travel'})!==false;
+    }
+    function seaPath(town,target,type,start=getAnchorChunk(town),requireWater=true) {
+        const limit=seaLimit(town,type);
+        if(!limit||!start||!target||Math.abs(start.x-target.x)+Math.abs(start.y-target.y)>limit.range)return null;
+        const path=findPath(start,target,{canEnter:c=>seaCanEnter(town,c),moveCost:seaMoveCost});
+        const water=path?.filter(c=>c.b==='water').length || 0;
+        return (!requireWater||water>0)&&water<=limit.water?path:null;
+    }
+    function buildSeaMission(town,target=null) {
+        if(!town||town.end||town.pop<=0||!canTownExplore(town)||!isTownCoastal(town)||!seaCrewRole(town)||happen('Legality',null,town,{law:'travel'})===false)return null;
+        if(target&&(target.b==='water'||!target.v?.g))return null;
+        if(livingWorldState().seaVoyages.some(v=>v.town===town.id&&SEA_ACTIVE.includes(v.status)))return null;
+        const type=seaCraftFor(town);if(!type)return null;
+        if(commodityStock(town,type)<1&&!MATERIAL_RECIPES[type].roles.some(role=>inquiryRoleFree(town,role)))return null;
+        const start=getAnchorChunk(town),limit=seaLimit(town,type),home=start.v?.g;
+        const visited=new Set(livingWorldState().seaVoyages.filter(v=>v.town===town.id&&v.reached!=null).map(v=>`${v.target.x},${v.target.y}`));
+        if(target&&visited.has(`${target.x},${target.y}`))return null;
+        const borrowed=(town._paultendoSeaCharts || []).map(c=>chunkAt(c.target.x,c.target.y)).filter(c=>c&&!visited.has(`${c.x},${c.y}`));
+        const targets=target?[target]:[...borrowed,...filterChunks(c=>c.b!=='water'&&c.b!=='mountain'&&c.v?.g&&c.v.g!==home&&!isChunkExplored(c.x,c.y)&&!visited.has(`${c.x},${c.y}`)&&Math.abs(start.x-c.x)+Math.abs(start.y-c.y)<=limit.range)
+            .sort((a,b)=>(Math.abs(start.x-a.x)+Math.abs(start.y-a.y))-(Math.abs(start.x-b.x)+Math.abs(start.y-b.y))).slice(0,32)];
+        for(const candidate of targets){const path=seaPath(town,candidate,type);if(path)return {type:'sea',craft:type,target:candidate,path,radius:EXPLORATION_CONFIG.revealRadius,label:'crossing beyond the known coast'};}
+        return null;
+    }
+    function seaStep(voyage,text,highlight=false) {
+        const last=voyage.steps.at(-1);if(last?.text===text)return;
+        voyage.steps.push({day:planet.day,text});
+        if(voyage.steps.length>32)voyage.steps.splice(1,voyage.steps.length-32);
+        const town=regGet('town',voyage.town);
+        if(livingTownKnown(town))modLog('travel',`${townRef(town.id)} · ${escapeLivingText(text)}`,null,{town,observedStory:true,force:highlight,highlight,story:{kind:'voyage',id:voyage.id}});
+    }
+    function startSeaMission(town,mission) {
+        if(mission.voyage)return livingWorldState().seaVoyages.some(v=>v.id===mission.voyage);
+        if(!buildSeaMission(town,mission.target)||!SEA_CRAFT[mission.craft]||!materialTechniqueAvailable(mission.craft,town))return false;
+        const path=seaPath(town,mission.target,mission.craft);if(!path)return false;
+        const state=livingWorldState(),voyage={id:`voyage:${state.nextId++}`,town:town.id,type:mission.craft,day:planet.day,lastDay:planet.day,status:'preparing',target:{x:mission.target.x,y:mission.target.y},path:path.map(c=>({x:c.x,y:c.y})),position:0,progress:0,steps:[],held:0,inputs:[]};
+        state.seaVoyages.push(voyage);mission.voyage=voyage.id;town._paultendoExplorationDay=planet.day;
+        seaStep(voyage,`A crew prepares to cross the water. They need a ${COMMODITIES[voyage.type].singular}.`);
+        return true;
+    }
+    function pauseSea(voyage,reason,text) {
+        if(voyage.pause!==reason)seaStep(voyage,text);
+        voyage.pause=reason;
+    }
+    function advanceSeaVoyages() {
+        const state=livingWorldState();
+        for(const voyage of state.seaVoyages.filter(v=>SEA_ACTIVE.includes(v.status))) {
+            if(voyage.lastDay===planet.day)continue;voyage.lastDay=planet.day;
+            const town=regGet('town',voyage.town);
+            if(!town||town.end||town.pop<=0){voyage.status='lost';voyage.lost=voyage.held;voyage.held=0;voyage.finished=planet.day;seaStep(voyage,'The home port is lost. No vessel returns to its stores.',true);continue;}
+            if(voyage.status==='preparing') {
+                if(!materialTechniqueAvailable(voyage.type,town)){pauseSea(voyage,'knowledge','The builders do not know how to make this vessel here.');continue;}
+                if(hasIssue(town,'war')){pauseSea(voyage,'war','Fighting keeps the crew at home.');continue;}
+                if(mealStock(town)<nativeMealNeed(town)){pauseSea(voyage,'food','The town is short of food. The crossing waits.');continue;}
+                if(happen('Legality',null,town,{law:'travel'})===false){pauseSea(voyage,'law','Travel is forbidden here. The crossing waits.');continue;}
+                const role=seaCrewRole(town);
+                if(!role){pauseSea(voyage,'hands','There is no free hand to take the vessel out.');continue;}
+                if(commodityStock(town,voyage.type)<1){pauseSea(voyage,'vessel',`The crew waits for a ${COMMODITIES[voyage.type].singular}.`);continue;}
+                const target=chunkAt(voyage.target.x,voyage.target.y),path=seaPath(town,target,voyage.type);
+                if(!path){pauseSea(voyage,'border','There is no open crossing to the other shore.');continue;}
+                const person=livingCommunityPerson(town,role),inputs=[],before=commodityStock(town,voyage.type);
+                withCommodityUse({kind:'voyage',id:voyage.id,town:town.id,text:'A vessel sets out to explore the coast.',inputs},()=>happen('RemoveResource',null,town,{type:voyage.type,count:1}));
+                const removed=before-commodityStock(town,voyage.type);if(removed!==1)continue;
+                voyage.held=1;voyage.inputs=inputs;voyage.lots=commodityCargoLots(1,inputs);voyage.person=person.id;voyage.name=person.name;voyage.role=role;voyage.started=planet.day;voyage.path=path.map(c=>({x:c.x,y:c.y}));voyage.status='outbound';delete voyage.pause;
+                for(const input of inputs)rememberCommodityUse(town,input,{kind:'voyage',id:voyage.id,name:'a coastal crossing'});
+                seaStep(voyage,`${person.name} sets out in a ${COMMODITIES[voyage.type].singular}. The vessel will be away until the crew comes home.`,true);continue;
+            }
+            if(voyage.status==='unloading') {
+                const before=commodityStock(town,voyage.type);happen('AddResource',null,town,{type:voyage.type,count:voyage.held});
+                const added=commodityStock(town,voyage.type)-before;voyage.held-=added;addCommodityLot(town,voyage.type,added,{id:voyage.id,seller:town.id},town,voyage.lots);
+                if(voyage.held>0){pauseSea(voyage,'room','There is no room to bring the vessel into the stores.');continue;}
+                voyage.status='returned';voyage.finished=planet.day;delete voyage.pause;
+                seaStep(voyage,`${voyage.name} brings the vessel home. It can make another crossing.`,true);continue;
+            }
+            const person=(town._paultendoPeople || []).find(p=>p.id===voyage.person);
+            if(person?.figure?.died){voyage.status='lost';voyage.lost=voyage.held;voyage.held=0;voyage.finished=planet.day;seaStep(voyage,`${voyage.name} is gone. The vessel does not return.`,true);continue;}
+            if(!livingTeachingPersonAvailable(person,town)){pauseSea(voyage,'hands',`${voyage.name} cannot continue the crossing.`);continue;}
+            const path=voyage.path.map(c=>chunkAt(c.x,c.y));
+            if(path.some(c=>!c)){pauseSea(voyage,'route','The charts no longer give a way through.');continue;}
+            const home=getAnchorChunk(town);
+            if(voyage.status==='returning'&&(path.at(-1).x!==home.x||path.at(-1).y!==home.y)) {
+                const revised=seaPath(town,home,voyage.type,path[voyage.position],false);
+                if(!revised){pauseSea(voyage,'border','The route to the new home port is closed.');continue;}
+                voyage.path=revised.map(c=>({x:c.x,y:c.y}));voyage.position=0;voyage.progress=0;seaStep(voyage,'The crew changes course toward the new home port.');continue;
+            }
+            let budget=EXCHANGE_PACE.chunksPerDay,travelled=[path[voyage.position]];
+            while(budget>0&&voyage.position<path.length-1) {
+                const next=path[voyage.position+1];
+                if(!seaCanEnter(town,next)||!Number.isFinite(seaMoveCost(next))){pauseSea(voyage,'border','The way ahead is closed. The vessel waits offshore.');break;}
+                delete voyage.pause;
+                const cost=seaMoveCost(next),paid=Math.min(budget,Math.max(0,cost-voyage.progress));voyage.progress+=paid;budget-=paid;
+                if(voyage.progress+1e-9<cost)break;
+                voyage.position++;voyage.progress=0;travelled.push(next);
+            }
+            if(livingTownKnown(town))revealPathFog(travelled,1,0.9);
+            if(voyage.position!==path.length-1)continue;
+            if(voyage.status==='outbound') {
+                const target=path.at(-1);voyage.reached=planet.day;
+                if(livingTownKnown(town)&&target.v?.g&&!isLandmassDiscovered(target.v.g)){
+                    // Reach, rather than a random global bonus, opens this horizon.
+                    setDiscoveryTier(Math.max(getDiscoveryTier(),getLandmassTier(target.v.g)));
+                    discoverLandmass(target.v.g,livingTownKnown(town)?town:null,'reach');
+                }
+                const before=new Set(Object.keys(planet._paultendoFog?.explored || {}));
+                if(livingTownKnown(town))revealPathFog(path,EXPLORATION_CONFIG.revealRadius,0.9);
+                const revealed=Object.keys(planet._paultendoFog?.explored || {}).filter(k=>!before.has(k)).length;
+                const place=recordLivingJourney(town,{type:'sea',label:'a crossing of the water'},path,revealed,{person:voyage.person,name:voyage.name});
+                if(place){voyage.place=place.id;place.visits.at(-1).voyage=voyage.id;}
+                discoverLivingArtifacts(town,path);
+                seaStep(voyage,`${voyage.name} reaches the other shore. The crew turns for home with an account of the crossing.`,true);
+                voyage.status='returning';voyage.path=[...voyage.path].reverse();voyage.position=0;voyage.progress=0;
+            }else {voyage.status='unloading';seaStep(voyage,`${voyage.name} reaches the home port.`);}
+        }
+        const finished=state.seaVoyages.filter(v=>!SEA_ACTIVE.includes(v.status));
+        if(finished.length>EXCHANGE_PACE.maxHistory){const old=new Set(finished.slice(0,finished.length-EXCHANGE_PACE.maxHistory).map(v=>v.id));state.seaVoyages=state.seaVoyages.filter(v=>!old.has(v.id));}
+    }
+    function openSeaVoyage(voyage) {
+        const town=regGet('town',voyage.town);if(!livingTownKnown(town))return;
+        const items=[{text:`← Back to ${escapeLivingText(town.name)}`,func:()=>{closeExecutive();openRegBrowser(town,'town');}},{heading:true,text:townRef(town.id)}];
+        const status={preparing:'Preparing the crossing',outbound:'Crossing the water',returning:'Coming home',unloading:'Back at the home port',returned:'Home again',lost:'No vessel returned'}[voyage.status];
+        items.push({heading:true,text:status},{text:COMMODITIES[voyage.type].description});
+        if(voyage.status==='preparing')items.push({text:`The crossing needs one ${COMMODITIES[voyage.type].singular}, made with ${commaList(Object.entries(MATERIAL_RECIPES[voyage.type].cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`))}.`});
+        if(['outbound','returning'].includes(voyage.status))items.push({text:voyage.pause==='hands'?'The crossing waits for its crew.':voyage.pause?'The crew is waiting for the way to open.':`${escapeLivingText(voyage.name)} is still away. The vessel is travelling ${voyage.status==='returning'?'home':'toward the other shore'}.`});
+        for(const input of voyage.inputs || []){const work=input.production?.world===skyWorldId()&&input.production.passage===travelerState().passage&&livingWorldState().materialWork.find(w=>w.id===input.production.work);if(work)items.push({text:'How the vessel was made',func:()=>openMaterialWork(work)});}
+        const work=livingWorldState().materialWork.findLast(w=>w.town===town.id&&w.type===voyage.type&&w.day>=voyage.day);
+        if(voyage.status==='preparing'&&work)items.push({text:'Visit the builders',func:()=>openMaterialWork(work)});
+        if(livingPlaceKnown(livingWorldState().places[voyage.place]))items.push({text:'The shore they reached',func:()=>openLivingPlace(livingWorldState().places[voyage.place],town.id)});
+        items.push({heading:true,text:'The crossing'});
+        for(const step of voyage.steps)items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        populateExecutive(items,'Beyond the coast');markLivingStoryControls();openExecutive();
+    }
+
     function planExplorationMission(town) {
         const weights = [];
         const travel = town.influences?.travel || 0;
@@ -11588,6 +11738,7 @@
 
         weights.push({ id: "resource", weight: 1 + trade * 0.15 + education * 0.12 + (materialSurveyNeeds(town).length?2:0) });
         weights.push({ id: "frontier", weight: 1 + travel * 0.2 });
+        if(seaCraftFor(town)&&isTownCoastal(town))weights.push({id:'sea',weight:1+travel*0.2+trade*0.1});
         if (faith > 2 && getTownReligion(town)) {
             weights.push({ id: "pilgrimage", weight: 0.6 + faith * 0.2 });
         }
@@ -11600,6 +11751,7 @@
             if (pick.id === "resource") mission = buildResourceSurveyMission(town);
             if (pick.id === "frontier") mission = buildFrontierMission(town);
             if (pick.id === "pilgrimage") mission = buildPilgrimageMission(town);
+            if(pick.id==='sea')mission=buildSeaMission(town);
             if (mission) return mission;
         }
         return buildFrontierMission(town);
@@ -11607,6 +11759,7 @@
 
     function explorationReturnMessage(town,args) {
         if (!args.success) return 'The scouts find no route through. The journey must wait.';
+        if(args.mission?.voyage)return `${townRef(town.id)} prepares a crossing beyond the coast. The builders and crew will need time.`;
         const survey=livingWorldState().sampling.find(w=>w.id===args.mission?.sampling);
         if(survey)return `${escapeLivingText(survey.name)} sets out from ${townRef(town.id)} to look for ${COMMODITIES[survey.type].label}. ${escapeLivingText(survey.reason)}`;
         const place = livingWorldState().places[args.mission?.placeId];
@@ -11616,6 +11769,7 @@
 
     function executeExplorationMission(town, mission, opts = {}) {
         if (!town || !mission) return false;
+        if(mission.type==='sea')return startSeaMission(town,mission);
         if(mission.materialSurvey)return startMaterialSurvey(town,mission,opts.carrier);
         let path = mission.path || null;
         if (!path) {
@@ -11869,111 +12023,6 @@
                 discoverLandmass(landmassId, town, "establish contact with");
             }
         }
-    }
-
-    function discoveryTierPrereqsMet(tier) {
-        const req = DISCOVERY_TIER_REQUIREMENTS[tier];
-        if (!req) return false;
-        const travel = planet.unlocks?.travel || 0;
-        const trade = planet.unlocks?.trade || 0;
-        const education = planet.unlocks?.education || 0;
-        const towns = regCount("town");
-
-        if (travel < req.travel) return false;
-        if (trade < req.trade) return false;
-        if (education < req.education) return false;
-        if (towns < req.towns) return false;
-        return true;
-    }
-
-    function getDiscoveryAdvanceChance(tier) {
-        const req = DISCOVERY_TIER_REQUIREMENTS[tier];
-        if (!req) return 0;
-        const travel = planet.unlocks?.travel || 0;
-        const trade = planet.unlocks?.trade || 0;
-        const education = planet.unlocks?.education || 0;
-        const towns = regCount("town");
-
-        let chance = tier === 1 ? 0.002 : tier === 2 ? 0.0015 : 0.001;
-        chance += Math.max(0, travel - req.travel) * 0.0002;
-        chance += Math.max(0, trade - req.trade) * 0.00015;
-        chance += Math.max(0, education - req.education) * 0.00015;
-        chance += Math.max(0, towns - req.towns) * 0.0003;
-
-        if (planet._paultendoDiscovery && planet._paultendoDiscovery.boostUntil > planet.day) {
-            chance += planet._paultendoDiscovery.boost || 0;
-        }
-
-        return Math.min(0.05, chance);
-    }
-
-    function attemptDiscoveryTierAdvance() {
-        if (!initDiscoveryState()) return false;
-        if (!planet || !planet.unlocks) return false;
-        if (!planet._paultendoDiscovery.tiers) {
-            computeLandmassTiers();
-        }
-        const currentTier = getDiscoveryTier();
-        const maxTier = getDiscoveryMaxTier();
-        if (currentTier >= maxTier) return false;
-
-        const nextTier = currentTier + 1;
-        if (!discoveryTierPrereqsMet(nextTier)) return false;
-
-        const chance = getDiscoveryAdvanceChance(nextTier);
-        if (Math.random() < chance) {
-            setDiscoveryTier(nextTier);
-            logMessage(`New horizons open: {{b:${getDiscoveryTierName(nextTier)}}} now lie within reach.`, "milestone");
-            try {
-                const stage = getAnnalsStage();
-                const tierName = getDiscoveryTierName(nextTier);
-                const title = `${tierName} Opened`;
-                let body = stage === "oral"
-                    ? `The people whisper of the ${tierName}, and ships dare farther waters.`
-                    : stage === "scribe"
-                        ? `Navigators mark the ${tierName} as newly reachable.`
-                        : `Expanded routes and charts brought the ${tierName} into the known world.`;
-                const line = themeLine("discovery", stage);
-                if (line) body += ` ${line}`;
-                recordAnnalsEntry({
-                    theme: "discovery",
-                    title,
-                    body,
-                    sourceType: "discovery_tier",
-                    sourceId: nextTier
-                });
-            } catch {}
-            return true;
-        }
-        return false;
-    }
-
-    function discoverReachableLandmass() {
-        if (!initDiscoveryState()) return false;
-        const reachableTier = getDiscoveryTier();
-        const undiscovered = regFilter("landmass", l =>
-            l && !isLandmassDiscovered(l.id) && getLandmassTier(l.id) <= reachableTier
-        );
-        if (undiscovered.length === 0) return false;
-
-        const towns = getActiveTowns();
-        if (towns.length === 0) return false;
-
-        const explorer = weightedChoice(towns, (t) => {
-            const travel = t.influences?.travel || 0;
-            const trade = t.influences?.trade || 0;
-            const education = t.influences?.education || 0;
-            return 1 + travel * 0.6 + trade * 0.4 + education * 0.2;
-        }) || choose(towns);
-
-        const targetLandmass = weightedChoice(undiscovered, (l) => {
-            const tier = getLandmassTier(l.id);
-            return tier === reachableTier ? 1.5 : 1;
-        });
-
-        if (!targetLandmass) return false;
-        discoverLandmass(targetLandmass.id, explorer, "chart");
-        return true;
     }
 
     function renderDiscoveryFog() {
@@ -12603,18 +12652,11 @@
         }
     });
 
-    modEvent("discoveryTierAdvance", {
-        daily: true,
-        subject: { reg: "player", id: 1 },
-        func: () => {
-            attemptDiscoveryTierAdvance();
-        }
-    });
-
     modEvent("discoveryTownReveal", {
         daily: true,
         subject: { reg: "town", all: true },
         value: (subject, target, args) => {
+            if(!livingTownKnown(subject))return false;
             const landmassId = getTownLandmassId(subject);
             if (!landmassId) return false;
             if (isLandmassDiscovered(landmassId)) return false;
@@ -12627,24 +12669,14 @@
     });
 
     modEvent("discoveryExpedition", {
-        random: true,
-        weight: $c.RARE,
-        subject: { reg: "town", random: true },
-        value: (subject, target, args) => {
-            if (!initDiscoveryState()) return false;
-            if (!planet.unlocks?.travel || planet.unlocks.travel < 30) return false;
-            const tier = getDiscoveryTier();
-            if (tier < 1) return false;
-            const undiscovered = regFilter("landmass", l =>
-                l && !isLandmassDiscovered(l.id) && getLandmassTier(l.id) <= tier
-            );
-            if (undiscovered.length === 0) return false;
-            if ((subject.influences?.travel || 0) < 1) return false;
-            return true;
+        random:true, auto:true, weight:$c.RARE,
+        subject:{reg:'town',random:true},
+        value:(subject,target,args)=>{
+            if((subject.influences?.travel || 0)<1)return false;
+            args.mission=buildSeaMission(subject);return !!args.mission;
         },
-        func: () => {
-            discoverReachableLandmass();
-        }
+        func:(subject,target,args)=>{args.success=executeExplorationMission(subject,args.mission);},
+        messageDone:(subject,target,args)=>explorationReturnMessage(subject,args)
     });
 
     // -------------------------------------------------------------------------
@@ -12670,7 +12702,7 @@
                 ? `a ${mission.label}`
                 : mission.type === "pilgrimage"
                     ? `a ${mission.label}`
-                    : `a ${mission.label} into the ${biome} outskirts`;
+                    : mission.type==='sea'?`a ${mission.label}`:`a ${mission.label} into the ${biome} outskirts`;
             return `Scouts from ${townName} propose ${detail}. Approve the expedition? {{should}}`;
         },
         func: (subject, target, args) => {
@@ -12729,33 +12761,17 @@
     });
 
     modEvent("swayDiscoveryExpedition", {
-        random: true,
-        weight: $c.VERY_RARE,
-        subject: { reg: "player", id: 1 },
-        target: { reg: "town", random: true },
-        value: (subject, target, args) => {
-            if (!initDiscoveryState()) return false;
-            const nextTier = getDiscoveryTier() + 1;
-            if (nextTier > getDiscoveryMaxTier()) return false;
-            const req = DISCOVERY_TIER_REQUIREMENTS[nextTier];
-            if (!req) return false;
-            if ((planet.unlocks?.travel || 0) < Math.max(10, req.travel - 10)) return false;
-            if ((target.influences?.travel || 0) < 1) return false;
-            args.tier = nextTier;
-            return true;
+        random:true, weight:$c.VERY_RARE,
+        subject:{reg:'player',id:1}, target:{reg:'town',random:true},
+        value:(subject,target,args)=>{
+            if(!canTownExplore(target,true)||(target.influences?.travel || 0)<1)return false;
+            args.mission=buildSeaMission(target);return !!args.mission;
         },
-        message: (subject, target, args) => {
-            return `Navigators in {{regname:town|${target.id}}} propose an ambitious expedition toward the {{b:${getDiscoveryTierName(args.tier)}}}. Support it? {{should}}`;
-        },
-        messageDone: "You fund the expedition's preparations.",
-        messageNo: "You let the idea fade for now.",
-        func: (subject, target, args) => {
-            initDiscoveryState();
-            planet._paultendoDiscovery.boost = Math.min(0.01, (planet._paultendoDiscovery.boost || 0) + 0.002);
-            planet._paultendoDiscovery.boostUntil = planet.day + 30;
-            happen("Influence", null, target, { travel: 0.5, education: 0.2, temp: true });
-            logMessage(`Explorers from {{regname:town|${target.id}}} outfit ships and charts for distant horizons.`);
-        }
+        message:(subject,target,args)=>`${townRef(target.id)} wants to cross beyond the known coast. The builders will need ${commaList(Object.entries(MATERIAL_RECIPES[args.mission.craft].cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`))} for a vessel. Encourage the crossing? {{should}}`,
+        messageDone:(subject,target,args)=>explorationReturnMessage(target,args),
+        messageNo:'The crew stays close to home.',
+        func:(subject,target,args)=>{args.success=executeExplorationMission(target,args.mission);},
+        funcNo:(subject,target)=>{target._paultendoExplorationDeclinedDay=planet.day;}
     });
 
     // -------------------------------------------------------------------------
@@ -15281,7 +15297,7 @@
             ["Seasons", updateSeasonState], ["Whispers", advanceLivingWhispers], ["Material surveys", advanceMaterialSurveys], ["Research work", advanceLivingInquiries],
             ["Artifact work", advanceLivingArtifactWork], ["Artifacts", advanceLivingArtifacts],
             ["Inventions", observeLivingInventions], ["Sky study", advanceSkyStudy],
-            ["Commodity journeys", advanceCommodityJourneys], ["Field tools", advanceFarmTools],
+            ["Commodity journeys", advanceCommodityJourneys], ["Sea crossings", advanceSeaVoyages], ["Field tools", advanceFarmTools],
             ["Material work", advanceMaterialWork], ["New field tools", advanceFarmTools],
             ["Grain stores", advanceGrainStores], ["Commodity needs", observeCommodityNeeds], ["Supply disputes", observeSupplyDisputes],
             ["Teachings", advanceLivingTeachings], ["Places", observeLivingPlaces],
@@ -33160,34 +33176,15 @@
         }
     }
 
-    function maybeStealMaps(subject, target, scale = 1) {
-        if (!subject || !target) return false;
-        if (!initDiscoveryState()) return false;
-        const travel = target.influences?.travel || 0;
-        const trade = target.influences?.trade || 0;
-        const education = target.influences?.education || 0;
-        const mapValue = travel * 0.6 + trade * 0.3 + education * 0.2;
-
-        const hasRouteKnowledge = hasTownSpecialization(target, "tradingHub") || hasTownSpecialization(target, "merchantGuild");
-        const hasScholars = hasTownSpecialization(target, "grandLibrary") || hasTownSpecialization(target, "academy");
-        const bonus = (hasRouteKnowledge ? 0.6 : 0) + (hasScholars ? 0.4 : 0);
-
-        if ((mapValue + bonus) < 2.5) return false;
-
-        const boost = clampValue((0.0009 * (mapValue + bonus)) * scale, 0.0006, 0.008);
-        const duration = Math.max(10, Math.round(20 * scale));
-
-        planet._paultendoDiscovery.boost = Math.min(0.02, (planet._paultendoDiscovery.boost || 0) + boost);
-        planet._paultendoDiscovery.boostUntil = Math.max(planet._paultendoDiscovery.boostUntil || 0, planet.day + duration);
-
-        if (Math.random() < 0.18 * scale) {
-            modLog(
-                "espionage",
-                `Stolen charts from {{regname:town|${target.id}}} spur new explorations in {{regname:town|${subject.id}}}.`,
-                null,
-                { town: subject }
-            );
-        }
+    function maybeStealMaps(subject, target) {
+        if(!subject||!target)return false;
+        const records=livingWorldState().seaVoyages.filter(v=>v.town===target.id&&v.status==='returned');
+        if(!records.length)return false;
+        const charts=subject._paultendoSeaCharts ||= [];
+        const source=records.findLast(v=>!charts.some(c=>c.voyage===v.id));if(!source)return false;
+        charts.push({voyage:source.id,from:target.id,known:livingTownKnown(target),name:target.name,day:planet.day,target:{...source.target}});
+        if(charts.length>32)charts.shift();
+        modLog('espionage',`Charts of an actual crossing reach ${townRef(subject.id)}. Its crew still needs a vessel to follow them.`,null,{town:subject});
         return true;
     }
 
@@ -34569,10 +34566,6 @@
         switch (work.effect) {
             case "library":
                 region.forEach(t => happen("Influence", null, t, { education: 0.3, temp: true }));
-                if (planet._paultendoDiscovery) {
-                    planet._paultendoDiscovery.boost = Math.min(0.03, (planet._paultendoDiscovery.boost || 0) + 0.006);
-                    planet._paultendoDiscovery.boostUntil = Math.max(planet._paultendoDiscovery.boostUntil || 0, planet.day + 80);
-                }
                 break;
             case "observatory":
                 region.forEach(t => happen("Influence", null, t, { travel: 0.3, education: 0.2, temp: true }));
@@ -36524,97 +36517,18 @@
     // ----------------------------------------
 
     // Coastal towns can establish sea trade routes
+    // A proposed crossing is work, not a trade route created by a dice roll.
     modEvent("establishSeaRoute", {
-        random: true,
-        auto: true,
-        weight: $c.UNCOMMON,
-        subject: { reg: "town", random: true },
-        target: { reg: "town", random: true },
-        value: (subject, target, args) => {
-            const relations = getRelations(subject, target);
-            args.relations = relations;
-            let baseYes = 0.65;
-            if (relations < -3) baseYes -= 0.15;
-            if ((subject.influences?.trade || 0) >= 15 && (target.influences?.trade || 0) >= 15) baseYes += 0.05;
-
-            args.choice = decideTownChoice(subject, {
-                baseYes,
-                minYes: 0.15,
-                maxYes: 0.90,
-                values: { openness: 0.10, wealth: 0.05, order: 0.03, change: 0.03 },
-                influences: { trade: 0.06 },
-                relations: relations,
-                randomness: 0.06
-            });
+        random:true, auto:true, weight:$c.UNCOMMON,
+        subject:{reg:'town',random:true}, target:{reg:'town',random:true},
+        value:(subject,target,args)=>{
+            if(!subject||!target||subject.id===target.id||!isTownCoastal(target)||areAtWar(subject,target))return false;
+            args.mission=buildSeaMission(subject,getAnchorChunk(target));if(!args.mission)return false;
+            args.choice=decideTownChoice(subject,{baseYes:.65,minYes:.15,maxYes:.9,values:{openness:.1,wealth:.05,order:.03,change:.03},influences:{trade:.06},relations:getRelations(subject,target),randomness:.06});
             return true;
         },
-        check: (subject, target) => {
-            if (!subject || !target) return false;
-            if (subject.id === target.id) return false;
-
-            // Both must be coastal
-            if (!isTownCoastal(subject) || !isTownCoastal(target)) return false;
-
-            // Need sailing ships tech
-            if ((planet.unlocks?.travel || 0) < 60) return false;
-
-            // Both need trade
-            if ((subject.influences?.trade || 0) < 10) return false;
-            if ((target.influences?.trade || 0) < 10) return false;
-
-            // Not at war
-            if (areAtWar(subject, target)) return false;
-
-            // Check if route already exists
-            initTradeRoutes();
-            const existing = planet.tradeRoutes.find(r =>
-                (r.town1 === subject.id && r.town2 === target.id) ||
-                (r.town1 === target.id && r.town2 === subject.id)
-            );
-            if (existing) return false;
-
-            return true;
-        },
-        message: (subject, target, args) => {
-            if (args.choice === "yes") {
-                return `A sea route connects {{regname:town|${subject.id}}} and {{regname:town|${target.id}}}.`;
-            }
-            return `Sailors speak of a sea route between {{regname:town|${subject.id}}} and {{regname:town|${target.id}}}, but it does not form.`;
-        },
-        func: (subject, target, args) => {
-            if (args.choice !== "yes") {
-                if ((args.relations || 0) < 0 && Math.random() < 0.25) {
-                    worsenRelations(subject, target, 1);
-                }
-                return;
-            }
-            initTradeRoutes();
-
-            const route = {
-                id: planet.tradeRoutes.length + 1,
-                town1: subject.id,
-                town2: target.id,
-                established: planet.day,
-                distance: 50, // Sea routes have fixed "distance"
-                difficulty: 1.2, // Moderate difficulty
-                needsShips: true,
-                isSeaRoute: true,
-                travelTime: 10,
-                active: true,
-                caravans: 0,
-                totalGoods: 0
-            };
-
-            planet.tradeRoutes.push(route);
-
-            happen("Influence", null, subject, { trade: 1, travel: 0.5, temp: true });
-            happen("Influence", null, target, { trade: 1, travel: 0.5, temp: true });
-            improveRelations(subject, target, 1);
-
-            if (typeof recordBond === "function") {
-                recordBond(subject, target, "maritime_partners", 15);
-            }
-        }
+        func:(subject,target,args)=>{if(args.choice==='yes')args.success=executeExplorationMission(subject,args.mission);},
+        messageDone:(subject,target,args)=>args.choice==='yes'?explorationReturnMessage(subject,args):`${townRef(subject.id)} leaves the crossing for another time.`
     });
 
     // Coastal towns benefit from fishing
@@ -36887,7 +36801,7 @@
             for (let i = 0; i < neighbors.length; i++) {
                 const neighbor = neighbors[i];
                 if (opts.canEnter && !opts.canEnter(neighbor)) continue;
-                const moveCost = getMovementCost(neighbor);
+                const moveCost = opts.moveCost?opts.moveCost(neighbor):getMovementCost(neighbor);
                 if (moveCost === Infinity) continue;
                 const neighborKey = getChunkKey(neighbor.x, neighbor.y);
                 const tentativeG = (gScore[currentKey] || 0) + moveCost;
