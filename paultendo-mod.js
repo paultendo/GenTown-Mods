@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.63/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.64/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.63";
+    const MOD_VERSION = "1.6.64";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -8381,6 +8381,16 @@
 
     function initLivingWorld() {
         installNativeTechNeeds();
+        const projectStart=gameEvents.townProjectStart;
+        if (projectStart?.value && !projectStart.value._paultendoLocal) {
+            const base=projectStart.value;
+            projectStart.value=function(subject,town) {
+                if (PAULTENDO_STATE.backgroundWorld === undefined) return base.apply(this,arguments);
+                const choices=localProjectCandidates(town);
+                return choices.length?weightedChoice(choices,c=>c.weight).type:false;
+            };
+            projectStart.value._paultendoLocal=true;
+        }
         installLivingInquiries();
         seedLivingDiscoveries();
         const discoveryPrompt = gameEvents.speciesDiscover?.value;
@@ -8452,17 +8462,53 @@
             const base=project.func;
             project.func=function(subject){return withCommodityUse({kind:'construction',id:subject.id,name:subject.subtype},()=>{
                 const town=regGet('town',subject.town);
-                const bricks=town&&Math.max(0,commodityStock(town,'brick')-commodityWorkClaims(town).filter(c=>c.kind!=='construction').reduce((sum,c)=>sum+(c.cost.brick || 0),0));
-                if(town&&!town.end&&subject.cost>0&&bricks>0) {
-                    const budget=Math.min(subject.cost,randRange(1,Math.max(1,Math.ceil(subject.total*0.5))));
-                    const count=Math.min(bricks,Math.ceil(budget/2));
-                    happen('RemoveResource',null,town,{type:'brick',count});subject.cost-=count*2;
-                    happen('RemoveResource',null,town,{type:'cash',count:Math.min(budget,count*2)});
-                    if(subject.cost<=0){happen('Finish',null,subject);logMessage(`Construction in ${townRef(town.id)} is finished.`,undefined);delete subject.cost;}
-                    else if(!subject.halfway&&subject.cost/subject.total<=0.5){subject.halfway=true;logMessage(`Construction in ${townRef(town.id)} is halfway done.`);}
-                    return;
+                if(!town || town.end) {
+                    const result=base.apply(this,arguments);
+                    constructionStep(subject,'ended','The town can no longer carry on the work.');
+                    return result;
                 }
-                return base.apply(this,arguments);
+                if(subject.done || subject.end) return;
+                const meal=(town._paultendoFoodFlow || []).findLast(e=>e.day<=planet.day&&e.day>=planet.day-1&&e.wanted>0&&Number.isFinite(e.consumed));
+                if(meal?meal.consumed<meal.wanted:mealStock(town)<nativeMealNeed(town)) {
+                    constructionStep(subject,'hungry','Building work stops while people go hungry.');return;
+                }
+                if(hasIssue(town,'war')) {constructionStep(subject,'war','The fighting has stopped the building work.');return;}
+                if(subject._paultendoLocalChoice) {
+                    const site=chunkAt(subject.x,subject.y);
+                    if(!site || site.v.s!==town.id || site.v.m) {constructionStep(subject,'site','The builders can no longer use their site.');return;}
+                }
+                const stocks=constructionStocks(town);
+                if(!Object.values(stocks).some(n=>n>0)) {constructionStep(subject,'supplies','The builders are waiting for stone, timber or bricks.');return;}
+                const budget=Math.min(subject.cost,randRange(1,Math.max(1,Math.ceil(subject.total*0.5))));
+                const brick=Math.min(stocks.brick,Math.ceil(budget/2));
+                const rock=Math.min(stocks.rock,Math.ceil(Math.max(0,budget-brick*2)/2));
+                const lumber=Math.min(stocks.lumber,Math.max(0,budget-brick*2-rock*2));
+                const progress=brick*2+rock*2+lumber, work=constructionHistory(subject);
+                if(!progress) {constructionStep(subject,'supplies','The builders are waiting for stone, timber or bricks.');return;}
+                constructionStep(subject,'working',Object.values(work.inputs).some(n=>n>0)?'The builders get back to work.':'The builders set to work.');
+                for(const [type,count] of Object.entries({brick,rock,lumber})) {
+                    if(!count)continue;
+                    const before=commodityStock(town,type);happen('RemoveResource',null,town,{type,count});
+                    work.inputs[type]=(work.inputs[type] || 0)+before-commodityStock(town,type);
+                }
+                const cash=commodityStock(town,'cash');
+                happen('RemoveResource',null,town,{type:'cash',count:Math.min(budget,progress)});
+                work.paid+=cash-commodityStock(town,'cash');subject.cost=Math.round(subject.cost-progress);
+                if(subject.cost<=0) {
+                    const before={...town.influences};happen('Finish',null,subject);
+                    work.effects=Object.fromEntries(Object.entries(town.influences).map(([key,n])=>[key,n-(before[key] || 0)]).filter(([,n])=>n));
+                    const marker=regGet('marker',subject.marker), built=marker&&!marker.end&&marker.process===subject.id;
+                    if(built && subject._paultendoLocalChoice) attachMarkerToChunk(marker,chunkAt(marker.x,marker.y));
+                    const place=subject.subtype.replace(/_/g,' ');
+                    const opening=['farmland','park','skatepark','highway','statue','flagpole'].includes(subject.subtype)?`The new ${place} is ready.`:`The ${place} opens its doors.`;
+                    constructionStep(subject,built?'built':'finished',built?opening:'The work is finished, but no building has been placed.');
+                    logMessage(`{{regname:${built?'marker':'process'}|${built?marker.id:subject.id}}} construction in ${townRef(town.id)} is finished.`,undefined,{influences:[before,town.influences],...constructionStory(subject,true)});
+                    delete subject.halfway;delete subject.cost;
+                } else if(!subject.halfway&&subject.cost/subject.total<=0.5) {
+                    subject.halfway=true;
+                    constructionStep(subject,'halfway','The building is halfway done.');
+                    logMessage(`Construction of a ${subject.subtype.replace(/_/g,' ')} in ${townRef(town.id)} is halfway done.`,undefined,constructionStory(subject));
+                }
             });};
             project.func._paultendoCommodity=true;
         }
@@ -14293,11 +14339,81 @@
 
     // Only these synchronous native proposals have a local decision policy.
     // Naming, player interventions and choice dialogs still need the player.
-    const LOCAL_CHOICE_EVENTS = new Set(['increaseResearch','townAskDiplomacy']);
+    const LOCAL_CHOICE_EVENTS = new Set(['increaseResearch','townAskDiplomacy','townProjectStart']);
+
+    // Civic wants compete for native buildings through their actual effects.
+    // These weights are pacing calibration. Knowledge, laws, supplies and the
+    // native project cooldown remain requirements, rather than rewards.
+    function localProjectCandidates(town) {
+        if (!town || town.end || town.pop <= 0 || town.legal?.['travel.construction'] === false) return [];
+        const needs = nativeTechNeeds(town), pressures = {};
+        const religion = planet.religions?.find(r => r.id === town.religion && !r.extinct);
+        const add = (key, pressure, reason, details={}) => {
+            if (pressure > (pressures[key]?.pressure || 0)) pressures[key] = {pressure,reason,...details};
+        };
+        if (town.jobs?.farmer > 0 && town.legal?.farm !== false && needs.farm)
+            add('farm',needs.farm.pressure,'The growers want to bring in more food.',{need:needs.farm});
+        add('disease',(town.influences.disease || 0)/4*(1+(town.values?.justice || 0)/12),'Sick people need care.',{disease:town.influences.disease || 0});
+        add('crime',(town.influences.crime || 0)/4*(1+(town.values?.order || 0)/12),'They want to put a stop to crime.',{crime:town.influences.crime || 0,order:town.values?.order || 0});
+        add('happy',Math.max(0,-(town.influences.happy || 0))/4,'They want somewhere to gather and lift their spirits.',{happy:town.influences.happy || 0});
+        const research=town.research || {}, total=Object.values(research).reduce((n,v)=>n+Math.max(0,v),0);
+        if (needs.education || research.education > 0)
+            add('education',Math.max(needs.education?.pressure || 0,(research.education || 0)/Math.max(1,total))/(1+Math.max(0,town.influences.education || 0)),needs.education?.text || 'They want a place for the learning they have been pursuing.',{research:research.education || 0,need:needs.education});
+        const war=regGet('process',town.issues?.war), recentWar=regToArray('process').findLast(p=>p.type==='war'&&p.towns?.includes(town.id)&&p.done&&planet.day-p.done<=30);
+        if ((war && !war.done && !war.end) || recentWar)
+            add('military',2/(1+Math.max(0,town.influences.military || 0)),war&&!war.done&&!war.end?'Fighting has made them want stronger defences.':'They remember the fighting and want stronger defences.',{war:(war&&!war.done&&!war.end?war:recentWar).id});
+        else if (religion?.tenets?.includes('militarism') && research.military > 0)
+            add('military',(research.military/Math.max(1,total))/(1+Math.max(0,town.influences.military || 0)),'Their faith and military studies favour a stronghold.',{religion:religion.id,research:research.military});
+        if (needs.trade) add('trade',needs.trade.pressure/(1+Math.max(0,town.influences.trade || 0)),'They want a place to bring needed goods into town.',{need:needs.trade});
+        const exchange=(livingWorldState().exchanges || []).findLast(e=>[e.buyer,e.seller].includes(town.id)&&e.steps.some(s=>s.kind==='arrive'&&planet.day-s.day<=20));
+        if (exchange) add('trade',1/(1+Math.max(0,town.influences.trade || 0)),'Carriers have been bringing goods through town.',{exchange:exchange.id});
+        if (religion) add('faith',Math.max(0,4-(town.influences.faith || 0))/4,'They want a place to honour their faith.',{religion:religion.id});
+        const available=constructionStocks(town);
+        if (!Object.values(available).some(n=>n>0)) return [];
+        return Object.entries(actionables.process._projectSubtypes).flatMap(([type,data])=>{
+            if (Object.entries(data.needsUnlock || {}).some(([key,level])=>!(planet.unlocks[key]>=level)||town.legal?.[key]===false)) return [];
+            const contributions=Object.entries(data.influences || {}).map(([key,amount])=>{
+                const need=pressures[key], beneficial=['disease','crime'].includes(key)?-amount:amount;
+                return {key,need,score:need?beneficial*need.pressure:0};
+            });
+            const cause=contributions.filter(c=>c.score>0).sort((a,b)=>b.score-a.score)[0];
+            const score=contributions.reduce((sum,c)=>sum+c.score,0);
+            if (!cause || score<=0) return [];
+            return [{type,weight:score,reason:cause.need.reason,cause:{kind:'building',field:cause.key,...structuredClone(cause.need),materials:{...available}}}];
+        });
+    }
+
+    function constructionStocks(town) {
+        const other=commodityWorkClaims(town).filter(c=>c.kind!=='construction');
+        return Object.fromEntries(['rock','lumber','brick'].map(type=>[type,Math.max(0,commodityStock(town,type)-other.reduce((n,c)=>n+(c.cost[type] || 0),0))]));
+    }
+
+    function constructionHistory(process) {
+        return process._paultendoBuilding ||= {inputs:{},paid:0,steps:[],phase:null};
+    }
+
+    function constructionStory(process, highlight=false) {
+        return process._paultendoLocalChoice?{_paultendoStory:{kind:'localChoice',id:process._paultendoLocalChoice},_paultendoHighlight:highlight}:{};
+    }
+
+    function constructionStep(process, phase, text) {
+        const work=constructionHistory(process), previous=work.phase;
+        // Halfway is a milestone, rather than another interruption of the work.
+        if ((phase==='working' && ['working','halfway'].includes(previous)) || previous===phase) return;
+        work.phase=phase;work.steps.push({day:planet.day,phase,text});
+        if(work.steps.length>16)work.steps.shift();
+        if(process._paultendoLocalChoice && previous && !['halfway','built','finished','ended'].includes(phase))
+            logMessage(`${townRef(process.town)}: ${escapeLivingText(text)}`,undefined,constructionStory(process));
+    }
 
     function localTownChoice(id, caller) {
         const town = id === 'townAskDiplomacy' ? caller.subject : caller.target;
         if (!town || town.end || town.pop <= 0) return null;
+        if (id === 'townProjectStart') {
+            const project=localProjectCandidates(town).find(p=>p.type===caller.args.value);
+            const site=project&&findTownMarkerSpot(town);
+            return site?{town,choice:'yes',reason:project.reason,cause:project.cause,site:{x:site.x,y:site.y}}:null;
+        }
         if (id === 'increaseResearch') {
             const needs = nativeTechNeeds(town);
             const eligible = Object.entries(needs).filter(([key]) => key in researchInfluences &&
@@ -14349,15 +14465,19 @@
         return null;
     }
 
-    function rememberLocalTownChoice(id, caller, policy, before) {
+    function rememberLocalTownChoice(id, caller, policy, before, result) {
         const state = livingWorldState(), town = policy.town;
-        const title = id === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : 'A neighbour at the table';
+        const building=id==='townProjectStart';
+        if (building && (result?._reg!=='process'||result.type!=='project'||result.town!==town.id)) return;
+        const title = building ? `A new ${caller.args.value.replace(/_/g,' ')}` : id === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : 'A neighbour at the table';
         const text = id === 'increaseResearch'
             ? `${townRef(town.id)} gives ${researchInfluences[caller.args.value] || caller.args.value} research ${policy.choice==='yes'?'more':'less'} attention.`
+            : building ? `${townRef(town.id)} begins building a ${caller.args.value.replace(/_/g,' ')}.`
             : `${townRef(town.id)} ${policy.choice==='yes'?'welcomes':'turns away'} ${townRef(policy.partner.id)}.`;
         const record = {id:`local:${state.nextId++}`,day:planet.day,town:town.id,partner:policy.partner?.id || null,event:id,
             value:caller.args.value,choice:policy.choice,title,text,reason:policy.reason,cause:policy.cause,
             before:{research:before.research,relations:before.relations},after:{research:{...town.research},relations:{...town.relations}}};
+        if (building) {record.project=result.id;result._paultendoLocalChoice=record.id;result.x=policy.site.x;result.y=policy.site.y;}
         state.localChoices.push(record);
         if (state.localChoices.length > 96) state.localChoices.shift();
         logMessage(`${text} ${escapeLivingText(policy.reason)}`,null,{_paultendoStory:{kind:'localChoice',id:record.id}});
@@ -14375,6 +14495,24 @@
                 : `${titleCase(researchInfluences[chosen] || chosen)} became their leading study.`});
             const priority = livingResearchPriority(town.research);
             items.push({heading:true,text:'Today'},{text:priority ? `${titleCase(researchInfluences[priority] || priority)} leads the town’s research.` : 'No field leads the town’s research.'});
+        } else if (record.event === 'townProjectStart') {
+            const process=regGet('process',record.project), work=process?._paultendoBuilding;
+            items.push({heading:true,text:'The work'});
+            if (work) {
+                items.push(...work.steps.map(step=>({text:`Day ${step.day} · ${escapeLivingText(step.text)}`})));
+                const inputs=Object.entries(work.inputs).filter(([,count])=>count>0).map(([type,count])=>`${count} ${COMMODITIES[type]?.label || type}`);
+                if (inputs.length) items.push({text:`Built with ${commaList(inputs)}.`});
+                if (work.paid>0) items.push({text:`${Math.round(work.paid)} cash went into the work.`});
+                const effects={farm:['The growers gained better ground.','Growing food became harder.'],military:['The town gained stronger defences.','The town’s defences weakened.'],education:['Learning gained a foothold here.','Learning lost ground here.'],trade:['Trade grew here.','Trade suffered here.'],travel:['Journeys became easier.','Journeys became harder.'],happy:['It lifted people’s spirits.','It darkened people’s spirits.'],faith:['It strengthened their faith.','Their faith weakened.'],crime:['It brought more crime.','It brought crime down.'],disease:['It brought more sickness.','It eased sickness in town.']};
+                for (const [key,change] of Object.entries(work.effects || {}))
+                    if (change && effects[key]) items.push({text:effects[key][change>0?0:1]});
+                if (process.end) items.push({text:'The project has ended.'});
+            } else items.push({text:process?.end?'The project was abandoned.':process?.done?'The work has finished.':'The building work has not started yet.'});
+            const marker=process&&regGet('marker',process.marker);
+            if (marker && marker.process===process.id && !marker.end && !marker._hidden && isChunkExplored(marker.x,marker.y))
+                items.push({text:`Visit the ${record.value.replace(/_/g,' ')}`,func:()=>{closePopups();closeExecutive();openRegBrowser(marker,'marker');}});
+            for (const exchange of (livingWorldState().exchanges || []).filter(e=>e.uses?.some(use=>use.kind==='construction'&&use.id===record.project)&&stateExchangeForLocalChoice(e.id)).slice(-3))
+                items.push({text:`Follow the ${COMMODITIES[exchange.type]?.label || exchange.type}`,func:()=>openCommodityJourney(exchange)});
         } else {
             const other = regGet('town',record.partner);
             if (livingTownKnown(other)) {
@@ -14425,10 +14563,11 @@
                 }
                 caller.done = true;
                 currentEvents[caller.eventID] = caller;
-                if (policy?.choice === 'no') info.funcNo?.(caller.subject,caller.target,caller.args);
-                else doEvent(id, caller);
+                let result;
+                if (policy?.choice === 'no') result=info.funcNo?.(caller.subject,caller.target,caller.args);
+                else result=doEvent(id, caller);
                 let text;
-                if (policy) rememberLocalTownChoice(id,caller,policy,before);
+                if (policy) rememberLocalTownChoice(id,caller,policy,before,result);
                 else if (info.messageDone) text = typeof info.messageDone === 'function'
                     ? info.messageDone(caller.subject, caller.target, caller.args) : info.messageDone;
                 else text = caller.message || (typeof info.message === 'function'

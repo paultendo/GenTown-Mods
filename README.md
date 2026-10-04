@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.63**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.64**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.63/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.64/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.63)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.64)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -105,3 +105,5 @@ Persistent needs now give eligible native research more attention within the usu
 Passenger vessels are rebuilt in shared workshops from one actual sky vessel, four steel, four timber and two glass over ten work days. Charters arise from current crowding, unrest, recent displacement, a practiced faith, trading interest or prestige. They no longer open just because Day 700 has arrived. Before three loading work days can finish, a town must have a vessel, two sets of tools, building supplies and provisions for the route, a return journey and the first week ashore (two weeks on harsh ground). Enough food must remain at home. Departure transfers actual people, jobs and a share of private wealth exactly once. Meals reduce cargo during travel. Founding grants no free grain or arbitrary casualties, and preserves the settlers’ values, research priorities, existing creed and knowledge backed by their actual departing workers. Contested landing ground prompts a provisioned return. Available records link the makers, materials, departure and arrival through the Chronicle and Solar panel. Recipe costs, capacity and durations remain initial game calibration. Background worlds now use the shared workshop economy. Existing automatic events and motivated native research now run in inactive worlds. Autonomous choices for the remaining player proposals and long human pacing tests remain unfinished.
 
 Advanced discoveries now begin with an actual town question and worker. Farming needs harvest experience, trade needs completed exchanges, and advanced learning needs scholars. Trials and observations support the scientific method, while actual illness gives healers a reason to develop medicine. Each advance has its own prototype supplies and working time. These values are initial game calibration. Waiting work creates commodity demand that existing workshops and neighbours can answer. Work spends its inputs once and pauses for food, fighting or unavailable hands. A waiting question can be abandoned when its purpose changes. The Chronicle and town view link to the work, and discoveries retain their actual maker and origin through reloads and background simulation. Previously acquired knowledge is preserved. Native knowledge levels remain world-wide, and a complete town-local technology model and human pacing balance remain unfinished.
+
+Inactive towns can now initiate native civic projects for current needs and beliefs. A shortage can favour farmland, illness a hospital, study a school, and faith or memories of fighting a temple or stronghold. The buildings compete through their native effects rather than a fixed story sequence. Native knowledge, laws, town size, available materials, a real building site, other processes and the project cooldown still apply. The town keeps the reason and the actual project identity without inventing player approval. Construction in every world now stops during hunger, war or material shortages, and honours supplies reserved for other work. Local projects also stop if their site is lost. Work uses actual stone, timber or bricks and records the cash spent. The connected story follows pauses, halfway progress, completed effects and the project’s own landmark, with links to exchanges whose goods went into it. Visits and reloads do not repeat work. Building durations still use the native population-scaled work budget. These are initial choices and pacing rules, not evidence that the whole progression curve is balanced.
