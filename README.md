@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.85**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
+Version **1.6.86**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.85/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.86/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.85)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.86)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -76,6 +76,8 @@ Grain, livestock, stone, timber and metal now share actual exchange journeys. Me
 Formal loans now require Banking learned in the lender’s own town, a free merchant, actual contact and coin left after the lender’s own bills. The borrower needs upkeep money or an actual recent purchase it could not afford. Terms depend on spare coin, relationships, remembered help, practiced belief and the lender’s interests. Helping a neighbour can mean returning only the principal. A controlling lender may seek a claim on future earnings. Emergency credit moves actual money without magically repairing disaster damage.
 
 Every loan keeps its quoted need, terms and actual payments in a saved story. Partial payments reduce the claim but leave arrears. All loans held by a borrower receive at most one cash payment each day. After four observed consecutive missed payments, lenders may give more time, accept useful goods, forgive a claim in hardship or pursue tribute and war. Goods must be spare after the debtor’s own meals and work, and needed by the lender. They travel through the actual exchange system. Only arrival pays debt, blocked roads keep cargo with carriers, and excess cargo returns home if cash settled the claim while it was away. Debt payments and endings appear in Today with coloured flags and links to their history. The eight-day public reserve, repayment range of eight to thirty days and four-day arrears threshold are initial calibration. Longer human play sessions still need to establish whether the timing feels good.
+
+Disaster relief now uses those same real needs and shipments. The older events that announced aid without moving supplies, or conjured a convoy from a player decision, have been removed. A town with enough food and materials gets no relief reward. A shortage can bring a request for grain, livestock or goods needed by work already underway, without an alliance or a minimum death count. Neighbours can help, trade, barter or refuse according to their stores, beliefs and remembered dealings. The disaster stays attached to the request through reload, with a link from the shipment story. Blocked carriers retain their actual cargo, and relationships change only after delivery. Relief no longer shortens an abstract recovery timer. Native disasters still use their existing casualties and territorial damage. Other scripted recovery effects, material damage and spoilage remain further work. The fifteen-day context window is an initial narrative value, not a guarantee that recovery takes fifteen days.
 
 Two completed deliveries within ninety days can establish a regular route when both towns already have trading knowledge, trading activity and a good relationship. It grows from actual cargo and keeps the founding journeys in its history. The new route appears in Today with the towns’ coloured flags, and its story opens those journeys. A closed road or war can interrupt passage while the route’s history remains. Deliveries now apply the native mutual relationship gain once, fixing a duplicated gain that drove trust to its limit too quickly. Three older climate, terrain and specialization events that invented trade rewards or competition without moving goods have been removed. Actual shortages, work and exchanges already provide those reasons. The visit count and ninety-day window are initial pacing values.
 

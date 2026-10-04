@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.85/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.86/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.85";
+    const MOD_VERSION = "1.6.86";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -4053,12 +4053,6 @@
         town: "target",
         yes: { openness: VALUE_SHIFT.minor, change: VALUE_SHIFT.minor },
         no: { openness: -VALUE_SHIFT.minor, change: -VALUE_SHIFT.minor }
-    });
-
-    addDecisionValues("swayDisasterRelief", {
-        town: "target",
-        yes: { wealth: VALUE_SHIFT.minor, justice: VALUE_SHIFT.minor, openness: VALUE_SHIFT.minor },
-        no: { wealth: -VALUE_SHIFT.minor, justice: -VALUE_SHIFT.minor, openness: -VALUE_SHIFT.minor }
     });
 
     addDecisionValues("disasterMemorial", {
@@ -8078,6 +8072,12 @@
     function exchangeStepText(record,step) {
         const buyer=exchangeTownLabel(record,record.buyer),seller=exchangeTownLabel(record,record.seller);
         const goods=COMMODITIES[record.type || 'crop'].label,payment=step.payment&&(COMMODITIES[step.payment.type]?.label || 'coin');
+        if(record.disaster&&['ask','market','work','famine'].includes(step.kind)) {
+            const disaster=record.disaster.subtype.replace(/_/g,' ');
+            return record.disaster.phase==='during'
+                ? `${buyer} asks ${seller} for ${goods} while the ${disaster} continues.`
+                : `After the ${disaster}, ${buyer} asks ${seller} for ${goods}.`;
+        }
         switch(step.kind) {
             case 'ask':return `After ${record.shortDays} days of short rations, people of ${buyer} ask ${seller} for food.`;
             case 'market':return `People of ${buyer} seek ${goods} from ${seller}.`;
@@ -8141,6 +8141,10 @@
         if(!COMMODITIES[type]||!path?.length||state.exchanges.some(r=>r.buyer===buyer.id&&!r.resolved)||state.exchanges.length>=EXCHANGE_PACE.maxHistory&&state.exchanges.every(r=>!r.resolved)) return null;
         const hunger=buyer._paultendoCommunityWork?.hunger;
         const record={id:`exchange:${state.nextId++}`,type,buyer:buyer.id,seller:seller.id,names:{[buyer.id]:buyer.name,[seller.id]:seller.name},known:{},day:planet.day,shortDays:hunger?.days || 0,since:hunger?.started || null,source,purposes:COMMODITIES[type].edible?[{kind:'meals'}]:commodityWorkClaims(buyer),status:'asking',due:planet.day+commodityTravelDays(path),steps:[],resolved:false,cargo:0};
+        // A disaster supplies context, never stock, a forced gift or a separate
+        // recovery bonus. The same unmet needs and exchange terms still apply.
+        const disaster=['need','market','work','famine'].includes(source)&&(getTownDisaster(buyer)||getRecentDisaster(buyer,15));
+        if(disaster)record.disaster={id:disaster.id,subtype:disaster.subtype || 'disaster',started:disaster.start,finished:disaster.done || null,phase:disaster.done?'after':'during'};
         if(path.sea&&!startSeaFreight(record,buyer,seller,path.sea))return null;
         state.exchanges.push(record);
         buyer._paultendoNextExchangeDay=planet.day+EXCHANGE_PACE.retryDays;
@@ -8421,6 +8425,8 @@
         const items=[{text:'← Back to trade and neighbours',func:()=>openCommodityHistory(known)}];
         const debt=record.debt&&livingWorldState().credit.find(r=>r.loan===record.debt.loan);
         if(debt)items.push({text:'The debt behind this journey',func:()=>openCreditStory(debt)});
+        const disaster=record.disaster&&regGet('process',record.disaster.id);
+        if(disaster&&livingTownKnown(regGet('town',record.buyer)))items.push({text:`The ${escapeLivingText(record.disaster.subtype.replace(/_/g,' '))}`,func:()=>{closeExecutive();openRegBrowser(disaster,'process');}});
         const voyage=record.sea&&seaFreightVoyage(record);
         if(voyage)items.push({heading:true,text:record.resolved?'The crossing':voyage.status==='preparing'?'Waiting for a vessel':voyage.pause?'The crossing waits':voyage.status==='docked'?'At the quay':'On the water'},{text:'Follow the vessel and its crew',func:()=>openSeaVoyage(voyage)});
         for(const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(exchangeStepText(record,step))}`});
@@ -28359,7 +28365,8 @@
     // Helper to check if a town is currently affected by a disaster
     function getTownDisaster(town) {
         if (!town.issues || !town.issues.disaster) return null;
-        return regGet("process", town.issues.disaster);
+        const disaster=regGet("process", town.issues.disaster);
+        return disaster?.type==='disaster'&&!disaster.done&&!disaster.end&&disaster.start<=planet.day?disaster:null;
     }
 
     // Helper to check if town was recently affected by disaster
@@ -28367,9 +28374,10 @@
         const disasters = regFilter("process", p =>
             p.type === "disaster" &&
             p.done &&
+            planet.day >= p.done &&
             planet.day - p.done <= daysAgo &&
             p.towns && p.towns.includes(town.id)
-        );
+        ).sort((a,b)=>b.done-a.done);
         return disasters.length > 0 ? disasters[0] : null;
     }
 
@@ -28463,58 +28471,9 @@
         }
     });
 
-    // Disaster triggers emergency aid requests to allies
-    modEvent("disasterAidRequest", {
-        random: true,
-        weight: $c.UNCOMMON,
-        subject: { reg: "town", random: true },
-        value: (subject, target, args) => {
-            const disaster = getRecentDisaster(subject, 10);
-            if (!disaster) return false;
-            if (getDisasterSeverity(disaster) < 1) return false;
-
-            // Must have an alliance
-            const alliance = getTownAlliance(subject);
-            if (!alliance) return false;
-
-            // Find an ally that hasn't sent aid yet
-            for (const memberId of alliance.members) {
-                if (memberId === subject.id) continue;
-                const ally = regGet("town", memberId);
-                if (!ally || ally.end) continue;
-
-                // Check if this ally already sent aid for this disaster
-                if (!subject._disasterAidReceived) subject._disasterAidReceived = {};
-                if (subject._disasterAidReceived[disaster.id + "_" + ally.id]) continue;
-
-                args.ally = ally;
-                args.disaster = disaster;
-                args.alliance = alliance;
-                return true;
-            }
-            return false;
-        },
-        func: (subject, target, args) => {
-            if (!subject._disasterAidReceived) subject._disasterAidReceived = {};
-            subject._disasterAidReceived[args.disaster.id + "_" + args.ally.id] = true;
-
-            // Ally sends aid
-            const aidAmount = 50 + Math.floor(Math.random() * 100);
-
-            // Speed up recovery
-            if (subject.disasterRecovery > 10) {
-                subject.disasterRecovery -= 10;
-            }
-
-            // Boost happiness
-            happen("Influence", null, subject, { happy: 1, temp: true });
-
-            // Strengthen alliance bonds
-            improveRelations(subject, args.ally, 5);
-
-            logMessage(`{{regname:town|${args.ally.id}}} sends ${aidAmount} in disaster relief to ally {{regname:town|${subject.id}}} through the {{b:${args.alliance.name}}}.`);
-        }
-    });
+    // Relief uses the common needs and shipment system. Alliances do not
+    // create supplies or guarantee generosity, and aid earns its relationship
+    // change only after an actual delivery.
 
     // Disaster-struck towns may seek emergency loans
     modEvent("disasterEmergencyLoan", {
@@ -28701,41 +28660,8 @@
     // DISASTER-DIPLOMACY INTERACTIONS
     // ----------------------------------------
 
-    // Player sway: Offer disaster relief to improve relations
-    modEvent("swayDisasterRelief", {
-        random: true,
-        weight: $c.UNCOMMON,
-        subject: { reg: "player", id: 1 },
-        target: { reg: "town", random: true },
-        value: (subject, target, args) => {
-            const disaster = getRecentDisaster(target, 15);
-            if (!disaster) return false;
-            if (getDisasterSeverity(disaster) < 1) return false;
-
-            args.disaster = disaster;
-            return true;
-        },
-        message: (subject, target, args) => {
-            return `{{regname:town|${target.id}}} is recovering from a devastating ${args.disaster.subtype}. Sending relief supplies would earn their gratitude. {{should}}`;
-        },
-        messageDone: "Aid convoys are dispatched to help the survivors.",
-        messageNo: "They must fend for themselves.",
-        func: (subject, target, args) => {
-            const severity = getDisasterSeverity(args.disaster);
-
-            // Big relations boost
-            improveRelations(target, regFilter("town", t => !t.end)[0], severity * 10);
-
-            // Speed their recovery
-            if (target.disasterRecovery > 10) {
-                target.disasterRecovery -= 10;
-            }
-
-            happen("Influence", null, target, { happy: 2, temp: true });
-
-            logMessage(`Relief supplies arrive in {{regname:town|${target.id}}}, speeding recovery from the ${args.disaster.subtype}.`, "milestone");
-        }
-    });
+    // The Traveler can encourage a real neighbour to care through the living
+    // people system. There is no separate decision that conjures a convoy.
 
     // Rivals may exploit disaster-weakened towns
     modEvent("disasterExploitation", {
