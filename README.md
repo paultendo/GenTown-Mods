@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.74**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.75**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.74/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.75/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.74)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.75)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -31,7 +31,7 @@ The local origin has its own saves; it does not share storage with r74n.com. The
 
 ## Compatibility and verification
 
-Sea exploration now starts with a real local vessel. Preparing a crossing creates workshop demand. A coastal boat takes four timber and six work days, while a sailing vessel takes eight timber, two metal and ten work days. Local sailing and navigation knowledge bound the water that can be crossed. A named, available crew takes the vessel out of stores, moves along actual tiles and brings the same vessel home with its maker recorded. Closed borders can hold the vessel offshore, full stores can delay unloading, and the loss of its home port loses the held vessel. Returning accounts can support later local travel inquiry. Proposals, viewing a story and reloading grant no ships, discovery bonuses or instant trade routes. Towns can also start this preparation themselves. Stolen sea charts copy an actual returned crossing. Maritime freight and separate crew provisions remain further work, and the initial workshop and journey timings need longer playtesting.
+Sea exploration now starts with a real local vessel. Preparing a crossing creates workshop demand. A coastal boat takes four timber and six work days, while a sailing vessel takes eight timber, two metal and ten work days. Local sailing and navigation knowledge bound the water that can be crossed. A named, available crew takes the vessel out of stores, moves along actual tiles and brings the same vessel home with its maker recorded. Closed borders can hold the vessel offshore, full stores can delay unloading, and the loss of its home port loses the held vessel. Returning accounts can support later local travel inquiry. Proposals, viewing a story and reloading grant no ships, discovery bonuses or instant trade routes. Towns can also start this preparation themselves. Stolen sea charts copy an actual returned crossing. Sea requests now share the commodity economy. Either settlement can provide an actual vessel, with a coastal hull carrying up to 24 supplies and a sailing vessel up to 96. A supplier's crew first visits the receiving town, then takes its request back to the supplying quay. Local workshop orders, aid, trade and barter retain their actual needs and terms. Goods must cross before entering stores. Payment held in escrow at the receiving town takes a separate return crossing. A crew stays occupied through waiting, delivery, payment and the vessel's return. Changed needs cancel preparation. Closed trade borders and full stores hold deliveries. Surviving carriers return cancelled cargo through actual ports. Two useful completed exchanges can establish a sea route with measured travel time. Ordinary credit, repayment goods and captured war supplies still use ground transport. Separate crew provisions and naval warfare remain further work. Cargo limits and journey timing are initial calibration that needs longer human playtesting.
 
 The overhaul now reads per-planet configuration, preserves native custom map sizes, initializes save hooks before autoload, restores inactive worlds, and redraws the map when installed after the game is already running. Chronicle history is encoded for GenTown's save import format and restored with sanitized markup. Repeated native sunrise greetings from the same day and current issues are retired after loading, with Chronicle indexes kept consistent. Genuine repeated events, different days, changing issue reports and linked stories remain. Play/Pause uses one timer, pauses for decisions or hidden pages, and does not automatically confirm destructive dialogs. Runtime caches stay out of saved games.
 

@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.74/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.75/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.74";
+    const MOD_VERSION = "1.6.75";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -6948,7 +6948,7 @@
     function materialPurposeWanted(town,work) {
         if(work.purpose?.exchange) {
             const request=commodityExchangeState().exchanges.find(r=>r.id===work.purpose.exchange),buyer=request&&regGet('town',request.buyer);
-            const path=buyer&&commodityPath(buyer,town);
+            const path=buyer&&commodityPath(buyer,town,request);
             return !!request&&!request.resolved&&!!path&&commodityDemand(buyer,request.type,path)>0;
         }
         const root=work.purpose?.type;
@@ -7193,21 +7193,21 @@
         if(kind==='aid')b.lastHelpReceived={...b.last};
         if(COMMODITIES[type]?.edible)rememberFoodExchange(from,to,kind,count,id);
     }
-    function commodityPath(from,to) {
+    function commodityPath(from,to,record=null,{marine=false}={}) {
         if(!from||!to||from.end||to.end||from.pop<=0||to.pop<=0||from.id===to.id||areAtWar(from,to)||hasEmbargo(from,to)||hasEmbargo(to,from)) return null;
         if(happen('Legality',null,from,{law:'travel'})===false||happen('Legality',null,to,{law:'travel'})===false) return null;
         const connected=!!getTradeRouteBetween(from,to)?.active;
         // First contact can be local. Longer journeys need the actual established route.
-        if(!connected&&(getTownDistance(from,to)>6||!(planet.unlocks.trade>=10))) return null;
+        if(!connected&&(getTownDistance(from,to)>6||!(planet.unlocks.trade>=10))) return marine||record?.sea?seaFreightPath(from,to,record):null;
         const enemies=new Set(regToArray('town').filter(town=>areAtWar(from,town)||areAtWar(to,town)).map(town=>town.id));
         const canEnter=chunk=>!enemies.has(chunk.v?.s)&&(chunk.b!=='water'||planet.unlocks.travel>=60);
         let path=getCachedPath(from,to,40);
         // The ordinary road cache knows terrain, not who now holds a border.
         // Try a real detour rather than closing every route during a war.
         if(path?.some(chunk=>!canEnter(chunk)))path=findPath(getAnchorChunk(from),getAnchorChunk(to),{canEnter});
-        return path?.length?path:null;
+        return path?.length?path:marine||record?.sea?seaFreightPath(from,to,record):null;
     }
-    function commodityTravelDays(path) {return Math.max(1,Math.ceil((computePathTravelCost(path) || path.length)/EXCHANGE_PACE.chunksPerDay));}
+    function commodityTravelDays(path) {return Math.max(1,Math.ceil((path?.sea?path.slice(1).reduce((n,c)=>n+seaMoveCost(c),0):computePathTravelCost(path) || path.length)/EXCHANGE_PACE.chunksPerDay));}
     function spareCrops(town,path) {return Math.max(0,Math.floor(commodityStock(town)-foodBuffer(town,path?commodityTravelDays(path)*2:0)));}
     function foodDemand(town,path) {return Math.max(0,foodBuffer(town,commodityTravelDays(path)*2+EXCHANGE_PACE.retryDays)-mealStock(town));}
     function foodCommodityValue(town,available,demand,travelDays) {
@@ -7374,7 +7374,7 @@
     }
     function commodityTerms(buyer,seller,person,path,type='crop',offer={}) {
         const demand=commodityDemand(buyer,type,path),spare=offer.spare ?? commoditySpare(seller,type,path,offer.exchange);
-        const count=Math.floor(Math.min(spare,demand,Math.max(0,commodityCapacity(buyer,type)-commodityStock(buyer,type))));
+        const count=Math.floor(Math.min(spare,demand,path.sea?SEA_CRAFT[path.sea.type].cargo:Infinity,Math.max(0,commodityCapacity(buyer,type)-commodityStock(buyer,type))));
         if(count<=0) return {kind:'refuse',reason:'stores'};
         const relation=getRelations(seller,buyer);
         const {aid,mercantile,closed}=commodityOfferPolicy(seller,person,{memory:exchangeMemory(seller,buyer),relation,practice:livingWorldState().teachings.some(t=>t.town===seller.id&&t.active&&['care','food'].includes(t.meaning)),religion:getTownReligion(seller),sameFaith:buyer.religion===seller.religion},count);
@@ -7393,7 +7393,7 @@
             const wanted=Object.entries(COMMODITIES).filter(([other])=>other!==type).map(([other])=>[other,commodityDemand(seller,other,path)]).filter(([,need])=>need>0).sort((a,b)=>b[1]-a[1]);
             for(const [other,need] of wanted) {
                 const capacity=Math.max(0,Math.floor(commodityCapacity(seller,other)-commodityStock(seller,other)));
-                const offered=Math.min(commoditySpare(buyer,other,path),Math.ceil(need),capacity);
+                const offered=Math.min(commoditySpare(buyer,other,path),Math.ceil(need),capacity,path.sea?SEA_CRAFT[path.sea.type].cargo:Infinity);
                 const paymentValue=commodityUnitValue(seller,other,commodityStock(seller,other)+offered,need,path);
                 const goodsValue=commodityUnitValue(seller,type,spare,demand,path);
                 const rate=Math.max(0.25,Math.min(8,paymentValue/goodsValue));
@@ -7467,6 +7467,7 @@
             case 'workRoom':return `${seller} keeps the finished ${goods} until ${buyer} has room for it.`;
             case 'workStores':return `${seller} keeps the ${goods} for its own work. The request from ${buyer} must wait.`;
             case 'aid':return `${seller} sends ${step.count} ${goods} to ${buyer}.${step.reason==='remembered'?' They remember help that once came the other way.':step.reason==='practice'?' Helping neighbours has become a practice here.':step.reason==='belief'?' They put their belief in shared provision into practice.':step.reason==='shared'?' They share from the town’s stores.':''}`;
+            case 'landed':return `${step.count} ${goods} reach ${buyer}.${record.payment?' The vessel will carry payment back across the water.':''}`;
             case 'trade':return `${seller} sends ${step.count} ${goods} to ${buyer} for ${step.payment.count} in payment.`;
             case 'barter':return `${seller} sends ${step.count} ${goods} to ${buyer} in exchange for ${step.payment.count} ${payment}. Both supplies travel with the carriers.`;
             case 'seizure':return `Raiders from ${buyer} take ${step.count} ${goods} from ${seller}. The supplies are on the road home. ${seller} remembers the theft.`;
@@ -7497,12 +7498,14 @@
         if(visibleTown) {
             const town=id=>livingTownKnown(regGet('town',id))?townRef(id):'another settlement';
             const goods=COMMODITIES[record.type].edible?'food':COMMODITIES[record.type].label;
-            const message=kind==='route'
+            const message=kind==='landed'
+                ? `Supplies landed: ${step.count} ${COMMODITIES[record.type].label} reach ${town(record.buyer)} from ${town(record.seller)}.`
+                : kind==='route'
                 ? `New route: ${[record.buyer,record.seller].map(town).join(' and ')}.`
                 : kind==='threat'?`${goods[0].toUpperCase()+goods.slice(1)}: ${town(record.buyer)} threatens ${town(record.seller)}.`
                 : kind==='debtArrive'?`${goods[0].toUpperCase()+goods.slice(1)} repays debt: ${town(record.seller)} supplies ${town(record.buyer)}.`
                 : escapeLivingText(exchangeStepText(record,step));
-            modLog('memory',message,['threat','war','seizure'].includes(kind)?'warning':null,{town:visibleTown,observedStory:true,force:['route','threat','debtArrive'].includes(kind),highlight:['route','threat','debtArrive'].includes(kind),story:{kind:'exchange',id:record.id}});
+            modLog('memory',message,['threat','war','seizure'].includes(kind)?'warning':null,{town:visibleTown,observedStory:true,force:['route','threat','debtArrive','landed'].includes(kind),highlight:['route','threat','debtArrive','landed'].includes(kind),story:{kind:'exchange',id:record.id}});
         }
     }
     function newCommodityJourney(buyer,seller,path,source='need',type='crop') {
@@ -7510,16 +7513,17 @@
         if(!COMMODITIES[type]||!path?.length||state.exchanges.some(r=>r.buyer===buyer.id&&!r.resolved)||state.exchanges.length>=EXCHANGE_PACE.maxHistory&&state.exchanges.every(r=>!r.resolved)) return null;
         const hunger=buyer._paultendoCommunityWork?.hunger;
         const record={id:`exchange:${state.nextId++}`,type,buyer:buyer.id,seller:seller.id,names:{[buyer.id]:buyer.name,[seller.id]:seller.name},known:{},day:planet.day,shortDays:hunger?.days || 0,since:hunger?.started || null,source,purposes:COMMODITIES[type].edible?[{kind:'meals'}]:commodityWorkClaims(buyer),status:'asking',due:planet.day+commodityTravelDays(path),steps:[],resolved:false,cargo:0};
+        if(path.sea&&!startSeaFreight(record,buyer,seller,path.sea))return null;
         state.exchanges.push(record);
         buyer._paultendoNextExchangeDay=planet.day+EXCHANGE_PACE.retryDays;
-        while(state.exchanges.length>EXCHANGE_PACE.maxHistory){const index=state.exchanges.findIndex(r=>r.resolved);if(index<0) break;state.exchanges.splice(index,1);}
+        while(state.exchanges.length>EXCHANGE_PACE.maxHistory){const index=state.exchanges.findIndex(r=>r.resolved&&!(r.paymentCargo>0)&&(!r.sea||!SEA_ACTIVE.includes(seaFreightVoyage(r)?.status)));if(index<0) break;state.exchanges.splice(index,1);}
         noteExchangeStep(record,source==='need'?'ask':source);return record;
     }
     function findCommoditySupplier(buyer,types) {
         const candidates=[];
         for(const seller of regToArray('town')) {
             if(seller.id===buyer.id||seller.end||seller.pop<=0)continue;
-            const path=commodityPath(buyer,seller);if(!path)continue;
+            const path=commodityPath(buyer,seller,null,{marine:true});if(!path)continue;
             for(const type of types) {
                 const wanted=commodityDemand(buyer,type,path),spare=commoditySpare(seller,type,path);
                 if(wanted<=0)continue;
@@ -7576,7 +7580,8 @@
         record.knowledgeOffer=localKnowledgeOffer(seller,buyer,record.id);
         record.returnKnowledge=localKnowledgeOffer(buyer,seller,record.id);
         record.cargo=removed;record.payment=terms.payment;record.quote=terms.quote;record.previousHelp=terms.previousHelp;record.kind=terms.kind;record.status='carrying';record.due=planet.day+commodityTravelDays(path);
-        recordTraffic(path,0.35);noteExchangeStep(record,terms.kind,{count:removed,payment:terms.payment,reason:terms.reason});
+        if(record.sea) {const voyage=seaFreightVoyage(record);if(!setSeaFreightLeg(voyage,buyer.id,'cargo')){rollback();record.cargo=0;record.paymentCargo=0;return false;}}
+        else recordTraffic(path,0.35);noteExchangeStep(record,terms.kind,{count:removed,payment:terms.payment,reason:terms.reason});
         if(record.materialLesson?.withheld)noteExchangeStep(record,'withheld',{type:record.type,town:seller.id});
         if(record.returnLesson?.withheld)noteExchangeStep(record,'withheld',{type:terms.payment.type,town:buyer.id});
         if(record.knowledgeOffer?.withheld)noteExchangeStep(record,'knowledgeWithheld',{town:seller.id,title:record.knowledgeOffer.title});
@@ -7663,16 +7668,20 @@
         if(removed<=0)return;
         const record={id:`exchange:${state.nextId++}`,type:pick.type,buyer:attacker.id,seller:defender.id,names:{[attacker.id]:attacker.name,[defender.id]:defender.name},known:{},day:planet.day,source:'raid',kind:'seizure',war:war.id,origin:{x:chunk.x,y:chunk.y},cause:war.cause?.source || null,purposes:COMMODITIES[pick.type].edible?[{kind:'meals'}]:commodityWorkClaims(attacker),status:'carrying',due:planet.day+commodityTravelDays(path),steps:[],resolved:false,cargo:removed,cargoLots:commodityCargoLots(removed,inputs)};
         state.exchanges.push(record);
-        while(state.exchanges.length>EXCHANGE_PACE.maxHistory){const index=state.exchanges.findIndex(r=>r.resolved);if(index<0)break;state.exchanges.splice(index,1);}
+        while(state.exchanges.length>EXCHANGE_PACE.maxHistory){const index=state.exchanges.findIndex(r=>r.resolved&&!(r.paymentCargo>0)&&(!r.sea||!SEA_ACTIVE.includes(seaFreightVoyage(r)?.status)));if(index<0)break;state.exchanges.splice(index,1);}
         const memory=exchangeMemory(defender,attacker);memory.lost ||= {};memory.lost[pick.type]=(memory.lost[pick.type] || 0)+removed;memory.lastTheft={day:planet.day,type:pick.type,count:removed,source:record.id};
         recordGrudge(defender,attacker.id,'stores taken',Math.min(3,1+removed/Math.max(1,nativeMealNeed(defender))));
         worsenRelations(defender,attacker,2);recordTraffic(path,0.2);noteExchangeStep(record,'seizure',{count:removed});
     }
     function advanceCommodityJourneys() {
+        for(const record of commodityExchangeState().exchanges)if(record.sea&&record.resolved&&!record.paymentLoaded&&record.paymentCargo>0)refundSeaEscrow(record);
         for(const record of commodityExchangeState().exchanges.filter(r=>!r.resolved&&r.due<=planet.day)) {
             const buyer=regGet('town',record.buyer),seller=regGet('town',record.seller);
+            const voyage=record.sea&&seaFreightVoyage(record);
+            if(record.sea&&(!voyage||voyage.status==='lost')){record.resolved=true;record.status='lost';continue;}
+            if(record.cancelled||record.sea&&(voyage.status!=='docked'||voyage.contractBlocked))continue;
             if(!buyer||buyer.end||buyer.pop<=0||record.kind!=='seizure'&&(!seller||seller.end||seller.pop<=0)) {record.resolved=true;record.status='lost';record.lost={type:record.type,count:record.cargo,payment:record.paymentCargo || 0};record.cargo=0;record.paymentCargo=0;noteExchangeStep(record,'closed');continue;}
-            const path=record.kind==='seizure'?capturedSupplyPath(buyer,record.origin):commodityPath(buyer,seller);
+            const path=record.kind==='seizure'?capturedSupplyPath(buyer,record.origin):commodityPath(buyer,seller,record);
             if(record.kind==='debt'){advanceDebtGoods(record,buyer,seller,path);continue;}
             if(record.status==='making') {
                 const work=livingWorldState().materialWork.find(w=>w.id===record.manufacture?.work);
@@ -7708,13 +7717,18 @@
             }
             if(!path){record.status='waiting';record.due=planet.day+1;if(record.steps.at(-1)?.kind!=='blocked')noteExchangeStep(record,'blocked');continue;}
             if(record.kind==='seizure'&&record.status==='waiting'){record.status='carrying';record.due=planet.day+commodityTravelDays(path);noteExchangeStep(record,'return');continue;}
-            if(record.cargo>0) {
+            if(record.cargo>0&&(!record.sea||voyage.phase==='cargo')) {
                 const before=commodityStock(buyer,record.type);happen('AddResource',seller,buyer,{type:record.type,count:record.cargo});
                 const received=Math.max(0,commodityStock(buyer,record.type)-before);
                 record.cargo-=received;record.delivered=(record.delivered || 0)+received;
+                if(record.sea&&received>0)noteExchangeStep(record,'landed',{count:received});
                 addCommodityLot(buyer,record.type,received,record,null,record.cargoLots);
             }
-            if(record.paymentCargo>0) {
+            if(record.sea&&voyage.phase==='cargo'&&record.cargo<=0&&record.paymentCargo>0) {
+                if(setSeaFreightLeg(voyage,seller.id,'payment')){record.paymentLoaded=true;record.status='paying';}
+                record.due=planet.day+1;continue;
+            }
+            if(record.paymentCargo>0&&(!record.sea||voyage.phase==='payment')) {
                 const before=commodityStock(seller,record.payment.type);
                 const source=PAULTENDO_STATE.cashSource;PAULTENDO_STATE.cashSource='trade';
                 try{happen('AddResource',buyer,seller,{type:record.payment.type,count:record.paymentCargo});}finally{PAULTENDO_STATE.cashSource=source;}
@@ -7737,7 +7751,7 @@
             if(route?.active){route.totalGoods=(route.totalGoods || 0)+record.delivered;route.caravans=(route.caravans || 0)+1;route.lastCaravanDay=planet.day;}
             receiveMaterialInstructions(buyer,record.materialLesson,record);receiveMaterialInstructions(seller,record.returnLesson,record);
             receiveLocalKnowledge(buyer,record.knowledgeOffer,record);receiveLocalKnowledge(seller,record.returnKnowledge,record);
-            recordTraffic(path,0.5);noteLivingExchange(seller,buyer,path,{type:record.kind==='aid'?'gift':'caravan',route:route?.id,goods:record.type});
+            if(!record.sea)recordTraffic(path,0.5);noteLivingExchange(seller,buyer,path,{type:record.kind==='aid'?'gift':'caravan',route:route?.id,goods:record.type});
             // Only real meals can calm hunger. A delivered supply can end a famine
             // when it actually provides enough for the recipient's next meal.
             if(buyer.famine&&!buyer.famine.ended&&mealStock(buyer)>=foodBuffer(buyer)) buyer.famine.ended=true;
@@ -7750,11 +7764,11 @@
     // It creates no stock, money, influence or extra random draw.
     function commodityRouteFromArrivals(record,buyer,seller) {
         if(getTradeRouteBetween(buyer,seller)||[buyer,seller].some(town=>townKnowledgeLevel(town,'trade')<20||(town.influences?.trade || 0)<5)
-            ||getRelations(buyer,seller)<2||getRelations(seller,buyer)<2||!commodityPath(buyer,seller))return null;
+            ||getRelations(buyer,seller)<2||getRelations(seller,buyer)<2||!commodityPath(buyer,seller,record))return null;
         const arrivals=commodityExchangeState().exchanges.filter(r=>r.status==='arrived'&&['aid','trade','barter'].includes(r.kind)&&r.delivered>0&&r.arrived<=planet.day&&planet.day-r.arrived<=90
             &&[buyer.id,seller.id].includes(r.buyer)&&[buyer.id,seller.id].includes(r.seller));
         if(arrivals.length<2)return null;
-        const route=createTradeRoute(buyer,seller);if(!route)return null;
+        const route=createTradeRoute(buyer,seller,commodityPath(buyer,seller,record));if(!route)return null;
         route.origin={kind:'exchanges',day:planet.day,arrivals:arrivals.slice(-2).map(r=>({id:r.id,day:r.arrived,type:r.type,count:r.delivered,buyer:r.buyer,seller:r.seller}))};
         const earlier=arrivals.filter(r=>r.id!==record.id);
         route.caravans=earlier.length;route.totalGoods=earlier.reduce((sum,r)=>sum+r.delivered,0);
@@ -7768,8 +7782,9 @@
             const exchange=commodityExchangeState().exchanges.find(r=>r.id===arrival.id);
             items.push({text:`Day ${arrival.day} · ${arrival.count} ${COMMODITIES[arrival.type].label} arrived`,...(exchange?{func:()=>openCommodityJourney(exchange)}:{})});
         }
-        const path=towns.every(t=>t&&!t.end)&&commodityPath(...towns);
-        items.push({heading:true,text:'Today'},{text:!path?'The way between them is closed.':route.active?'Carriers can still use the route.':'The route has fallen quiet.'});
+        const arrival=route.origin?.arrivals?.at(-1),exchange=arrival&&commodityExchangeState().exchanges.find(r=>r.id===arrival.id);
+        const path=towns.every(t=>t&&!t.end)&&commodityPath(...towns,exchange,{marine:true});
+        items.push({heading:true,text:'Today'},{text:!path?'The way between them is closed.':route.active?(route.needsShips?'This crossing needs a free vessel and crew.':'Carriers can still use the route.'):'The route has fallen quiet.'});
         for(const town of towns)if(livingTownKnown(town))items.push({text:`Visit ${escapeLivingText(town.name)}`,func:()=>{closeExecutive();openRegBrowser(town,'town');}});
         populateExecutive(items,'A regular route');markLivingStoryControls();openExecutive();
     }
@@ -7778,6 +7793,8 @@
         const items=[{text:'← Back to trade and neighbours',func:()=>openCommodityHistory(known)}];
         const debt=record.debt&&livingWorldState().credit.find(r=>r.loan===record.debt.loan);
         if(debt)items.push({text:'The debt behind this journey',func:()=>openCreditStory(debt)});
+        const voyage=record.sea&&seaFreightVoyage(record);
+        if(voyage)items.push({heading:true,text:record.resolved?'The crossing':voyage.status==='preparing'?'Waiting for a vessel':voyage.pause?'The crossing waits':voyage.status==='docked'?'At the quay':'On the water'},{text:'Follow the vessel and its crew',func:()=>openSeaVoyage(voyage)});
         for(const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(exchangeStepText(record,step))}`});
         const route=record.route&&planet.tradeRoutes?.find(r=>r.id===record.route);
         if(route?.origin?.kind==='exchanges')items.push({text:'The route these journeys made',func:()=>openCommodityRoute(route)});
@@ -7801,7 +7818,7 @@
                 if(artifact&&livingArtifactKnown(artifact))items.push({text:`Visit ${escapeLivingText(artifactTitle(artifact))}`,func:()=>openLivingArtifact(artifact)});
             }
         }
-        if(!record.resolved) items.push({text:record.status==='making'?'The workshop is filling the request.':record.cargo>0||record.paymentCargo>0?'The cargo is still with the carriers.':'The request is still on its way.'});
+        if(!record.resolved) items.push({text:record.status==='making'?'The workshop is filling the request.':record.cargo>0?'The supplies are still with the carriers.':record.paymentCargo>0?record.sea?(record.paymentLoaded?'The supplies have arrived. The crew is taking payment back.':'The supplies have arrived. Payment is waiting at the quay.'):'The supplies have arrived. The carriers are taking payment back.':voyage?.status==='preparing'?'The crossing needs a vessel and an available crew.':'The request is still on its way.'});
         const previous=record.previousHelp;
         if(previous?.source&&previous.source!==record.id) {
             const root=commodityExchangeState().exchanges.find(r=>r.id===previous.source);if(root&&resolveChronicleStory({kind:'food',id:root.id}))items.push({text:'Remember the earlier help',func:()=>openCommodityJourney(root)});
@@ -8826,7 +8843,7 @@
         }
         section.appendChild(links);
         for(const voyage of livingWorldState().seaVoyages.filter(v=>v.town===town.id).slice(-2)){
-            const crossing=document.createElement('button');crossing.textContent=voyage.status==='returned'?'A crossing remembered':'Beyond the coast';crossing.addEventListener('click',()=>{closePopups();openSeaVoyage(voyage);});section.appendChild(crossing);
+            const crossing=document.createElement('button');crossing.textContent=voyage.exchange?'Supplies by sea':voyage.status==='returned'?'A crossing remembered':'Beyond the coast';crossing.addEventListener('click',()=>{closePopups();openSeaVoyage(voyage);});section.appendChild(crossing);
         }
         if (town.pop > 0) {
             const people = document.createElement('button'); people.textContent = 'Meet the people';
@@ -10960,7 +10977,7 @@
     }
 
     function updateFogVisibilityForTown(town, opts = {}) {
-        if (!town || town.end) return false;
+        if (!town || town.end || town._hidden) return false;
         if (!town.center && typeof happen === "function") {
             try { happen("UpdateCenter", null, town); } catch {}
         }
@@ -11573,10 +11590,10 @@
     }
 
     const SEA_CRAFT = {
-        coastal_boat:{water:6,range:16},
-        sailing_vessel:{water:24,range:40}
+        coastal_boat:{water:6,range:16,cargo:24},
+        sailing_vessel:{water:24,range:40,cargo:96}
     };
-    const SEA_ACTIVE = ['preparing','outbound','returning','unloading'];
+    const SEA_ACTIVE = ['preparing','outbound','returning','docked','unloading'];
     function seaCrewBusy(town,id) {
         return livingWorldState().seaVoyages.some(v=>v.town===town.id&&v.person===id&&SEA_ACTIVE.includes(v.status));
     }
@@ -11606,6 +11623,121 @@
         const water=path?.filter(c=>c.b==='water').length || 0;
         return (!requireWater||water>0)&&water<=limit.water?path:null;
     }
+    function seaFreightVoyage(record) {return livingWorldState().seaVoyages.find(v=>v.id===record?.sea);}
+    function seaFreightContact(a,b) {
+        return !!getTradeRouteBetween(a,b)?.active || getTownDistance(a,b)<=6&&planet.unlocks.trade>=10 || livingWorldState().seaVoyages.some(v=>{
+            if(v.reached==null||![a.id,b.id].includes(v.town))return false;
+            const other=v.town===a.id?b:a,target=chunkAt(v.target.x,v.target.y);
+            return target?.v?.s===other.id||target&&getAnchorChunk(other)?.x===target.x&&getAnchorChunk(other)?.y===target.y;
+        });
+    }
+    // A prospective request may need a hull built. Reading this plan never
+    // creates people, work or stock. Existing freight keeps its held vessel.
+    function seaFreightPath(buyer,seller,record) {
+        if(!seaFreightContact(buyer,seller))return null;
+        const held=record?.sea&&seaFreightVoyage(record);
+        const choices=held?[{owner:regGet('town',held.town),type:held.type}]:[buyer,seller].flatMap(owner=>['sailing_vessel','coastal_boat'].filter(type=>materialTechniqueAvailable(type,owner)).map(type=>({owner,type})))
+            .sort((a,b)=>Number(mealStock(b.owner)>=nativeMealNeed(b.owner))-Number(mealStock(a.owner)>=nativeMealNeed(a.owner))||Number(commodityStock(b.owner,b.type)>0)-Number(commodityStock(a.owner,a.type)>0));
+        for(const {owner,type} of choices) {
+            if(!owner||owner.end||owner.pop<=0||!isTownCoastal(owner)||hasIssue(owner,'war')||happen('Legality',null,owner,{law:'travel'})===false)continue;
+            if(!held&&(livingWorldState().seaVoyages.some(v=>v.town===owner.id&&SEA_ACTIVE.includes(v.status))||!seaCrewRole(owner)))continue;
+            if(!held&&commodityStock(owner,type)<1&&!MATERIAL_RECIPES[type].roles.some(role=>inquiryRoleFree(owner,role)))continue;
+            const path=seaPath(owner,getAnchorChunk(seller),type,getAnchorChunk(buyer));
+            if(!path||path.some(c=>!seaCanEnter(buyer,c)||!seaCanEnter(seller,c)))continue;
+            path.sea={town:owner.id,type};return path;
+        }
+        return null;
+    }
+    function startSeaFreight(record,buyer,seller,plan) {
+        const owner=regGet('town',plan.town),path=commodityPath(buyer,seller,null,{marine:true});
+        if(!owner||!path?.sea||path.sea.town!==owner.id||path.sea.type!==plan.type)return false;
+        const state=livingWorldState(),target=owner.id===buyer.id?seller:buyer;
+        const crossing=seaPath(owner,getAnchorChunk(target),plan.type);if(!crossing)return false;
+        const voyage={id:`voyage:${state.nextId++}`,town:owner.id,type:plan.type,exchange:record.id,phase:owner.id===buyer.id?'request':'collect',day:planet.day,lastDay:planet.day,status:'preparing',target:{x:getAnchorChunk(target).x,y:getAnchorChunk(target).y},routePath:path.map(c=>({x:c.x,y:c.y})),path:crossing.map(c=>({x:c.x,y:c.y})),position:0,progress:0,steps:[],held:0,inputs:[]};
+        state.seaVoyages.push(voyage);record.sea=voyage.id;record.due=planet.day+1;
+        seaStep(voyage,`A vessel is needed to carry ${COMMODITIES[record.type].label} between the towns.`);return true;
+    }
+    function setSeaFreightLeg(voyage,destination,phase) {
+        if(!voyage||!voyage.held)return false;
+        const owner=regGet('town',voyage.town),town=regGet('town',destination),start=voyage.path[voyage.position],target=town&&!town.end&&town.pop>0&&getAnchorChunk(town);
+        const path=target&&seaPath(owner,target,voyage.type,chunkAt(start.x,start.y),false);if(!path)return false;
+        voyage.path=path.map(c=>({x:c.x,y:c.y}));voyage.position=0;voyage.progress=0;voyage.phase=phase;voyage.destination=destination;voyage.status=phase==='home'?'returning':'outbound';voyage.lastDay=planet.day;delete voyage.pause;
+        seaStep(voyage,phase==='cargo'?`${voyage.name} takes the supplies across the water.`:phase==='payment'?`${voyage.name} sets out with payment for the supplies.`:phase==='home'?`${voyage.name} turns the vessel for home.`:'The crew sets out for the other port.');return true;
+    }
+    function arriveSeaFreight(voyage,owner) {
+        const record=commodityExchangeState().exchanges.find(r=>r.id===voyage.exchange);
+        voyage.status='docked';voyage.reached ??=planet.day;
+        if(voyage.phase==='home'){voyage.status='unloading';return;}
+        if(!record)return;
+        if(voyage.phase==='collect') {
+            if(!setSeaFreightLeg(voyage,record.seller,'request'))pauseSea(voyage,'border','The return to the supplying port is closed.');
+            return;
+        }
+        record.due=planet.day;
+        seaStep(voyage,voyage.phase==='request'?'The request reaches the supplying port.':voyage.phase==='cargo'?'The vessel reaches the receiving quay.':voyage.phase==='payment'?'The vessel brings payment to the supplying quay.':'The crew reaches a quay with the supplies it brought back.');
+    }
+    function refundSeaEscrow(record) {
+        if(record.paymentLoaded||!(record.paymentCargo>0))return;
+        const buyer=regGet('town',record.buyer);
+        if(!buyer||buyer.end||buyer.pop<=0){record.lost ||= {};record.lost.payment=(record.lost.payment || 0)+record.paymentCargo;record.paymentCargo=0;return;}
+        const before=commodityStock(buyer,record.payment.type);happen('AddResource',null,buyer,{type:record.payment.type,count:record.paymentCargo});
+        const added=Math.max(0,commodityStock(buyer,record.payment.type)-before);record.paymentCargo-=added;
+        if(record.payment.type!=='cash')addCommodityLot(buyer,record.payment.type,added,record,buyer,record.paymentLots);
+    }
+    function loseSeaFreight(voyage) {
+        if(!voyage.exchange)return;
+        const record=commodityExchangeState().exchanges.find(r=>r.id===voyage.exchange);if(!record)return;
+        refundSeaEscrow(record);record.lost={...(record.lost || {}),type:record.type,count:record.cargo,payment:record.paymentLoaded?record.paymentCargo:record.lost?.payment || 0};record.cargo=0;
+        if(record.paymentLoaded)record.paymentCargo=0;
+        record.resolved=true;record.status='lost';noteExchangeStep(record,'closed');
+    }
+    // When an order ends, cargo goes back through actual ports. Payment kept
+    // at home can be released there; payment already aboard must travel back.
+    function advanceSeaFreightPort(voyage,owner) {
+        const record=commodityExchangeState().exchanges.find(r=>r.id===voyage.exchange);
+        if(!record)return false;
+        const buyer=regGet('town',record.buyer),seller=regGet('town',record.seller),alive=t=>t&&!t.end&&t.pop>0;
+        if(voyage.status==='preparing'&&!record.resolved&&!record.cancelled&&alive(buyer)&&alive(seller)) {
+            const path=commodityPath(buyer,seller,record);
+            if(path&&commodityDemand(buyer,record.type,path)<=0){record.resolved=true;record.status='withdrawn';noteExchangeStep(record,'recovered');}
+        }
+        if(!alive(buyer)||!alive(seller)) {
+            if(!record.cancelled){record.cancelled=true;record.status='closed';noteExchangeStep(record,'closed');}
+        }
+        if(record.resolved||record.cancelled) {
+            if(voyage.status==='preparing'){voyage.status='cancelled';voyage.finished=planet.day;record.resolved=true;return true;}
+            if(voyage.status==='unloading')return false;
+            refundSeaEscrow(record);
+            const cargo=record.cargo>0,paid=record.paymentLoaded&&record.paymentCargo>0;
+            const destination=cargo?(alive(seller)?seller:alive(buyer)?buyer:null):paid?(alive(buyer)?buyer:null):owner;
+            if(!destination) {record.lost ||= {};record.lost.count=(record.lost.count || 0)+(record.cargo || 0);record.lost.payment=(record.lost.payment || 0)+(record.paymentCargo || 0);record.cargo=record.paymentCargo=0;return true;}
+            const phase=cargo?'recoverCargo':paid?'recoverPayment':'home';
+            if(voyage.phase!==phase||voyage.destination!==destination.id) {
+                if(!setSeaFreightLeg(voyage,destination.id,phase)){pauseSea(voyage,'border','The way back is closed. The crew keeps the supplies aboard.');return true;}
+                return true;
+            }
+            if(voyage.status==='docked'&&(cargo||paid)) {
+                const type=cargo?record.type:record.payment.type,held=cargo?record.cargo:record.paymentCargo,before=commodityStock(destination,type);
+                happen('AddResource',null,destination,{type,count:held});const added=Math.max(0,commodityStock(destination,type)-before);
+                if(cargo){record.cargo-=added;record.returned=(record.returned || 0)+added;addCommodityLot(destination,type,added,record,seller,record.cargoLots);}else{record.paymentCargo-=added;if(type!=='cash')addCommodityLot(destination,type,added,record,buyer,record.paymentLots);}
+                if(added<held)pauseSea(voyage,'room','The quay has no room for the returned supplies.');return true;
+            }
+            if(!cargo&&!paid)record.resolved=true;
+            return false;
+        }
+        if(alive(buyer)&&alive(seller)&&(areAtWar(buyer,seller)||hasEmbargo(buyer,seller)||hasEmbargo(seller,buyer))) {
+            voyage.contractBlocked=true;pauseSea(voyage,'border','The ports have closed their trade. The crossing waits.');return true;
+        }
+        if(voyage.contractBlocked){delete voyage.contractBlocked;delete voyage.pause;}
+        if(voyage.status==='docked') {
+            const person=(owner._paultendoPeople || []).find(p=>p.id===voyage.person);
+            if(person?.figure?.died){loseSeaFreight(voyage);voyage.status='lost';voyage.lost=voyage.held;voyage.held=0;voyage.finished=planet.day;return true;}
+            if(voyage.phase==='collect'){if(!setSeaFreightLeg(voyage,record.seller,'request'))pauseSea(voyage,'border','The way to the supplying port is closed.');}
+            return true;
+        }
+        return false;
+    }
+
     function buildSeaMission(town,target=null) {
         if(!town||town.end||town.pop<=0||!canTownExplore(town)||!isTownCoastal(town)||!seaCrewRole(town)||happen('Legality',null,town,{law:'travel'})===false)return null;
         if(target&&(target.b==='water'||!target.v?.g))return null;
@@ -11646,7 +11778,13 @@
         for(const voyage of state.seaVoyages.filter(v=>SEA_ACTIVE.includes(v.status))) {
             if(voyage.lastDay===planet.day)continue;voyage.lastDay=planet.day;
             const town=regGet('town',voyage.town);
-            if(!town||town.end||town.pop<=0){voyage.status='lost';voyage.lost=voyage.held;voyage.held=0;voyage.finished=planet.day;seaStep(voyage,'The home port is lost. No vessel returns to its stores.',true);continue;}
+            if(!town||town.end||town.pop<=0){loseSeaFreight(voyage);voyage.status='lost';voyage.lost=voyage.held;voyage.held=0;voyage.finished=planet.day;seaStep(voyage,'The home port is lost. No vessel returns to its stores.',true);continue;}
+            if(voyage.exchange&&voyage.held>0&&voyage.status!=='unloading') {
+                const person=(town._paultendoPeople || []).find(p=>p.id===voyage.person);
+                if(person?.figure?.died){loseSeaFreight(voyage);voyage.status='lost';voyage.lost=voyage.held;voyage.held=0;voyage.finished=planet.day;seaStep(voyage,`${voyage.name} is gone. The vessel does not return.`,true);continue;}
+                if(!livingTeachingPersonAvailable(person,town)){pauseSea(voyage,'hands',`${voyage.name} cannot continue the crossing.`);continue;}
+            }
+            if(voyage.exchange&&advanceSeaFreightPort(voyage,town))continue;
             if(voyage.status==='preparing') {
                 if(!materialTechniqueAvailable(voyage.type,town)){pauseSea(voyage,'knowledge','The builders do not know how to make this vessel here.');continue;}
                 if(hasIssue(town,'war')){pauseSea(voyage,'war','Fighting keeps the crew at home.');continue;}
@@ -11658,7 +11796,7 @@
                 const target=chunkAt(voyage.target.x,voyage.target.y),path=seaPath(town,target,voyage.type);
                 if(!path){pauseSea(voyage,'border','There is no open crossing to the other shore.');continue;}
                 const person=livingCommunityPerson(town,role),inputs=[],before=commodityStock(town,voyage.type);
-                withCommodityUse({kind:'voyage',id:voyage.id,town:town.id,text:'A vessel sets out to explore the coast.',inputs},()=>happen('RemoveResource',null,town,{type:voyage.type,count:1}));
+                withCommodityUse({kind:'voyage',id:voyage.id,town:town.id,text:voyage.exchange?'A vessel sets out to carry supplies.':'A vessel sets out to explore the coast.',inputs},()=>happen('RemoveResource',null,town,{type:voyage.type,count:1}));
                 const removed=before-commodityStock(town,voyage.type);if(removed!==1)continue;
                 voyage.held=1;voyage.inputs=inputs;voyage.lots=commodityCargoLots(1,inputs);voyage.person=person.id;voyage.name=person.name;voyage.role=role;voyage.started=planet.day;voyage.path=path.map(c=>({x:c.x,y:c.y}));voyage.status='outbound';delete voyage.pause;
                 for(const input of inputs)rememberCommodityUse(town,input,{kind:'voyage',id:voyage.id,name:'a coastal crossing'});
@@ -11672,7 +11810,7 @@
                 seaStep(voyage,`${voyage.name} brings the vessel home. It can make another crossing.`,true);continue;
             }
             const person=(town._paultendoPeople || []).find(p=>p.id===voyage.person);
-            if(person?.figure?.died){voyage.status='lost';voyage.lost=voyage.held;voyage.held=0;voyage.finished=planet.day;seaStep(voyage,`${voyage.name} is gone. The vessel does not return.`,true);continue;}
+            if(person?.figure?.died){loseSeaFreight(voyage);voyage.status='lost';voyage.lost=voyage.held;voyage.held=0;voyage.finished=planet.day;seaStep(voyage,`${voyage.name} is gone. The vessel does not return.`,true);continue;}
             if(!livingTeachingPersonAvailable(person,town)){pauseSea(voyage,'hands',`${voyage.name} cannot continue the crossing.`);continue;}
             const path=voyage.path.map(c=>chunkAt(c.x,c.y));
             if(path.some(c=>!c)){pauseSea(voyage,'route','The charts no longer give a way through.');continue;}
@@ -11693,6 +11831,7 @@
             }
             if(livingTownKnown(town))revealPathFog(travelled,1,0.9);
             if(voyage.position!==path.length-1)continue;
+            if(voyage.exchange){arriveSeaFreight(voyage,town);continue;}
             if(voyage.status==='outbound') {
                 const target=path.at(-1);voyage.reached=planet.day;
                 if(livingTownKnown(town)&&target.v?.g&&!isLandmassDiscovered(target.v.g)){
@@ -11716,9 +11855,12 @@
     function openSeaVoyage(voyage) {
         const town=regGet('town',voyage.town);if(!livingTownKnown(town))return;
         const items=[{text:`← Back to ${escapeLivingText(town.name)}`,func:()=>{closeExecutive();openRegBrowser(town,'town');}},{heading:true,text:townRef(town.id)}];
-        const status={preparing:'Preparing the crossing',outbound:'Crossing the water',returning:'Coming home',unloading:'Back at the home port',returned:'Home again',lost:'No vessel returned'}[voyage.status];
+        const status={preparing:'Preparing the crossing',outbound:'Crossing the water',returning:'Coming home',docked:'At the quay',unloading:'Back at the home port',returned:'Home again',lost:'No vessel returned',cancelled:'The crossing was set aside'}[voyage.status];
         items.push({heading:true,text:status},{text:COMMODITIES[voyage.type].description});
+        const exchange=voyage.exchange&&commodityExchangeState().exchanges.find(r=>r.id===voyage.exchange);
+        if(exchange)items.push({text:'The supplies behind this crossing',func:()=>openCommodityJourney(exchange)},{text:`This ${COMMODITIES[voyage.type].singular} can carry up to ${SEA_CRAFT[voyage.type].cargo} supplies. Goods reach the receiving town first. Any payment makes a separate return crossing.`});
         if(voyage.status==='preparing')items.push({text:`The crossing needs one ${COMMODITIES[voyage.type].singular}, made with ${commaList(Object.entries(MATERIAL_RECIPES[voyage.type].cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`))}.`});
+        if(voyage.status==='docked')items.push({text:escapeLivingText(voyage.pause==='room'?'The quay has no room for the supplies.':voyage.phase==='request'?'The crew waits while the supplying town considers the request or prepares the goods.':voyage.phase==='cargo'?'The crew waits to unload the supplies.':'The crew waits at the supplying quay.')});
         if(['outbound','returning'].includes(voyage.status))items.push({text:voyage.pause==='hands'?'The crossing waits for its crew.':voyage.pause?'The crew is waiting for the way to open.':`${escapeLivingText(voyage.name)} is still away. The vessel is travelling ${voyage.status==='returning'?'home':'toward the other shore'}.`});
         for(const input of voyage.inputs || []){const work=input.production?.world===skyWorldId()&&input.production.passage===travelerState().passage&&livingWorldState().materialWork.find(w=>w.id===input.production.work);if(work)items.push({text:'How the vessel was made',func:()=>openMaterialWork(work)});}
         const work=livingWorldState().materialWork.findLast(w=>w.town===town.id&&w.type===voyage.type&&w.day>=voyage.day);
@@ -11726,7 +11868,7 @@
         if(livingPlaceKnown(livingWorldState().places[voyage.place]))items.push({text:'The shore they reached',func:()=>openLivingPlace(livingWorldState().places[voyage.place],town.id)});
         items.push({heading:true,text:'The crossing'});
         for(const step of voyage.steps)items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
-        populateExecutive(items,'Beyond the coast');markLivingStoryControls();openExecutive();
+        populateExecutive(items,voyage.exchange?'Supplies by sea':'Beyond the coast');markLivingStoryControls();openExecutive();
     }
 
     function planExplorationMission(town) {
@@ -15297,7 +15439,7 @@
             ["Seasons", updateSeasonState], ["Whispers", advanceLivingWhispers], ["Material surveys", advanceMaterialSurveys], ["Research work", advanceLivingInquiries],
             ["Artifact work", advanceLivingArtifactWork], ["Artifacts", advanceLivingArtifacts],
             ["Inventions", observeLivingInventions], ["Sky study", advanceSkyStudy],
-            ["Commodity journeys", advanceCommodityJourneys], ["Sea crossings", advanceSeaVoyages], ["Field tools", advanceFarmTools],
+            ["Sea crossings", advanceSeaVoyages], ["Commodity journeys", advanceCommodityJourneys], ["Field tools", advanceFarmTools],
             ["Material work", advanceMaterialWork], ["New field tools", advanceFarmTools],
             ["Grain stores", advanceGrainStores], ["Commodity needs", observeCommodityNeeds], ["Supply disputes", observeSupplyDisputes],
             ["Teachings", advanceLivingTeachings], ["Places", observeLivingPlaces],
@@ -18312,7 +18454,7 @@
 
     function applyMarketPurchase(buyer,seller,type) {
         if(!buyer||!seller||planet.day-buyer.start<=1)return null;
-        const path=commodityPath(buyer,seller);if(!path)return null;
+        const path=commodityPath(buyer,seller,null,{marine:true});if(!path)return null;
         if(type==='food')type=['crop','livestock'].filter(t=>commoditySpare(seller,t,path)>0).sort((a,b)=>commoditySpare(seller,b,path)-commoditySpare(seller,a,path))[0];
         if(!COMMODITIES[type]||commodityDemand(buyer,type,path)<=0||commoditySpare(seller,type,path)<=0&&!materialOffer(seller,type))return null;
         return newCommodityJourney(buyer,seller,path,'market',type);
@@ -27914,10 +28056,10 @@
             const isAlly = alliance && alliance.members.includes(target.id);
             const relations = getRelations(subject, target);
 
-            return (isAlly || relations > 6) && spareCrops(target)>0 && !!commodityPath(subject,target) && !commodityExchangeState().exchanges.some(r=>r.buyer===subject.id&&!r.resolved);
+            return (isAlly || relations > 6) && spareCrops(target)>0 && !!commodityPath(subject,target,null,{marine:true}) && !commodityExchangeState().exchanges.some(r=>r.buyer===subject.id&&!r.resolved);
         },
         func: (subject, target) => {
-            const path=commodityPath(subject,target);
+            const path=commodityPath(subject,target,null,{marine:true});
             if(path&&spareCrops(target)>0)newCommodityJourney(subject,target,path,'famine');
         }
     });
@@ -35395,17 +35537,17 @@
     }
 
     // Calculate path difficulty between two towns
-    function calculateRouteDifficulty(town1, town2) {
-        const path=getCachedPath(town1,town2);
+    function calculateRouteDifficulty(town1, town2,observedPath=null) {
+        const path=observedPath || getCachedPath(town1,town2);
         const distance=getTownDistance(town1,town2) || 0;
         if(!path?.length) return {distance,difficulty:1,waterCrossings:0,needsShips:false,baseTravelTime:0,reachable:false};
         const waterCrossings=path.filter(chunk=>chunk.b==='water').length;
         const difficulty=Math.max(0.5,path.reduce((sum,chunk)=>sum+getTerrainDifficulty(chunk),0)/path.length);
-        return {distance,difficulty,waterCrossings,needsShips:waterCrossings>0,baseTravelTime:Math.max(1,Math.ceil(computePathTravelCost(path))),reachable:true};
+        return {distance,difficulty,waterCrossings,needsShips:waterCrossings>0,baseTravelTime:path.sea?commodityTravelDays(path):Math.max(1,Math.ceil(computePathTravelCost(path))),reachable:true};
     }
 
     // Create a trade route between two towns
-    function createTradeRoute(town1, town2) {
+    function createTradeRoute(town1, town2,observedPath=null) {
         initTradeRoutes();
 
         // Check if route already exists
@@ -35415,7 +35557,7 @@
         );
         if (existing) return existing;
 
-        const routeInfo = calculateRouteDifficulty(town1, town2);
+        const routeInfo = calculateRouteDifficulty(town1, town2,observedPath);
         if(!routeInfo.reachable) return null;
 
         const route = {
@@ -35802,14 +35944,14 @@
         random:true, weight:$c.COMMON, subject:{reg:"town",random:true},
         value:subject=>{
             const routes=getTownRoutes(subject).filter(route=>{
-                const partner=getRoutePartner(route,subject),path=partner&&commodityPath(subject,partner);
+                const partner=getRoutePartner(route,subject),path=partner&&commodityPath(subject,partner,null,{marine:true});
                 return path&&Object.keys(COMMODITIES).some(type=>commodityDemand(partner,type,path)>0&&commoditySpare(subject,type,path)>0);
             });
             return routes.length?choose(routes):null;
         },
         check:(subject,_,args)=>!!args.value&&args.value.active,
         func:(subject,_,args)=>{
-            const route=args.value,partner=route&&getRoutePartner(route,subject),path=partner&&commodityPath(subject,partner);
+            const route=args.value,partner=route&&getRoutePartner(route,subject),path=partner&&commodityPath(subject,partner,null,{marine:true});
             if(!route?.active||!path)return;
             const types=Object.keys(COMMODITIES).filter(type=>commodityDemand(partner,type,path)>0&&commoditySpare(subject,type,path)>0);
             types.sort((a,b)=>commodityUnitValue(partner,b,commodityStock(partner,b),commodityDemand(partner,b,path),path)-commodityUnitValue(partner,a,commodityStock(partner,a),commodityDemand(partner,a,path),path));
