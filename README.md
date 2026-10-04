@@ -58,6 +58,14 @@ Open `http://localhost:4173/`. To test a late installation, open `http://localho
 
 Run `npm run check` and `npm test` for the automated checks. These verify behaviour and conservation. They do not establish that a whole campaign feels balanced.
 
+To run a campaign without waiting through the front end:
+
+```sh
+npm run simulate -- --days 1000 --seeds 7,42,123 --policies yes,mixed,skip
+```
+
+The runner uses actual game turns and decisions. It writes campaign reports, a timeline and importable world saves to an isolated output directory. Reports track discoveries, population, shortages, unfinished work and events without usable controls. Continue an exported save with `--save /path/to/world.planet`. The [campaign harness guide](docs/campaign-harness.txt) explains the policies, checks and reproduction limits.
+
 ## Credits
 
 **R74n created GenTown**, including its engine, styles, fonts and icons. Its framework made this mod possible. The local snapshot retains the original source and credit. Source URLs and SHA-256 hashes are recorded in [vendor/gentown/upstream.json](vendor/gentown/upstream.json). The [R74n Content License](vendor/gentown/LICENSE.txt) applies to those assets. `index.html` adapts the original game page for local loading. The paultendo overhaul lives in `paultendo-mod.js` and can be installed independently.

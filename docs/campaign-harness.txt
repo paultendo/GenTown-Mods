@@ -1,0 +1,120 @@
+HEADLESS CAMPAIGN HARNESS
+
+Run the real vendored GenTown engine and paultendo mod for hundreds or thousands
+of turns. No browser is needed and no live player save is read or changed.
+
+Quick start (Node.js 22 or newer, after npm ci)
+
+  npm run simulate -- --days 1000
+
+Compare the same generated terrain under different decision policies
+
+  npm run simulate -- --days 1000 --seeds 7,42,123 --policies yes,mixed,skip
+
+Continue an exported save in an isolated simulation
+
+  npm run simulate -- --save /path/to/world.planet --days 500 --policy mixed
+
+Inspect a harsher founding location
+
+  npm run simulate -- --days 500 --seed 42 --site first
+
+Default founding chooses temperate grassland if the generated terrain has it.
+The report records the selected coordinates and biome. It gives no technology,
+people or resources beyond what the native founding action supplies. 'first'
+uses the first habitable chunk in engine order, which may be snow or desert.
+An imported world keeps its towns and starting day and is not settled again.
+
+Policies
+
+  yes    Accept live Yes/No proposals and use the first offered choice.
+  no     Reject live Yes/No proposals and use the last offered choice.
+  mixed  Choose using a separate seeded random stream.
+  skip   Leave ordinary proposals unanswered. Advancing invokes the engine's
+         actual skip or fallback behaviour, which differs between events.
+
+These are diagnostic policies, not models of skilled or typical players. Naming
+prompts submit the native suggestion, including its editable preview. Missing
+suggestions receive a deterministic name. Mandatory letters are read through
+their actual Read controls. A world which has taken control from the player
+continues to use native autonomous decisions. No costs or checks are bypassed.
+
+What runs
+
+The actual nextDay wrapper, daily events, weighted random events, unfinished
+choices, native skip handlers, mod follow-ups and inactive reached worlds run.
+Canvas operations are stubbed because there is no display. UI and live choice
+handlers still execute. A virtual clock runs deferred callbacks immediately
+within simulated time, without sleeping for the game's real-time button delay.
+Every turn advances the virtual clock by one second. Seeded IDs and timestamps
+make a new campaign reproducible along with its simulation and policy seeds.
+
+Reproducibility requires identical source hashes, inputs and arguments. Running
+a different policy changes consequences and later random event eligibility.
+Imported exports do not contain the engine's complete random stream or every
+pending callback. They begin a new seeded continuation, not an exact replay of
+the original session. Reproduce a failure from its original input and seed.
+
+Output
+
+The runner prints its output directory. By default it creates a unique directory
+under the system temporary directory. --out selects a NEW directory and refuses
+to overwrite one that already exists. Put long-lived runs somewhere permanent.
+
+  batch.json / batch.txt       Configuration and a comparison of completed runs
+  input.planet                Copy of the supplied input, when importing
+  seed-N-policy/report.json   Metrics, source hashes, snapshots and failure detail
+  seed-N-policy/report.txt    Human-readable campaign summary
+  seed-N-policy/timeline.jsonl Actual news, choices, discoveries and work changes
+  seed-N-policy/initial.planet World after founding or importing
+  seed-N-policy/day-N.planet  Checkpoint exports (every 100 turns by default)
+  seed-N-policy/final.planet  Last state, including after a runtime failure
+
+Open any exported world through the game's Saves import to inspect its map,
+towns and history. This is a separate simulation. Importing it into your own
+play session replaces that session, so use a separate browser profile or save
+first if you want to retain your playthrough.
+
+Checks and metrics
+
+Each existing active or inactive world must advance exactly one day per turn.
+Every registered town is checked for finite population, wealth, stores and jobs.
+Negative people, occupations or physical goods fail the run. Cash debt is allowed.
+Console errors, warnings and thrown exceptions fail the run. The report and last
+world are retained if export is still possible. Ctrl+C writes the current partial
+result and stops the batch, rather than discarding it.
+
+The runner records population, food, jobs, wealth, hunger, unrest, actual local
+knowledge, research, workshop work, artifact work, sampling, voyages, exchanges,
+teachings, encounters, places, clues and process types. The report counts only
+real unlock-tree thresholds as discoveries. Small legacy technology score gains
+remain in snapshots and do not inflate the discovery count.
+
+Unfinished work includes its actual status and obstacle. --stall-after N flags
+work with no change in status, remaining work, obstacle or resolution for N days
+(default 30). This is a diagnostic threshold, not a deadline for the game. It can
+include legitimate shortages and waits. A lack of progress is not itself a crash.
+
+The longest quiet stretch counts days without a tracked discovery, change of
+work status or obstacle, town count, artifact, place, encounter, clue or process
+count. Routine news and population changes do not reset it. A town dying out is
+recorded, but the world continues for the requested number of turns. Long quiet
+periods after extinction are therefore visible rather than hidden by early exits.
+
+An event which requests input but has no message or live controls is recorded as
+an unavailable choice. The runner leaves it to lapse rather than inventing an
+answer. Such a campaign finishes with ISSUES. Runtime failures finish with FAILED.
+PASSED means the configured checks found no fault, not that the game is balanced.
+Exit status is 0 for all PASSED, 1 for ISSUES or FAILED, and 130 when interrupted.
+
+The harness cannot decide whether the pacing is enjoyable, whether a headline is
+convincing or whether a player understands a decision. It supplies reproducible
+campaign evidence for those finishing passes and complements human playtesting.
+
+Options
+
+  npm run simulate -- --help
+
+Normal regression tests keep their existing real-timer boot behaviour. Harness
+regressions are in tests/campaign-harness.test.mjs and use the same shared game
+bootstrap as the rest of the suite.
