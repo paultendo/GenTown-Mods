@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.87/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.88/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.87";
+    const MOD_VERSION = "1.6.88";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -3163,6 +3163,8 @@
             }
             const speciesRate = action === 'Boost' && target?._reg === 'species' ? (target.rate || 1) : null;
             const stockBefore=['AddResource','RemoveResource'].includes(action)&&target?.resources&&args?.type?target.resources[args.type] || 0:null;
+            const forest=action==='AddResource'&&args?.type==='lumber'&&PAULTENDO_STATE.landHarvest?.town===target?PAULTENDO_STATE.landHarvest.chunk:null;
+            if(forest)args={...args,count:Math.min(Math.max(0,args.count ?? 1),Math.floor(landPatch(forest,true).cover*LAND_PACE.timber))};
             let result;
             // Zero means zero. Native RemoveResource otherwise treats it as one,
             // including construction inputs which were not actually used.
@@ -3177,6 +3179,11 @@
                 // harvests and arriving cargo still use the same actual stock.
                 if(!(args.count<=0))target.resources.crop=Math.floor(Math.min(commodityCapacity(target,'crop'),stockBefore+(args.count || 1)));
             } else result = baseHappen(action, subject, target, args, targetClass);
+            if(forest&&target.resources.lumber>stockBefore) {
+                const patch=landPatch(forest,true);
+                patch.cover=Math.max(0,patch.cover-(target.resources.lumber-stockBefore)/LAND_PACE.timber);
+                patch.lastDay=planet.day;
+            }
             if(PAULTENDO_STATE.commoditiesReady&&stockBefore!==null) {
                 const after=target.resources[args.type] || 0,delta=after-stockBefore;
                 if(args.type==='cash'&&delta)recordCashFlow(target,delta,PAULTENDO_STATE.cashSource || 'other');
@@ -3233,6 +3240,15 @@
                 if(deposits[key])chunk._paultendoDeposits=deposits[key];
             }
             PAULTENDO_STATE.materialDepositChunks=planet.chunks;
+        }
+        if(planet.chunks&&PAULTENDO_STATE.landscapeChunks!==planet.chunks) {
+            // Native compression rounds heights to tenths. Retain precise moved
+            // ground so repeated reloads cannot create or erase a landslide.
+            for(const [key,patch] of Object.entries(planet._paultendoLand || {})) {
+                const chunk=planet.chunks[key];
+                if(chunk&&patch.pixels){chunk.p=structuredClone(patch.pixels);chunk.e=patch.elevation;}
+            }
+            PAULTENDO_STATE.landscapeChunks=planet.chunks;
         }
     }
 
@@ -4667,6 +4683,10 @@
             const town=regGet('town',Number(ref.id));
             return livingTownKnown(town)&&town._paultendoGrainStore?{label:'Visit the grain stores',open:()=>openGrainStores(town)}:null;
         }
+        if(ref.kind==='land') {
+            const chunk=planet.chunks?.[ref.id];
+            return chunk&&isChunkExplored(chunk.x,chunk.y)&&landPatch(chunk)?{label:'Look at the land',open:()=>openLivingPlace(ensureLivingPlace(chunk),chunk.v?.s)}:null;
+        }
         if(ref.kind==='discovery') {
             const discovery=state.discoveries?.[ref.id],town=regGet('town',discovery?.origin);
             const level=livingDiscoveryBranches()[discovery?.key]?.levels.find(item=>item.level===discovery.level);
@@ -4709,13 +4729,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
+        if (!['land','clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
+        if (!ref || !['land','clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -6375,10 +6395,12 @@
         items.push({text:`${escapeLivingText(titleCase(chunk.b))} · ${place.x}, ${place.y}`});
         const features = [];
         if (isChunkSuitableForTag(chunk,'coastal')) features.push('The shore is close enough to reach on foot.');
-        if (biomes[chunk.b]?.hasLumber) features.push('Trees grow here.');
+        const seenLand=isChunkVisible(chunk.x,chunk.y)?landPatch(chunk):null;
+        if (biomes[chunk.b]?.hasLumber) features.push((seenLand?.cover ?? 1)<0.25?'Few trees remain here.':(seenLand?.cover ?? 1)<0.7?'Young growth stands among the remaining trees.':'Trees grow here.');
         if (isChunkSuitableForTag(chunk,'fertile')) features.push('The ground can support crops.');
         if (isChunkSuitableForTag(chunk,'mineral')) features.push('The exposed rock offers ground for mineral surveys.');
         if (features.length) items.push({text:features.join(' ')});
+        appendLandscapeHistory(items,chunk);
         for(const mark of livingWorldState().surfaceMarks.filter(m=>m.surface.x===place.x&&m.surface.y===place.y&&surfaceMarkKnown(m)))items.push({text:inscriptionText(surfaceMarkLabel(mark)),func:()=>openSurfaceMark(mark)});
         const owner = chunk.v?.s && regGet('town',chunk.v.s);
         if (livingTownKnown(owner)) items.push({text:`This ground is now held by ${escapeLivingText(owner.name)}.`,func:() => {closeExecutive();openRegBrowser(owner,'town');}});
@@ -6589,7 +6611,7 @@
         const label=observedSubject(observation)?.label || 'what they saw';
         if(meaning==='belief')return observation.effect?.harm?`${person.name} takes what happened as a warning.`:`${person.name} takes what they saw as a sign of favour.`;
         if(meaning==='song')return `${person.name} puts what they saw into a song.`;
-        if(observation.effect?.harm)return `${person.name} wants to understand why the ${label} failed.${prepared?' They want to find a safer way to keep the grain.':' They still cannot explain what went wrong.'}`;
+        if(observation.effect?.harm)return `${person.name} wants to understand ${observation.effect.activity==='land'?'what happened to':'why the'} ${label}${observation.effect.activity==='land'?'':' failed'}.${prepared?(observation.effect.activity==='land'?' They look for a way to work with the changed ground.':' They want to find a safer way to keep the grain.'):' They still cannot explain what went wrong.'}`;
         return `${person.name} wants to understand ${label}.${prepared?' They think they could try the work here.':' They still cannot explain how it works.'}`;
     }
     function advanceClueIntrigue() {
@@ -7100,6 +7122,140 @@
                     title:titleCase(`${hazard.past} ${good.label}`),effect:{harm:true,need:actualLoss>0||grainStorageShortfall(town)>0,property:hazard.property,activity:'storage',lost:fixture.lost,grain:fixture.grain},
                     fixtures:structuredClone(fixtures),inputs:fixture.inputs,visit:{kind:'storage',id:town.id,label:'Visit the grain stores'},
                     text:`${person.name} sees ${fixture.lost} ${fixture.lost===1?good.singular:good.label} ${hazard.past} in the ${disaster.subtype}.${fixture.grain?` ${fixture.grain} grain was lost with them.`:''}`});
+            }
+        }
+    }
+    // Initial game calibration, not a physical model. Only touched land needs
+    // a ledger. Plants can return from surviving roots or neighbouring growth.
+    const LAND_PACE={timber:120,growth:0.018,soil:0.006,scorch:0.025,rubble:0.006,slope:0.12,slide:0.08};
+    function landPatch(chunk,create=false) {
+        if(!chunk)return null;
+        const ledger=planet._paultendoLand,key=`${chunk.x},${chunk.y}`;
+        if(ledger?.[key])return ledger[key];
+        if(!create||biomes[chunk.b]?.water)return null;
+        return (planet._paultendoLand ||= {})[key]={cover:biomes[chunk.b]?.hasLumber?1:0,soil:1,scorch:0,rubble:0,lastDay:planet.day,history:[]};
+    }
+    function landClimate(chunk) {
+        const moisture=clampValue(chunk.m ?? 0.5,0,1),warmth=Math.max(0,1-Math.abs((chunk.t ?? 0.5)-0.55)*2);
+        return {moisture,warmth,growth:moisture*warmth};
+    }
+    function landNeighbours(chunk) {return [[1,0],[-1,0],[0,1],[0,-1]].map(([x,y])=>chunkAt(chunk.x+x,chunk.y+y)).filter(c=>c&&!biomes[c.b]?.water);}
+    function landFireFuel(chunk) {
+        if(!chunk||biomes[chunk.b]?.water)return 0;
+        const plants=biomes[chunk.b]?.hasLumber?(landPatch(chunk)?.cover ?? 1):0;
+        const town=regGet('town',chunk.v?.s),stores=town?.center?.join(',')===`${chunk.x},${chunk.y}`&&town._paultendoGrainStore?.vessels?.some(v=>v.count>0&&COMMODITIES[grainFixtureType(v)]?.properties?.fireLoss>0);
+        return Math.max(plants,stores||chunk.v?.m?0.5:0);
+    }
+    function spreadLandscapeFire(disaster) {
+        if(!Array.isArray(disaster.chunks))return;
+        // Preserve the array identity for the native completion tick.
+        for(let i=disaster.chunks.length-1;i>=0;i--)if(landFireFuel(chunkAt(...disaster.chunks[i]))<0.03)disaster.chunks.splice(i,1);
+        const seen=new Set(disaster.chunks.map(c=>c.join(',')));
+        for(const [x,y] of [...disaster.chunks]) {
+            const offset=choose(adjacentCoords),target=chunkAt(x+offset[0],y+offset[1]);
+            if(!target||target.b==='snow'||seen.has(`${target.x},${target.y}`))continue;
+            const fuel=landFireFuel(target),chance=0.4*fuel*(1-landClimate(target).moisture*0.7);
+            if(fuel<0.03||Math.random()>=chance)continue;
+            disaster.chunks.push([target.x,target.y]);seen.add(`${target.x},${target.y}`);
+        }
+    }
+    function rememberLandChange(chunk,disaster,kind,text) {
+        const patch=landPatch(chunk,true),prior=patch.history.find(h=>h.disaster===disaster?.id&&h.kind===kind);
+        if(prior)return;
+        patch.history.push({day:planet.day,disaster:disaster?.id,kind,text,known:isChunkVisible(chunk.x,chunk.y)});if(patch.history.length>12)patch.history.shift();
+        const reported=disaster?(disaster._paultendoLandscapeReported ||= []):[];
+        if(!isChunkVisible(chunk.x,chunk.y)||reported.includes(kind))return;
+        if(disaster)reported.push(kind);
+        const town=regGet('town',chunk.v?.s);
+        logMessage(`${livingTownKnown(town)?`${townRef(town.id)}: `:''}${escapeLivingText(text)}`,disaster?'warning':'milestone',{_paultendoHighlight:true,_paultendoStory:{kind:'land',id:`${chunk.x},${chunk.y}`}});
+    }
+    function shiftLandHeight(chunk,amount) {
+        const patch=landPatch(chunk,true);
+        for(const row of chunk.p)for(let i=0;i<row.length;i++)row[i]+=amount;
+        const pixels=chunk.p.flat();chunk.e=pixels.reduce((sum,p)=>sum+p,0)/pixels.length;
+        patch.pixels=structuredClone(chunk.p);patch.elevation=chunk.e;
+    }
+    function changeDisasterLandscape(disaster,chunks) {
+        if(!Array.isArray(chunks))return;
+        const affected=[...new Set(chunks.map(c=>c.join(',')))].map(key=>planet.chunks[key]).filter(c=>c&&!biomes[c.b]?.water);
+        for(const chunk of affected) {
+            if(disaster.subtype==='wildfire'||disaster.subtype==='hurricane') {
+                const patch=landPatch(chunk,true),climate=landClimate(chunk),before=patch.cover;
+                const exposure=disaster.subtype==='wildfire'?0.3+(1-climate.moisture)*0.5:0.1+climate.moisture*0.2;
+                const lost=before*exposure;if(lost<0.005)continue;
+                patch.cover=Math.max(0,before-lost);patch.lastDay=planet.day;
+                if(disaster.subtype==='wildfire') {
+                    patch.scorch=Math.min(1,patch.scorch+lost);patch.soil=Math.max(0.15,patch.soil-lost*(0.25+(1-climate.moisture)*0.25));
+                    rememberLandChange(chunk,disaster,'burn','The fire leaves scorched ground where plants once grew.');
+                } else {
+                    patch.rubble=Math.min(1,patch.rubble+lost*0.5);
+                    rememberLandChange(chunk,disaster,'wind','The storm tears through the trees. Fallen growth covers the ground.');
+                }
+            } else if(disaster.subtype==='earthquake') {
+                // Move ground only on an inland slope. Keep all pixels above
+                // sea level until coastlines and landmass topology share rules.
+                const low=landNeighbours(chunk).sort((a,b)=>a.e-b.e)[0],water=planet.config.waterLevel;
+                if(!low||chunk.e-low.e<=LAND_PACE.slope||Math.min(...low.p.flat())<=water+0.02)continue;
+                const magnitude=Math.max(0,Math.min(1,(Number(disaster.scale) || 6)/8));
+                const move=Math.min(LAND_PACE.slide*magnitude,(chunk.e-low.e-LAND_PACE.slope)/2,Math.min(...chunk.p.flat())-water-0.02);
+                if(!(move>0.001))continue;
+                const up=landPatch(chunk,true),down=landPatch(low,true),impact=Math.min(1,move/LAND_PACE.slide);
+                shiftLandHeight(chunk,-move);shiftLandHeight(low,move);
+                up.cover*=1-impact*0.6;down.cover*=1-impact*0.4;
+                up.soil=Math.max(0.15,up.soil-impact*0.4);down.soil=Math.max(0.15,down.soil-impact*0.3);
+                up.rubble=Math.min(1,up.rubble+impact);down.rubble=Math.min(1,down.rubble+impact);up.lastDay=down.lastDay=planet.day;
+                rememberLandChange(chunk,disaster,'slide','The earthquake sends ground sliding down the slope. Bare rock is left above.');
+                rememberLandChange(low,disaster,'buried','Fallen ground from the earthquake covers this slope.');
+            }
+        }
+    }
+    function advanceLandscape() {
+        const ledger=planet._paultendoLand;if(!ledger)return;
+        // Snapshot the seed sources. Iteration order must not spread new growth
+        // across a whole continent on one game day.
+        const seeds=new Map(Object.entries(ledger).map(([key,p])=>[key,p.cover]));
+        for(const [key,patch] of Object.entries(ledger)) {
+            const chunk=planet.chunks[key];if(!chunk||patch.lastDay>=planet.day)continue;
+            patch.lastDay=planet.day;
+            const climate=landClimate(chunk),before=patch.cover;
+            const seed=before>0.01||landNeighbours(chunk).some(c=>biomes[c.b]?.hasLumber&&(seeds.get(`${c.x},${c.y}`) ?? 1)>0.1);
+            if(seed&&biomes[chunk.b]?.hasLumber)patch.cover=Math.min(1,before+LAND_PACE.growth*climate.growth*(0.1+patch.soil)*(1-before));
+            patch.soil=Math.min(1,patch.soil+LAND_PACE.soil*climate.growth*patch.cover);
+            patch.scorch=Math.max(0,patch.scorch-LAND_PACE.scorch*climate.moisture*patch.cover);
+            patch.rubble=Math.max(0,patch.rubble-LAND_PACE.rubble*climate.growth*patch.cover);
+            if(before<0.25&&patch.cover>=0.25&&patch.history.some(h=>['burn','wind','slide','buried'].includes(h.kind)))rememberLandChange(chunk,null,'regrowth','New growth takes root on the damaged ground.');
+        }
+    }
+    function appendLandscapeHistory(items,chunk) {
+        const patch=landPatch(chunk);if(!patch)return;
+        if(isChunkVisible(chunk.x,chunk.y)) {
+            if(patch.scorch>0.1)items.push({text:'Blackened ground remains from the fire.'});
+            if(patch.rubble>0.2)items.push({text:'Fallen material still covers the ground.'});
+            if(patch.soil<0.75)items.push({text:'The damaged soil gives the farmers less to work with.'});
+        }
+        for(const step of patch.history.filter(h=>h.known)) {
+            items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+            const event=step.disaster&&regGet('process',step.disaster);
+            if(event)items.push({text:escapeLivingText(event.name || titleCase(event.subtype)),func:()=>{closeExecutive();openRegBrowser(event,'process');}});
+        }
+    }
+    function renderLandscape() {
+        if(PAULTENDO_STATE.backgroundWorld||!planet||typeof canvasLayers==='undefined')return;
+        if(!canvasLayers.landscape&&!Object.keys(planet._paultendoLand || {}).length)return;
+        if(!canvasLayers.landscape){addCanvasLayer('landscape');moveCanvasLayerBefore('landscape','highlight');}
+        const canvas=canvasLayers.landscape,ctx=canvasLayersCtx.landscape;
+        canvas.width=worldConfig.width;canvas.height=worldConfig.height;ctx.clearRect(0,0,canvas.width,canvas.height);
+        if(!['terrain','territory'].includes(currentView))return;
+        for(const [key,patch] of Object.entries(planet._paultendoLand || {})) {
+            const chunk=planet.chunks[key];if(!chunk||!isChunkVisible(chunk.x,chunk.y))continue;
+            const loss=biomes[chunk.b]?.hasLumber?1-patch.cover:0,damage=Math.max(loss,patch.scorch,patch.rubble);
+            if(damage<0.08)continue;
+            const size=worldConfig.chunkSize;
+            for(let x=0;x<size;x++)for(let y=0;y<size;y++) {
+                if(chunk.p[x][y]<=planet.config.waterLevel)continue;
+                const shade=(x+y+chunk.x)%2?1:0.82;
+                ctx.fillStyle=`rgba(${Math.round((patch.scorch>0.15?66:123)*shade)},${Math.round((patch.scorch>0.15?51:108)*shade)},${Math.round((patch.scorch>0.15?40:72)*shade)},${Math.min(0.85,damage*0.85)})`;
+                ctx.fillRect(chunk.x*size+x,chunk.y*size+y,1,1);
             }
         }
     }
@@ -9664,7 +9820,7 @@
             const chunks = (territories.get(town.id) || []).sort((a,b)=>fnv1a32(`${town.id}:${a.x},${a.y}`)-fnv1a32(`${town.id}:${b.x},${b.y}`));
             const count = Math.min(Math.ceil(town.jobs.farmer / 4), 8, chunks.length);
             for (const chunk of chunks.slice(0, count)) {
-                if (!isChunkVisible(chunk.x, chunk.y)) continue;
+                if (!isChunkVisible(chunk.x, chunk.y)||(landPatch(chunk)?.soil ?? 1)<0.65||(landPatch(chunk)?.scorch ?? 0)>0.2) continue;
                 const size = worldConfig.chunkSize;
                 const x = chunk.x * size, y = chunk.y * size;
                 ctx.fillStyle = '#a38743'; ctx.fillRect(x, y, size, size);
@@ -9777,12 +9933,14 @@
                 const active=subject?.type==='disaster'&&!subject.done&&!subject.end&&STORAGE_HAZARDS[subject.subtype]&&subject._paultendoStorageDay!==planet.day;
                 const sites=active?regToArray('town').filter(t=>!t.end&&t.pop>0&&t._paultendoGrainStore?.vessels?.some(v=>v.count>0)&&Array.isArray(t.center)&&chunkAt(...t.center)?.v.s===t.id)
                     .map(town=>({town,site:town.center.join(','),baseCapacity:$c.maxResource(town)})):[];
+                const fire=active&&subject.subtype==='wildfire',data=fire&&actionables.process._disasterSubtypes.wildfire,spread=data?.spread;
+                if(fire){spreadLandscapeFire(subject);data.spread=0;}
                 // Native spread and movement mutate this array in place, then
                 // Finish deletes the property. Keep the final tick's footprint.
                 const chunks=subject?.chunks;
                 if(active)subject._paultendoStorageDay=planet.day;
-                const result=base.apply(this,arguments);
-                if(active)damageGrainStores(subject,sites,Array.isArray(subject.chunks)?subject.chunks:chunks);
+                let result;try{result=base.apply(this,arguments);}finally{if(fire)data.spread=spread;}
+                if(active){const footprint=Array.isArray(subject.chunks)?subject.chunks:chunks;damageGrainStores(subject,sites,footprint);changeDisasterLandscape(subject,footprint);}
                 return result;
             };
             disaster.func._paultendoStorage=true;
@@ -9865,6 +10023,21 @@
             const base=event.perChunk;
             event.perChunk=function(town,target,chunk){const before=commodityStock(town,type),result=base.apply(this,arguments);if(commodityStock(town,type)>before)visitSurfaceMarks(town,[chunk],{role});return result;};
             event.perChunk._paultendoSurfaceRead=true;
+        }
+        const fertility=actionables.chunk.asTarget.Fertility;
+        if(!fertility._paultendoLand) {
+            const wrapped=function(subject,chunk){return fertility.apply(this,arguments)*(landPatch(chunk)?.soil ?? 1);};
+            wrapped._paultendoLand=true;actionables.chunk.asTarget.Fertility=wrapped;
+        }
+        const forest=gameEvents.townLumber;
+        if(forest?.perChunk&&!forest.perChunk._paultendoLand) {
+            const base=forest.perChunk;
+            forest.perChunk=function(town,target,chunk) {
+                if((landPatch(chunk)?.cover ?? 1)*LAND_PACE.timber<1)return;
+                const context=PAULTENDO_STATE.landHarvest;
+                PAULTENDO_STATE.landHarvest={town,chunk};
+                try{return base.apply(this,arguments);}finally{PAULTENDO_STATE.landHarvest=context;}
+            };forest.perChunk._paultendoLand=true;
         }
         PAULTENDO_STATE.commoditiesReady=true;
         const resourceTotal=typeof textParserCommands==='object'&&textParserCommands.resourcetotal;
@@ -12226,9 +12399,9 @@
             case "mineral":
                 return biome === "mountain" || biome === "badlands";
             case "lumber":
-                return !!def.hasLumber;
+                return !!def.hasLumber&&(landPatch(chunk)?.cover ?? 1)>0.1;
             case "fertile":
-                return !def.infertile && biome !== "mountain" && biome !== "water";
+                return !def.infertile && biome !== "mountain" && biome !== "water"&&(landPatch(chunk)?.soil ?? 1)>0.5;
             case "coastal":
                 return biome !== "water" && chunkIsNearby(chunk.x, chunk.y, c => c.b === "water", 2);
             case "arid":
@@ -16578,7 +16751,7 @@
 
     function advanceWorldLife() {
         for (const [name, step] of [
-            ["Seasons", updateSeasonState], ["Whispers", advanceLivingWhispers], ["Material surveys", advanceMaterialSurveys], ["Research work", advanceLivingInquiries],
+            ["Seasons", updateSeasonState], ["Landscape", advanceLandscape], ["Whispers", advanceLivingWhispers], ["Material surveys", advanceMaterialSurveys], ["Research work", advanceLivingInquiries],
             ["Surface marks", advanceSurfaceMarks], ["Curiosity about marks", advanceClueIntrigue], ["Remembered diagrams", advanceRememberedClues], ["New marks", observeSurfaceMarks], ["Artifact work", advanceLivingArtifactWork], ["Artifacts", advanceLivingArtifacts],
             ["Inventions", observeLivingInventions], ["Sky study", advanceSkyStudy],
             ["Sea crossings", advanceSeaVoyages], ["Commodity journeys", advanceCommodityJourneys], ["Field tools", advanceFarmTools],
@@ -26336,7 +26509,7 @@
                 ensureEpidemicLayer();
                 baseRenderMap();
                 try { renderEpidemicOverlay(); } catch {}
-                try { renderLivingFields(); } catch {}
+                try { renderLandscape(); renderLivingFields(); } catch {}
                 try { renderDiscoveryFog(); } catch {}
                 try { renderMarkers(); } catch {}
             };
@@ -37543,9 +37716,7 @@
             // Lumber use creates deforestation pressure
             const chunks = filterChunks(c => c.v.s === subject.id);
             const forestChunks = chunks.filter(c => biomes[c.b]?.hasLumber);
-            if (forestChunks.length > 0 && density > 5) {
-                pressure.deforestation += 0.001 * density;
-            }
+            pressure.deforestation=forestChunks.length?forestChunks.reduce((sum,c)=>sum+1-(landPatch(c)?.cover ?? 1),0)/forestChunks.length:0;
 
             // High farm influence without agricultural science = overfarming
             const farmLevel = subject.influences?.farm || 0;
@@ -37576,63 +37747,13 @@
 
             // Natural recovery (very slow)
             if (density < 3) {
-                pressure.deforestation = Math.max(0, pressure.deforestation - 0.0001);
                 pressure.overfarming = Math.max(0, pressure.overfarming - 0.0001);
             }
         }
     });
 
-    // Environmental degradation events (rare, subtle changes)
-    modEvent("localDeforestation", {
-        random: true,
-        auto: true,
-        weight: $c.VERY_RARE,
-        subject: { reg: "town", random: true },
-        value: (subject, target, args) => {
-            initEnvironmentalPressure(subject);
-            args.pressure = subject.environmentalPressure.deforestation;
-            let baseYes = 0.55;
-            if (args.pressure > 0.8) baseYes += 0.08;
-            if (args.pressure < 0.6) baseYes -= 0.05;
-
-            args.choice = decideTownChoice(subject, {
-                baseYes,
-                minYes: 0.15,
-                maxYes: 0.90,
-                values: { change: 0.06, order: 0.05, wealth: 0.04, justice: 0.02 },
-                influences: { education: 0.04, farm: 0.02 },
-                randomness: 0.07
-            });
-            return true;
-        },
-        check: (subject) => {
-            initEnvironmentalPressure(subject);
-            return subject.environmentalPressure.deforestation > 0.5;
-        },
-        message: (subject, target, args) => {
-            if (args.choice === "yes") {
-                return `The forests around {{regname:town|${subject.id}}} are thinning. Replanting efforts begin.`;
-            }
-            return `The forests around {{regname:town|${subject.id}}} are thinning. The demand for lumber continues unabated.`;
-        },
-        func: (subject, target, args) => {
-            initEnvironmentalPressure(subject);
-            if (args.choice === "yes") {
-                subject.environmentalPressure.deforestation = Math.max(0, subject.environmentalPressure.deforestation - 0.2);
-                happen("Influence", null, subject, { happy: 0.5 });
-                return;
-            }
-
-            // Subtle moisture reduction in one chunk
-            const chunks = filterChunks(c => c.v.s === subject.id && biomes[c.b]?.hasLumber);
-            if (chunks.length > 0) {
-                const chunk = choose(chunks);
-                // Very subtle change - reduce moisture slightly
-                chunk.m = Math.max(0.2, (chunk.m || 0.5) - 0.05);
-                subject.environmentalPressure.deforestation = Math.max(0, subject.environmentalPressure.deforestation - 0.1);
-            }
-        }
-    });
+    // Actual gathering and regrowth now govern woodland cover. The older
+    // event changed moisture or announced replanting without changing trees.
 
     // Soil exhaustion from overfarming
     modEvent("soilExhaustion", {
@@ -39769,6 +39890,7 @@
         updateCanvas();
     }
     initLivingWorld();
+    renderLandscape();
     renderLivingFields();
     if (typeof updateCanvas === "function") updateCanvas();
     PAULTENDO_STATE.loadedVersion = MOD_VERSION;
