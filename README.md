@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.72**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.73**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.72/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.73/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.72)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.73)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -58,6 +58,10 @@ Distant towns can now decide how to divide their research attention and how to t
 Communities can now begin practices without a whisper. Actual repeated harvests and spare food can rally farmers, sustained short rations can breed dissent, and an emerging scholar can share lessons from the academy. Established practices resist replacement and the same daily work cannot continually renew its bonus. A successful caravan or an actual food gift can carry a practice into another town. The listener may refuse it or change its meaning according to their occupation and outlook. Local work takes time before words can travel again, and influence weakens across repeated handoffs. The history records where an idea began and how it changed, with no Traveler credit for an autonomous beginning. These lives continue beyond the explored map while their undiscovered names remain hidden. Caravan difficulty now uses town centres and the actual terrain path rather than legacy coordinates.
 
 Grain, livestock, stone, timber and metal now share actual exchange journeys. Meals and unfinished work create demand. Communities may give, bargain, barter or refuse according to their means, values, faith and remembered help. Supplies and payment remain with carriers until arrival, including through blocked routes and reloads. Construction and craft reserve their materials, and stone and timber can substitute in native building work. Imported goods keep records of their actual use in meals, buildings and created instruments. Caravans no longer invent cargo or profit, market purchases no longer buy abstract luxury or tool bonuses, and public cashflow reports actual receipts and spending. Taxes and upkeep move divisible cash between public stores and native private wealth. Sustained hunger and refused supplies can deepen war pressure where rule, soldiers and beliefs permit it. This is a shared commodity foundation. The original basic milestones still use native shared knowledge. New advanced inquiries and their workshop requirements now develop locally. A full settlement-specific conversion of older mechanics remains work ahead.
+
+Formal loans now require Banking learned in the lender’s own town, a free merchant, actual contact and coin left after the lender’s own bills. The borrower needs upkeep money or an actual recent purchase it could not afford. Terms depend on spare coin, relationships, remembered help, practiced belief and the lender’s interests. Helping a neighbour can mean returning only the principal. A controlling lender may seek a claim on future earnings. Emergency credit moves actual money without magically repairing disaster damage.
+
+Every loan keeps its quoted need, terms and actual payments in a saved story. Partial payments reduce the claim but leave arrears. All loans held by a borrower receive at most one cash payment each day. After four observed consecutive missed payments, lenders may give more time, accept useful goods, forgive a claim in hardship or pursue tribute and war. Goods must be spare after the debtor’s own meals and work, and needed by the lender. They travel through the actual exchange system. Only arrival pays debt, blocked roads keep cargo with carriers, and excess cargo returns home if cash settled the claim while it was away. Debt payments and endings appear in Today with coloured flags and links to their history. The eight-day public reserve, repayment range of eight to thirty days and four-day arrears threshold are initial calibration. Longer human play sessions still need to establish whether the timing feels good.
 
 Two completed deliveries within ninety days can establish a regular route when both towns already have trading knowledge, trading activity and a good relationship. It grows from actual cargo and keeps the founding journeys in its history. The new route appears in Today with the towns’ coloured flags, and its story opens those journeys. A closed road or war can interrupt passage while the route’s history remains. Deliveries now apply the native mutual relationship gain once, fixing a duplicated gain that drove trust to its limit too quickly. Three older climate, terrain and specialization events that invented trade rewards or competition without moving goods have been removed. Actual shortages, work and exchanges already provide those reasons. The visit count and ninety-day window are initial pacing values.
 

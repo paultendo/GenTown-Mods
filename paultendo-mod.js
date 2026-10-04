@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.72/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.73/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.72";
+    const MOD_VERSION = "1.6.73";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -4680,9 +4680,10 @@
             const level=livingDiscoveryBranches()[discovery?.key]?.levels.find(item=>item.level===discovery.level);
             return level&&livingTownKnown(town)?{label:'Explore the discovery',open:()=>openUnlockDetail(discovery.key,level,town.id)}:null;
         }
-        const lists = {sampling:state.sampling, rations:state.warRations, localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
+        const lists = {credit:state.credit, sampling:state.sampling, rations:state.warRations, localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
         const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
         if (!record) return null;
+        if(ref.kind==='credit')return [record.borrower,record.lender].some(id=>livingTownKnown(regGet('town',id)))?{label:'Follow the debt',open:()=>openCreditStory(record)}:null;
         if (ref.kind === 'food' || ref.kind === 'exchange') {
             if (![record.buyer,record.seller].map(id=>regGet('town',id)).some(livingTownKnown)) return null;
             return {label:`Follow the ${COMMODITIES[record.type || 'crop']?.label || 'exchange'}`,open:()=>openCommodityJourney(record)};
@@ -4709,13 +4710,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
+        if (!['credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
+        if (!ref || !['credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -4999,6 +5000,7 @@
             items.push({ text: `Visit ${town.name}`, func: () => { closePopups(); closeExecutive(); openRegBrowser(town, 'town'); } });
         }
         items.push({ heading: true, text: "What it changes" });
+        if(type==='trade'&&levelData.level===40)items.push({text:'A free merchant can arrange credit with a neighbour. The town must know banking here and have coin left after its own bills.'});
         for (const text of livingInfluencePhrases(levelData.influences, Infinity)) items.push({ text: text + '.' });
         const jobs = typeof jobNeedsUnlock === "object" ? Object.entries(jobNeedsUnlock).filter(([, need]) => need[0] === type && need[1] === levelData.level) : [];
         for (const [job] of jobs) items.push({ text: `Enables ${job} jobs.` });
@@ -5277,6 +5279,7 @@
         state.materialWork ||= [];
         state.sampling ||= [];
         state.inquiries ||= [];
+        state.credit ||= [];
         state.localChoices ||= [];
         state.warRations ||= [];
         state.teachings ||= [];
@@ -7365,11 +7368,11 @@
         // A mercantile community tries an exchange first, but can still honour
         // remembered help when the hungry neighbour has nothing it can use.
         if(aid&&!mercantile)return aid;
+        let cashQuote;
         if(planet.unlocks.trade>=30) {
             const competition=commodityExchangeState().exchanges.filter(r=>r.seller===seller.id&&r.type===type&&!r.resolved&&r.status==='asking').reduce((sum,r)=>{const town=regGet('town',r.buyer),route=town&&commodityPath(town,seller);return sum+(route?commodityDemand(town,type,route):0);},0);
-            const pressure=commodityUnitValue(seller,type,spare,competition,path);
-            const useScale=COMMODITIES[type]?.edible?foodFlow(buyer).consumption:Math.max(1,commodityCommittedStock(buyer,type));
-            const unit=Math.max(1,Math.ceil(computeMarketPrice(buyer,seller,type,0)/useScale*pressure));
+            const unit=commodityCashUnit(buyer,seller,type,path,spare,competition);
+            cashQuote={unit,count,total:count*unit,spare,demand,competition,travelDays:commodityTravelDays(path)};
             const affordable=Math.min(count,Math.floor(commodityStock(buyer,'cash')/unit));
             if(affordable>0&&relation>=-4) return {kind:'trade',count:affordable,payment:{type:'cash',count:affordable*unit},quote:{unit,spare,demand,competition,travelDays:commodityTravelDays(path)}};
         }
@@ -7385,7 +7388,12 @@
                 if(goods>0&&amount>0)return {kind:'barter',count:goods,payment:{type:other,count:amount},quote:{goodsPerPayment:rate,cropsPerMaterial:COMMODITIES[type].edible?rate:undefined,spare,demand,paymentNeed:need,travelDays:commodityTravelDays(path)}};
             }
         }
-        return aid || {kind:'refuse',reason:relation<-4?'rivalry':closed?'outsiders':'terms'};
+        return aid || {kind:'refuse',reason:relation<-4?'rivalry':closed?'outsiders':'terms',quote:cashQuote};
+    }
+    function commodityCashUnit(buyer,seller,type,path,spare,competition=0) {
+        const pressure=commodityUnitValue(seller,type,spare,competition,path);
+        const useScale=COMMODITIES[type]?.edible?foodFlow(buyer).consumption:Math.max(1,commodityCommittedStock(buyer,type));
+        return Math.max(1,Math.ceil(computeMarketPrice(buyer,seller,type,0)/useScale*pressure));
     }
     function materialOffer(town,type) {
         const recipe=MATERIAL_RECIPES[type];
@@ -7434,6 +7442,11 @@
             case 'market':return `People of ${buyer} seek ${goods} from ${seller}.`;
             case 'work':return `${buyer} seeks ${goods} from ${seller} for work already underway.`;
             case 'caravan':return `Merchants seek ${goods} from ${seller} for ${buyer}.`;
+            case 'debt':return `${seller} offers ${goods} to ${buyer} in place of coin it owes.`;
+            case 'pledgedGoods':return `${seller} sends ${step.count} ${goods}. The debt will fall when they reach ${buyer}.`;
+            case 'debtArrive':return `${step.count} ${goods} reach ${buyer}. ${creditAmount(step.credit)} of the debt is paid.`;
+            case 'debtReturn':return `The carriers turn back with ${step.count} ${goods} that are no longer needed for repayment.`;
+            case 'debtReturned':return `${step.count} ${goods} return to ${seller}'s stores.`;
             case 'famine':return `${buyer} asks ${seller} for help through the famine.`;
             case 'commission':return `${record.known?.[record.seller]||livingTownKnown(regGet('town',record.seller))?step.name:`A maker in ${seller}`} agrees to make ${step.count} ${goods} for ${buyer}.${step.payment?` They ask for ${step.payment.count} ${payment} when the goods are ready.`:' They offer their work as help.'}`;
             case 'workBlocked':return `The road between ${buyer} and ${seller} is closed. The workshop keeps the goods until it opens.`;
@@ -7474,8 +7487,9 @@
             const message=kind==='route'
                 ? `New route: ${[record.buyer,record.seller].map(town).join(' and ')}.`
                 : kind==='threat'?`${goods[0].toUpperCase()+goods.slice(1)}: ${town(record.buyer)} threatens ${town(record.seller)}.`
+                : kind==='debtArrive'?`${goods[0].toUpperCase()+goods.slice(1)} repays debt: ${town(record.seller)} supplies ${town(record.buyer)}.`
                 : escapeLivingText(exchangeStepText(record,step));
-            modLog('memory',message,['threat','war','seizure'].includes(kind)?'warning':null,{town:visibleTown,observedStory:true,force:['route','threat'].includes(kind),highlight:['route','threat'].includes(kind),story:{kind:'exchange',id:record.id}});
+            modLog('memory',message,['threat','war','seizure'].includes(kind)?'warning':null,{town:visibleTown,observedStory:true,force:['route','threat','debtArrive'].includes(kind),highlight:['route','threat','debtArrive'].includes(kind),story:{kind:'exchange',id:record.id}});
         }
     }
     function newCommodityJourney(buyer,seller,path,source='need',type='crop') {
@@ -7646,6 +7660,7 @@
             const buyer=regGet('town',record.buyer),seller=regGet('town',record.seller);
             if(!buyer||buyer.end||buyer.pop<=0||record.kind!=='seizure'&&(!seller||seller.end||seller.pop<=0)) {record.resolved=true;record.status='lost';record.lost={type:record.type,count:record.cargo,payment:record.paymentCargo || 0};record.cargo=0;record.paymentCargo=0;noteExchangeStep(record,'closed');continue;}
             const path=record.kind==='seizure'?capturedSupplyPath(buyer,record.origin):commodityPath(buyer,seller);
+            if(record.kind==='debt'){advanceDebtGoods(record,buyer,seller,path);continue;}
             if(record.status==='making') {
                 const work=livingWorldState().materialWork.find(w=>w.id===record.manufacture?.work);
                 if(!work||['lost','failed'].includes(work.status)){record.resolved=true;record.status='unfilled';noteExchangeStep(record,'workLost');continue;}
@@ -7672,6 +7687,7 @@
                 if(commission===true)continue;
                 if(commission?.refusal)terms.reason=commission.refusal;
                 record.resolved=true;record.status='refused';record.refusal=terms.reason || 'terms';
+                if(record.refusal==='terms'&&terms.quote)record.quote=terms.quote;
                 const memory=exchangeMemory(buyer,seller);memory.refused++;memory.lastRefused={day:planet.day,source:record.id,type:record.type};
                 if(COMMODITIES[record.type].edible){const food=foodMemory(buyer,seller);food.refused++;food.lastRefused={...memory.lastRefused};}
                 noteExchangeStep(record,'refuse',{reason:record.refusal});
@@ -7722,7 +7738,7 @@
     function commodityRouteFromArrivals(record,buyer,seller) {
         if(getTradeRouteBetween(buyer,seller)||[buyer,seller].some(town=>townKnowledgeLevel(town,'trade')<20||(town.influences?.trade || 0)<5)
             ||getRelations(buyer,seller)<2||getRelations(seller,buyer)<2||!commodityPath(buyer,seller))return null;
-        const arrivals=commodityExchangeState().exchanges.filter(r=>r.status==='arrived'&&r.kind!=='seizure'&&r.delivered>0&&r.arrived<=planet.day&&planet.day-r.arrived<=90
+        const arrivals=commodityExchangeState().exchanges.filter(r=>r.status==='arrived'&&['aid','trade','barter'].includes(r.kind)&&r.delivered>0&&r.arrived<=planet.day&&planet.day-r.arrived<=90
             &&[buyer.id,seller.id].includes(r.buyer)&&[buyer.id,seller.id].includes(r.seller));
         if(arrivals.length<2)return null;
         const route=createTradeRoute(buyer,seller);if(!route)return null;
@@ -7747,6 +7763,8 @@
     function openCommodityJourney(record) {
         const known=[record.buyer,record.seller].map(id=>regGet('town',id)).find(livingTownKnown);if(!known)return;
         const items=[{text:'← Back to trade and neighbours',func:()=>openCommodityHistory(known)}];
+        const debt=record.debt&&livingWorldState().credit.find(r=>r.loan===record.debt.loan);
+        if(debt)items.push({text:'The debt behind this journey',func:()=>openCreditStory(debt)});
         for(const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(exchangeStepText(record,step))}`});
         const route=record.route&&planet.tradeRoutes?.find(r=>r.id===record.route);
         if(route?.origin?.kind==='exchanges')items.push({text:'The route these journeys made',func:()=>openCommodityRoute(route)});
@@ -7784,6 +7802,7 @@
         const hunger=town._paultendoCommunityWork?.hunger;
         if(hunger?.days>0&&hunger.recovery<2)items.push({text:`The town has had ${hunger.days} days of short rations.`});
         for(const record of commodityExchangeState().exchanges.filter(r=>r.buyer===town.id||r.seller===town.id).slice(-12).reverse())items.push({text:`Day ${record.day} · ${escapeLivingText(exchangeStepText(record,record.steps.at(-1)))}`,func:()=>openCommodityJourney(record)});
+        for(const record of livingWorldState().credit.filter(r=>r.borrower===town.id||r.lender===town.id).slice(-4).reverse())items.push({text:`A debt · ${creditTown(record.borrower)} and ${creditTown(record.lender)}`,func:()=>openCreditStory(record)});
         populateExecutive(items,'Trade and neighbours');markLivingStoryControls();openExecutive();
     }
 
@@ -10239,17 +10258,18 @@
         initEconomics();
         initTradeRoutes();
         const items = [];
-        const towns = getActiveTowns();
-        const routes = planet.tradeRoutes || [];
+        const towns = getActiveTowns().filter(livingTownKnown);
+        const routes = (planet.tradeRoutes || []).filter(r=>[r.town1,r.town2].some(id=>livingTownKnown(regGet('town',id))));
         const activeRoutes = routes.filter(r => r && r.active !== false).length;
-        const embargoes = planet.embargoes || [];
-        const loans = planet.loans || [];
+        const embargoes = (planet.embargoes || []).filter(r=>[r.fromId,r.toId].some(id=>livingTownKnown(regGet('town',id))));
+        const loans = (planet.loans || []).filter(r=>[r.borrowerId,r.lenderId].some(id=>livingTownKnown(regGet('town',id))));
 
         items.push({ text: `Day ${planet.day} · Economy` });
         items.push({ text: `Trade routes · ${activeRoutes}/${routes.length} active` });
         items.push({ text: `Embargoes · ${embargoes.length || 0} active` });
         items.push({ text: `Loans · ${loans.length || 0} outstanding` });
 
+        for(const record of livingWorldState().credit.filter(r=>[r.borrower,r.lender].some(id=>livingTownKnown(regGet('town',id)))).slice(-8).reverse())items.push({text:`${creditTown(record.borrower)} · ${record.status==='active'?`${creditAmount(record.remaining)} owed to ${creditTown(record.lender)}`:record.status==='repaid'?'Debt settled':record.status==='forgiven'?'Debt forgiven':'Debt ended'}`,func:()=>openCreditStory(record)});
         items.push({ spacer: true, text: "Debt Pressure" });
         const borrowerStats = towns.map(getTownDebtStats).filter(Boolean);
         if (!borrowerStats.length) {
@@ -10317,11 +10337,12 @@
         });
 
         items.push({ spacer: true, text: "How it moves" });
-        items.push({ text: "Coin swells with trade routes, roads, learning, and population." });
-        items.push({ text: "It drains with upkeep, unrest, war footing, and famine." });
-        items.push({ text: "Debt pressure rises with missed payments; lenders may restructure, demand concessions, impose vassalage, or enforce by force." });
+        items.push({ text: "Coin changes hands through actual purchases, aid and loans. Routes give carriers a way to travel." });
+        items.push({ text: "Public coffers pay upkeep. Unrest, war and famine make those bills heavier." });
+        items.push({ text: "Lenders respond to unpaid debts according to their beliefs and interests. They may give more time, accept useful goods, forgive the debt or seek power over the borrower." });
 
         populateExecutive(items, "Economy");
+        markLivingStoryControls();
     }
 
     function addEconomyButton() {
@@ -18366,24 +18387,128 @@
         return transferred;
     }
 
-    // Loan system - simple flat repayment, no compounding interest
-    function createLoan(lender, borrower, amount, repaymentAmount, turnsToRepay) {
+    // Credit is a claim on actual money or delivered goods. These reserve and
+    // term ranges are initial game calibration, not additional income.
+    const CREDIT_PACE={reserveDays:8,minTurns:8,maxTurns:30,arrearsDays:4};
+    function publicCashNeed(town) {
+        const upkeep=computeTownEconomySnapshot(town)?.upkeep || 0;
+        const obligations=getLoansFor(town).reduce((n,l)=>n+Math.min(l.remainingAmount || 0,(l.paymentPerTurn || 0)*CREDIT_PACE.reserveDays),0);
+        const offers=commodityExchangeState().exchanges.filter(r=>r.buyer===town.id&&r.status==='refused'&&r.refusal==='terms'&&r.quote?.unit>0&&commodityRefusalAge(r)>=0&&commodityRefusalAge(r)<=EXCHANGE_PACE.flowDays)
+            .flatMap(r=>{const seller=regGet('town',r.seller),path=seller&&commodityPath(town,seller);
+                if(!path||!commodityRefusalNeed(r,town))return [];
+                const count=Math.floor(Math.min(r.quote.count,commodityDemand(town,r.type,path),commoditySpare(seller,r.type,path)));
+                return count>0?[{id:r.id,type:r.type,count,amount:count*r.quote.unit,unit:r.quote.unit}]:[];}).sort((a,b)=>a.amount-b.amount);
+        // Alternative offers for the same work are not separate bills. Fund one
+        // actual quoted purchase, alongside upkeep and existing repayments.
+        const market=offers[0],reserve=upkeep*CREDIT_PACE.reserveDays+obligations+(market?.amount || 0),cash=commodityStock(town,'cash');
+        return {upkeep,obligations,market,reserve,cash,amount:Math.max(0,Math.ceil((reserve-cash)*10)/10)};
+    }
+    function creditOffer(lender,borrower) {
+        if(!lender||!borrower||lender.id===borrower.id||lender.end||borrower.end||lender.pop<=0||borrower.pop<=0
+            ||townKnowledgeLevel(lender,'trade')<40||townKnowledgeLevel(borrower,'trade')<30||!inquiryRoleFree(lender,'merchant')||getLoansFor(borrower).length>=2)return null;
+        const path=commodityPath(lender,borrower);if(!path)return null;
+        const need=publicCashNeed(borrower),budget=publicCashNeed(lender),spare=Math.max(0,budget.cash-budget.reserve);
+        if(need.amount<=0||spare<need.amount)return null;
+        const person=livingCommunityPerson(lender,'merchant'),relation=getRelations(lender,borrower),religion=getTownReligion(lender);
+        const policy=commodityOfferPolicy(lender,person,{memory:exchangeMemory(lender,borrower),relation,practice:livingWorldState().teachings.some(t=>t.town===lender.id&&t.active&&['care','food'].includes(t.meaning)),religion,sameFaith:lender.religion===borrower.religion},need.amount);
+        const values=lender.values || {},predatory=(values.justice || 0)<=-2&&(values.wealth || 0)>=4&&(values.order || 0)>=4;
+        if(policy.closed&&!policy.aid||relation<(predatory?-4:-2))return null;
+        const helping=!!policy.aid&&!policy.mercantile&&!predatory;
+        const motive=helping?{kind:'help',reason:policy.aid.reason,text:'They ask only for the coin they lend to be returned.'}
+            :predatory?{kind:'leverage',text:'They want a claim on the neighbour’s future earnings.'}
+            :{kind:'exchange',text:'They want a return for putting their own coin at risk.'};
+        const fee=helping?0:Math.min(.6,.03+.2*need.amount/Math.max(1,spare)+Math.max(0,-relation)/50+(predatory?Math.max(0,-values.justice)/20:0)+(policy.mercantile?0.1:0));
+        const amount=need.amount,repayment=Math.ceil(amount*(1+fee)*10)/10;
+        const turns=Math.max(CREDIT_PACE.minTurns,Math.min(CREDIT_PACE.maxTurns,Math.ceil(CREDIT_PACE.minTurns+amount/Math.max(1,need.upkeep*3)+(helping?4:0))));
+        return {day:planet.day,amount,repayment,turns,fee,motive,need,reserve:budget.reserve,spare,person:person.id,name:person.name,values:{...values},religion:lender.religion,faith:lender.influences.faith,relation,
+            knowledge:lender._paultendoLocalDiscoveries?.['trade:40']?.inquiry || null};
+    }
+    function prepareCreditRequest(borrower,args) {
+        const options=regToArray('town').flatMap(lender=>{const offer=creditOffer(lender,borrower);return offer?[{lender,offer}]:[];});
+        if(!options.length)return false;
+        const pick=weightedChoice(options,item=>1/(1+item.offer.fee));
+        args.lender=pick.lender;args.loanOffer=pick.offer;args.amount=pick.offer.amount;args.repayment=pick.offer.repayment;args.turns=pick.offer.turns;return true;
+    }
+    function grantCreditRequest(borrower,args) {
+        if(args.loanId)return args.approved;
+        const quote=args.loanOffer,lender=args.lender,current=quote&&creditOffer(lender,borrower);
+        args.approved=!!current&&args.amount===quote.amount&&args.repayment===quote.repayment&&args.turns===quote.turns&&current.amount>=quote.amount&&current.spare>=quote.amount
+            &&(!quote.need.market||current.need.market?.id===quote.need.market.id);
+        if(!args.approved)return false;
+        if(transferCash(lender,borrower,quote.amount)!==quote.amount){args.approved=false;return false;}
+        const loan=createLoan(lender,borrower,quote.amount,quote.repayment,quote.turns,quote);args.loanId=loan.id;
+        happen('AddRelation',borrower,lender,{amount:1});return true;
+    }
+    function creditStory(loan) {return livingWorldState().credit.find(record=>record.loan===loan.id);}
+    function recordCreditStep(loan,kind,details={}) {
+        let record=creditStory(loan);
+        if(!record){record={id:`credit:${livingWorldState().nextId++}`,loan:loan.id,borrower:loan.borrowerId,lender:loan.lenderId,day:planet.day,terms:null,steps:[]};livingWorldState().credit.push(record);}
+        record.remaining=loan.remainingAmount || 0;record.repaid=(record.repaid || 0)+(details.paid || details.credit || 0);record.steps.push({day:planet.day,kind,...details});
+        record.status ||= 'active';
+        if(record.steps.length>128)record.steps.splice(1,record.steps.length-128);
+        if(['repaid','cancelled','forgiven'].includes(kind))record.status=kind;
+        const finished=livingWorldState().credit.filter(r=>r.status&&r.status!=='active');
+        if(finished.length>128){const ids=new Set(finished.slice(0,finished.length-128).map(r=>r.id));livingWorldState().credit=livingWorldState().credit.filter(r=>!ids.has(r.id));}
+        return record;
+    }
+    function creditTown(id) {return livingTownKnown(regGet('town',id))?townRef(id):'another settlement';}
+    function creditAmount(amount) {return Math.round(amount*100)/100;}
+    function creditNews(loan,text,type=null) {
+        const known=[loan.borrowerId,loan.lenderId].map(id=>regGet('town',id)).find(livingTownKnown),record=creditStory(loan);
+        if(known&&record)modLog(type==='warning'?'warning':'trade',text,type,{town:known,observedStory:true,force:true,highlight:true,story:{kind:'credit',id:record.id}});
+    }
+    function openCreditStory(record) {
+        const loan=(planet.loans || []).find(l=>l.id===record.loan),terms=record.terms;
+        const items=[{text:'← Back to the economy',func:openEconomyPanel}];
+        items.push({heading:true,text:`${creditTown(record.borrower)} and ${creditTown(record.lender)}`});
+        if(terms){items.push({text:terms.need.market?`Coin was needed for the ${COMMODITIES[terms.need.market.type].label} they tried to buy, alongside the town’s upkeep and existing payments.`:'The public coffers were short of the coin needed for upkeep and existing payments.'},
+            {text:terms.motive.text},{text:`They borrowed ${creditAmount(terms.amount)} and agreed to return ${creditAmount(terms.repayment)} over ${terms.turns} days.`});
+            const work=terms.knowledge&&livingWorldState().inquiries.find(w=>w.id===terms.knowledge);
+            if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'The banker’s earlier work',func:()=>openLivingInquiry(work)});
+            const request=terms.need.market&&commodityExchangeState().exchanges.find(r=>r.id===terms.need.market.id);
+            if(request)items.push({text:'The goods they tried to buy',func:()=>openCommodityJourney(request)});
+        }else items.push({text:'This debt began before these records were kept.'});
+        items.push({heading:true,text:'Today'},{text:loan?`${creditAmount(loan.remainingAmount)} remains to be repaid.`:record.status==='repaid'?'The debt is settled.':record.status==='forgiven'?'The remaining debt was forgiven.':'The debt is no longer held.'});
+        const groups=[];
+        for(const step of record.steps.slice(-12)) {
+            const last=groups.at(-1);
+            if(last&&['payment','default','partial'].includes(step.kind)&&last.kind===step.kind&&last.end===step.day-1){last.end=step.day;last.span++;last.paid+=step.paid || 0;last.short+=step.short || 0;}
+            else groups.push({...step,end:step.day,span:1,paid:step.paid || 0,short:step.short || 0});
+        }
+        items.push({heading:true,text:'Since then'});
+        const linked=new Set();
+        for(const step of groups) {
+            const text=step.kind==='lent'?'The coin changed hands.':step.kind==='payment'?`${creditAmount(step.paid)} was repaid in coin.`:step.kind==='partial'?`${creditAmount(step.paid)} was paid, but ${creditAmount(step.short)} ${step.span>1?'across those payments':'of this payment'} was still missing.`
+                :step.kind==='default'?step.span>1?`${step.span} payments went unpaid.`:'They had no coin for this payment.':step.kind==='repaid'?'The debt was settled.':step.kind==='cancelled'?'The debt ended with the lost town.'
+                :step.kind==='restructure'?`The lender gave them more time. Payments fell to ${creditAmount(step.payment)} a day.`:step.kind==='forgiven'?`The lender let go of the remaining ${creditAmount(step.amount)}.`
+                :step.kind==='goods'?`${step.count} ${COMMODITIES[step.type].label} arrived. ${creditAmount(step.credit)} of the debt was paid.`:step.kind==='pledge'?`They offered ${step.count} ${COMMODITIES[step.type].label} in place of coin.`
+                :step.kind==='vassal'?'The debt bound them to the lender as a tributary.':step.kind==='war'?'The lender went to war to enforce the debt.':null;
+            if(text)items.push({text:`${step.span>1?`Days ${step.day}–${step.end}`:`Day ${step.day}`} · ${text}`});
+            const exchange=step.exchange&&commodityExchangeState().exchanges.find(r=>r.id===step.exchange);if(exchange&&!linked.has(exchange.id)){linked.add(exchange.id);items.push({text:'Follow the repayment goods',func:()=>openCommodityJourney(exchange)});}
+        }
+        for(const id of [record.borrower,record.lender]){const town=regGet('town',id);if(livingTownKnown(town))items.push({text:`Visit ${escapeLivingText(town.name)}`,func:()=>{closeExecutive();openRegBrowser(town,'town');}});}
+        populateExecutive(items,'A debt between neighbours');markLivingStoryControls();openExecutive();
+    }
+    // Loan system - agreed repayment with no compounding interest.
+    function createLoan(lender, borrower, amount, repaymentAmount, turnsToRepay,offer) {
         initEconomics();
         const loan = {
-            id: Date.now(),
+            id: `loan:${livingWorldState().nextId++}`,
             lenderId: lender.id,
             borrowerId: borrower.id,
             originalAmount: amount,
             repaymentAmount: repaymentAmount, // Total to repay (slightly more than borrowed)
             remainingAmount: repaymentAmount,
             remainingPayments: turnsToRepay,
-            paymentPerTurn: Math.ceil(repaymentAmount / turnsToRepay),
+            paymentPerTurn: Math.ceil(repaymentAmount / turnsToRepay*10)/10,
             missedPayments: 0,
             daysInArrears: 0,
             pressure: 0,
             lastPaymentDay: planet.day
         };
         planet.loans.push(loan);
+        const record=recordCreditStep(loan,'lent');record.terms=structuredClone(offer);record.status='active';
+        creditNews(loan,`Credit: ${creditTown(lender.id)} lends ${amount} to ${creditTown(borrower.id)}.`);
         return loan;
     }
 
@@ -18397,50 +18522,99 @@
         return planet.loans.filter(l => l.lenderId === town.id);
     }
 
+    function reduceLoanBalance(loan,amount) {
+        const credited=Math.min(Math.max(0,amount),loan.remainingAmount);
+        loan.remainingAmount=Math.max(0,loan.remainingAmount-credited);
+        loan.remainingPayments=Math.ceil(loan.remainingAmount/Math.max(0.1,loan.paymentPerTurn));
+        return credited;
+    }
+    function settleLoan(loan,borrower,lender) {
+        if(loan.remainingAmount>0||!(planet.loans || []).includes(loan))return false;
+        planet.loans=planet.loans.filter(l=>l.id!==loan.id);
+        recordCreditStep(loan,'repaid');improveRelations(borrower,lender,2);
+        creditNews(loan,`Debt settled: ${creditTown(borrower.id)} and ${creditTown(lender.id)}.`);return true;
+    }
     function processLoanPayment(loan) {
-        const borrower = regGet("town", loan.borrowerId);
-        const lender = regGet("town", loan.lenderId);
-        if (!borrower || !lender) {
-            // Town no longer exists, cancel loan
-            planet.loans = planet.loans.filter(l => l.id !== loan.id);
-            return null;
+        if(!loan||!(planet.loans || []).includes(loan)||loan.lastPaymentDay>=planet.day)return null;
+        const borrower=regGet('town',loan.borrowerId),lender=regGet('town',loan.lenderId);
+        if(!borrower||!lender||borrower.end||lender.end||borrower.pop<=0||lender.pop<=0) {
+            planet.loans=planet.loans.filter(l=>l.id!==loan.id);recordCreditStep(loan,'cancelled');return null;
         }
-
-        if (loan.remainingAmount === undefined) {
-            loan.remainingAmount = loan.repaymentAmount || 0;
+        loan.remainingAmount ??= loan.repaymentAmount || 0;
+        const due=Math.min(loan.paymentPerTurn,loan.remainingAmount),payment=Math.min(due,commodityStock(borrower,'cash'));
+        const consecutive=loan.lastPaymentDay===planet.day-1;
+        loan.lastPaymentDay=planet.day;
+        if(payment>0){transferCash(borrower,lender,payment);reduceLoanBalance(loan,payment);}
+        if(payment<due) {
+            const previous=loan.daysInArrears || 0;
+            loan.daysInArrears=(consecutive?previous:0)+1;loan.missedPayments=(loan.missedPayments || 0)+1;
+            loan.pressure=Math.min(CREDIT_PACE.arrearsDays*2.5,(loan.pressure || 0)+1);
+            recordCreditStep(loan,payment>0?'partial':'default',{paid:payment,short:due-payment});
+            if(!previous){worsenRelations(borrower,lender,1);creditNews(loan,`Missed payment: ${creditTown(borrower.id)} owes ${creditTown(lender.id)}.`,'warning');}
+            return payment>0?'partial':'default';
         }
+        loan.daysInArrears=0;loan.missedPayments=Math.max(0,(loan.missedPayments || 0)-1);loan.pressure=Math.max(0,(loan.pressure || 0)-1);
+        if(payment>0)recordCreditStep(loan,'payment',{paid:payment});
+        return settleLoan(loan,borrower,lender)?'repaid':'payment';
+    }
 
-        const borrowerCash = borrower.resources?.cash || 0;
-        const payment = Math.min(loan.paymentPerTurn, borrowerCash, loan.remainingAmount);
-
-        if (payment > 0) {
-            applyTownCashDelta(borrower, -payment);
-            applyTownCashDelta(lender, payment);
-            loan.remainingAmount -= payment;
-            loan.remainingPayments = Math.max(
-                0,
-                Math.ceil(loan.remainingAmount / Math.max(1, loan.paymentPerTurn))
-            );
-            loan.lastPaymentDay = planet.day;
-            loan.daysInArrears = Math.max(0, (loan.daysInArrears || 0) - 1);
-            loan.missedPayments = Math.max(0, (loan.missedPayments || 0) - 1);
-            loan.pressure = Math.max(0, (loan.pressure || 0) - 1);
-
-            if (loan.remainingAmount <= 0) {
-                // Loan fully repaid
-                planet.loans = planet.loans.filter(l => l.id !== loan.id);
-                happen("AddRelation", borrower, lender, { amount: 2 });
-                return "repaid";
+    function debtGoodsOffer(loan,lender,borrower) {
+        if(!loan||loan.remainingAmount<=0||!lender||!borrower||commodityExchangeState().exchanges.some(r=>!r.resolved&&(r.buyer===lender.id||r.debt?.loan===loan.id)))return null;
+        const path=commodityPath(lender,borrower);if(!path)return null;
+        const offers=Object.keys(COMMODITIES).flatMap(type=>{
+            const demand=commodityDemand(lender,type,path),spare=commoditySpare(borrower,type,path);
+            if(demand<=0||spare<1)return [];
+            const unit=commodityCashUnit(lender,borrower,type,path,spare);
+            const count=Math.floor(Math.min(demand,spare,commodityCapacity(lender,type)-commodityStock(lender,type),loan.remainingAmount/unit));
+            return count>0?[{type,count,unit,path}]:[];
+        });
+        offers.sort((a,b)=>b.count*b.unit-a.count*a.unit||a.type.localeCompare(b.type));return offers[0] || null;
+    }
+    function startDebtGoods(loan,lender,borrower) {
+        const offer=debtGoodsOffer(loan,lender,borrower);if(!offer)return false;
+        const consent=decideTownChoice(borrower,{baseYes:0.65,values:{justice:0.3,order:0.2,wealth:-0.15},relations:getRelations(borrower,lender)});
+        if(consent!=='yes')return false;
+        const record=newCommodityJourney(lender,borrower,offer.path,'debt',offer.type);if(!record)return false;
+        record.kind='debt';record.debt={loan:loan.id,unit:offer.unit,promised:offer.count,credited:0,returned:0};
+        recordCreditStep(loan,'pledge',{count:offer.count,type:offer.type,exchange:record.id});
+        creditNews(loan,`Repayment goods: ${creditTown(borrower.id)} offers ${COMMODITIES[offer.type].label} to ${creditTown(lender.id)}.`);return true;
+    }
+    function advanceDebtGoods(record,lender,borrower,path) {
+        const loan=(planet.loans || []).find(l=>l.id===record.debt.loan);
+        if(!path){record.due=planet.day+1;if(record.cargo>0){record.status='waiting';if(record.steps.at(-1)?.kind!=='blocked')noteExchangeStep(record,'blocked');}else{record.resolved=true;record.status='closed';noteExchangeStep(record,'closed');}return;}
+        if(record.status==='asking') {
+            const count=loan?Math.floor(Math.min(record.debt.promised,loan.remainingAmount/record.debt.unit,commodityDemand(lender,record.type,path),commoditySpare(borrower,record.type,path),commodityCapacity(lender,record.type)-commodityStock(lender,record.type))):0;
+            if(count<=0){record.resolved=true;record.status='withdrawn';noteExchangeStep(record,'recovered');return;}
+            const inputs=[];record.cargo=withCommodityUse({kind:'transport',inputs},()=>removeCommodityStock(borrower,record.type,count));
+            record.cargoLots=commodityCargoLots(record.cargo,inputs);record.status='carrying';record.due=planet.day+commodityTravelDays(path);
+            recordTraffic(path,0.2);noteExchangeStep(record,'pledgedGoods',{count:record.cargo});return;
+        }
+        if(record.status==='waiting') {record.status='carrying';record.due=planet.day+commodityTravelDays(path);return;}
+        if(record.debt.returning) {
+            const before=commodityStock(borrower,record.type);happen('AddResource',lender,borrower,{type:record.type,count:record.cargo});
+            const received=Math.max(0,commodityStock(borrower,record.type)-before);record.cargo-=received;record.debt.returned+=received;
+            addCommodityLot(borrower,record.type,received,record,borrower,record.cargoLots);
+            if(record.cargo>0){record.due=planet.day+1;return;}
+            record.resolved=true;record.status='returned';noteExchangeStep(record,'debtReturned',{count:record.debt.returned});return;
+        }
+        const wanted=loan?Math.floor(Math.min(record.cargo,loan.remainingAmount/record.debt.unit,commodityDemand(lender,record.type,path))):0;
+        if(wanted>0) {
+            const before=commodityStock(lender,record.type);happen('AddResource',borrower,lender,{type:record.type,count:wanted});
+            const received=Math.max(0,commodityStock(lender,record.type)-before);record.cargo-=received;record.delivered=(record.delivered || 0)+received;
+            addCommodityLot(lender,record.type,received,record,borrower,record.cargoLots);
+            if(received>0) {
+                const credited=reduceLoanBalance(loan,received*record.debt.unit);record.debt.credited+=credited;
+                if(credited>=loan.paymentPerTurn){loan.lastPaymentDay=planet.day;loan.daysInArrears=0;loan.missedPayments=Math.max(0,(loan.missedPayments || 0)-1);loan.pressure=Math.max(0,(loan.pressure || 0)-1);}
+                recordCreditStep(loan,'goods',{count:received,type:record.type,credit:credited,exchange:record.id});
+                noteExchangeStep(record,'debtArrive',{count:received,credit:credited});settleLoan(loan,borrower,lender);
             }
-            return "payment";
-        } else {
-            // Can't pay - damage relations
-            happen("AddRelation", borrower, lender, { amount: -1 });
-            loan.missedPayments = (loan.missedPayments || 0) + 1;
-            loan.daysInArrears = (loan.daysInArrears || 0) + 1;
-            loan.pressure = Math.min(10, (loan.pressure || 0) + 1);
-            return "default";
         }
+        // A repayment made while carriers were away, or a vanished need, sends
+        // the unused goods home. Full stores keep cargo with the carriers.
+        const remainingWanted=loan&&loan.remainingAmount>0&&commodityDemand(lender,record.type,path)>0&&Math.floor(loan.remainingAmount/record.debt.unit)>0;
+        if(record.cargo>0&&remainingWanted){record.due=planet.day+1;return;}
+        if(record.cargo>0){record.debt.returning=true;record.status='carrying';record.due=planet.day+commodityTravelDays(path);noteExchangeStep(record,'debtReturn',{count:record.cargo});return;}
+        record.resolved=true;record.status='arrived';record.arrived=planet.day;
     }
 
     // Embargo system
@@ -18526,50 +18700,15 @@
             reg: "town", random: true
         },
         value: (subject, target, args) => {
-            initEconomics();
-            if (getLoansFor(target).length >= 2) return false;
-            const econ = computeTownEconomySnapshot(target);
-            const towns = regFilter("town", t => t.id !== target.id && (t.resources?.cash || 0) > 70);
-            if (towns.length === 0) return false;
-            const lender = choose(towns);
-            const targetCash = target.resources?.cash || 0;
-            const lenderCash = lender.resources?.cash || 0;
-
-            // Only borrow if struggling and lender has means
-            if (targetCash > 45 && (econ?.net || 0) > -0.4 && !hasIssue(target, "war")) return false;
-            if (lenderCash < 70) return false;
-
-            const relation = target.relations[lender.id] || 0;
-            if (relation < -2) return false; // Won't lend to enemies
-
-            args.lender = lender;
-            const need = Math.max(0, 50 - targetCash) + Math.max(0, -(econ?.net || 0) * 12);
-            const baseAmount = Math.max(25, Math.floor(30 + need));
-            args.amount = Math.min(90, Math.max(baseAmount, Math.floor(lenderCash * 0.25)));
-            args.repayment = Math.floor(args.amount * 1.22); // modest fee
-            args.turns = 10 + Math.floor(Math.random() * 6);
-            return true;
+            return prepareCreditRequest(target,args);
         },
         message: (subject, target, args) => {
-            return `{{regname:town|${target.id}}} seeks a loan of {{b:${args.amount}}} {{currency:${target.id}}} from {{regname:town|${args.lender.id}}}. They would repay {{b:${args.repayment}}} over time.`;
+            return `${creditTown(target.id)} seeks ${args.amount} from ${creditTown(args.lender.id)}. They would return ${args.repayment} over ${args.turns} days. ${args.loanOffer.motive.text}`;
         },
         func: (subject, target, args) => {
-            const relation = target.relations[args.lender.id] || 0;
-            const approved = (relation >= 0 || Math.random() < 0.3) && !args.lender.end && !target.end && commodityStock(args.lender,'cash')>=args.amount;
-            args.approved = approved;
-
-            if (approved) {
-                transferCash(args.lender,target,args.amount);
-                createLoan(args.lender, target, args.amount, args.repayment, args.turns);
-                happen("AddRelation", target, args.lender, { amount: 1 });
-            }
+            grantCreditRequest(target,args);
         },
-        messageDone: (subject, target, args) => {
-            if (args.approved) {
-                return `{{regname:town|${args.lender.id}}} {{c:agrees|grants|approves}} the loan. {{regname:town|${target.id}}} receives {{b:${args.amount}}} {{currency:${target.id}}}.`;
-            }
-            return `{{regname:town|${args.lender.id}}} {{c:declines|refuses|denies}} the loan request.`;
-        }
+        messageDone: (subject, target, args) => args.approved?null:`${creditTown(args.lender.id)} can no longer offer the loan.`
     });
 
     // Process loan repayments daily
@@ -18583,140 +18722,65 @@
             initEconomics();
             const loans = getLoansFor(target);
             if (loans.length === 0) return false;
-            args.loan = loans[0]; // Process one loan at a time
-            return true;
+            args.loans=loans.slice();return true;
         },
-        func: (subject, target, args) => {
-            args.result = processLoanPayment(args.loan);
+        func: (subject,target,args) => {
+            for(const loan of args.loans || [args.loan])processLoanPayment(loan);
         },
-        messageDone: (subject, target, args) => {
-            if (args.result === "repaid") {
-                const lender = regGet("town", args.loan.lenderId);
-                if (lender) {
-                    return `{{regname:town|${target.id}}} {{c:repays|settles|completes}} their debt to {{regname:town|${lender.id}}}. Relations {{c:warm|improve|strengthen}}.`;
-                }
-            } else if (args.result === "default") {
-                const lender = regGet("town", args.loan.lenderId);
-                if (lender) {
-                    return `{{regname:town|${target.id}}} {{c:cannot pay|defaults on|misses payment to}} {{regname:town|${lender.id}}}. Trust {{c:erodes|falters|wanes}}.`;
-                }
-            }
-            return null; // Regular payments are silent
-        }
+        messageDone: () => null
     });
 
-    // Debt diplomacy escalation (autonomous)
-    const DEBT_DIPLOMACY_CONFIG = {
-        escalationCooldown: 20,
-        minMissedPayments: 1,
-        maxPressure: 10
-    };
-
+    // A sustained, observed arrear can provoke politics. A promise of goods
+    // does not lower the balance or erase the missed payments.
+    const DEBT_DIPLOMACY_CONFIG={escalationCooldown:20,maxPressure:10};
     function canEscalateDebt(loan) {
-        if (!loan) return false;
-        if ((loan.missedPayments || 0) < DEBT_DIPLOMACY_CONFIG.minMissedPayments) return false;
-        if (loan._paultendoLastEscalation && planet.day - loan._paultendoLastEscalation < DEBT_DIPLOMACY_CONFIG.escalationCooldown) {
-            return false;
-        }
-        return true;
+        return !!loan&&(planet.loans || []).includes(loan)&&(loan.daysInArrears || 0)>=CREDIT_PACE.arrearsDays
+            &&loan.lastPaymentDay===planet.day&&(loan._paultendoLastEscalation==null||planet.day-loan._paultendoLastEscalation>=DEBT_DIPLOMACY_CONFIG.escalationCooldown);
     }
-
-    function evaluateDebtEscalation(loan, lender, borrower) {
+    function debtWarAllowed(lender) {
+        const religion=getTownReligion(lender);
+        return lender.jobs?.soldier>0&&townKnowledgeLevel(lender,'military')>=10
+            &&!((lender.influences.faith || 0)>4&&religion?.tenets?.includes('pacifism'));
+    }
+    function evaluateDebtEscalation(loan,lender,borrower) {
         initTownValues(lender);
-        const values = lender.values || {};
-        const pressure = loan.pressure || 0;
-        const debtRatio = loan.remainingAmount / Math.max(1, borrower.resources?.cash || 1);
-
-        let weights = [
-            { id: "restructure", weight: 1 + Math.max(0, values.justice || 0) + Math.max(0, values.openness || 0) },
-            { id: "concession", weight: 1 + Math.max(0, values.order || 0) * 0.5 + Math.max(0, values.wealth || 0) * 0.3 },
-            { id: "vassal", weight: 0.7 + pressure * 0.45 + Math.max(0, (values.order || 0)) * 0.25 },
-            { id: "war", weight: 0.15 + pressure * 0.45 + Math.max(0, values.order || 0) * 0.25 }
+        const values=lender.values || {},pressure=loan.pressure || 0;
+        const religion=getTownReligion(lender),faithful=(lender.influences.faith || 0)>4;
+        const care=livingWorldState().teachings.some(t=>t.town===lender.id&&t.active&&['care','food'].includes(t.meaning));
+        const communal=care||faithful&&religion?.tenets?.includes('egalitarian')&&(!religion.tenets.includes('insular')||lender.religion===borrower.religion);
+        const hardship=mealStock(borrower)<nativeMealNeed(borrower)||hasIssue(borrower,'war')||(borrower.disasterRecovery || 0)>0;
+        const domination=Math.max(0,values.order || 0)*Math.max(0,-(values.justice || 0))/10;
+        const weights=[
+            {id:'restructure',weight:1+Math.max(0,values.justice || 0)+Math.max(0,values.openness || 0)+(communal?4:0)},
+            {id:'concession',weight:debtGoodsOffer(loan,lender,borrower)?1+Math.max(0,values.wealth || 0)*0.3:0},
+            {id:'forgive',weight:hardship&&communal?1+Math.max(0,values.justice || 0):0},
+            {id:'vassal',weight:domination>0?pressure*0.25+domination:0},
+            {id:'war',weight:debtWarAllowed(lender)&&domination>0?(pressure*0.3+domination)*(loan.remainingAmount<commodityStock(borrower,'cash')*1.5?0.4:1):0}
         ];
-
-        if (debtRatio < 1.5) {
-            weights = weights.map(w => w.id === "war" ? { ...w, weight: w.weight * 0.4 } : w);
-        }
-
-        return weightedChoice(weights, w => w.weight) || { id: "restructure" };
+        return weightedChoice(weights,w=>w.weight) || {id:'restructure'};
     }
-
-    function buildDebtEscalationClause(loan, borrower) {
-        if (!loan || !borrower) return null;
-        const parts = [];
-        const missed = loan.missedPayments || 0;
-        const pressure = loan.pressure || 0;
-        const debtRatio = loan.remainingAmount / Math.max(1, borrower.resources?.cash || 1);
-        if (missed >= 2) parts.push("missed payments piling up");
-        else if (missed >= 1) parts.push("a missed payment");
-        if (pressure >= 6) parts.push("pressure mounting");
-        if (debtRatio >= 2.5) parts.push("debts towering over them");
-        if (!parts.length) return null;
-        const phrase = parts.slice(0, 2).join(" and ");
-        if (phrase.startsWith("a missed payment")) return `after ${phrase}`;
-        return `as ${phrase}`;
-    }
-
-    function appendDebtClause(text, clause) {
-        if (!clause || !text) return text;
-        const cleaned = text.endsWith(".") ? text.slice(0, -1) : text;
-        return `${cleaned} ${clause}.`;
-    }
-
-    function applyDebtEscalation(loan, lender, borrower) {
-        const choice = evaluateDebtEscalation(loan, lender, borrower);
-        loan._paultendoLastEscalation = planet.day;
-        const clause = buildDebtEscalationClause(loan, borrower);
-
-        if (choice.id === "restructure") {
-            loan.remainingPayments = Math.max(loan.remainingPayments || 0, 8) + 5;
-            loan.paymentPerTurn = Math.ceil(loan.remainingAmount / Math.max(1, loan.remainingPayments));
-            loan.missedPayments = Math.max(0, (loan.missedPayments || 0) - 2);
-            loan.pressure = Math.max(0, (loan.pressure || 0) - 2);
-            const line = `{{regname:town|${lender.id}}} restructures {{regname:town|${borrower.id}}}'s debt, extending repayment terms.`;
-            logMessage(appendDebtClause(line, clause), "milestone");
-            return;
+    function applyDebtEscalation(loan,lender,borrower) {
+        const choice=evaluateDebtEscalation(loan,lender,borrower);loan._paultendoLastEscalation=planet.day;
+        if(choice.id==='forgive') {
+            const amount=loan.remainingAmount;loan.remainingAmount=0;planet.loans=planet.loans.filter(l=>l.id!==loan.id);
+            recordCreditStep(loan,'forgiven',{amount});improveRelations(borrower,lender,2);
+            creditNews(loan,`Debt forgiven: ${creditTown(lender.id)} releases ${creditTown(borrower.id)} from the debt.`);return;
         }
-
-        if (choice.id === "concession") {
-            let concessionDone = false;
-            if (!hasEmbargo(lender, borrower)) {
-                try { createEmbargo(lender, borrower); concessionDone = true; } catch {}
-            }
-            if (!concessionDone) {
-                try { createTradeRoute(lender, borrower); concessionDone = true; } catch {}
-            }
-            if (!concessionDone) {
-                happen("AddRelation", borrower, lender, { amount: 1 });
-            }
-            loan.missedPayments = Math.max(0, (loan.missedPayments || 0) - 1);
-            loan.pressure = Math.max(0, (loan.pressure || 0) - 1);
-            const line = `{{regname:town|${borrower.id}}} grants trade concessions to {{regname:town|${lender.id}}} to ease debt pressure.`;
-            logMessage(appendDebtClause(line, clause), "warning");
-            return;
+        if(choice.id==='concession'&&startDebtGoods(loan,lender,borrower))return;
+        if(choice.id==='vassal') {
+            const relation=createVassalRelation(lender,borrower,{autonomy:0.7,resentment:3,terms:{origin:'debt',loan:loan.id}});
+            if(relation){loan.pressure=Math.max(0,(loan.pressure || 0)-3);recordCreditStep(loan,'vassal');creditNews(loan,`Debt binds ${creditTown(borrower.id)} to ${creditTown(lender.id)} as a tributary.`,'warning');return;}
         }
-
-        if (choice.id === "vassal") {
-            const rel = createVassalRelation(lender, borrower, { autonomy: 0.7, resentment: 3, terms: { origin: "debt" } });
-            if (rel) {
-                loan.missedPayments = 0;
-                loan.pressure = Math.max(0, (loan.pressure || 0) - 3);
-                const line = `Debt binds {{regname:town|${borrower.id}}} into tributary status under {{regname:town|${lender.id}}}.`;
-                logMessage(appendDebtClause(line, clause), "warning");
-                return;
-            }
+        if(choice.id==='war'&&debtWarAllowed(lender)) {
+            const process=startWar(lender,borrower);
+            if(process){process.cause={id:'debt_enforcement',label:'debt enforcement',subjectId:lender.id,targetId:borrower.id,source:loan.id};process.objective={id:'vassalize',label:'subjugation',targetId:borrower.id};
+                recordCreditStep(loan,'war');creditNews(loan,`Debt war: ${creditTown(lender.id)} moves against ${creditTown(borrower.id)}.`,'warning');return;}
         }
-
-        if (choice.id === "war") {
-            const process = startWar(lender, borrower);
-            if (process) {
-                process.cause = { id: "debt_enforcement", label: "debt enforcement", subjectId: lender.id, targetId: borrower.id };
-                process.objective = { id: "vassalize", label: "subjugation", targetId: borrower.id };
-                const line = `Debt disputes boil over. {{regname:town|${lender.id}}} moves to enforce repayment from {{regname:town|${borrower.id}}}.`;
-                logMessage(appendDebtClause(line, clause), "warning");
-                return;
-            }
-        }
+        loan.remainingPayments=Math.max(loan.remainingPayments || 0,8)+5;
+        loan.paymentPerTurn=Math.ceil(loan.remainingAmount/loan.remainingPayments*10)/10;
+        loan.daysInArrears=0;loan.missedPayments=Math.max(0,(loan.missedPayments || 0)-2);loan.pressure=Math.max(0,(loan.pressure || 0)-2);
+        recordCreditStep(loan,'restructure',{payment:loan.paymentPerTurn,turns:loan.remainingPayments});
+        creditNews(loan,`More time: ${creditTown(lender.id)} eases ${creditTown(borrower.id)}'s payments.`);
     }
 
     modEvent("debtDiplomacyEscalation", {
@@ -18976,15 +19040,7 @@
         },
         value: (subject, target, args) => {
             if ((target.influences.faith || 0) < -2) return false;
-
-            const wealthyTowns = regFilter("town", t =>
-                t.id !== target.id && (t.resources?.cash || 0) > 100
-            );
-            if (wealthyTowns.length === 0) return false;
-
-            args.lender = choose(wealthyTowns);
-            args.amount = Math.min(50, Math.floor((args.lender.resources?.cash || 0) * 0.3));
-            args.repayment = Math.floor(args.amount * 1.2);
+            if(!prepareCreditRequest(target,args))return false;
             args.successChance = calcSwaySuccess(target, args.lender);
             return true;
         },
@@ -18996,15 +19052,7 @@
             args.success = success;
 
             if (success) {
-                const relation = target.relations[args.lender.id] || 0;
-                const approved = (relation >= -1 || Math.random() < 0.4) && !args.lender.end && !target.end && commodityStock(args.lender,'cash')>=args.amount;
-                args.approved = approved;
-
-                if (approved) {
-                    transferCash(args.lender,target,args.amount);
-                    createLoan(args.lender, target, args.amount, args.repayment, 10);
-                    happen("AddRelation", target, args.lender, { amount: 1 });
-                }
+                grantCreditRequest(target,args);
             } else {
                 happen("Influence", subject, target, { faith: -1 });
             }
@@ -23145,7 +23193,7 @@
         return planet.loans.some(l =>
             l.lenderId === lender.id &&
             l.borrowerId === borrower.id &&
-            (l.missedPayments || 0) >= 2
+            (l.daysInArrears || 0) >= CREDIT_PACE.arrearsDays
         );
     }
 
@@ -23179,8 +23227,8 @@
             candidates.push({ id: "tribute_refusal", label: "tribute refusal", weight: 3.2 });
         }
 
-        if (hasDebtArrears(instigator, defender)) {
-            candidates.push({ id: "debt_enforcement", label: "debt enforcement", weight: 2.4 });
+        if (hasDebtArrears(instigator, defender)&&debtWarAllowed(instigator)) {
+            candidates.push({id:'debt_enforcement',label:'debt enforcement',weight:2.4,source:planet.loans.find(l=>l.lenderId===instigator.id&&l.borrowerId===defender.id&&l.daysInArrears>=CREDIT_PACE.arrearsDays)?.id});
         }
 
         const r1 = getTownReligion(instigator);
@@ -27085,46 +27133,12 @@
             if (!disaster) return false;
             if (getDisasterSeverity(disaster) < 2) return false;
 
-            // Don't already have too many loans
-            initEconomics();
-            const existingLoans = (planet.loans || []).filter(l => l.borrowerId === subject.id);
-            if (existingLoans.length >= 2) return false;
-
-            // Find a wealthy neighbor to borrow from
-            const neighbors = regFilter("town", t =>
-                t.id !== subject.id &&
-                !t.end &&
-                getRelations(subject, t) > -6 // Not hostile
-            );
-
-            if (neighbors.length === 0) return false;
-
-            // Pick richest neighbor
-            const lender = neighbors.sort((a, b) => (b.influences?.trade || 0) - (a.influences?.trade || 0))[0];
-            const lenderCash = lender.resources?.cash || 0;
-            if (lenderCash < 60) return false;
-            args.lender = lender;
+            if(!prepareCreditRequest(subject,args))return false;
             args.disaster = disaster;
             return true;
         },
         func: (subject, target, args) => {
-            const lenderCash = args.lender?.resources?.cash || 0;
-            const baseAmount = 100 + Math.floor(Math.random() * 150);
-            const amount = Math.max(60, Math.min(baseAmount, Math.floor(lenderCash * 0.45)));
-            const interest = 0.15 + Math.random() * 0.1; // 15-25% interest for emergency
-            const repayment = Math.max(amount + 10, Math.floor(amount * (1 + interest)));
-            const turns = 12 + Math.floor(Math.random() * 6);
-
-            if(args.lender.end||subject.end||lenderCash<amount)return;
-            transferCash(args.lender,subject,amount);
-            createLoan(args.lender, subject, amount, repayment, turns);
-
-            // Loan helps recovery
-            if (subject.disasterRecovery > 5) {
-                subject.disasterRecovery -= 5;
-            }
-
-            logMessage(`{{regname:town|${subject.id}}} takes an emergency loan of ${amount} from {{regname:town|${args.lender.id}}} for disaster recovery.`);
+            grantCreditRequest(subject,args);
         }
     });
 

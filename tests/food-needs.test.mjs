@@ -157,7 +157,10 @@ test('barter preserves an input committed to the buyer’s own construction',asy
 test('existing economic aid and loans move real divisible cash on the current engine',async t=>{
  const g=await makeGame();t.after(g.close);const {w,a,b}=pair(g,{currency:true});a.resources.cash=1.25;b.resources.cash=100.75;
  w.gameEvents.townEconomicAid.func(null,b,{recipient:a,amount:20});assert.equal(a.resources.cash,21.25);assert.equal(b.resources.cash,80.75);
- const args={lender:b,amount:30,repayment:36,turns:10};w.gameEvents.townRequestLoan.func(null,a,args);assert.equal(args.approved,true);assert.equal(a.resources.cash,51.25);assert.equal(b.resources.cash,50.75);assert.equal(w.planet.loans.at(-1).originalAmount,30);
+ w.planet.unlocks.trade=40;b.jobs.merchant=1;b.values={openness:6,justice:6};b.resources.cash=1000;
+ const args={};assert.equal(w.gameEvents.townRequestLoan.value(null,a,args),false,'Aid has already filled the public reserve');
+ a.resources.cash=0.25;assert.equal(w.gameEvents.townRequestLoan.value(null,a,args),true);const total=a.resources.cash+b.resources.cash,amount=args.amount;
+ w.gameEvents.townRequestLoan.func(null,a,args);assert.equal(args.approved,true);assert.equal(a.resources.cash,0.25+amount);assert.equal(a.resources.cash+b.resources.cash,total);assert.equal(w.planet.loans.at(-1).originalAmount,amount);
  assert.ok(w.planet.loans.some(l=>l.lenderId===b.id&&l.borrowerId===a.id));errors(g);
 });
 
