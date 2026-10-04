@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.69**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.70**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.69/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.70/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.69)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.70)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -117,3 +117,5 @@ Practical shortages can now motivate material surveys. With the existing mining 
 A town that brought home useful samples can now grow toward that source while its shortage lasts. This only guides an existing native growth opportunity, claiming one adjoining piece of reachable unclaimed ground at a time. Native population, growth chance, laws, food, fighting and colony rules still apply. Occupied or exhausted deposits do not draw a border, and claiming ground grants no stock or knowledge. Regular miners can then work the same finite source. Remembered journeys connect the first samples to the later claim through reloads. A return whisper to an available miner can send them back for needed samples with the actual outward trip, gathering and homeward trip. Changed needs keep an ordinary return from promising supplies. This connects exploration to lasting supply without setting every discovery on the same timetable. Overall pacing still needs longer human playtesting.
 
 Actual shipments can carry a maker’s account of an advanced discovery. A receiver needs a current reason, an available worker and the earlier knowledge before it can try the idea. Goods may arrive while guarded makers keep their methods private, or listeners decline the account. Accepted guidance shortens the prototype work by two days, with a minimum of two working days, but supplies are still spent locally and knowledge arrives only when the trials finish. These durations are initial game calibration. Fighting and closed routes delay the actual contact. Shipment, teacher and local work histories survive reloads and remain linked in the Chronicle. Multiple communities can pursue the same question independently. This gives trade a possible consequence beyond its immediate cargo without making every visit a guaranteed unlock.
+
+Repeated completed exchanges can give available scholars a practical reason to work on writing even when the town prioritises another branch. Continued exchanges after local writing can prompt libraries. Actual workshop attempts or recent sky observations can prompt scientific method. These are questions to work on, rather than discoveries awarded by a visit. Prototypes still need the earlier knowledge, local supplies and free workers. Their stories link to the actual exchanges that raised the question. Two exchanges and a ninety-day evidence window are initial game calibration. Advanced medical knowledge now improves healing and outbreak resistance in communities that have learned it. Local writing limits the existing distortion of remembered grudges, while leaving the grievance intact. Local libraries enable the existing healthcare and cultural proposals. Older untracked discoveries keep their shared benefits without inventing a local history. Overall pacing and the remaining shared technology mechanics still need further work.

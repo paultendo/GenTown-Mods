@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.69/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.70/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.69";
+    const MOD_VERSION = "1.6.70";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -5449,11 +5449,17 @@
                 roles=['doctor'];if(!(town.influences?.disease>0))return null;
                 evidence.disease=town.influences.disease;text='The healers have sick people to care for. They want to understand what helps.';
             } else {
-                if(!priority)return null;
-                const observations=planet._paultendoSky?.surveys?.[town.id]?.observations || [];
-                if(event==='unlockScientificMethod'&&practice.length<2&&observations.length<3)return null;
+                const observations=(planet._paultendoSky?.surveys?.[town.id]?.observations || []).filter(o=>o.day<=planet.day&&planet.day-o.day<=90);
+                const learned=town._paultendoLocalDiscoveries?.['education:30'];
+                const accounts=exchanges.filter(r=>r.arrived<=planet.day&&(!learned||r.arrived>learned.day));
+                const recordKeeping=['unlockWriting','unlockLibraries'].includes(event)&&accounts.length>=2;
+                const experiments=practice.length>=2||observations.length>=3;
+                const inquiry=event==='unlockScientificMethod'&&experiments;
+                if(!priority&&!recordKeeping&&!inquiry)return null;
+                if(event==='unlockScientificMethod'&&!experiments)return null;
                 evidence.practice=practice.slice(-4).map(w=>({id:w.id,type:w.type,day:w.finished}));evidence.observations=observations.slice(-3).map(o=>({day:o.day,type:o.type}));
-                text=event==='unlockScientificMethod'?'Their experiments and observations do not always agree. The scholars want a way to test an explanation.':'The town has made learning a priority. Its scholars want to preserve and share what they know.';
+                if(recordKeeping)evidence.exchanges=accounts.slice(-4).map(r=>r.id);
+                text=inquiry?'The scholars have experiments and observations to compare. They want a way to test an explanation.':recordKeeping?event==='unlockWriting'?'Goods keep changing hands with the neighbours. The scholars want a way to remember these exchanges.':'The exchanges continue. The scholars want a place to keep what they are learning.':'The town has made learning a priority. Its scholars want to preserve and share what they know.';
             }
         } else if(key==='military') {
             if(!priority&&!hasIssue(town,'war'))return null;
@@ -5534,7 +5540,7 @@
                 completeLocalInquiry(town,work,discovery);
             } finally {logMessage=baseLog;}
             work.status='learned';work.finished=planet.day;
-            inquiryStep(work,`${work.name}'s work leads to ${work.title.toLowerCase()}. ${discovery.messageDone}`,'milestone');
+            inquiryStep(work,`${work.name}’s work leads to ${work.title.toLowerCase()}. ${discovery.messageDone}`,'milestone');
         }
         // Keep active work and every discovery's source. Only prune abandoned histories.
         const old=state.inquiries.filter(w=>!['waiting','working','learned'].includes(w.status));
@@ -5549,6 +5555,7 @@
         items.push({text:`Work began on Day ${work.day}.`});
         for(const step of work.steps.slice(1))items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
         if(work.started!=null&&Object.keys(work.cost).length)items.push({text:`Used ${Object.entries(work.cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`).join(', ')}.`});
+        for(const id of work.cause.evidence?.exchanges || []) {const exchange=commodityExchangeState().exchanges.find(r=>r.id===id);if(exchange)items.push({text:`Day ${exchange.arrived} · The exchange that raised the question`,func:()=>openCommodityJourney(exchange)});}
         if(work.guidance){const journey=commodityExchangeState().exchanges.find(r=>r.id===work.guidance.exchange),source=livingWorldState().inquiries.find(w=>w.id===work.guidance.source);if(journey)items.push({text:'The visitors who brought the idea',func:()=>openCommodityJourney(journey)});if(source&&livingTownKnown(regGet('town',source.town)))items.push({text:'The work they learned from',func:()=>openLivingInquiry(source)});}
         for(const input of work.inputs || []){const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(record)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(record)});}
         const definition=EXTENDED_DISCOVERIES.find(d=>d.event===work.event);
@@ -6534,8 +6541,8 @@
         return Math.max(0,town.jobs.farmer-farmToolCount(town));
     }
     function farmToolKind(town) {
-        if(town._paultendoMaterials?.steel_tools||town._paultendoMaterials?.steel&&planet.unlocks.smith>=50)return 'steel_tools';
-        if(town._paultendoMaterials?.metal_tools||commodityStock(town,'metal')>0&&planet.unlocks.smith>=40)return 'metal_tools';
+        if(town._paultendoMaterials?.steel_tools||town._paultendoMaterials?.steel&&townKnowledgeLevel(town,'smith')>=50)return 'steel_tools';
+        if(town._paultendoMaterials?.metal_tools||commodityStock(town,'metal')>0&&townKnowledgeLevel(town,'smith')>=40)return 'metal_tools';
         return 'stone_tools';
     }
     function farmToolStep(town,text) {
@@ -24359,10 +24366,10 @@
         resistance += hospitals.length * 1.0;
 
         // Medicine tech helps
-        if (planet.unlocks.education >= 80) resistance += 2;
+        if (townKnowledgeLevel(town,'education') >= 80) resistance += 2;
 
         // Scientific Method helps
-        if (planet.unlocks.education >= 70) resistance += 1;
+        if (townKnowledgeLevel(town,'education') >= 70) resistance += 1;
 
         // Cooking helps
         if (planet.unlocks.fire >= 20) resistance += 0.5;
@@ -24883,7 +24890,7 @@
             healRate += args.doctors * 0.02;
 
             // Medicine tech helps
-            if (planet.unlocks.education >= 80) healRate += 0.10;
+            if (townKnowledgeLevel(subject,'education') >= 80) healRate += 0.10;
 
             const healed = Math.max(1, Math.floor(args.injuries * healRate));
             subject.injuries = Math.max(0, subject.injuries - healed);
@@ -24928,7 +24935,7 @@
         target: { reg: "town", random: true },
         value: (subject, target, args) => {
             if ((target.influences.faith || 0) < -2) return false;
-            if (planet.unlocks.education < 40) return false; // Need Libraries
+            if (townKnowledgeLevel(target,'education') < 40) return false; // Need Libraries
             if (target.publicHealthcare) return false;
             if ((target.pop || 0) < 80) return false;
             if (!canReceiveGuidance(target, "publicHealthcare", 60)) return false;
@@ -24987,7 +24994,7 @@
             }
 
             // Attract doctors
-            if (Math.random() < 0.02 && planet.unlocks.education >= 40) {
+            if (Math.random() < 0.02 && townKnowledgeLevel(subject,'education') >= 40) {
                 subject.jobs = subject.jobs || {};
                 subject.jobs.doctor = (subject.jobs.doctor || 0) + 1;
             }
@@ -25007,7 +25014,7 @@
         value: (subject, target, args) => {
             if ((target.influences.faith || 0) < -2) return false;
             if (planet.unlocks.smith < 20) return false;
-            if (planet.unlocks.education < 40) return false;
+            if (townKnowledgeLevel(target,'education') < 40) return false;
             if ((target.pop || 0) < 80) return false;
             if (!canReceiveGuidance(target, "buildHospital", 45)) return false;
 
@@ -25060,7 +25067,7 @@
         target: { reg: "town", random: true },
         value: (subject, target, args) => {
             if ((target.influences.faith || 0) < -1) return false;
-            if (planet.unlocks.education < 40 && (target.influences.faith || 0) < 4) return false;
+            if (townKnowledgeLevel(target,'education') < 40 && (target.influences.faith || 0) < 4) return false;
             if (!canReceiveGuidance(target, "trainHealers", 25)) return false;
 
             const doctors = target.jobs?.doctor || 0;
@@ -26278,7 +26285,7 @@
         target: { reg: "town", random: true },
         value: (subject, target, args) => {
             if ((target.influences.faith || 0) < -1) return false;
-            if (planet.unlocks.education < 40) return false;
+            if (townKnowledgeLevel(target,'education') < 40) return false;
             if (hasCulturalLandmark(target, "museum")) return false;
 
             args.successChance = 0.30;
@@ -26322,7 +26329,7 @@
         target: { reg: "town", random: true },
         value: (subject, target, args) => {
             if ((target.influences.faith || 0) < -1) return false;
-            if (planet.unlocks.education < 30) return false;
+            if (townKnowledgeLevel(target,'education') < 30) return false;
             if (hasCulturalLandmark(target, "gallery")) return false;
 
             args.successChance = 0.35;
@@ -32767,7 +32774,7 @@
     function getMemoryDistortionChance(town) {
         const education = town.influences?.education || 0;
         const faith = town.influences?.faith || 0;
-        const writing = planet.unlocks?.education || 0;
+        const writing = townKnowledgeLevel(town,'education');
         let chance = 0.015 + Math.max(0, faith) * 0.004;
         chance -= Math.max(0, education) * 0.003;
         if (writing >= 30) chance -= 0.01;
