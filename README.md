@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.67**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.68**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.67/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.68/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.67)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.68)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -113,3 +113,5 @@ A recent threatened food refusal can now become the cause of a native war while 
 Workshop methods now retain the actual hands who learned them. A successful batch establishes its maker’s practice. Experienced makers can train another eligible employed hand while making goods that are genuinely needed. Openness, outlook and a practiced belief in learning affect whether they share. The learner must attend the method’s actual working days. Food shortages, fighting, lost work or competing tasks can interrupt the lesson. An absent learner gains no mastery from a finished batch. A trained successor can make goods reliably and pass guidance through a real shipment when the original maker no longer does that work. An untrained replacement still needs a trial and can fail using actual inputs. Hearing guidance is tied to its listener and grants no immediate mastery. Named methods, teachers, batches and unfinished lessons survive reloads and continue on inactive worlds. Workshop and person views connect those histories. Learning changes no native discovery levels, awards no goods and adds no extra production. Training uses each recipe’s existing work duration. Older practice without a named maker is retained without inventing an apprenticeship. These people represent available employed roles, rather than a complete individual population and ageing model. World-wide native milestones and the broader local technology tree still need further work, and the pacing remains initial calibration.
 
 Practical shortages can now motivate material surveys. With the existing mining and travel knowledge, an available miner can search reachable unclaimed ground for clay, sand or coal needed by actual work. The outward trip, gathering one unit per day and return take separate time. Samples come from finite deposits shared with native mining. Food, fighting, missing workers, unsafe paths, changed ownership and full stores can interrupt a survey. A maker waiting for their own raw ingredient can fetch it, while their workshop waits for their return. Samples retain their source when actual work consumes them, with links between the survey, destination, motivating need and resulting batch. Surveys survive reloads and continue on inactive worlds. Finding a source grants no technology or manufacturing mastery. These journeys apply to practical material surveys, while the existing general exploration missions retain their previous timing. Deposits, sample sizes and gathering speed remain game calibration.
+
+A town that brought home useful samples can now grow toward that source while its shortage lasts. This only guides an existing native growth opportunity, claiming one adjoining piece of reachable unclaimed ground at a time. Native population, growth chance, laws, food, fighting and colony rules still apply. Occupied or exhausted deposits do not draw a border, and claiming ground grants no stock or knowledge. Regular miners can then work the same finite source. Remembered journeys connect the first samples to the later claim through reloads. A return whisper to an available miner can send them back for needed samples with the actual outward trip, gathering and homeward trip. Changed needs keep an ordinary return from promising supplies. This connects exploration to lasting supply without setting every discovery on the same timetable. Overall pacing still needs longer human playtesting.

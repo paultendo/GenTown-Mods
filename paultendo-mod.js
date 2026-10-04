@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.67/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.68/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.67";
+    const MOD_VERSION = "1.6.68";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -6181,6 +6181,8 @@
         const artifacts = livingWorldState().artifacts.filter(a=>a.place===place.id);
         for(const artifact of artifacts) items.push({text:`${escapeLivingText(artifactTitle(artifact))} · Its story`,func:()=>openLivingArtifact(artifact)});
         for(const survey of livingWorldState().sampling.filter(w=>w.place===place.id&&livingTownKnown(regGet('town',w.town))))items.push({text:`${escapeLivingText(survey.name)}’s ${COMMODITIES[survey.type].label} survey`,func:()=>openMaterialSurvey(survey)});
+        const sampled=new Set(livingWorldState().sampling.filter(w=>w.place===place.id&&w.delivered>0&&livingTownKnown(regGet('town',w.town))).map(w=>w.type));
+        for(const type of sampled){const source=MATERIAL_SOURCES[type],deposit=planet._paultendoDeposits?.[place.id]?.[type] || chunk._paultendoDeposits?.[type];if(source.biomes.includes(chunk.b)&&deposit)items.push({text:deposit.remaining>0?`The ${COMMODITIES[type].label} deposit still has material for the miners.`:`The miners have exhausted the ${COMMODITIES[type].label} here.`});}
         if(Object.keys(LIVING_ARTIFACTS).some(kind=>!livingArtifactSpent(kind))) items.push({text:'Leave something from your time',func:()=>openLivingArtifactKit(place)});
         items.push({heading:true,text:'Journeys remembered'});
         for (const visit of place.visits) {
@@ -6609,21 +6611,50 @@
         if(path?.some(c=>!canEnter(c)))path=findPath(getAnchorChunk(town),target,{canEnter});
         return path?.length&&path.at(-1).x===target.x&&path.at(-1).y===target.y?path:null;
     }
-    function buildMaterialSurveyMission(town) {
+    function buildMaterialSurveyMission(town,requestedTarget=null,requestedPerson=null) {
         const state=livingWorldState();
         if(state.sampling.some(w=>w.town===town.id&&['outbound','collecting','returning'].includes(w.status)))return null;
-        const person=livingCommunityPerson(town,'miner');
+        const person=requestedPerson || livingCommunityPerson(town,'miner');
+        if(person?.role!=='miner')return null;
         const range=getExplorationRange(town),center=getTownCenter(town);
         for(const need of materialSurveyNeeds(town)) {
             const workshop=state.materialWork.find(w=>w.town===town.id&&w.person===person?.id&&w.status==='waiting'&&(w.cost[need.type] || 0)>commodityStock(town,need.type));
             if(!materialHandFree(town,person,workshop?.id))continue;
             const source=MATERIAL_SOURCES[need.type];
-            const targets=filterChunks(c=>!c.v?.s&&source.biomes.includes(c.b)&&c.v.g===getTownLandmassId(town)&&Math.hypot(c.x-center[0],c.y-center[1])<=range&&(planet._paultendoDeposits?.[`${c.x},${c.y}`]?.[need.type]?.remaining ?? c._paultendoDeposits?.[need.type]?.remaining ?? source.quantity)>0).sort((a,b)=>Math.hypot(a.x-center[0],a.y-center[1])-Math.hypot(b.x-center[0],b.y-center[1]));
+            const targets=filterChunks(c=>(!requestedTarget||c===requestedTarget)&&!c.v?.s&&source.biomes.includes(c.b)&&c.v.g===getTownLandmassId(town)&&Math.hypot(c.x-center[0],c.y-center[1])<=range&&(planet._paultendoDeposits?.[`${c.x},${c.y}`]?.[need.type]?.remaining ?? c._paultendoDeposits?.[need.type]?.remaining ?? source.quantity)>0).sort((a,b)=>Math.hypot(a.x-center[0],a.y-center[1])-Math.hypot(b.x-center[0],b.y-center[1]));
             for(const target of targets.slice(0,EXPLORATION_CONFIG.maxAttempts)) {
                 const path=materialSurveyPath(town,target);if(path)return {type:'resource',target,path,radius:EXPLORATION_CONFIG.surveyRadius,label:`survey for ${COMMODITIES[need.type].label}`,materialSurvey:{...need,person:person.id,workshop:workshop?.id}};
             }
         }
         return null;
+    }
+    function materialExpansionChoice(town,anchor,check,stop) {
+        if(!town||!anchor||mealStock(town)<foodBuffer(town)||happen('Legality',null,town,{law:'travel'})===false)return null;
+        const needs=materialSurveyNeeds(town),state=livingWorldState();
+        if(!needs.length)return null;
+        // Only ground this town actually sampled can guide its borders.
+        for(const need of needs) {
+            const sources=state.sampling.filter(w=>w.town===town.id&&w.type===need.type&&w.delivered>0&&w.status==='arrived').slice().sort((a,b)=>Math.hypot(a.x-anchor.x,a.y-anchor.y)-Math.hypot(b.x-anchor.x,b.y-anchor.y));
+            for(const survey of sources) {
+                const source=MATERIAL_SOURCES[need.type],target=chunkAt(survey.x,survey.y),deposit=planet._paultendoDeposits?.[`${survey.x},${survey.y}`]?.[need.type] || target?._paultendoDeposits?.[need.type];
+                if(!target||target.v.s!==undefined||!source.biomes.includes(target.b)||!(deposit?.remaining>0)||!isLandmassReachable(target.v.g))continue;
+                const canEnter=c=>c&&(!stop||!stop(c))&&(!c.v.s||c.v.s===town.id)&&isLandmassReachable(c.v.g);
+                const path=findPath(anchor,target,{canEnter});if(!path?.length)continue;
+                const edge=path.find(c=>c.v.s===undefined&&check(c));
+                if(edge&&getNeighborChunks(edge).some(c=>c.v.s===town.id))return {chunk:edge,survey};
+            }
+        }
+        return null;
+    }
+    function rememberMaterialExpansion(town,choice) {
+        const {chunk,survey}=choice;if(chunk.v.s!==town.id)return;
+        const source=chunkAt(survey.x,survey.y),place=livingWorldState().places[survey.place];
+        const claims=survey.claims ||= [];claims.push({day:planet.day,x:chunk.x,y:chunk.y});if(claims.length>64)claims.shift();
+        town._paultendoClaimedCache=null;
+        if(source?.v.s===town.id&&!survey.claimed) {
+            survey.claimed=planet.day;
+            materialSurveyStep(survey,`${town.name} now holds ${place?.name || 'the surveyed ground'}. Its miners can work the ${COMMODITIES[survey.type].label} there.`,true);
+        } else if(claims.length===1)materialSurveyStep(survey,`${town.name} extends its border toward ${place?.name || 'the surveyed ground'}. Its makers still need ${COMMODITIES[survey.type].label}.`);
     }
     function materialSurveyStep(work,text,important=false) {
         work.steps.push({day:planet.day,text});
@@ -6657,7 +6688,7 @@
                 revealPathFog(path,EXPLORATION_CONFIG.surveyRadius,0.9);
                 const revealed=Object.keys(planet._paultendoFog?.explored || {}).filter(key=>!known.has(key)).length;
                 const mission={type:'resource',label:`survey for ${COMMODITIES[work.type].label}`},place=recordLivingJourney(town,mission,path,revealed,{person:work.person,name:work.name,id:work.whisper});
-                work.place=place?.id;if(place)place.visits.at(-1).sampling=work.id;
+                work.place=place?.id;if(place){place.visits.at(-1).sampling=work.id;const words=livingWorldState().whispers.find(w=>w.id===work.whisper);if(words?.mission?.sampling===work.id){words.mission.place=place.id;words.mission.revealed=revealed;}}
                 recordTraffic(path,0.5);discoverLivingArtifacts(town,path);work.status='collecting';
                 materialSurveyStep(work,`${work.name} reaches ${place?.name || 'the ground they were seeking'}.`);continue;
             }
@@ -7835,14 +7866,15 @@
                 if (!livingPlaceReturn(town,place)) return {acted:false,reason:'The place you spoke of is beyond their reach now.'};
                 const target = chunkAt(place.x,place.y);
                 const tag = {farmer:'fertile',miner:'mineral',lumberer:'lumber'}[person.role];
-                mission = {type:tag && isChunkSuitableForTag(target,tag) ? 'resource' : 'frontier',tag:tag && isChunkSuitableForTag(target,tag) ? tag : null,target,radius:EXPLORATION_CONFIG.revealRadius,label:`return journey to ${place.name}`};
+                if(person.role==='miner')mission=buildMaterialSurveyMission(town,target,person);
+                mission ||= {type:tag && isChunkSuitableForTag(target,tag) ? 'resource' : 'frontier',tag:tag && isChunkSuitableForTag(target,tag) ? tag : null,target,radius:EXPLORATION_CONFIG.revealRadius,label:`return journey to ${place.name}`};
             } else mission = person.role === 'priest' ? buildPilgrimageMission(town) || buildFrontierMission(town) : ['farmer','miner','lumberer'].includes(person.role) ? buildResourceSurveyMission(town) || buildFrontierMission(town) : buildFrontierMission(town);
             const known = new Set(Object.keys(planet._paultendoFog?.explored || {}));
             if (!mission || !executeExplorationMission(town, mission, {silent:true,carrier:record})) return {acted:false,reason:'They found no safe route out. Your words did not become a journey.'};
             const revealed = Object.keys(planet._paultendoFog?.explored || {}).filter(key => !known.has(key)).length;
-            record.mission = {type:mission.type,label:mission.label,revealed,place:mission.placeId, target:mission.target ? [mission.target.x,mission.target.y] : null};
+            record.mission = {type:mission.type,label:mission.label,revealed,place:mission.placeId, target:mission.target ? [mission.target.x,mission.target.y] : null,...(mission.sampling?{sampling:mission.sampling}:{})};
             record.reshaped = mission.type !== 'frontier';
-            record.steps.push({day:planet.day,text:`${person.name} led ${mission.type === 'pilgrimage' ? 'pilgrims' : 'scouts'} on a ${mission.label}.${revealed > 0 ? ' More of the surrounding land is known now.' : ' They charted the route.'}`});
+            record.steps.push({day:planet.day,text:mission.sampling?`${livingWorldState().sampling.find(w=>w.id===mission.sampling).name} sets out to gather ${COMMODITIES[mission.materialSurvey.type].label}. ${mission.materialSurvey.text}`:`${person.name} led ${mission.type === 'pilgrimage' ? 'pilgrims' : 'scouts'} on a ${mission.label}.${revealed > 0 ? ' More of the surrounding land is known now.' : ' They charted the route.'}`});
         } else if (record.topic === 'learn') {
             if (person.role === 'soldier' && planet.unlocks?.military >= 10) {
                 effects = {military:0.6,education:0.1,crime:0.05}; record.reshaped = true;
@@ -7968,6 +8000,7 @@
         if(record.teaching) items.push({text:'Follow the words',func:()=>openLivingTownTeachings(town)});
         if(livingArtifactKnown(artifact)) items.push({text:`Follow ${escapeLivingText(artifactTitle(artifact))}`,func:()=>openLivingArtifact(artifact)});
         if (record.hostility && (record.hostility.relation < 0 || record.hostility.pressure > 0)) items.push({text:'Their claim left a lasting strain between the towns.'});
+        const sampling=livingWorldState().sampling.find(w=>w.id===record.mission?.sampling);if(sampling)items.push({text:'Follow the survey',func:()=>openMaterialSurvey(sampling)});
         const placeId = record.mission?.place || record.destination;
         const place = placeId && livingWorldState().places[placeId];
         if (livingPlaceKnown(place)) items.push({text:`Visit ${escapeLivingText(place.name)}`,func:() => openLivingPlace(place,town.id)});
@@ -11808,6 +11841,12 @@
                 const filter = window._paultendoDiscoveryFilter;
                 if (!filter) return baseNearestChunk(chunkX, chunkY, check, stop);
                 const combined = (c) => filter(c) && check(c);
+                const expansion=window._paultendoMaterialExpansion;
+                if(expansion?.pending) {
+                    expansion.pending=false;
+                    const choice=materialExpansionChoice(expansion.town,chunkAt(chunkX,chunkY),combined,stop);
+                    if(choice){expansion.choice=choice;return choice.chunk;}
+                }
                 return baseNearestChunk(chunkX, chunkY, combined, stop);
             };
             nearestChunk._paultendoDiscovery = true;
@@ -11833,13 +11872,19 @@
                 !gameEvents.townExpand.func._paultendoDiscovery) {
                 const baseExpand = gameEvents.townExpand.func;
                 gameEvents.townExpand.func = function(subject, target, args) {
-                    return withDiscoveryFilter(
-                        (chunk) => {
-                            if (!chunk || !chunk.v || !chunk.v.g) return false;
-                            return isLandmassReachable(chunk.v.g);
-                        },
-                        () => baseExpand(subject, target, args)
-                    );
+                    const previous=window._paultendoMaterialExpansion,expansion={town:subject,pending:true};
+                    window._paultendoMaterialExpansion=expansion;
+                    try {
+                        const result=withDiscoveryFilter(
+                            (chunk) => {
+                                if (!chunk || !chunk.v || !chunk.v.g) return false;
+                                return isLandmassReachable(chunk.v.g);
+                            },
+                            () => baseExpand(subject, target, args)
+                        );
+                        if(expansion.choice)rememberMaterialExpansion(subject,expansion.choice);
+                        return result;
+                    } finally {window._paultendoMaterialExpansion=previous;}
                 };
                 gameEvents.townExpand.func._paultendoDiscovery = true;
                 hooked = true;
