@@ -34,7 +34,7 @@ test('a resize before world creation waits safely and normal resize resumes afte
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.88');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.89');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));
@@ -151,6 +151,9 @@ test('advanced menus follow discoveries and persist their read notification stat
   for (const id of ['economy', 'stance', 'solar', 'festivals']) assert.equal(window.document.getElementById('actionItem-' + id).style.display, 'none');
   window.planet.unlocks.trade = 10;
   window.planet.unlocks.astronomy = 10;
+  window.updateStats();
+  assert.equal(window.document.getElementById('actionItem-solar').style.display, 'none');
+  Object.assign(window.planet.unlocks,{astronomy:20,education:70,smith:80,fire:70,travel:100});
   window.planet.religions = [{ id: 1, name: 'The River Faith' }];
   window.updateStats();
   for (const id of ['economy', 'stance', 'solar']) {
@@ -339,7 +342,7 @@ test('mod management receives complete URLs and can remove an installation', asy
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.88/paultendo-mod.js';
+  const url = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.89/paultendo-mod.js';
   window.userSettings.mods = [url];
   window.showMods();
   window.handlePrompt(url);
@@ -353,7 +356,7 @@ test('adding an updated URL replaces older URLs before the duplicate guard retur
   const game = await makeGame();
   t.after(game.close);
   const { window } = game;
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.88/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.89/paultendo-mod.js';
   window.userSettings.mods = ['https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.27/paultendo-mod.js', current, 'example_mod.js'];
   window._paultendoState.loadedVersion = '1.6.27';
   Object.defineProperty(window.document, 'currentScript', { configurable: true, get: () => ({ src: current }) });
@@ -366,7 +369,7 @@ test('an update survives an older startup script pruning the new URL before it r
   const game = await makeGame(); t.after(game.close);
   const {window} = game;
   const old = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.35/paultendo-mod.js';
-  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.88/paultendo-mod.js';
+  const current = 'https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.89/paultendo-mod.js';
   // This is the observed live race: the old script has already saved only itself.
   window.userSettings.mods = [old, 'example_mod.js'];
   window.saveSettings();
@@ -617,6 +620,13 @@ test('asynchronous saved-mod installation restores history after native autoload
   late.window.nextDay();
   assert.equal(late.window.planet.day, 3);
   assert.deepEqual(late.errors, []);
+});
+
+test('religious refugee eligibility records its actual faith gap and unhappiness without crashing', async t => {
+  const game=await makeGame();t.after(game.close);const {window}=game,source=settleGame(game);
+  const c=window.filterChunks(c=>!c.v.s&&c.b!=='water'&&c.b!=='mountain')[0],target=window.happen('Create',null,null,{x:c.x,y:c.y},'town');
+  source.pop=40;source.influences.faith=0;source.influences.happy=-4;target.influences.faith=6;
+  const args={};assert.equal(window.gameEvents.religiousRefugees.value(source,target,args),true);assert.equal(args.gap,6);assert.equal(args.unhappy,4);assert.equal(source.pop,40);assert.deepEqual(game.errors,[]);
 });
 
 for (const seed of [7, 42, 123]) {

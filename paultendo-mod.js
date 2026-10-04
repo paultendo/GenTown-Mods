@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.88/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.89/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.88";
+    const MOD_VERSION = "1.6.89";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -1916,6 +1916,14 @@
                 min-height: 36px;
             }
             .paultendoChronicleToggle.off { color: #aaa; }
+            #logMessages { min-width: 0; overflow-wrap: anywhere; }
+            #logMessages .logMessage { max-width: 100%; }
+            /* Keep the day and first words inside the panel during arrival. */
+            #logMessages .logMessage[new="true"] { animation-name: paultendoChronicleArrive; }
+            @keyframes paultendoChronicleArrive { from { opacity: 0.65; } to { opacity: 1; } }
+            @media (prefers-reduced-motion: reduce) {
+                #logMessages .logMessage { animation: none !important; transition: none; }
+            }
             @media (max-width: 600px) {
                 #paultendoChronicleHeader { display: block; }
                 #paultendoChronicleHeader > .paultendoChronicleToggle { float: right; }
@@ -3242,6 +3250,9 @@
             PAULTENDO_STATE.materialDepositChunks=planet.chunks;
         }
         if(planet.chunks&&PAULTENDO_STATE.landscapeChunks!==planet.chunks) {
+            for(const [key,ground] of Object.entries(planet._paultendoWater?.ground || {})) {
+                const chunk=planet.chunks[key];if(chunk)Object.assign(chunk,{e:ground.e,m:ground.m,t:ground.t});
+            }
             // Native compression rounds heights to tenths. Retain precise moved
             // ground so repeated reloads cannot create or erase a landslide.
             for(const [key,patch] of Object.entries(planet._paultendoLand || {})) {
@@ -5227,6 +5238,8 @@
         {"key": "travel", "level": 70, "event": "unlockNavigation", "name": "Navigation", "needsUnlock": {"travel": 60, "education": 20}, "messageDone": "Navigators guide ships by the heavens.", "influences": {"travel": 2, "education": 1}, "tale": "A sailor can lose sight of shore without losing the way. Learning to read the heavens supports journeys below them."},
         {"key": "travel", "level": 80, "event": "unlockSteamPower", "name": "Steam Power", "needsUnlock": {"travel": 70, "smith": 50, "fire": 20}, "messageDone": "Steam engines transform travel and industry.", "influences": {"travel": 3, "farm": 1}, "influencesNo": {"happy": 0.5}, "tale": "Boiling water becomes a source of motion. Travel gains support, and the fields share in the new power."},
         {"key": "travel", "level": 90, "event": "unlockRailways", "name": "Railways", "needsUnlock": {"travel": 80, "smith": 60}, "messageDone": "Locomotives connect distant settlements.", "influences": {"travel": 3, "trade": 2, "happy": -0.5}, "tale": "Iron tracks tie distant places together. Travel and trade grow stronger, while happiness takes a small loss."},
+        {key:'travel',level:100,event:'unlockRocketry',name:'Rocketry',needsUnlock:{travel:90,smith:80,fire:70,education:70,astronomy:20},messageDone:'The test rocket holds its course above the clouds.',influences:{education:1,travel:1},tale:'Engines, instruments and careful trials come together. The town can begin building vessels for journeys beyond its world.'},
+        {key:'travel',level:110,event:'unlockLifeSupport',name:'Life support',needsUnlock:{travel:100,smith:80,education:70},messageDone:'The sealed cabin holds through the trials.',influences:{education:1},tale:'Sending instruments into the sky is one thing. Carrying people requires a cabin that can keep them alive. Passenger vessels still need their own construction, supplies and a place to land.'},
         {"key": "fire", "level": 40, "event": "unlockKilns", "name": "Kilns", "needsUnlock": {"fire": 20, "smith": 20}, "messageDone": "Kilns fire pottery and bricks with precision.", "influences": {"trade": 1}, "tale": "Clay goes into the heat and comes back changed. Controlled fire gives trade a new craft to draw on."},
         {"key": "fire", "level": 50, "event": "unlockForges", "name": "Forges", "needsUnlock": {"fire": 40, "smith": 30}, "messageDone": "Great forges produce stronger alloys.", "influences": {"military": 1, "trade": 1}, "tale": "The hottest part of the workshop becomes its heart. Stronger metal supports trade and military work."},
         {"key": "fire", "level": 60, "event": "unlockGunpowder", "name": "Gunpowder", "needsUnlock": {"fire": 50, "military": 30, "education": 10}, "messageDone": "Gunpowder changes the nature of warfare forever.", "influences": {"military": 4, "crime": 1, "happy": -1}, "influencesNo": {"happy": 1}, "tale": "A spark can release a force no arm could match. Military strength grows, with costs to happiness and order."},
@@ -5319,6 +5332,8 @@
         unlockMechanizedFarming:[12,{metal:2,lumber:2}], unlockAgriculturalScience:[16,{crop:2,glass:1}],
         unlockRoads:[6,{rock:3}], unlockSailingShips:[10,{lumber:4}], unlockNavigation:[8,{lumber:1}],
         unlockSteamPower:[18,{metal:3,charcoal:2}], unlockRailways:[20,{metal:4,lumber:2}],
+        unlockRocketry:[24,{steel:4,glass:2,charcoal:8}],
+        unlockLifeSupport:[32,{steel:8,glass:4,charcoal:4,crop:32}],
         unlockKilns:[6,{clay:2,charcoal:1}], unlockForges:[10,{brick:2,charcoal:2}],
         unlockGunpowder:[12,{charcoal:2},{charcoal:'cleanCarbon'}], unlockEngines:[18,{metal:3,charcoal:3}],
         unlockSteel:[8,{metal:2,charcoal:2}], unlockArchitecture:[10,{brick:2,lumber:2}],
@@ -5470,6 +5485,17 @@
             evidence.practice=practice.slice(-4).map(w=>({id:w.id,type:w.type,day:w.finished}));evidence.samples=samples;
             if(interest)evidence.question={type:interest.type,sample:interest.sample};
             text=trial?`${trial.name}'s ${COMMODITIES[trial.type].label} trials have shown what could be improved.`:interest?interest.text || `They have ${COMMODITIES[interest.sample].label} to experiment with.`:military?'The soldiers want a more destructive weapon.':'Workshop experience has given the makers another question to try.';
+        } else if(event==='unlockLifeSupport') {
+            const flight=skyState().flights.findLast(f=>f.town===town.id&&f.target==null&&f.status==='arrived');
+            if(!flight)return null;
+            roles=['scholar','miner'];evidence.flight=flight.id;
+            text='The satellite has sent its reports home. The makers now want to test a sealed cabin and the provisions a living crew would need.';
+        } else if(event==='unlockRocketry') {
+            const survey=skyState().surveys[town.id],observations=(survey?.observations || []).filter(o=>o.astronomy>=20&&planet.day-o.day<=90);
+            const metalwork=practice.findLast(w=>w.type==='steel'&&w.status==='made');
+            if(!survey?.instrument||observations.length<6||!metalwork)return null;
+            roles=['scholar','miner'];evidence.observations=observations.slice(-6).map(o=>({day:o.day,type:o.type}));evidence.practice=[{id:metalwork.id,type:metalwork.type,day:metalwork.finished}];
+            text='The sky charts and steelwork have given the makers a new question. They want to test an engine that can carry its own fuel above the clouds.';
         } else if(key==='travel') {
             if(!journeys.length&&!exchanges.length&&!crossings.length)return null;
             if(!priority&&!journeys.length&&!crossings.length&&exchanges.length<2)return null;
@@ -5596,6 +5622,7 @@
         items.push({text:`Work began on Day ${work.day}.`});
         for(const step of work.steps.slice(1))items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
         if(work.started!=null&&Object.keys(work.cost).length)items.push({text:`Used ${Object.entries(work.cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`).join(', ')}.`});
+        const flight=work.cause.evidence?.flight&&skyState().flights.find(f=>f.id===work.cause.evidence.flight);if(flight)items.push({text:'The satellite that brought the reports',func:()=>openSkyStudy(town,flight)});
         for(const id of work.cause.evidence?.exchanges || []) {const exchange=commodityExchangeState().exchanges.find(r=>r.id===id);if(exchange)items.push({text:`Day ${exchange.arrived} · The exchange that raised the question`,func:()=>openCommodityJourney(exchange)});}
         for(const id of work.cause.evidence?.voyages || []){const voyage=livingWorldState().seaVoyages.find(v=>v.id===id);if(voyage)items.push({text:'The crossing that raised the question',func:()=>openSeaVoyage(voyage)});}
         if(work.guidance){const journey=commodityExchangeState().exchanges.find(r=>r.id===work.guidance.exchange),source=(!work.guidance.world||work.guidance.world===skyWorldId())&&livingWorldState().inquiries.find(w=>w.id===work.guidance.source);if(journey)items.push({text:'The visitors who brought the idea',func:()=>openCommodityJourney(journey)});if(source&&livingTownKnown(regGet('town',source.town)))items.push({text:'The work they learned from',func:()=>openLivingInquiry(source)});const mark=livingWorldState().surfaceMarks.find(m=>m.id===work.guidance.mark);if(surfaceMarkKnown(mark))items.push({text:'The diagram they found',func:()=>openSurfaceMark(mark)});const clue=livingWorldState().clues.find(c=>c.id===work.guidance.clue);if(clue?.observation)items.push({text:'What caught their eye',func:()=>openObservedClue(clue)});}
@@ -6410,7 +6437,7 @@
         for(const artifact of artifacts) items.push({text:`${escapeLivingText(artifactTitle(artifact))} · Its story`,func:()=>openLivingArtifact(artifact)});
         for(const survey of livingWorldState().sampling.filter(w=>w.place===place.id&&livingTownKnown(regGet('town',w.town))))items.push({text:`${escapeLivingText(survey.name)}’s ${COMMODITIES[survey.type].label} survey`,func:()=>openMaterialSurvey(survey)});
         const sampled=new Set(livingWorldState().sampling.filter(w=>w.place===place.id&&w.delivered>0&&livingTownKnown(regGet('town',w.town))).map(w=>w.type));
-        for(const type of sampled){const source=MATERIAL_SOURCES[type],deposit=planet._paultendoDeposits?.[place.id]?.[type] || chunk._paultendoDeposits?.[type];if(source.biomes.includes(chunk.b)&&deposit)items.push({text:deposit.remaining>0?`The ${COMMODITIES[type].label} deposit still has material for the miners.`:`The miners have exhausted the ${COMMODITIES[type].label} here.`});}
+        for(const type of sampled){const source=MATERIAL_SOURCES[type],deposit=planet._paultendoDeposits?.[place.id]?.[type] || chunk._paultendoDeposits?.[type];if(materialGroundAvailable(chunk,type)&&deposit)items.push({text:deposit.remaining>0?`The ${COMMODITIES[type].label} deposit still has material for the miners.`:`The miners have exhausted the ${COMMODITIES[type].label} here.`});}
         if(Object.keys(LIVING_ARTIFACTS).some(kind=>!livingArtifactSpent(kind))) items.push({text:'Leave something from your time',func:()=>openLivingArtifactKit(place)});
         items.push({heading:true,text:'Journeys remembered'});
         for (const visit of place.visits) {
@@ -6609,6 +6636,10 @@
     }
     function observedInterpretation(observation,person,meaning,prepared) {
         const label=observedSubject(observation)?.label || 'what they saw';
+        if(meaning==='belief'&&observation.effect?.activity==='land'&&observation.effect.harm&&observation.effect.benefit) {
+            const found=commaList((observation.effect.uncovered || []).map(type=>type==='coal'?'the dark seam':`the ${COMMODITIES[type].label}`)) || 'the new ground';
+            return `${person.name} gives thanks for ${found}, but fears another ${observation.subtype || 'disaster'}.`;
+        }
         if(meaning==='belief')return observation.effect?.harm?`${person.name} takes what happened as a warning.`:`${person.name} takes what they saw as a sign of favour.`;
         if(meaning==='song')return `${person.name} puts what they saw into a song.`;
         if(observation.effect?.harm)return `${person.name} wants to understand ${observation.effect.activity==='land'?'what happened to':'why the'} ${label}${observation.effect.activity==='land'?'':' failed'}.${prepared?(observation.effect.activity==='land'?' They look for a way to work with the changed ground.':' They want to find a safer way to keep the grain.'):' They still cannot explain what went wrong.'}`;
@@ -7066,9 +7097,9 @@
         coastal_boat:{cost:{lumber:4},output:1,days:6,needs:{travel:30,smith:10},sample:'lumber',established:{travel:30},roles:['lumberer','merchant'],risk:0.15,method:'assembly',success:'The hull floats and holds its load. The boat is ready for a coastal crossing.',failure:'Water comes through the hull during its test. This boat cannot make the crossing.'},
         sailing_vessel:{cost:{lumber:8,metal:2},output:1,days:10,needs:{travel:60,smith:20},sample:'lumber',established:{travel:60},roles:['lumberer','merchant'],risk:0.15,method:'assembly',success:'The hull and fittings hold through their tests. The vessel is ready to sail.',failure:'The hull twists during its test. This vessel cannot go to sea.'},
         telescope:{cost:{glass:2,metal:2,lumber:1},output:1,days:8,needs:{astronomy:20,smith:30},sample:'glass',established:{astronomy:20},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The instrument holds its focus. Distant lights keep their shape as the scholar watches.',failure:'The frame will not hold its focus. The instrument needs another attempt.'},
-        sky_vessel:{cost:{steel:8,glass:2,charcoal:4},output:1,days:12,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'steel',established:{smith:80},roles:['miner','scholar'],risk:0.2,method:'assembly',success:'The engine and instruments pass their tests. The vessel is ready for a flight.',failure:'The engine breaks its mount in the test. This vessel cannot fly.'},
-        colony_vessel:{cost:{sky_vessel:1,steel:4,lumber:4,glass:2},output:1,days:10,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The cabins and cargo holds pass their tests. The vessel can carry settlers.',failure:'The cabin seals fail their test. This vessel cannot carry people.'},
-        cargo_vessel:{cost:{sky_vessel:1,steel:4,lumber:4},output:1,days:8,needs:{education:70,smith:80,fire:70,travel:90,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The hold and engine pass their tests. The vessel can carry goods between worlds.',failure:'The hold breaks its seal in the test. This vessel cannot carry goods.'}
+        sky_vessel:{cost:{steel:8,glass:2,charcoal:4},output:1,days:12,needs:{education:70,smith:80,fire:70,travel:100,astronomy:20},sample:'steel',established:{smith:80},roles:['miner','scholar'],risk:0.2,method:'assembly',success:'The engine and instruments pass their tests. The vessel is ready for a flight.',failure:'The engine breaks its mount in the test. This vessel cannot fly.'},
+        colony_vessel:{cost:{sky_vessel:1,steel:4,lumber:4,glass:2},output:1,days:10,needs:{education:70,smith:80,fire:70,travel:110,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The cabins and cargo holds pass their tests. The vessel can carry settlers.',failure:'The cabin seals fail their test. This vessel cannot carry people.'},
+        cargo_vessel:{cost:{sky_vessel:1,steel:4,lumber:4},output:1,days:8,needs:{education:70,smith:80,fire:70,travel:110,astronomy:20},sample:'sky_vessel',established:{smith:80},roles:['miner','scholar'],risk:0.15,method:'assembly',success:'The hold and engine pass their tests. The vessel can carry goods between worlds.',failure:'The hold breaks its seal in the test. This vessel cannot carry goods.'}
     };
     // Capacity is a property of a finished form, not a bonus on receiving a
     // raw material. The installed capacity stays with its actual paid fixture.
@@ -7076,7 +7107,7 @@
     // Relative exposure and loss rates are game calibration. Grain is a native
     // town-wide stock, so the current town centre represents its storage site.
     // Other stock, buildings and loose containers are not modelled here yet.
-    const STORAGE_HAZARDS={wildfire:{property:'fireLoss',exposure:1,verb:'burns',past:'burned'},earthquake:{property:'shockLoss',exposure:1,verb:'breaks',past:'broken'},hurricane:{property:'shockLoss',exposure:0.25,verb:'breaks',past:'broken'}};
+    const STORAGE_HAZARDS={wildfire:{property:'fireLoss',exposure:1,verb:'burns',past:'burned'},earthquake:{property:'shockLoss',exposure:1,verb:'breaks',past:'broken'},hurricane:{property:'shockLoss',exposure:0.25,verb:'breaks',past:'broken'},volcano:{property:'fireLoss',exposure:1,verb:'burns',past:'burned'}};
     function grainFixtureType(vessel) {return vessel.type || 'pottery';}
     function grainFixtureCapacity(vessel) {return vessel.count*(vessel.capacity ?? COMMODITIES[grainFixtureType(vessel)]?.properties?.grainCapacity ?? 0);}
     function grainStorageRisk(town,type) {
@@ -7128,11 +7159,11 @@
     // Initial game calibration, not a physical model. Only touched land needs
     // a ledger. Plants can return from surviving roots or neighbouring growth.
     const LAND_PACE={timber:120,growth:0.018,soil:0.006,scorch:0.025,rubble:0.006,slope:0.12,slide:0.08};
-    function landPatch(chunk,create=false) {
+    function landPatch(chunk,create=false,seabed=false) {
         if(!chunk)return null;
         const ledger=planet._paultendoLand,key=`${chunk.x},${chunk.y}`;
         if(ledger?.[key])return ledger[key];
-        if(!create||biomes[chunk.b]?.water)return null;
+        if(!create||biomes[chunk.b]?.water&&!seabed)return null;
         return (planet._paultendoLand ||= {})[key]={cover:biomes[chunk.b]?.hasLumber?1:0,soil:1,scorch:0,rubble:0,lastDay:planet.day,history:[]};
     }
     function landClimate(chunk) {
@@ -7170,10 +7201,13 @@
         logMessage(`${livingTownKnown(town)?`${townRef(town.id)}: `:''}${escapeLivingText(text)}`,disaster?'warning':'milestone',{_paultendoHighlight:true,_paultendoStory:{kind:'land',id:`${chunk.x},${chunk.y}`}});
     }
     function shiftLandHeight(chunk,amount) {
-        const patch=landPatch(chunk,true);
+        const patch=landPatch(chunk,true,true);
+        patch.cut=(patch.cut || 0)-amount;
         for(const row of chunk.p)for(let i=0;i<row.length;i++)row[i]+=amount;
         const pixels=chunk.p.flat();chunk.e=pixels.reduce((sum,p)=>sum+p,0)/pixels.length;
         patch.pixels=structuredClone(chunk.p);patch.elevation=chunk.e;
+        const hydro=planet._paultendoWater;if(hydro)hydro.revision=(hydro.revision || 0)+1;
+        if(amount<0&&!biomes[chunk.b]?.water)exposeLandMaterial(chunk);
     }
     function changeDisasterLandscape(disaster,chunks) {
         if(!Array.isArray(chunks))return;
@@ -7181,6 +7215,7 @@
         for(const chunk of affected) {
             if(disaster.subtype==='wildfire'||disaster.subtype==='hurricane') {
                 const patch=landPatch(chunk,true),climate=landClimate(chunk),before=patch.cover;
+                if(disaster.subtype==='hurricane')patch.stormDay=planet.day;
                 const exposure=disaster.subtype==='wildfire'?0.3+(1-climate.moisture)*0.5:0.1+climate.moisture*0.2;
                 const lost=before*exposure;if(lost<0.005)continue;
                 patch.cover=Math.max(0,before-lost);patch.lastDay=planet.day;
@@ -7191,6 +7226,11 @@
                     patch.rubble=Math.min(1,patch.rubble+lost*0.5);
                     rememberLandChange(chunk,disaster,'wind','The storm tears through the trees. Fallen growth covers the ground.');
                 }
+            } else if(disaster.subtype==='volcano') {
+                const patch=landPatch(chunk,true),distance=Math.hypot(chunk.x-disaster.x,chunk.y-disaster.y);
+                shiftLandHeight(chunk,0.008/(1+distance));patch.cover*=0.35;patch.scorch=Math.min(1,patch.scorch+0.5);
+                patch.soil=Math.max(0.15,patch.soil-0.35);patch.rubble=Math.min(1,patch.rubble+0.5);patch.lastDay=planet.day;
+                rememberLandChange(chunk,disaster,'lava','The eruption leaves a new layer of rock over the ground.');
             } else if(disaster.subtype==='earthquake') {
                 // Move ground only on an inland slope. Keep all pixels above
                 // sea level until coastlines and landmass topology share rules.
@@ -7207,6 +7247,7 @@
                 rememberLandChange(chunk,disaster,'slide','The earthquake sends ground sliding down the slope. Bare rock is left above.');
                 rememberLandChange(low,disaster,'buried','Fallen ground from the earthquake covers this slope.');
             }
+            if(disaster.subtype==='hurricane')landPatch(chunk,true).stormDay=planet.day;
         }
     }
     function advanceLandscape() {
@@ -7232,6 +7273,12 @@
             if(patch.scorch>0.1)items.push({text:'Blackened ground remains from the fire.'});
             if(patch.rubble>0.2)items.push({text:'Fallen material still covers the ground.'});
             if(patch.soil<0.75)items.push({text:'The damaged soil gives the farmers less to work with.'});
+            const water=planet._paultendoWater?.cells?.[`${chunk.x},${chunk.y}`];
+            if(patch.flood>0.1)items.push({text:'Floodwater still covers the low ground.'});
+            else if(water?.flow>WATER_PACE.channel)items.push({text:'A stream runs through this ground.'});
+            if(patch.eroded>0.002)items.push({text:'Running water has worn away part of the ground.'});
+            if(patch.deposited>0.002)items.push({text:'Sediment carried from higher ground is building up here.'});
+            for(const [type,d] of Object.entries(planet._paultendoDeposits?.[`${chunk.x},${chunk.y}`] || {}))if(d.exposed&&materialGroundAvailable(chunk,type))items.push({text:d.remaining>0?`A ${type==='coal'?'dark seam':`${type} bed`} is exposed here.`:`The exposed ${COMMODITIES[type].label} has been worked out.`});
         }
         for(const step of patch.history.filter(h=>h.known)) {
             items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
@@ -7241,7 +7288,7 @@
     }
     function renderLandscape() {
         if(PAULTENDO_STATE.backgroundWorld||!planet||typeof canvasLayers==='undefined')return;
-        if(!canvasLayers.landscape&&!Object.keys(planet._paultendoLand || {}).length)return;
+        if(!canvasLayers.landscape&&!Object.keys(planet._paultendoLand || {}).length&&!planet._paultendoWater)return;
         if(!canvasLayers.landscape){addCanvasLayer('landscape');moveCanvasLayerBefore('landscape','highlight');}
         const canvas=canvasLayers.landscape,ctx=canvasLayersCtx.landscape;
         canvas.width=worldConfig.width;canvas.height=worldConfig.height;ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -7257,6 +7304,210 @@
                 ctx.fillStyle=`rgba(${Math.round((patch.scorch>0.15?66:123)*shade)},${Math.round((patch.scorch>0.15?51:108)*shade)},${Math.round((patch.scorch>0.15?40:72)*shade)},${Math.min(0.85,damage*0.85)})`;
                 ctx.fillRect(chunk.x*size+x,chunk.y*size+y,1,1);
             }
+        }
+        renderGroundWater(ctx);
+    }
+    // Persistent world conditions use a private deterministic stream. Looking
+    // at a place must never consume the simulation's next random outcome.
+    function groundNoise(x,y,salt) {
+        let h=2166136261;for(const c of `${planet.config.seed}:${x}:${y}:${salt}`){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}
+        h^=h>>>16;h=Math.imul(h,0x7feb352d);h^=h>>>15;h=Math.imul(h,0x846ca68b);return ((h^(h>>>16))>>>0)/4294967296;
+    }
+    const geologyCaches=new WeakMap(),drainageCaches=new WeakMap();
+    function geologicalState() {
+        if(planet._paultendoGeology)return planet._paultendoGeology;
+        const width=planet.config.width/planet.config.chunkSize,height=planet.config.height/planet.config.chunkSize;
+        const plates=Array.from({length:6},(_,i)=>{
+            const x=groundNoise(i,0,'plate-x')*width,y=groundNoise(i,0,'plate-y')*height,a=groundNoise(i,0,'motion')*Math.PI*2;
+            return {x,y,vx:Math.cos(a),vy:Math.sin(a),oceanic:!!biomes[chunkAt(Math.floor(x),Math.floor(y))?.b]?.water,stress:0.5};
+        });
+        return planet._paultendoGeology={plates,lastDay:planet.day};
+    }
+    function groundGeology(chunk) {
+        const state=geologicalState();let cache=geologyCaches.get(planet.chunks);
+        if(!cache||cache.plates!==state.plates){cache={plates:state.plates,cells:new Map()};geologyCaches.set(planet.chunks,cache);}
+        const key=`${chunk.x},${chunk.y}`;if(cache.cells.has(key))return cache.cells.get(key);
+        const nearest=state.plates.map((p,id)=>({p,id,d:Math.hypot(p.x-chunk.x,p.y-chunk.y)})).sort((a,b)=>a.d-b.d),a=nearest[0],b=nearest[1];
+        const distance=Math.hypot(b.p.x-a.p.x,b.p.y-a.p.y)||1,nx=(b.p.x-a.p.x)/distance,ny=(b.p.y-a.p.y)/distance;
+        const motion=(b.p.vx-a.p.vx)*nx+(b.p.vy-a.p.vy)*ny,edge=Math.exp(-(b.d-a.d)/1.5);
+        const boundary=motion<-0.3?'convergent':motion>0.3?'divergent':'transform';
+        const quake=0.02+edge*(0.3+Math.min(1,Math.abs(motion)));
+        const volcanic=edge*(boundary==='divergent'?0.45:boundary==='convergent'&&(a.p.oceanic||b.p.oceanic)?0.9:0);
+        const profile={plate:a.id,other:b.id,boundary,edge,quake,volcanic};cache.cells.set(key,profile);return profile;
+    }
+    function geologicalDisasterChunk(type,check) {
+        const state=geologicalState(),cells=filterChunks(c=>check(c)&&(type!=='volcano'||groundGeology(c).volcanic>0.08));
+        return weightedChoice(cells,c=>{const g=groundGeology(c);return (type==='volcano'?g.volcanic:g.quake)*(0.2+state.plates[g.plate].stress);});
+    }
+    function initGroundProcesses() {
+        const types=actionables.process._disasterSubtypes;
+        types.volcano ||= {location:'land',radius:2,duration:3,color:[235,113,48],deathRate:0.15,destroy:true,
+            name:()=> 'Volcanic eruption',message:'[NAME] begins $.',messageDone:'[NAME] $ subsides.'};
+        const event=gameEvents.naturalDisaster;if(!event?.func||event.func._paultendoGeology)return;
+        const base=event.func;
+        event.func=function(subject,target,args) {
+            if(!['earthquake','volcano'].includes(args?.value))return base.apply(this,arguments);
+            const select=randomChunk;randomChunk=check=>geologicalDisasterChunk(args.value,check);
+            let disaster;try{disaster=base.apply(this,arguments);}finally{randomChunk=select;}
+            if(disaster) {
+                const profile=groundGeology(chunkAt(disaster.x,disaster.y)),state=geologicalState();
+                disaster._paultendoGeology={...profile,stress:state.plates[profile.plate].stress};
+                state.plates[profile.plate].stress=Math.max(0,state.plates[profile.plate].stress-0.4);
+            }
+            return disaster;
+        };
+        event.func._paultendoGeology=true;
+    }
+    function exposeLandMaterial(chunk) {
+        const patch=landPatch(chunk),cut=patch?.cut || 0;if(cut<=0)return;
+        // A buried seam exists independently of discovering or mining it.
+        // Erosion reveals it once. Further erosion never refills spent stock.
+        const roll=groundNoise(chunk.x,chunk.y,'buried-material'),type=roll<0.35?'clay':roll<0.7?'sand':'coal';
+        const depth=0.008+groundNoise(chunk.x,chunk.y,'burial-depth')*0.045;if(cut<depth)return;
+        const ledger=planet._paultendoDeposits ||= {},key=`${chunk.x},${chunk.y}`,local=ledger[key] ||= chunk._paultendoDeposits || {};
+        chunk._paultendoDeposits=local;if(local[type])return;
+        local[type]={remaining:MATERIAL_SOURCES[type].quantity,exposed:true,depth};
+        rememberLandChange(chunk,null,`exposed:${type}`,`The moving ground uncovers ${type==='coal'?'a dark seam':type==='clay'?'a layer of clay':'a bed of sand'}.`);
+    }
+    function groundSnapshot(chunk) {
+        const patch=landPatch(chunk),town=regGet('town',chunk.v?.s);
+        return {cover:patch?.cover ?? (biomes[chunk.b]?.hasLumber?1:0),soil:patch?.soil ?? 1,e:chunk.e,grain:town?commodityStock(town,'crop'):0,pop:town?.pop || 0,
+            exposed:Object.entries(planet._paultendoDeposits?.[`${chunk.x},${chunk.y}`] || {}).filter(([type,d])=>d.exposed&&materialGroundAvailable(chunk,type)).map(([type])=>type)};
+    }
+    function observeGroundDisaster(disaster,chunk,people,before=groundSnapshot(chunk),townId=null) {
+        const town=regGet('town',townId || chunk.v?.s);if(!town||town.end||!townId&&town.center?.join(',')!==`${chunk.x},${chunk.y}`)return;
+        const patch=landPatch(chunk);if(!patch)return;
+        const after=groundSnapshot(chunk),uncovered=after.exposed.filter(type=>!before.exposed.includes(type));
+        const harm=disaster.subtype==='flood'||after.cover<before.cover||after.soil<before.soil||town.pop<before.pop||commodityStock(town,'crop')<before.grain;
+        const benefit=uncovered.length>0||after.soil>before.soil;if(!harm&&!benefit)return;
+        const label=disaster.subtype==='flood'?'the flooded ground':disaster.subtype==='wildfire'?'the burned ground':disaster.subtype==='volcano'?'the new rock': 'the changed ground';
+        for(const person of people.filter(p=>livingTeachingPersonAvailable(p,town)).slice(0,2)) {
+            rememberObservedEffect(town,person,{kind:'landDisaster',disaster:disaster.id,subtype:disaster.subtype,explanationOnly:true,reported:false,evidence:{before,after},
+                subject:{kind:'hazard',key:`land:${disaster.subtype}:${person.id}`,label,needs:{},effort:6},title:titleCase(label),
+                effect:{harm,benefit,uncovered,activity:'land',need:mealStock(town)<foodBuffer(town)||patch.soil<0.75},
+                visit:{kind:'land',id:`${chunk.x},${chunk.y}`,label:'Visit the ground'},
+                text:`${person.name} looks over ${label} in ${town.name}.`});
+        }
+    }
+    function groundWitnesses(chunk) {
+        const town=regGet('town',chunk.v?.s);if(!town||town.center?.join(',')!==`${chunk.x},${chunk.y}`)return [];
+        const people=(town._paultendoPeople || []).filter(p=>livingTeachingPersonAvailable(p,town));
+        const worker=people.find(p=>['farmer','lumberer','miner'].includes(p.role)),priest=people.find(p=>p.role==='priest');
+        return [...new Set([worker,priest].filter(Boolean))];
+    }
+    function materialGroundAvailable(chunk,type) {
+        if(!chunk)return false;
+        const deposit=planet._paultendoDeposits?.[`${chunk.x},${chunk.y}`]?.[type] || chunk._paultendoDeposits?.[type];
+        return MATERIAL_SOURCES[type].biomes.includes(chunk.b)||!!deposit?.exposed&&(landPatch(chunk)?.cut || 0)>=deposit.depth;
+    }
+    // Authored daily game units. Conservation and terrain, rather than a new
+    // random event for every tile, determine where water and ground travel.
+    const WATER_PACE={rain:0.025,evaporation:0.12,channel:0.35,bank:2.5,erosion:0.00006,bedFloor:0.02};
+    function waterState() {return planet._paultendoWater ||= {cells:{},lastDay:planet.day-1,revision:0,seaSediment:0,evaporated:0,rain:0,outflow:0};}
+    function saveGroundPrecision() {
+        if(!planet._paultendoWater)return;
+        planet._paultendoWater.ground=Object.fromEntries(Object.entries(planet.chunks).map(([key,c])=>[key,{e:c.e,m:c.m,t:c.t}]));
+    }
+    function groundDrainage() {
+        const state=waterState();let cached=drainageCaches.get(planet.chunks);
+        if(cached&&cached.revision===state.revision)return cached;
+        const cells=new Map(),heap=[],seen=new Set(),land=filterChunks(c=>!biomes[c.b]?.water);
+        const push=node=>{heap.push(node);let i=heap.length-1;while(i){const p=(i-1)>>1;if(heap[p].level<=node.level)break;heap[i]=heap[p];i=p;}heap[i]=node;};
+        const pop=()=>{const first=heap[0],last=heap.pop();if(heap.length){let i=0;while(i*2+1<heap.length){let c=i*2+1;if(c+1<heap.length&&heap[c+1].level<heap[c].level)c++;if(heap[c].level>=last.level)break;heap[i]=heap[c];i=c;}heap[i]=last;}return first;};
+        for(const c of filterChunks(c=>!!biomes[c.b]?.water)){const key=`${c.x},${c.y}`;seen.add(key);push({chunk:c,key,level:c.e});}
+        if(!heap.length&&land.length){const c=land.reduce((a,b)=>a.e<b.e?a:b),key=`${c.x},${c.y}`;seen.add(key);const n={chunk:c,key,level:c.e,parent:null};cells.set(key,n);push(n);}
+        while(heap.length) {
+            const n=pop();
+            for(const c of landNeighbours(n.chunk)) {
+                const key=`${c.x},${c.y}`;if(seen.has(key))continue;seen.add(key);
+                const node={chunk:c,key,level:Math.max(c.e,n.level+0.000001),parent:n.key};cells.set(key,node);push(node);
+            }
+        }
+        const order=[...cells.values()].sort((a,b)=>b.level-a.level);
+        for(const n of order) {
+            n.normal=(n.normal || 0)+WATER_PACE.rain*landClimate(n.chunk).moisture;
+            const down=cells.get(n.parent);if(down)down.normal=(down.normal || 0)+n.normal;
+        }
+        cached={revision:state.revision,cells,order};drainageCaches.set(planet.chunks,cached);return cached;
+    }
+    function waterWeather(chunk) {
+        const climate=landClimate(chunk),phase=groundNoise(Math.floor(chunk.x/12),Math.floor(chunk.y/12),'rain-phase')*Math.PI*2;
+        const wet=Math.max(0,1+0.85*Math.sin(planet.day*Math.PI/35+phase)+0.4*Math.sin(planet.day*Math.PI/6+phase));
+        const season=Math.cos(((planet.day-1)%120)*Math.PI/60),temperature=(chunk.t ?? 0.5)-0.16*season;
+        return {rain:WATER_PACE.rain*climate.moisture*wet,temperature,storm:landPatch(chunk)?.stormDay===planet.day?0.5:0};
+    }
+    function waterFlood(chunk,depth,event) {
+        const patch=landPatch(chunk,true);patch.flood=Math.max(patch.flood || 0,depth);
+        if(depth<=0.1)return;
+        const previous=patch.lastFloodDay;patch.lastFloodDay=planet.day;
+        if(previous>=planet.day-1)return;
+        rememberLandChange(chunk,event,'flood','Water spills over the banks and covers the low ground.');
+        observeGroundDisaster(event,chunk,groundWitnesses(chunk));
+        const town=regGet('town',chunk.v?.s);if(!town||town.end)return;
+        // Floodwater ruins actual grain at the inundated town centre. Ordinary
+        // hunger, work, aid and rebuilding then react to the loss themselves.
+        if(town.center?.join(',')===`${chunk.x},${chunk.y}`) {
+            const count=Math.floor(commodityStock(town,'crop')*Math.min(0.25,depth*0.05));
+            if(count>0)withCommodityUse({kind:'flood',id:event.id,name:'floodwater'},()=>happen('RemoveResource',null,town,{type:'crop',count}));
+        }
+    }
+    function advanceGroundWater() {
+        const state=waterState();if(state.lastDay>=planet.day)return;
+        const geology=geologicalState();for(const p of geology.plates)p.stress=Math.min(2,p.stress+0.002*Math.max(0,planet.day-geology.lastDay));geology.lastDay=planet.day;
+        state.lastDay=planet.day;
+        const graph=groundDrainage(),incoming=new Map(),sediment=new Map(),events=new Map();
+        // A receding flood remains wet for a few days, without repeating loss.
+        for(const patch of Object.values(planet._paultendoLand || {}))patch.flood=Math.max(0,(patch.flood || 0)*0.55-0.02);
+        for(const n of graph.order) {
+            const c=n.chunk,cell=state.cells[n.key] ||= {stored:0,snow:0,sediment:0},weather=waterWeather(c);
+            let rain=weather.rain+weather.storm;state.rain+=rain;
+            if(weather.temperature<0.18){cell.snow+=rain;rain=0;}else {const melt=Math.min(cell.snow,(weather.temperature-0.18)*0.2);cell.snow-=melt;rain+=melt;}
+            let water=cell.stored+rain+(incoming.get(n.key) || 0),evap=Math.min(water,0.001+0.004*Math.max(0,weather.temperature)+WATER_PACE.evaporation*rain*Math.max(0,weather.temperature));
+            water-=evap;state.evaporated+=evap;
+            const pond=Math.max(0,n.level-c.e)*50,retained=n.parent?Math.min(water,pond):water;
+            const flow=water-retained;cell.stored=retained;cell.flow=flow;cell.down=n.parent;cell.bank=0.3+n.normal*WATER_PACE.bank;
+            const flood=Math.max(0,flow-cell.bank)+Math.max(0,retained-pond-0.3);
+            if(flood>0.1) {
+                let root=n;while(graph.cells.has(root.parent))root=graph.cells.get(root.parent);
+                const event=events.get(root.key) || {id:`flood:${root.key}:${planet.day}`,subtype:'flood'};events.set(root.key,event);
+                waterFlood(c,Math.min(3,flood),event);
+                for(const near of landNeighbours(c))if(near.e<=c.e+Math.min(0.03,flood*0.005))waterFlood(near,Math.min(2,flood/2),event);
+            }
+            const next=planet.chunks[n.parent],slope=next?Math.max(0,c.e-next.e):0,cover=landPatch(c)?.cover ?? (biomes[c.b]?.hasLumber?1:0);
+            let load=cell.sediment+(sediment.get(n.key) || 0),deposited=0,eroded=0;
+            if(flow>WATER_PACE.channel) {
+                const capacity=flow*Math.max(0.00002,slope*0.001);
+                deposited=Math.max(0,load-capacity);
+                if(deposited>0){shiftLandHeight(c,deposited);const patch=landPatch(c,true);patch.soil=Math.min(1,patch.soil+deposited*3);load-=deposited;}
+                eroded=Math.min(WATER_PACE.erosion*flow*slope*(1-cover*0.9),Math.max(0,Math.min(...c.p.flat())-planet.config.waterLevel-WATER_PACE.bedFloor));
+                if(eroded>0){shiftLandHeight(c,-eroded);const patch=landPatch(c,true);patch.soil=Math.max(0.15,patch.soil-eroded*3);load+=eroded;}
+                const patch=landPatch(c,true);patch.eroded=(patch.eroded || 0)+eroded;patch.deposited=(patch.deposited || 0)+deposited;
+            } else if(load>0) {
+                // Water too slow to carry its load leaves it here, rather than
+                // silently discarding sediment at the next receiving tile.
+                shiftLandHeight(c,load);const patch=landPatch(c,true);patch.deposited=(patch.deposited || 0)+load;patch.soil=Math.min(1,patch.soil+load*3);load=0;
+            }
+            if(flow>0&&n.parent) {
+                if(graph.cells.has(n.parent)){incoming.set(n.parent,(incoming.get(n.parent) || 0)+flow);sediment.set(n.parent,(sediment.get(n.parent) || 0)+load);}
+                else {
+                    state.outflow+=flow;state.seaSediment+=load;
+                    if(next&&load>0){const raised=Math.min(load,Math.max(0,planet.config.waterLevel-0.01-Math.max(...next.p.flat())));if(raised>0){shiftLandHeight(next,raised);state.seaSediment-=raised;const patch=landPatch(next,true,true);patch.deposited=(patch.deposited || 0)+raised;}}
+                }
+                cell.sediment=0;
+            } else cell.sediment=load;
+        }
+    }
+    function renderGroundWater(ctx) {
+        const size=worldConfig.chunkSize;
+        for(const [key,cell] of Object.entries(planet._paultendoWater?.cells || {})) {
+            const c=planet.chunks[key];if(!c||!isChunkVisible(c.x,c.y))continue;
+            const patch=landPatch(c);
+            if(patch?.flood>0.1){ctx.fillStyle='rgba(79,144,169,0.45)';ctx.fillRect(c.x*size,c.y*size,size,size);}
+            if(cell.flow<=WATER_PACE.channel&&cell.stored<0.4)continue;
+            const next=planet.chunks[cell.down],x=c.x*size+size/2,y=c.y*size+size/2;
+            ctx.strokeStyle='#77aeb9';ctx.lineWidth=Math.min(2,0.5+cell.flow/5);ctx.beginPath();ctx.moveTo(x,y);
+            if(next&&isChunkVisible(next.x,next.y))ctx.lineTo(next.x*size+size/2,next.y*size+size/2);else ctx.lineTo(x+0.5,y+0.5);
+            ctx.stroke();if(cell.stored>0.4){ctx.fillStyle='rgba(79,144,169,0.55)';ctx.fillRect(x-1,y-1,2,2);}
         }
     }
     function commodityCapacity(town,type) {
@@ -7483,7 +7734,7 @@
     function collectLocalMaterial(town,chunk,gained) {
         if(gained<1||!(town.jobs?.miner>0)||chunk?.v?.s!==town.id||town.end)return;
         for(const [type,source] of Object.entries(MATERIAL_SOURCES)) {
-            if(!source.biomes.includes(chunk.b)||Object.entries(source.needs).some(([key,level])=>townKnowledgeLevel(town,key)<level))continue;
+            if(!materialGroundAvailable(chunk,type)||Object.entries(source.needs).some(([key,level])=>townKnowledgeLevel(town,key)<level))continue;
             const desired=Math.max(source.sample,commodityCommittedStock(town,type),type==='clay'?Math.ceil(materialConstructionNeed(town)/2):0);
             if(commodityStock(town,type)>=desired||commodityStock(town,type)>=$c.maxResource(town))continue;
             const deposits=planet._paultendoDeposits ||= {},key=`${chunk.x},${chunk.y}`;
@@ -7516,7 +7767,7 @@
             const inbound=commodityExchangeState().exchanges.filter(r=>r.buyer===town.id&&r.type===type&&r.status==='carrying').reduce((n,r)=>n+(r.cargo || 0),0);
             const need=required-commodityStock(town,type)-inbound;if(need<=0)continue;
             // Local miners can already supply their own viable ground.
-            if(getTownClaimedChunks(town).some(chunk=>source.biomes.includes(chunk.b)&&(planet._paultendoDeposits?.[`${chunk.x},${chunk.y}`]?.[type]?.remaining ?? chunk._paultendoDeposits?.[type]?.remaining ?? source.quantity)>0))continue;
+            if(getTownClaimedChunks(town).some(chunk=>materialGroundAvailable(chunk,type)&&(planet._paultendoDeposits?.[`${chunk.x},${chunk.y}`]?.[type]?.remaining ?? chunk._paultendoDeposits?.[type]?.remaining ?? source.quantity)>0))continue;
             needs.push({type,count:Math.min(source.sample,need),purpose,text:purpose?.output?`The town needs ${COMMODITIES[purpose.output].label}. Its makers are short of ${COMMODITIES[type].label}.`:`Work in the town is waiting for ${COMMODITIES[type].label}.`});
         }
         return needs;
@@ -7538,7 +7789,7 @@
             const workshop=state.materialWork.find(w=>w.town===town.id&&w.person===person?.id&&w.status==='waiting'&&(w.cost[need.type] || 0)>commodityStock(town,need.type));
             if(!materialHandFree(town,person,workshop?.id))continue;
             const source=MATERIAL_SOURCES[need.type];
-            const targets=filterChunks(c=>(!requestedTarget||c===requestedTarget)&&!c.v?.s&&source.biomes.includes(c.b)&&c.v.g===getTownLandmassId(town)&&Math.hypot(c.x-center[0],c.y-center[1])<=range&&(planet._paultendoDeposits?.[`${c.x},${c.y}`]?.[need.type]?.remaining ?? c._paultendoDeposits?.[need.type]?.remaining ?? source.quantity)>0).sort((a,b)=>Math.hypot(a.x-center[0],a.y-center[1])-Math.hypot(b.x-center[0],b.y-center[1]));
+            const targets=filterChunks(c=>(!requestedTarget||c===requestedTarget)&&!c.v?.s&&materialGroundAvailable(c,need.type)&&c.v.g===getTownLandmassId(town)&&Math.hypot(c.x-center[0],c.y-center[1])<=range&&(planet._paultendoDeposits?.[`${c.x},${c.y}`]?.[need.type]?.remaining ?? c._paultendoDeposits?.[need.type]?.remaining ?? source.quantity)>0).sort((a,b)=>Math.hypot(a.x-center[0],a.y-center[1])-Math.hypot(b.x-center[0],b.y-center[1]));
             for(const target of targets.slice(0,EXPLORATION_CONFIG.maxAttempts)) {
                 const path=materialSurveyPath(town,target);if(path)return {type:'resource',target,path,radius:EXPLORATION_CONFIG.surveyRadius,label:`survey for ${COMMODITIES[need.type].label}`,materialSurvey:{...need,person:person.id,workshop:workshop?.id}};
             }
@@ -7554,7 +7805,7 @@
             const sources=state.sampling.filter(w=>w.town===town.id&&w.type===need.type&&w.delivered>0&&w.status==='arrived').slice().sort((a,b)=>Math.hypot(a.x-anchor.x,a.y-anchor.y)-Math.hypot(b.x-anchor.x,b.y-anchor.y));
             for(const survey of sources) {
                 const source=MATERIAL_SOURCES[need.type],target=chunkAt(survey.x,survey.y),deposit=planet._paultendoDeposits?.[`${survey.x},${survey.y}`]?.[need.type] || target?._paultendoDeposits?.[need.type];
-                if(!target||target.v.s!==undefined||!source.biomes.includes(target.b)||!(deposit?.remaining>0)||!isLandmassReachable(target.v.g))continue;
+                if(!target||target.v.s!==undefined||!materialGroundAvailable(target,need.type)||!(deposit?.remaining>0)||!isLandmassReachable(target.v.g))continue;
                 const canEnter=c=>c&&(!stop||!stop(c))&&(!c.v.s||c.v.s===town.id)&&isLandmassReachable(c.v.g);
                 const path=findPath(anchor,target,{canEnter});if(!path?.length)continue;
                 const edge=path.find(c=>c.v.s===undefined&&check(c));
@@ -7613,7 +7864,7 @@
                 const source=MATERIAL_SOURCES[work.type];
                 const deposits=planet._paultendoDeposits ||= {},key=`${work.x},${work.y}`,local=deposits[key] ||= target._paultendoDeposits || {};target._paultendoDeposits=local;
                 const deposit=local[work.type] ||= {remaining:source.quantity};
-                const accessible=source.biomes.includes(target.b)&&(!target.v?.s||target.v.s===town.id)&&Object.entries(source.needs).every(([key,level])=>townKnowledgeLevel(town,key)>=level);
+                const accessible=materialGroundAvailable(target,work.type)&&(!target.v?.s||target.v.s===town.id)&&Object.entries(source.needs).every(([key,level])=>townKnowledgeLevel(town,key)>=level);
                 if(accessible&&deposit.remaining>0&&work.cargo<work.count){deposit.remaining--;work.cargo++;if(work.cargo<work.count)continue;}
                 work.status='returning';work.remaining=commodityTravelDays(path);
                 materialSurveyStep(work,work.cargo?`${work.name} heads home carrying ${work.cargo} ${COMMODITIES[work.type].label}.`:`${work.name} heads home empty-handed. ${target.v?.s&&target.v.s!==town.id?'Others now hold the ground.':'There is no usable sample to bring back.'}`);continue;
@@ -9737,6 +9988,9 @@
         for(const voyage of livingWorldState().seaVoyages.filter(v=>v.town===town.id).slice(-2)){
             const crossing=document.createElement('button');crossing.textContent=voyage.exchange?'Supplies by sea':voyage.status==='returned'?'A crossing remembered':'Beyond the coast';crossing.addEventListener('click',()=>{closePopups();openSeaVoyage(voyage);});section.appendChild(crossing);
         }
+        if(townKnowledgeLevel(town,'astronomy')>=10&&town.jobs?.scholar>0) {
+            const charts=document.createElement('button');charts.textContent='The night charts';charts.addEventListener('click',()=>{closePopups();openSkyStudy(town);});section.appendChild(charts);
+        }
         if (town.pop > 0) {
             const people = document.createElement('button'); people.textContent = 'Meet the people';
             people.addEventListener('click', () => { closePopups(); openLivingPeople(town); }); section.appendChild(people);
@@ -9835,6 +10089,7 @@
     }
 
     function initLivingWorld() {
+        initGroundProcesses();
         installNativeTechNeeds();
         installLocalEconomicProposals();
         const lawEvent=gameEvents.townLaw;
@@ -9938,9 +10193,16 @@
                 // Native spread and movement mutate this array in place, then
                 // Finish deletes the property. Keep the final tick's footprint.
                 const chunks=subject?.chunks;
+                // A moving storm can reach a settlement outside its starting
+                // footprint. Record existing witnesses before native losses.
+                const witnesses=active?regToArray('town').filter(town=>!town.end&&town.pop>0&&Array.isArray(town.center)).map(town=>chunkAt(...town.center)).filter(Boolean)
+                    .map(chunk=>({chunk,people:groundWitnesses(chunk),before:groundSnapshot(chunk),townId:chunk.v?.s})):[];
                 if(active)subject._paultendoStorageDay=planet.day;
                 let result;try{result=base.apply(this,arguments);}finally{if(fire)data.spread=spread;}
-                if(active){const footprint=Array.isArray(subject.chunks)?subject.chunks:chunks;damageGrainStores(subject,sites,footprint);changeDisasterLandscape(subject,footprint);}
+                if(active){const footprint=Array.isArray(subject.chunks)?subject.chunks:chunks;damageGrainStores(subject,sites,footprint);changeDisasterLandscape(subject,footprint);
+                    const reached=new Set((footprint || []).map(c=>c.join(',')));
+                    for(const {chunk,people,before,townId} of witnesses)if(people.length&&reached.has(`${chunk.x},${chunk.y}`))observeGroundDisaster(subject,chunk,people,before,townId);
+                }
                 return result;
             };
             disaster.func._paultendoStorage=true;
@@ -10026,7 +10288,7 @@
         }
         const fertility=actionables.chunk.asTarget.Fertility;
         if(!fertility._paultendoLand) {
-            const wrapped=function(subject,chunk){return fertility.apply(this,arguments)*(landPatch(chunk)?.soil ?? 1);};
+            const wrapped=function(subject,chunk){return fertility.apply(this,arguments)*(landPatch(chunk)?.soil ?? 1)*((landPatch(chunk)?.flood || 0)>0.1?0.4:1);};
             wrapped._paultendoLand=true;actionables.chunk.asTarget.Fertility=wrapped;
         }
         const forest=gameEvents.townLumber;
@@ -12397,7 +12659,7 @@
         const def = biomes[biome] || {};
         switch (tag) {
             case "mineral":
-                return biome === "mountain" || biome === "badlands";
+                return biome === "mountain" || biome === "badlands" || Object.keys(MATERIAL_SOURCES).some(type=>materialGroundAvailable(chunk,type)&&planet._paultendoDeposits?.[`${chunk.x},${chunk.y}`]?.[type]?.exposed);
             case "lumber":
                 return !!def.hasLumber&&(landPatch(chunk)?.cover ?? 1)>0.1;
             case "fertile":
@@ -14479,7 +14741,7 @@
             &&getUniverseDay()-(registry?.worldLastColony?.[world.id] ?? -999)>=FRONTIER_CHARTER_CONFIG.worldCooldownDays);
     }
     function frontierTownReady(town,registry=getColonizationRegistry()) {
-        return !!town&&!town.end&&town.pop>=FRONTIER_CHARTER_CONFIG.minTownPop&&skyFlightKnowledge(town)
+        return !!town&&!town.end&&town.pop>=FRONTIER_CHARTER_CONFIG.minTownPop&&skyPassengerKnowledge(town)
             &&registry&&registry.charters.length<FRONTIER_CHARTER_CONFIG.maxActive
             &&getUniverseDay()-(town._paultendoCharterDay ?? -999)>=FRONTIER_CHARTER_CONFIG.townCooldownDays
             &&!registry.charters.some(c=>c.originWorldId===skyWorldId()&&c.originTownId===town.id)
@@ -14571,9 +14833,17 @@
             // bring their actual hold instead; their later harvests are native work.
             town.resources={};town._paultendoCommodityLots={};town.jobs={...charter.jobs};town.wealth=charter.wealth || 0;
             town.influences={...charter.influences};town.values={...charter.values};town.research={...charter.research};
-            // Native knowledge is planet-wide. Only branches backed by the
-            // actual departing workers travel with this cohort.
-            for(const [key,level] of Object.entries(charter.knowledge || {}))planet.unlocks[key]=Math.max(planet.unlocks[key] || 0,level);
+            // Arriving workers carry their knowledge to their own settlement.
+            // Recording a new world milestone must not teach its other towns.
+            for(const [key,level] of Object.entries(charter.knowledge || {})) {
+                const before=planet.unlocks[key] || 0;
+                for(const discovery of EXTENDED_DISCOVERIES.filter(d=>d.key===key&&d.level<=level)) {
+                    const id=`${key}:${discovery.level}`;
+                    if(discovery.level>before)(planet._paultendoLocalKnowledge ||= {})[id] ||= {key,level:discovery.level,before};
+                    (town._paultendoLocalDiscoveries ||= {})[id]={day:planet.day,charter:charter.id,from:{world:charter.originWorldId,town:charter.originTownId}};
+                }
+                planet.unlocks[key]=Math.max(before,level);
+            }
             ensureTownState(town);unloadFrontierCargo(charter,town);
             town._paultendoColony={originWorldId:charter.originWorldId,originTownId:charter.originTownId,motive:charter.motive,charterId:charter.id,day:planet.day};
             // Faith does not become a new religion merely because a ship lands.
@@ -14653,9 +14923,9 @@
             withWorldState(world,()=>{
                 prepareFrontierSupplies(charter,town);
                 const costs=frontierCargoCost(charter,town),other=commodityWorkClaims(town).filter(c=>c.id!==`charter:${charter.id}`&&c.kind!=='construction');
-                const blocked=!target.reached||target.habitable===false?'destination':!skyFlightKnowledge(town)?'knowledge':town.pop<FRONTIER_CHARTER_CONFIG.minTownPop?'people':hasIssue(town,'war')?'war':!(town.jobs?.miner>0||town.jobs?.scholar>0)?'hands':mealStock(town)-(costs.crop || 0)-(costs.livestock || 0)<foodBuffer(town)?'food':Object.entries(costs).some(([type,n])=>commodityStock(town,type)-other.reduce((sum,c)=>sum+(c.cost[type] || 0),0)<n)?'supplies':null;
+                const blocked=!target.reached||target.habitable===false?'destination':!skyPassengerKnowledge(town)?'knowledge':town.pop<FRONTIER_CHARTER_CONFIG.minTownPop?'people':hasIssue(town,'war')?'war':!(town.jobs?.miner>0||town.jobs?.scholar>0)?'hands':mealStock(town)-(costs.crop || 0)-(costs.livestock || 0)<foodBuffer(town)?'food':Object.entries(costs).some(([type,n])=>commodityStock(town,type)-other.reduce((sum,c)=>sum+(c.cost[type] || 0),0)<n)?'supplies':null;
                 if(blocked) {
-                    if(charter.pause!==blocked)frontierStep(charter,{destination:'The settlers wait for reports of a place they can reach.',knowledge:'The workshop needs more knowledge before it can prepare this journey.',people:'Too few people remain to send a colony.',war:'Fighting draws people away from the colony preparations.',hands:'The colony preparations wait for workshop hands.',food:'The town cannot spare enough food for the journey yet.',supplies:'The settlers are gathering a passenger vessel, tools and building supplies.'}[blocked]);
+                    if(charter.pause!==blocked)frontierStep(charter,{destination:'The settlers wait for reports of a place they can reach.',knowledge:'The town needs to finish its life-support trials before preparing a passenger journey.',people:'Too few people remain to send a colony.',war:'Fighting draws people away from the colony preparations.',hands:'The colony preparations wait for workshop hands.',food:'The town cannot spare enough food for the journey yet.',supplies:'The settlers are gathering a passenger vessel, tools and building supplies.'}[blocked]);
                     charter.pause=blocked;return;
                 }
                 delete charter.pause;
@@ -14687,7 +14957,7 @@
     function openFrontierCharter(charter) {
         if(!frontierKnown(charter))return;
         if(charter.stage==='preparing'&&charter.supplyVersion!==1){const world=getWorldById(charter.originWorldId),town=getTownByRef({worldId:charter.originWorldId,townId:charter.originTownId});if(town)withWorldState(world,()=>prepareFrontierSupplies(charter,town),{silent:true});}
-        const items=[{text:'← Back to Solar',func:openSolarPanel}];
+        const items=[{text:'← Back to the star system',func:openSolarPanel}];
         items.push({heading:true,text:`${escapeLivingText(charter.originName)} → ${escapeLivingText(charter.targetName)}`});
         items.push({text:{preparing:`${charter.emigrants} people hope to ${charter.motiveLabel}. Their journey begins when the workshop and stores are ready.`,enroute:`${charter.emigrants} settlers are aboard. They expect to reach ${charter.targetName} around Day ${charter.arrivalDay}.`,completed:`${charter.colony?.name || 'A new settlement'} has begun with the people and supplies they brought.`,returning:`The settlers are returning to ${charter.originName}. They expect to arrive around Day ${charter.arrivalDay}.`,returned:'The settlers have come home with their remaining supplies.',stranded:'The settlers are still aboard, searching for somewhere to land. Their provisions will not last forever.',failed:charter.outcome==='lost_contact'?'No further signal has returned from the vessel.':'The preparations came to an end.'}[charter.stage] || 'An earlier colony journey.'});
         if(charter.stage==='preparing') {
@@ -15072,7 +15342,7 @@
         return (planet._paultendoLife?.artifacts || []).find(a=>a.kind==='lens'&&a.town===town.id&&a.person===person?.id&&a.status==='study');
     }
     function skyInstrumentWanted(town) {
-        if(!town||town.end||town.pop<=0||!(planet.unlocks.astronomy>=20)||skyState().surveys[town.id]?.instrument)return false;
+        if(!town||town.end||town.pop<=0||!(townKnowledgeLevel(town,'astronomy')>=20)||skyState().surveys[town.id]?.instrument)return false;
         const person=skyScholar(town);
         return !!person&&(person.outlook==='curious'||(town.research?.education || 0)>0);
     }
@@ -15086,7 +15356,7 @@
         const state=skyState();
         for(const town of regToArray('town')) {
             if(town.end||town.pop<=0)continue;
-            const person=skyScholar(town,true);if(!person||!livingTeachingPersonAvailable(person,town)||inquiryWorkerBusy(town,person)||!(planet.unlocks.astronomy>=10)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town))continue;
+            const person=skyScholar(town,true);if(!person||!livingTeachingPersonAvailable(person,town)||inquiryWorkerBusy(town,person)||!(townKnowledgeLevel(town,'astronomy')>=10)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town))continue;
             let survey=state.surveys[town.id];
             if(skyInstrumentWanted(town)&&commodityStock(town,'telescope')>0) {
                 const other=commodityWorkClaims(town).filter(c=>c.kind!=='construction'&&c.id!==`sky:${town.id}`);
@@ -15104,7 +15374,7 @@
             survey ||= state.surveys[town.id]={count:0,observations:[],steps:[]};
             if(survey.lastDay===planet.day)continue;
             survey.lastDay=planet.day;survey.count++;
-            const observation={day:planet.day,person:person.id,name:person.name,optics:survey.instrument?.id || lens.id,type:survey.instrument?'telescope':'lens',astronomy:planet.unlocks.astronomy};
+            const observation={day:planet.day,person:person.id,name:person.name,optics:survey.instrument?.id || lens.id,type:survey.instrument?'telescope':'lens',astronomy:townKnowledgeLevel(town,'astronomy')};
             survey.observations.push(observation);if(survey.observations.length>32)survey.observations.shift();
             if(survey.count===1)skyStep(town,`${person.name} begins a chart of the night sky in ${town.name}.`);
         }
@@ -15126,6 +15396,7 @@
         return null;
     }
     function skyFlightKnowledge(town) {return Object.entries(MATERIAL_RECIPES.sky_vessel.needs).every(([key,level])=>townKnowledgeLevel(town,key)>=level);}
+    function skyPassengerKnowledge(town) {return materialTechniqueAvailable('colony_vessel',town);}
     function skyFlightTargets() {
         const universe=getUniverse(false);if(!universe)return [];
         if(!skyState().orbitalSurvey)return [{id:null,name:'the home sky',orbitIndex:0}];
@@ -15190,7 +15461,7 @@
     }
     function openSkyStudy(town,flight=null) {
         if(!livingTownKnown(town))return;
-        const state=skyState(),survey=state.surveys[town.id],items=[{text:'← Back to Solar',func:openSolarPanel}];
+        const state=skyState(),survey=state.surveys[town.id],items=[isProgressMenuAvailable('solar')?{text:'← Back to the star system',func:openSolarPanel}:{text:'← Back to settlement',func:()=>{closeExecutive();openRegBrowser(town,'town');}}];
         if(flight) {
             items.push({heading:true,text:escapeLivingText(flight.name)});
             items.push({text:flight.status==='enroute'?`The instruments are still on their journey. Reports are expected around Day ${flight.arrival}.`:flight.status==='arrived'?'Its reports have reached the town.':flight.status==='lost'?'The preparations were lost with the settlement.':'The workshop is preparing the flight.'});
@@ -15346,7 +15617,7 @@
     }
     function openSolarWorldDetail(worldId) {
         const universe=getUniverse(false),world=universe?.worlds?.[worldId];if(!world?.discovered)return;
-        const items=[{text:'← Back to Solar',func:openSolarPanel}];
+        const items=[{text:'← Back to the star system',func:openSolarPanel}];
         items.push({text:world.reached?`${world.label || 'World'} · ${world.habitable?'Habitable':'Harsh'}`:'Only its light has reached us.'});
         if(world.chart?.known&&world.chart.world===getCurrentWorldId()&&livingTownKnown(regGet('town',world.chart.town)))items.push({text:`${escapeLivingText(world.chart.name)} charted it on Day ${world.chart.day}.`});
         const flight=skyState().flights.findLast(f=>f.target===worldId);
@@ -15357,7 +15628,7 @@
             else items.push({text:'Switch to world',func:()=>switchWorld(world.id)});
             if(world.id!==universe.currentWorldId&&world.habitable!==false) {
                 for(const town of regToArray('town').filter(livingTownKnown).filter(t=>frontierTownReady(t)&&getFrontierCandidateWorlds(getWorldById(skyWorldId()),null,getColonizationRegistry()).includes(world)))items.push({text:`Encourage ${escapeLivingText(town.name)} to prepare a settlement`,func:()=>{const charter=startFrontierCharter(planFrontierCharter(town,world.id),{endorsed:true});if(charter)openFrontierCharter(charter);else openSolarWorldDetail(world.id);}});
-                items.push({text:'Settlers need a passenger vessel, provisions, tools and building supplies. Their home must be able to spare them.'});
+                items.push({text:'Settlers need life support, a passenger vessel, provisions, tools and building supplies. Their home must be able to spare them.'});
             }
         } else if(skyState().orbitalSurvey)items.push(...skyFlightItems(worldId));
         else items.push({text:'A survey flight above the homeworld comes first.'});
@@ -15417,7 +15688,7 @@
         const button = document.createElement("span");
         button.className = "actionItem clickable";
         button.id = "actionItem-solar";
-        button.innerHTML = "Solar";
+        button.innerHTML = "Star system";
         button.addEventListener("click", () => {
             if (!isProgressMenuAvailable("solar")) return;
             openSolarPanel();
@@ -15430,7 +15701,7 @@
         if (id === "economy") return (planet.unlocks?.trade || 0) >= 10;
         if (id === "stance") return !!planet.religions?.length;
         if (id === "festivals") return !!planet._paultendoFestivals?.length;
-        if (id === "solar") return (planet.unlocks?.astronomy || 0) >= 10
+        if (id === "solar") return regToArray('town').filter(livingTownKnown).some(skyFlightKnowledge)
             || Object.values(getUniverse(false)?.worlds || {}).some(world=>world.reached&&world.id!==getUniverse(false)?.homeWorldId);
         return true;
     }
@@ -15704,7 +15975,7 @@
     }
     function openSpaceRoute(route) {
         if(!spaceRouteKnown(route))return;
-        const trip=route.journey,items=[{text:'← Back to Solar',func:openSolarPanel},{heading:true,text:`${spaceTownLabel(route.from)} ↔ ${spaceTownLabel(route.to)}`}];
+        const trip=route.journey,items=[{text:'← Back to the star system',func:openSolarPanel},{heading:true,text:`${spaceTownLabel(route.from)} ↔ ${spaceTownLabel(route.to)}`}];
         items.push({text:trip?`${trip.status==='outbound'?'Cargo on the way':'Vessel coming home'} · Expected around Day ${trip.arrival}`:route.status==='preparing'?'The workshop is preparing a cargo journey.':'The towns look for goods they need and terms they can accept.'});
         if(trip){items.push({heading:true,text:`${trip.count} ${COMMODITIES[trip.type].label}`},{text:trip.terms.payment?`Agreed payment: ${trip.terms.payment.count} ${COMMODITIES[trip.terms.payment.type]?.label || 'coin'}. It reaches the supplier when the vessel returns.`:'Sent as help. No payment is expected.'});}
         for(const journey of [...(route.journeys || []),...(trip?[trip]:[])].reverse()) {
@@ -16751,7 +17022,7 @@
 
     function advanceWorldLife() {
         for (const [name, step] of [
-            ["Seasons", updateSeasonState], ["Landscape", advanceLandscape], ["Whispers", advanceLivingWhispers], ["Material surveys", advanceMaterialSurveys], ["Research work", advanceLivingInquiries],
+            ["Seasons", updateSeasonState], ["Landscape", advanceLandscape], ["Watercourses", advanceGroundWater], ["Whispers", advanceLivingWhispers], ["Material surveys", advanceMaterialSurveys], ["Research work", advanceLivingInquiries],
             ["Surface marks", advanceSurfaceMarks], ["Curiosity about marks", advanceClueIntrigue], ["Remembered diagrams", advanceRememberedClues], ["New marks", observeSurfaceMarks], ["Artifact work", advanceLivingArtifactWork], ["Artifacts", advanceLivingArtifacts],
             ["Inventions", observeLivingInventions], ["Sky study", advanceSkyStudy],
             ["Sea crossings", advanceSeaVoyages], ["Commodity journeys", advanceCommodityJourneys], ["Field tools", advanceFarmTools],
@@ -16917,6 +17188,7 @@
                 // Decisions can replace existing messages without adding a new
                 // log entry. Serialize the current Chronicle at every save.
                 syncLogToPlanet();
+                saveGroundPrecision();
                 const universe = getUniverse(false);
                 if (universe) {
                     syncCurrentWorldState(universe);
@@ -17003,7 +17275,7 @@
                 if (!world || !world.state) continue;
                 if (world.id === universe.currentWorldId) continue;
                 const state = world.state;
-                const worldSave = withWorldState(state, () => baseGenerateSave());
+                const worldSave = withWorldState(state, () => {saveGroundPrecision();return baseGenerateSave();});
                 if (worldSave) data.worldSaves[world.id] = worldSave;
             }
         }
@@ -22851,6 +23123,20 @@
             logMessage("Combustion engines power a new age.", "milestone");
         },
         messageNo: () => "Steam and muscle are power enough."
+    });
+
+    modEvent('unlockRocketry', {
+        random:true,weight:$c.RARE,subject:{reg:'player',id:1},
+        check:()=>planet.unlocks.travel<100&&planet.unlocks.travel>=90&&planet.unlocks.smith>=80&&planet.unlocks.fire>=70&&planet.unlocks.education>=70&&planet.unlocks.astronomy>=20,
+        message:()=>null,
+        func:()=>{planet.unlocks.travel=100;happen('Influence',null,null,{education:1,travel:1});logMessage('The test rocket holds its course above the clouds.','milestone');}
+    });
+
+    modEvent('unlockLifeSupport', {
+        random:true,weight:$c.RARE,subject:{reg:'player',id:1},
+        check:()=>planet.unlocks.travel<110&&planet.unlocks.travel>=100&&planet.unlocks.smith>=80&&planet.unlocks.education>=70,
+        message:()=>null,
+        func:()=>{planet.unlocks.travel=110;happen('Influence',null,null,{education:1});logMessage('The sealed cabin holds through the trials.','milestone');}
     });
 
     // Smith branch extensions (currently ends at 40: Metal Tools)
@@ -30105,7 +30391,7 @@
         weight: $c.RARE,
         subject: { reg: "town", random: true },
         target: { reg: "town", random: true },
-        value: (subject, target) => {
+        value: (subject, target, args) => {
             if (subject.id === target.id) return false;
             if (subject.pop < 30) return false;
             if (subject._paultendoReligiousRefugeeDay && planet.day - subject._paultendoReligiousRefugeeDay < 25) return false;

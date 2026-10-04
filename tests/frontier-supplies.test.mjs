@@ -4,7 +4,7 @@ import {makeGame,settleGame} from './harness.mjs';
 const plain=x=>JSON.parse(JSON.stringify(x));
 const registry=w=>w._paultendoUniverse._paultendoColonization;
 function quiet(w){for(const id of ['townFarm','townTame','townMine','townLumber','townEat','townBirth','townDeath','townExpand','townEmploy','townPay','townTax']){if(w.gameEvents[id].func)w.gameEvents[id].func=()=>{};if(w.gameEvents[id].perChunk)w.gameEvents[id].perChunk=()=>{};}w.gameEvents.processAll.func=()=>{};}
-function setup(g){const w=g.window,town=settleGame(g);w.planet.day=80;town.name='Homebank';town.pop=100;town.jobs={scholar:15,miner:15,farmer:40};town.resources={crop:800,lumber:20,rock:20,metal:20};town.influences.trade=5;town.wealth=90;town.research={farm:10};town._paultendoNextExchangeDay=9999;Object.assign(w.planet.unlocks,{education:70,smith:80,fire:70,travel:90,astronomy:20,trade:10,farm:10});quiet(w);return {w,town};}
+function setup(g){const w=g.window,town=settleGame(g);w.planet.day=80;town.name='Homebank';town.pop=100;town.jobs={scholar:15,miner:15,farmer:40};town.resources={crop:800,lumber:20,rock:20,metal:20};town.influences.trade=5;town.wealth=90;town.research={farm:10};town._paultendoNextExchangeDay=9999;Object.assign(w.planet.unlocks,{education:70,smith:80,fire:70,travel:110,astronomy:20,trade:10,farm:10});quiet(w);return {w,town};}
 function next(w){const choose=w.chooseEvent;w.chooseEvent=()=>null;try{w.nextDay();}finally{w.chooseEvent=choose;}}
 function panel(w){return w.document.getElementById('actionSubList');}
 function click(w,text){const b=[...panel(w).querySelectorAll('[role="button"]')].find(b=>b.textContent.includes(text));assert.ok(b,`Missing ${text}: ${panel(w).textContent}`);b.click();}
@@ -71,6 +71,15 @@ test('a town without crowding, unrest, a creed, prestige or trading interest has
 
 test('the cohort carries actual worker knowledge, beliefs and priorities instead of restarting as strangers',async t=>{
  const g=await makeGame();t.after(g.close);const {w,town}=setup(g),target=reach(w);town.jobs={farmer:94,miner:3,scholar:3};town.values={justice:4,openness:-3};town.research={farm:10,education:2};town.influences.faith=6;w.planet.religions.push({id:1,name:'Lantern Path',archetype:'animism',foundingTown:town.id,founded:60,influences:{faith:1},tenets:['insular','trade'],tenetNames:['Insular','Trade'],practices:'offerings',deityType:'spirits',followers:[town.id],parent:null,reformed:false,extinct:false,cohesion:60});town.religion=1;
- const charter=launch(w,town);assert.ok(charter.jobs.farmer>0);assert.equal(charter.knowledge.farm,10);assert.equal(charter.knowledge.travel,90);if(!charter.jobs.scholar)assert.equal(charter.knowledge.education,undefined);assert.equal(charter.creed.data.name,'Lantern Path');town.values.justice=-6;
+ const charter=launch(w,town);assert.ok(charter.jobs.farmer>0);assert.equal(charter.knowledge.farm,10);assert.equal(charter.knowledge.travel,110);if(!charter.jobs.scholar)assert.equal(charter.knowledge.education,undefined);assert.equal(charter.creed.data.name,'Lantern Path');town.values.justice=-6;
  for(let n=0;n<charter.travelDays;n++)next(w);const done=registry(w).history.at(-1),colony=target.state.planet.reg.town[done.colony.townId];assert.equal(colony.values.justice,charter.values.justice);assert.deepEqual(plain(colony.research),plain(charter.research));assert.equal(target.state.planet.unlocks.farm,10);assert.equal(target.state.planet.religions.find(r=>r.id===colony.religion).name,'Lantern Path');assert.deepEqual(plain(target.state.planet.religions.find(r=>r.id===colony.religion).tenets),['insular','trade']);errors(g);
+});
+
+test('arriving colonists retain their advances without teaching every existing town on that world',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g),target=reach(w);
+ solar(w);w.document.querySelector('[data-world-id="2"]').click();click(w,'Switch to world');
+ w.planet.unlocks.travel=20;const c=w.filterChunks(c=>c.b!=='water'&&c.b!=='mountain')[0],neighbour=w.happen('Create',null,null,{x:c.x,y:c.y},'town');neighbour.pop=20;neighbour.jobs={scholar:5,farmer:15};neighbour.resources={crop:1000};
+ solar(w);w.document.querySelector('[data-world-id="1"]').click();click(w,'Switch to world');const charter=launch(w,town);for(let n=0;n<charter.travelDays;n++)next(w);
+ const done=registry(w).history.at(-1),colony=target.state.planet.reg.town[done.colony.townId];assert.equal(target.state.planet.unlocks.travel,110);assert.ok(colony._paultendoLocalDiscoveries['travel:110']);assert.equal(colony._paultendoLocalDiscoveries['travel:110'].charter,charter.id);assert.equal(neighbour._paultendoLocalDiscoveries?.['travel:110'],undefined);assert.equal(target.state.planet._paultendoLocalKnowledge['travel:110'].before,20);
+ solar(w);w.document.querySelector('[data-world-id="2"]').click();click(w,'Switch to world');assert.equal(w.gameEvents.frontierCharterPrompt.value(neighbour,null,{}),false);errors(g);
 });

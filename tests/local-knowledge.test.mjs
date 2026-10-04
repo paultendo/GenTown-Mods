@@ -68,7 +68,7 @@ test('reading a guided question and its linked journey cannot add days, lessons,
 });
 
 test('a distant precision milestone cannot enable a town’s flight preparation without local knowledge',async t=>{
- const g=await makeGame();t.after(g.close);const {w,a,b}=pair(g);Object.assign(w.planet.unlocks,{education:70,smith:80,fire:70,travel:90,astronomy:20});w.planet._paultendoLocalKnowledge={'smith:80':{key:'smith',level:80,before:70}};a._paultendoLocalDiscoveries={'smith:80':{day:w.planet.day,inquiry:'source-precision'}};for(const town of [a,b]){town.resources.crop=1000;town._paultendoPeople.find(p=>p.role==='scholar').outlook='steadfast';}
+ const g=await makeGame();t.after(g.close);const {w,a,b}=pair(g);Object.assign(w.planet.unlocks,{education:70,smith:80,fire:70,travel:100,astronomy:20});w.planet._paultendoLocalKnowledge={'smith:80':{key:'smith',level:80,before:70}};a._paultendoLocalDiscoveries={'smith:80':{day:w.planet.day,inquiry:'source-precision'}};for(const town of [a,b]){town.resources.crop=1000;town._paultendoPeople.find(p=>p.role==='scholar').outlook='steadfast';}
  w.document.getElementById('actionItem-solar').click();const actions=[...panel(w).querySelectorAll('[role="button"]')].filter(e=>e.textContent.includes('prepare a survey satellite'));assert.equal(actions.length,1);assert.ok(actions[0].textContent.includes(a._paultendoPeople.find(p=>p.role==='scholar').name));actions[0].click();assert.equal(w.planet._paultendoSky.flights[0].town,a.id);assert.equal(w.planet._paultendoSky.flights.some(f=>f.town===b.id),false);errors(g);
 });
 

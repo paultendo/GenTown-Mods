@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.88**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
+Version **1.6.89**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.88/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.89/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.88)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.89)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -30,6 +30,14 @@ Open `http://localhost:4173/`. This loads the mod with the current engine snapsh
 The local origin has its own saves; it does not share storage with r74n.com. The development server listens on loopback and serves only game assets. It does not expose repository configuration.
 
 ## Compatibility and verification
+
+The world now keeps a seeded plate model with convergent, divergent and transform boundaries. Native earthquake and eruption locations favour the relevant active regions, with quieter interiors and stress retained between days. Eruptions add rock and damage vegetation. This is an authored game model, not a reconstruction of the original terrain from moving plates. Hotspots and long-term plate movement remain further work. The physical relationships follow [USGS plate-motion guidance](https://pubs.usgs.gov/gip/dynamic/understanding.html).
+
+Rain, snowmelt and storms feed a drainage network derived from actual heights. Depressions retain water before spilling. Rivers erode exposed ground, carry the removed sediment and deposit it on slower reaches or offshore. Tree cover reduces erosion. Floods lower farming success and spoil real grain at inundated town centres, without repeatedly charging a loss for the same lingering flood. The water and sediment balances, precise drainage heights, stores and moved ground survive reloads. New coastlines, navigable river transport and coast topology are further work. These relationships follow [USGS runoff](https://www.usgs.gov/water-science-school/science/surface-runoff-and-water-cycle) and [sediment transport](https://www.usgs.gov/publications/fluvial-sediments-a-summary-source-transportation-deposition-and-measurement-sediment); rates and thresholds are initial game calibration and still need longer playtesting.
+
+Moving ground can expose a finite clay, sand or coal layer beyond its usual biome. Later deposits can cover it again. Mining still needs actual workers, local knowledge and a usable source, and uncovering spent material never replenishes it. Existing workers and priests can interpret witnessed physical changes differently. Their dated observations preserve actual harm and opportunity and can become study or teachings without awarding geological knowledge. Unseen events cannot publish their witnesses or terrain. Broader competing disaster explanations, political reactions and settlement migration remain further work.
+
+The Chronicle now fades new entries in place so their day and first words remain visible on phones. Early astronomy is accessed through a settlement’s Night charts. The star system remains hidden until an observed town has earned Rocketry, or another world has already been reached. Optics work and sky observations use town-specific discovery levels. Rocketry follows railway-era transport, engines, precision engineering and scientific work. Six telescope observations and recent successful steelwork can prompt a local 24-day experiment that spends four steel, two glass and eight charcoal. It grants no vessel or launch. Life support follows a successful local survey satellite, with a separate 32-day sealed-cabin trial costing eight steel, four glass, four charcoal and 32 grain. Only then can a town construct passenger vessels and prepare an interplanetary settlement charter. Arriving settlers keep the extended advances carried by their workers within their own settlement, with their passage recorded as the source. These rates are authored game calibration, not engineering specifications. Detailed atmospheric survival and crewed rehearsal missions remain further work. Original core GenTown unlocks still retain shared legacy behaviour; a complete migration of those native technologies, uncertain ocean rumours and overseas settlement logistics remain further work.
 
 Commodity demand, supply, shared work claims, journeys and use histories respond to actual town state. Writing, construction, workshop fuel and handtools now share material properties and forms. Activities look for suitable capabilities, local methods and unclaimed stock, with familiar materials preferred. The same timber can become a writing board or go to the builders, and a shaped tool can work a field or help a civilian resist an attack. Raw metal is not a finished tool. Coal can provide workshop heat, while an ingredient still needs the properties required by its recipe. Relative properties, methods, recipes and numerical effects remain authored game rules. A broader model of discovered uses, cultural preferences and purposes remains work ahead. Marks can now stay on real mineral outcrops and completed structures whose construction material was recorded. Cave discovery and a wider range of surface uses remain work ahead.
 

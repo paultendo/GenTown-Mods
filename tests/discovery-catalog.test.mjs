@@ -9,11 +9,11 @@ function selectDiscovery(window, name) {
   assert.ok(button, `${name} must be a readable discovery`); button.click(); return list;
 }
 
-test('all 41 extended discoveries preserve their knowledge gates and offer readable lore without instant awards', async t => {
+test('all 43 extended discoveries preserve their knowledge gates and offer readable lore without instant awards', async t => {
   const game = await makeGame(); t.after(game.close);
   const { window } = game; settleGame(game);
   const events = Object.entries(window.gameEvents).filter(([, info]) => info._paultendoDiscovery);
-  assert.equal(events.length, 41);
+  assert.equal(events.length, 43);
   const player = window.regGet('player', 1);
   for (const [id, info] of events) {
     const discovery = info._paultendoDiscovery;
