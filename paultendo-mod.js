@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.77/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.78/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.77";
+    const MOD_VERSION = "1.6.78";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -5591,7 +5591,7 @@
         craft: {title:'Something of their own',words:'Try making something of your own.'}
     };
     // A reply is quick. Work and attachment develop while the rest of the world continues.
-    const LIVING_PACE = {reply:2, work:{fork:6,lens:8,compass:10}, wartimePersistence:0.04, invention:{notice:3,retry:30,priorityScale:10}, purpose:{kept:4,healing:6,song:8,drills:12,study:16,revered:28,hoarded:24}, attachment:{generous:-2,curious:0,steadfast:6,guarded:10}, objectLife:12};
+    const LIVING_PACE = {reply:2, work:{fork:6,lens:8,compass:10}, wartimePersistence:0.04, memoryUse:12, invention:{notice:3,retry:30,priorityScale:10}, purpose:{kept:4,healing:6,song:8,drills:12,study:16,revered:28,hoarded:24}, attachment:{generous:-2,curious:0,steadfast:6,guarded:10}, objectLife:12};
     const LIVING_FIGURE_ROLES = { SCHOLAR:'scholar', INVENTOR:'scholar', GENERAL:'soldier', HERO:'soldier', TYRANT:'soldier', PROPHET:'priest', HEALER:'doctor', ARTIST:'musician' };
     let livingPersonView = null;
     let livingArtifactView = null;
@@ -5797,7 +5797,10 @@
                         for(const context of work.wartime)artifact.events.push({day:context.day,text:context.text,town:town.id,knownTown:livingTownKnown(town)});
                     }
                     carryLivingArtifact(artifact,town,person,text);
-                    if(work.wartime?.length&&hasIssue(town,'war'))livingArtifactEvent(artifact,`It was finished while ${town.name} was at war.`,town,null,true);
+                    if(work.wartime?.length&&hasIssue(town,'war')) {
+                        artifact.origin.wartimeCompletion={war:town.issues.war,day:planet.day,town:town.id,townName:town.name};
+                        livingArtifactEvent(artifact,`It was finished while ${town.name} was at war.`,town,null,true);
+                    }
                     if(work.cause?.recipient&&livingPersonMind(person).outlook!=='guarded') {
                         const recipient=livingCommunityPerson(town,work.cause.recipient);
                         if(recipient&&recipient.id!==person.id)carryLivingArtifact(artifact,town,recipient,`${person.name} brings ${artifactPhrase(artifact)} to ${recipient.name}, the ${livingPersonLabel(recipient).toLowerCase()} whose work began the idea.`);
@@ -6137,7 +6140,7 @@
     }
     function interpretLivingArtifact(artifact,town,person) {
         const use=livingArtifactUse(artifact,town,person);
-        const context=JSON.stringify([person.id,livingPersonMind(person).outlook,town.religion,planet.unlocks?.smith>=30,planet.unlocks?.education>=10,planet.unlocks?.travel>=20,planet.unlocks?.astronomy>=10,planet.unlocks?.military>=10]);
+        const context=JSON.stringify([person.id,livingPersonMind(person).outlook,town.religion,...['smith','education','travel','astronomy','military'].map(k=>townKnowledgeLevel(town,k))]);
         if(artifact.context===context) return;
         artifact.context=context;
         if(!use){artifact.status='kept';livingArtifactEvent(artifact,`${person.name} turns the object over and tries it against familiar things. They have not found a use for it yet.`,town);return;}
@@ -6148,6 +6151,35 @@
         let changes;
         if(use.effects){const before={...town.influences};const effects=Object.fromEntries(Object.entries(use.effects).map(([k,v])=>[k,v*(artifact.quality || 1)]));happen('Influence',null,town,{...effects,temp:true});changes=Object.fromEntries(Object.keys(town.influences).map(k=>[k,town.influences[k]-(before[k]||0)]).filter(([,v])=>v));}
         livingArtifactEvent(artifact,use.text,town,changes);
+    }
+    function observeLivingArtifactMemory(artifact,town,person) {
+        // Only the rare ordinary work finished amid fighting qualifies. A war
+        // instrument is useful without becoming a symbol, and work resumed in
+        // peace has a different history. Old v77 saves retain the completion event.
+        const remembered=[...artifact.events,...(artifact.origin?.history || []).flatMap(h=>h.events || [])];
+        const completion=artifact.origin?.wartimeCompletion || (remembered.some(e=>e.text===`It was finished while ${artifact.origin?.maker?.town} was at war.`)&&{day:artifact.origin?.maker?.day,townName:artifact.origin?.maker?.town});
+        if(!completion||!artifact.origin?.wartime?.some(c=>c.meaning==='persistence'&&(!completion.war||c.war===completion.war)))return;
+        // People draw on the war their own community witnessed. An unknown
+        // past life does not give a new bearer memories they never acquired.
+        if(artifact.origin.passage!==travelerState().passage||artifact.origin.maker?.world!==planet.name||(completion.town!=null?completion.town!==town.id:completion.townName!==town.name))return;
+        const use=livingArtifactUse(artifact,town,person);
+        if(!use?.effects||artifact.status!==use.meaning||hasIssue(town,'war')||hasIssue(town,'revolution')||mealStock(town)<nativeMealNeed(town))return;
+        const topic=person.role==='doctor'?'care':person.role==='soldier'&&(town.values?.order || 0)>(town.values?.justice || 0)?'order':'learn';
+        if(topic==='learn'&&townKnowledgeLevel(town,'education')<10||topic==='order'&&townKnowledgeLevel(town,'government')<10)return;
+        const memories=artifact.memories ||= {},memory=memories[town.id] ||= {days:0};
+        if(memory.teaching||memory.lastDay===planet.day)return;
+        // Count actual days in use, not elapsed calendar time or repeated reads.
+        const context=`${person.id}:${use.meaning}:${topic}`;
+        if(memory.context!==context){memory.context=context;memory.days=0;}
+        memory.lastDay=planet.day;memory.days=Math.min(LIVING_PACE.memoryUse,memory.days+1);
+        if(memory.days<LIVING_PACE.memoryUse)return;
+        const lesson=topic==='care'?'a reason to keep looking after one another':topic==='order'?'proof that discipline can carry a town through anything':person.role==='musician'?'a story worth keeping in song':person.role==='priest'?'a sign that their beliefs carried them through':'a reason to keep learning, even when the world turns against them';
+        const text=`${person.name} remembers ${artifactTitle(artifact)}, finished during the fighting at ${completion.townName}. After living with it, they see ${lesson}.`;
+        const cause={type:'artifactMemory',artifact:artifact.id,lineage:artifact.lineage,title:artifactTitle(artifact),lesson,world:skyWorldId(),passage:travelerState().passage,days:memory.days,completion:structuredClone(completion),text};
+        const teaching=beginLivingCommunityTeaching(town,person,topic,cause);
+        if(!teaching)return;
+        memory.teaching=teaching.id;memory.meaning=teaching.meaning;memory.day=planet.day;
+        livingArtifactEvent(artifact,text,town,null,true);
     }
     function livingArtifactExpert(artifact,town,holder) {
         const people=[...(town._paultendoPeople || []),...livingPeople(town).filter(p=>p.figure)];
@@ -6188,6 +6220,7 @@
                 if(other){carryLivingArtifact(artifact,town,other,`${person.name} brings the object to ${other.name}, hoping they can make something of it.`);continue;}
             }
             interpretLivingArtifact(artifact,town,person);
+            observeLivingArtifactMemory(artifact,town,person);
         }
     }
     function actOnArtifactWhisper(town,person,record) {
@@ -6227,6 +6260,10 @@
         if(artifact.parent) items.push({text:`Its maker learned from ${escapeLivingText(artifact.parent.phrase || artifact.parent.title)}.`});
         items.push({text:`Visit ${escapeLivingText(place.name)}`,func:()=>openLivingPlace(place,town?.id)});
         if(livingArtifactHolder(artifact,town,person)) items.push({text:`Speak to ${escapeLivingText(person.name)} about it`,func:()=>openLivingPerson(town,person,null,artifact.id)});
+        for(const memory of Object.values(artifact.memories || {})) {
+            const teaching=livingWorldState().teachings.find(t=>t.id===memory.teaching);
+            if(teaching&&livingTownKnown(regGet('town',teaching.town)))items.push({text:`Follow ${escapeLivingText(teaching.title.toLowerCase())}`,func:()=>openLivingTeaching(teaching)});
+        }
         items.push({heading:true,text:'What became of it'});
         for(const past of artifact.origin?.history || []) {
             items.push({heading:true,text:past.passage<travelerState().passage?'Before this beginning':`Earlier in ${escapeLivingText(past.world)}`});
@@ -6445,7 +6482,11 @@
         record.steps.unshift({day:planet.day,text:cause.text});
         const teaching=seedLivingTeaching(town,person,record);
         teaching.strength=record.strength;
-        if(livingTownKnown(town)) modLog('memory',escapeLivingText(record.steps.at(-1).text),null,{town,observedStory:true,story:{kind:"teaching",id:teaching.id}});
+        if(livingTownKnown(town)) {
+            const symbol=cause.type==='artifactMemory';
+            const message=symbol?`${escapeLivingText(cause.title)} becomes ${escapeLivingText(cause.lesson)} in ${townRef(town.id)}.`:escapeLivingText(record.steps.at(-1).text);
+            modLog('memory',message,symbol?'milestone':null,{town,highlight:symbol,observedStory:true,story:{kind:"teaching",id:teaching.id}});
+        }
         return teaching;
     }
     function observeLivingCommunityHarvest(town,before) {
@@ -7958,6 +7999,11 @@
         if(origin.knownTown||livingTownKnown(regGet('town',origin.town))) items.push({text:`Day ${origin.day} · ${origin.kind==='community'?`${escapeLivingText(origin.name)} in ${escapeLivingText(origin.townName)} began saying`:`You whispered to ${escapeLivingText(origin.name)} in ${escapeLivingText(origin.townName)}`}: “${escapeLivingText(origin.words)}”`});
         else items.push({text:'These words began beyond the land you know.'});
         if(origin.cause&&(origin.knownTown||livingTownKnown(regGet('town',origin.town)))) items.push({text:escapeLivingText(origin.cause.text)});
+        const cause=origin.cause;
+        if(cause?.type==='artifactMemory'&&cause.passage===travelerState().passage&&cause.world===skyWorldId()) {
+            const artifact=livingWorldState().artifacts.find(a=>a.id===cause.artifact&&a.lineage===cause.lineage);
+            if(livingArtifactKnown(artifact))items.push({text:'Remember the object',func:()=>openLivingArtifact(artifact)});
+        }
         for(const stop of record.chain) if((stop.knownTown||livingTownKnown(regGet('town',stop.town)))&&!(stop.id===origin.id&&stop.words===origin.words)) items.push({text:`Day ${stop.day} · ${escapeLivingText(stop.name)} in ${escapeLivingText(stop.townName)} passed on: “${escapeLivingText(stop.words)}”`});
         if(!record.resolved) items.push({text:`${escapeLivingText(record.name)} is still turning the words over.`});
         for(const step of record.steps) if(step.text!==origin.cause?.text) items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
@@ -8171,7 +8217,7 @@
         } else if(record.topic==='order') {
             if(!(planet.unlocks.government>=10)||!town.gov||town.gov==='anarchy') return {acted:false,reason:'The old argument no longer fits how this town is ruled.'};
             effects={law:0.3,happy:-0.25,crime:0.05};
-            record.steps.push({day:planet.day,text:`${person.name} repeats a warning of revolt. The town tightens its rule, leaving less room for dissent.`});
+            record.steps.push({day:planet.day,text:record.cause?.type==='artifactMemory'?`${person.name} argues that discipline carried them through the fighting. The town tightens its rule, leaving less room for dissent.`:`${person.name} repeats a warning of revolt. The town tightens its rule, leaving less room for dissent.`});
         } else if (record.topic === 'defy') {
             if (!livingWhisperAvailable(town,'defy')) return {acted:false,reason:'The rulers you spoke against no longer hold this town.'};
             if (person.figure?.type === 'RULER' || person.figure?.type === 'TYRANT' || (person.role === 'soldier' && (town.values?.order || 0) > 2)) {
@@ -8205,7 +8251,7 @@
                 record.steps.push({day:planet.day,text:began ? `${person.name} pressed the claim against ${neighbour.name}. Tensions broke into war.` : `${person.name} spread claims against ${neighbour.name}. ${record.hostility.relation < 0 || record.hostility.pressure > 0 ? 'Relations soured and the towns moved closer to war.' : 'Old hostilities found a new voice.'}`});
             }
         } else if (record.topic === 'care') {
-            if (!hasIssue(town, 'war') && livingWhisperGift(town, person, record)) return {acted:true};
+            if (record.cause?.type!=='artifactMemory'&&!hasIssue(town, 'war') && livingWhisperGift(town, person, record)) return {acted:true};
             if (person.role === 'farmer' && planet.unlocks?.farm >= 10 && happen('Legality', null, town, {law:'farm'}) !== false) {
                 effects = {farm:0.55,trade:-0.15};
                 record.steps.push({day:planet.day,text:`${person.name} turned the talk toward feeding people. They rallied the farmers.`});

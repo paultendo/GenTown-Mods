@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.77**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.78**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.77/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.78/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.77)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.78)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -138,3 +138,5 @@ Ordinary changes of government now need a sustained preference over the current 
 
 
 Unfinished traveler objects now pause during food shortages or fighting instead of being discarded solely because a calendar deadline passed. Suitable work can continue when soldiers need an instrument for drills or sick people need a lens, with real hands, food and inputs still required. An ordinary object already taking shape before the war can also be finished against the odds by a curious or steadfast maker. That rare exception is checked once per work and war, survives reload, and grants no free inputs, quality or happiness. Its actual wartime purpose or persistence stays in the finished object's history and travels with it. The four percent chance among eligible unfinished works is initial calibration, not a promise of one special object every war. Lost makers, knowledge, inspiration or materials retain their existing abandonment rules.
+
+A rare ordinary object finished during war can later inspire a practice in the community that witnessed its making. Twelve observed days of useful handling are needed, with food, living hands and peace. Hoarding, curiosity without a use and elapsed time alone do not count. The bearer and current values shape the lesson: care, learning, song, faith, military lessons or coercive discipline. It uses the existing community practice system with its actual effects, costs, resistance to replacement and spread through completed exchanges. It cannot repeatedly renew influence. A new life does not grant strangers memories of a war they never witnessed. The object keeps its story through the Traveler loop, while ideas must reach new communities through real contact. Twelve days is initial pacing calibration.
