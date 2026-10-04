@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.61/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.62/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.61";
+    const MOD_VERSION = "1.6.62";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -2930,7 +2930,7 @@
                         args.choice = "yes";
                     }
                     const result = funcFn(subject, target, args);
-                    if (isPlayerPrompt) {
+                    if (isPlayerPrompt && !args?._paultendoAutonomous) {
                         const town = getGuidanceTown(subject, target);
                         if (town) applyGuidanceOutcome(town, args.choice || "yes", args, id, data);
                     }
@@ -2944,7 +2944,7 @@
                         args.choice = "no";
                     }
                     const result = funcNoFn(subject, target, args);
-                    if (isPlayerPrompt) {
+                    if (isPlayerPrompt && !args?._paultendoAutonomous) {
                         const town = getGuidanceTown(subject, target);
                         if (town) applyGuidanceOutcome(town, args.choice || "no", args, id, data);
                     }
@@ -4673,7 +4673,7 @@
             const level=livingDiscoveryBranches()[discovery?.key]?.levels.find(item=>item.level===discovery.level);
             return level&&livingTownKnown(town)?{label:'Explore the discovery',open:()=>openUnlockDetail(discovery.key,level,town.id)}:null;
         }
-        const lists = {inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
+        const lists = {localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
         const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
         if (!record) return null;
         if (ref.kind === 'food' || ref.kind === 'exchange') {
@@ -4688,6 +4688,7 @@
             ? (record.towns || []).map(id=>regGet('town',id)).find(livingTownKnown)
             : regGet('town',record.town);
         if (!livingTownKnown(town)) return null;
+        if (ref.kind === 'localChoice') return {label:'Their choice',open:()=>openLocalTownChoice(record)};
         if (ref.kind === 'inquiry') return {label:'Follow the work',open:()=>openLivingInquiry(record)};
         if (ref.kind === 'craft') return {label:'Follow their work',open:()=>openLivingArtifactWork(record)};
         if (ref.kind === 'material') return {label:'Visit the workshop',open:()=>openMaterialWork(record)};
@@ -4699,13 +4700,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
+        if (!['localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
+        if (!ref || !['localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -5263,6 +5264,7 @@
         state.artifactWork ||= [];
         state.materialWork ||= [];
         state.inquiries ||= [];
+        state.localChoices ||= [];
         state.teachings ||= [];
         state.teachingSeen ||= {};
         state.nextId ||= 1;
@@ -8302,6 +8304,14 @@
         }
         for(const work of livingWorldState().inquiries.filter(w=>w.town===town.id&&['waiting','working'].includes(w.status))) {
             const button=document.createElement('button');button.textContent=`${work.title} · Work in progress`;button.addEventListener('click',()=>{closePopups();openLivingInquiry(work);});section.appendChild(button);
+        }
+        const localChoices = livingWorldState().localChoices.filter(record=>record.town===town.id);
+        if (localChoices.length) {
+            const choices = document.createElement('button');choices.textContent='Choices made here';
+            choices.addEventListener('click',()=>{closePopups();populateExecutive([
+                {text:'← Back to settlement',func:()=>{closeExecutive();openRegBrowser(town,'town');}},
+                ...localChoices.slice(-12).reverse().map(record=>({text:`Day ${record.day} · ${record.title}`,func:()=>openLocalTownChoice(record)}))
+            ],`${town.name} · Choices made here`);markLivingStoryControls();openExecutive();});section.appendChild(choices);
         }
         appendLivingTownSpecies(town, section);
         const places = livingPlaceItems(town);
@@ -14273,6 +14283,110 @@
         });
     }
 
+    // Only these synchronous native proposals have a local decision policy.
+    // Naming, player interventions and choice dialogs still need the player.
+    const LOCAL_CHOICE_EVENTS = new Set(['increaseResearch','townAskDiplomacy']);
+
+    function localTownChoice(id, caller) {
+        const town = id === 'townAskDiplomacy' ? caller.subject : caller.target;
+        if (!town || town.end || town.pop <= 0) return null;
+        if (id === 'increaseResearch') {
+            const needs = nativeTechNeeds(town);
+            const eligible = Object.entries(needs).filter(([key]) => key in researchInfluences &&
+                (!influenceNeedsUnlock[key] || planet.unlocks[influenceNeedsUnlock[key]]));
+            const strongest = eligible.sort((a,b) => b[1].pressure-a[1].pressure)[0];
+            if (!strongest) return null;
+            const proposed = eligible.some(([key])=>key===caller.args.value) && needs[caller.args.value];
+            const yes = proposed?.pressure > 0 && proposed.pressure >= strongest[1].pressure;
+            // Passing over a field that has no attention changes nothing.
+            if (!yes && !(town.research?.[caller.args.value] > 0)) return null;
+            return {town, choice:yes?'yes':'no', reason:yes?proposed.text:strongest[1].text,
+                cause:{kind:'need',field:yes?caller.args.value:strongest[0],need:structuredClone(yes?proposed:strongest[1])}};
+        }
+        if (id !== 'townAskDiplomacy') return null;
+        const other = caller.target;
+        if (!other || other.end || other.pop <= 0 || other.id === town.id) return null;
+        const decide = (choice,reason,cause) => ({town,partner:other,choice,reason,cause});
+        if (areAtWar(town,other)) return decide('no','The towns are fighting each other.',{kind:'war',war:town.issues.war});
+        const exchanges = (livingWorldState().exchanges || []).filter(record =>
+            [record.buyer,record.seller].includes(town.id) && [record.buyer,record.seller].includes(other.id));
+        const memory = town._paultendoExchangeMemory?.[other.id];
+        const help = memory?.lastHelpReceived;
+        const relation = getRelations(town,other);
+        // A fresh grievance can outweigh older help. Keep the actual source.
+        const grievance = exchanges.flatMap(record => record.steps.filter(step =>
+            step.kind === 'threat' && record.seller===town.id || step.kind === 'refuse' && record.buyer===town.id && ['rivalry','outsiders'].includes(step.reason))
+            .map(step => ({record,step}))).sort((a,b) => b.step.day-a.step.day)[0];
+        if (grievance && planet.day-grievance.step.day <= 30 && (!help || grievance.step.day > help.day)) {
+            return decide('no',grievance.step.kind === 'threat' ? 'Threats over supplies have soured their dealings.' : 'They remember being turned away when they asked for supplies.',
+                {kind:'grievance',exchange:grievance.record.id,day:grievance.step.day});
+        }
+        if (relation < -2) return decide('no','Old hostilities still stand between them.',{kind:'relations',relation});
+        if (help) return decide('yes','They remember supplies that came when they needed help.',{...structuredClone(help),kind:'help'});
+        const religion = planet.religions?.find(r => r.id === town.religion && !r.extinct);
+        const insular = (town.influences.faith || 0)>4 && religion?.tenets?.includes('insular') && town.religion !== other.religion;
+        const path = getCachedPath(town,other,40);
+        const contact = exchanges.length > 0 || Object.hasOwn(town.relations || {},other.id) || getTownDistance(town,other)<=6 && path?.length;
+        if (!contact) return null;
+        if (insular || (town.values?.openness || 0)<=-4) return decide('no',insular ? 'Their faith teaches them to keep outsiders at a distance.' : 'They prefer to keep their town closed to outsiders.',
+            {kind:'belief',religion:insular?religion.id:null,openness:town.values?.openness || 0});
+        const arrived = exchanges.filter(record => record.steps.some(step => step.kind === 'arrive')).at(-1);
+        if (arrived) return decide('yes','Their carriers have brought useful goods between the towns.',{kind:'exchange',exchange:arrived.id});
+        if (relation > 2) return decide('yes','They want to keep an old friendship alive.',{kind:'relations',relation});
+        const route = commodityPath(town,other);
+        if (route && Object.keys(COMMODITIES).some(type => commodityDemand(town,type,route)>0 && commoditySpare(other,type,route)>0)) {
+            return decide('yes','Their neighbours have supplies the town needs.',{kind:'supplies',food:mealStock(town),wanted:foodBuffer(town)});
+        }
+        if ((town.values?.openness || 0)>=4) return decide('yes','They welcome a closer tie with their neighbours.',{kind:'belief',openness:town.values.openness});
+        return null;
+    }
+
+    function rememberLocalTownChoice(id, caller, policy, before) {
+        const state = livingWorldState(), town = policy.town;
+        const title = id === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : 'A neighbour at the table';
+        const text = id === 'increaseResearch'
+            ? `${townRef(town.id)} gives ${researchInfluences[caller.args.value] || caller.args.value} research ${policy.choice==='yes'?'more':'less'} attention.`
+            : `${townRef(town.id)} ${policy.choice==='yes'?'welcomes':'turns away'} ${townRef(policy.partner.id)}.`;
+        const record = {id:`local:${state.nextId++}`,day:planet.day,town:town.id,partner:policy.partner?.id || null,event:id,
+            value:caller.args.value,choice:policy.choice,title,text,reason:policy.reason,cause:policy.cause,
+            before:{research:before.research,relations:before.relations},after:{research:{...town.research},relations:{...town.relations}}};
+        state.localChoices.push(record);
+        if (state.localChoices.length > 96) state.localChoices.shift();
+        logMessage(`${text} ${escapeLivingText(policy.reason)}`,null,{_paultendoStory:{kind:'localChoice',id:record.id}});
+    }
+
+    function openLocalTownChoice(record) {
+        const town = regGet('town',record.town);
+        if (!livingTownKnown(town)) return;
+        const items = [{text:'← Back to settlement',func:()=>{closePopups();closeExecutive();openRegBrowser(town,'town');}},
+            {heading:true,text:`Day ${record.day} · ${record.title}`},{text:record.text},{text:escapeLivingText(record.reason)}];
+        if (record.event === 'increaseResearch') {
+            const previous = livingResearchPriority(record.before.research), chosen = livingResearchPriority(record.after.research);
+            if (chosen && chosen !== previous) items.push({text:previous
+                ? `${titleCase(researchInfluences[chosen] || chosen)} took the lead over ${researchInfluences[previous] || previous}.`
+                : `${titleCase(researchInfluences[chosen] || chosen)} became their leading study.`});
+            const priority = livingResearchPriority(town.research);
+            items.push({heading:true,text:'Today'},{text:priority ? `${titleCase(researchInfluences[priority] || priority)} leads the town’s research.` : 'No field leads the town’s research.'});
+        } else {
+            const other = regGet('town',record.partner);
+            if (livingTownKnown(other)) {
+                const change = (record.after.relations[other.id] || 0)-(record.before.relations[other.id] || 0);
+                items.push({text:change > 0 ? 'The towns grew closer.' : 'Relations worsened.'});
+                const current = livingTraceNow({kind:'relations',other:other.id},town);
+                if (current) items.push({heading:true,text:'Today'},{text:escapeLivingText(current)});
+            }
+        }
+        const source = record.cause.exchange || record.cause.source;
+        const exchange = stateExchangeForLocalChoice(source);
+        if (exchange) items.push({text:'Follow the exchange',func:()=>openCommodityJourney(exchange)});
+        populateExecutive(items,`${town.name} · ${record.title}`);markLivingStoryControls();openExecutive();
+    }
+
+    function stateExchangeForLocalChoice(id) {
+        return id && (livingWorldState().exchanges || []).find(record => record.id === id &&
+            [record.buyer,record.seller].map(town=>regGet('town',town)).some(livingTownKnown));
+    }
+
     // Background worlds draw one event through the native weights, eligibility
     // and cooldowns. Existing automatic events decide for themselves. Player
     // interventions and naming prompts remain attached to the visited world.
@@ -14291,14 +14405,23 @@
                 const caller = readyEvent(id, subject, target);
                 if (!caller || info.target && !caller.target || planet.dead && caller.subject?._reg !== 'nature') continue;
                 if (info.check && !info.check(caller.subject, caller.target, caller.args)) continue;
+                const policy = LOCAL_CHOICE_EVENTS.has(id) ? localTownChoice(id,caller) : null;
+                if (LOCAL_CHOICE_EVENTS.has(id) && !policy) continue;
+                const before = policy && livingTownSnapshot(policy.town);
                 debugContext.eventClass = id;
                 debugContext.eventArgs = caller.args;
                 caller.args._paultendoAutonomous = true;
+                if (policy) {
+                    caller.args.choice = policy.choice;
+                    if (info.subject?.reg === 'player') caller.subject = policy.town;
+                }
                 caller.done = true;
                 currentEvents[caller.eventID] = caller;
-                doEvent(id, caller);
+                if (policy?.choice === 'no') info.funcNo?.(caller.subject,caller.target,caller.args);
+                else doEvent(id, caller);
                 let text;
-                if (info.messageDone) text = typeof info.messageDone === 'function'
+                if (policy) rememberLocalTownChoice(id,caller,policy,before);
+                else if (info.messageDone) text = typeof info.messageDone === 'function'
                     ? info.messageDone(caller.subject, caller.target, caller.args) : info.messageDone;
                 else text = caller.message || (typeof info.message === 'function'
                     ? info.message(caller.subject, caller.target, caller.args) : info.message);
@@ -14380,7 +14503,7 @@
             // the visited world's menu or the player's saved preferences.
             userSettings = {...userSettings, notify:false};
             randomEvents = Object.fromEntries(Object.entries(randomEvents).filter(([id, info]) =>
-                id === 'unlockLevel' || info.auto === true && !info.value?.ask && !info.value?.choose));
+                (id === 'unlockLevel' || LOCAL_CHOICE_EVENTS.has(id) || info.auto === true) && !info.value?.ask && !info.value?.choose));
             for (const name of ["initGame", "setView", "updateStats", "refreshExecutive", "renderMap", "renderHighlight", "renderCursor", "updateCanvas", "fitToScreen", "resizeCanvases", "updateTitle", "autosave", "saveSettings", "logChange", "logSub", "fadeMessage", "clearLog", "doPrompt", "openExecutive", "closeExecutive", "populateExecutive", "openRegBrowser", "logTip"]) replace(name);
             replace("logMessage", archive);
             replace("unhideEntity", entity => { if (entity?.name) delete entity.named; });

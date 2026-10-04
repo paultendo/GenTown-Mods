@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.61**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.62**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.61/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.62/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.61)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.62)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -52,6 +52,8 @@ The Traveler now carries a compass, a clear lens and a tuning fork. Leave one on
 Ask a bearer to entrust an object to you. They can refuse, or promise it while continuing to use it. The eventual handover depends on purpose, attachment, local familiarity and working replacements. Illness, fighting, unfinished work or a full pack can keep it in their hands. Pressing them to hurry can secure an earlier handover at a cost to personal and town trust, and to the object’s current use. Through Lore → The Traveler → The way back, return to the same world’s beginning with the surviving pack, including objects created during play. The pack does not refill. Names, makers and object histories survive the return and save import. Other histories retains the stories of objects left behind. The complete last world can be revisited, while older returns keep their object stories rather than recursively storing entire saves. The pack holds up to five objects. Native Start new planet still starts a separate game.
 
 Replies arrive after two game days. Making an object normally takes six to ten days, with an update partway through. Smithing knowledge and earlier successful work can shorten the attempt. Promises develop on a separate rhythm from replies and can change when an object gains a new purpose or a useful replacement appears. Long consequences live in custody, conflict and histories carried into another beginning. At 1x, the autoplay interval is one second per day before simulation time and pauses. These are initial pacing rules that still need human playtesting across longer sessions.
+
+Distant towns can now decide how to divide their research attention and how to treat neighbours without waiting for the Traveler. Food shortages, unfinished work, journeys, illness and war compete for research through the existing native effects. Remembered help and completed shipments can strengthen ties. Hostility, fresh grievances and insular beliefs can sour them, even when a neighbour has useful supplies. These choices use the existing daily event slot and native prerequisites. Their reasons and actual changes survive reloads, with a “Their choice” link in the Chronicle and “Choices made here” in the settlement. Player interventions, naming and choices in the visited world remain yours. Other native policy proposals still need local decision rules.
 
 Communities can now begin practices without a whisper. Actual repeated harvests and spare food can rally farmers, sustained short rations can breed dissent, and an emerging scholar can share lessons from the academy. Established practices resist replacement and the same daily work cannot continually renew its bonus. A successful caravan or an actual food gift can carry a practice into another town. The listener may refuse it or change its meaning according to their occupation and outlook. Local work takes time before words can travel again, and influence weakens across repeated handoffs. The history records where an idea began and how it changed, with no Traveler credit for an autonomous beginning. These lives continue beyond the explored map while their undiscovered names remain hidden. Caravan difficulty now uses town centres and the actual terrain path rather than legacy coordinates.
 

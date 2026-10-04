@@ -8,6 +8,9 @@ function next(w){const choose=w.chooseEvent;w.chooseEvent=()=>null;try{w.nextDay
 async function setup(t){const g=await makeGame();t.after(g.close);const w=g.window,warnings=[];w.console.warn=(...args)=>warnings.push(args.map(String).join(' '));const home=settleGame(g);w.planet.day=80;home.pop=100;home.resources={crop:1000};const target=w._paultendoUniverse.worlds[2];target.discovered=true;target.reached=true;visit(w,2);const at=w.filterChunks(c=>!c.v.s&&c.b!=='water'&&c.b!=='mountain')[0],away=w.happen('Create',null,null,{x:at.x,y:at.y},'town');w.happen('Explore',null,null,{x:at.x,y:at.y});away.name='Farbank';away.start=78;away.pop=100;away.jobs={farmer:30,miner:15};away.resources={crop:1000,rock:10,metal:10,lumber:10};away._paultendoNextExchangeDay=99999;Object.assign(w.planet.unlocks,{farm:10,smith:10,trade:10});visit(w,1);return {g,w,home,away,target,warnings};}
 function check(g,warnings){assert.deepEqual(g.errors,[]);assert.deepEqual(warnings,[]);}
 function backgroundEvent(w,target,id){const choose=w.chooseEvent;w.chooseEvent=()=>w.planet===target.state.planet?id:null;try{w.nextDay();}finally{w.chooseEvent=choose;}}
+function quietDaily(w){for(const id of ['townBirth','townDeath','townExpand','townEat'])w.gameEvents[id].func=()=>{};w.gameEvents.processAll.func=()=>{};}
+function proposal(w,target,id,value){const event=w.gameEvents[id],original=event.value;event.value=()=>value;try{backgroundEvent(w,target,id);}finally{event.value=original;}}
+function neighbour(w,away){const site=w.filterChunks(c=>!c.v.s&&c.b!=='water'&&Math.abs(c.x-away.center[0])+Math.abs(c.y-away.center[1])<=4)[0];assert.ok(site);const town=w.happen('Create',null,null,{x:site.x,y:site.y},'town');w.happen('Explore',null,null,{x:site.x,y:site.y});town.name='Nextbank';town.start=1;town.pop=100;town.resources={crop:1000};town.jobs={};return town;}
 
 test('native resize before planet creation is safe without the local launcher guard',async t=>{
  let startupPlanet;
@@ -111,4 +114,45 @@ test('advanced knowledge takes actual offscreen work and supplies and retains it
  for(const id of ['townBirth','townDeath','townExpand','townEat'])rw.gameEvents[id].func=()=>{};rw.gameEvents.processAll.func=()=>{};for(let n=0;n<remaining;n++)next(rw);
  assert.equal(resumed.status,'learned');assert.equal(other.state.planet.unlocks.education,30);assert.equal(rw.planet.unlocks.education,undefined);assert.equal(other.state.planet._paultendoLife.discoveries['education:30'].person,resumed.person);assert.equal(rw.document.getElementById('actionItem-unlocks').classList.contains('notify'),false);assert.doesNotMatch(rw.document.getElementById('logMessages').textContent,/Farbank/);
  visit(rw,2);const story=rw.document.querySelector(`[data-story-kind="inquiry"][data-story-id="${resumed.id}"]`);assert.ok(story);story.querySelector('.paultendoChronicleStoryLink').click();assert.match(rw.document.getElementById('actionSubList').textContent,new RegExp(resumed.name));assert.equal(rw.planet._paultendoLife.decisions.length,0);assert.equal(w.userSettings,settings);assert.equal(w.currentEvents,events);check(g,warnings);assert.deepEqual(restored.errors,[]);
+});
+
+test('a distant town reprioritises native research for an actual shortage without crediting the player',async t=>{
+ const {g,w,away,target,warnings}=await setup(t);quietDaily(w);away.jobs={};away.resources={crop:1};away.research={education:8,farm:1};away._paultendoGuidanceTrust=35;
+ const settings=plain(w.userSettings),prompts=w.planet.stats.prompt,activeResearch=plain(w.regToArray('town')[0].research);
+ proposal(w,target,'increaseResearch','farm');
+ assert.equal(away.research.farm,10);assert.equal(away.research.education,4);const choice=target.state.planet._paultendoLife.localChoices.at(-1);assert.ok(choice);assert.equal(choice.choice,'yes');assert.equal(choice.town,away.id);assert.equal(choice.cause.field,'farm');assert.ok(choice.cause.need.food<choice.cause.need.wanted);assert.match(choice.reason,/Food is running short/);
+ assert.equal(choice.before.research.farm,1);assert.equal(choice.after.research.farm,10);assert.equal(away._paultendoGuidanceTrust,35);assert.equal(target.state.planet._paultendoLife.decisions.length,0);assert.equal(w.planet.stats.prompt,prompts);assert.deepEqual(plain(w.userSettings),settings);assert.deepEqual(plain(w.regToArray('town')[0].research),activeResearch);
+ const html=decodeURIComponent(target.state.planet._paultendoLogHTML.slice(4));assert.match(html,/data-story-kind="localChoice"/);assert.doesNotMatch(html,/How should|logAct|Your choice|Autoplay/);check(g,warnings);
+ const restored=await makeGame({save:plain(w.generateSave())});t.after(restored.close);const rw=restored.window;visit(rw,2);assert.equal(rw.planet._paultendoLife.localChoices.length,1);const link=rw.document.querySelector('[data-story-kind="localChoice"] .paultendoChronicleStoryLink');assert.ok(link);assert.equal(link.textContent,'Their choice');link.click();assert.match(rw.document.getElementById('actionSubList').textContent,/Food is running short/);assert.match(rw.document.getElementById('actionSubList').textContent,/Farming took the lead over education/);assert.doesNotMatch(rw.document.getElementById('actionSubList').textContent,/Your choice|Autoplay/);assert.deepEqual(restored.errors,[]);
+});
+
+test('competing necessities can reduce a research field through the real native refusal effect',async t=>{
+ const {g,w,away,target,warnings}=await setup(t);quietDaily(w);away.jobs={};away.resources={crop:1};away.research={education:8,farm:3};
+ proposal(w,target,'increaseResearch','education');assert.equal(away.research.education,2);assert.equal(away.research.farm,7);const choice=target.state.planet._paultendoLife.localChoices.at(-1);assert.equal(choice.choice,'no');assert.equal(choice.cause.field,'farm');assert.equal(choice.value,'education');assert.match(choice.text,/less.*attention/);check(g,warnings);
+});
+
+test('local research waits when there is no purpose or the field lacks its native discovery gate',async t=>{
+ const {g,w,away,target,warnings}=await setup(t);quietDaily(w);away.jobs={};away.resources={crop:1000};away.research={};proposal(w,target,'increaseResearch','education');assert.equal(target.state.planet._paultendoLife.localChoices.length,0);
+ away.resources={crop:1};target.state.planet.unlocks.farm=0;proposal(w,target,'increaseResearch','farm');assert.equal(target.state.planet._paultendoLife.localChoices.length,0);assert.deepEqual(plain(away.research),{});check(g,warnings);
+});
+
+test('remembered help makes a distant town welcome its neighbour and preserves the source through reload',async t=>{
+ const {g,w,away,target,warnings}=await setup(t);quietDaily(w);visit(w,2);const other=neighbour(w,away);away._paultendoExchangeMemory={[other.id]:{received:{crop:20},given:{},traded:{},lastHelpReceived:{day:w.planet.day-3,kind:'aid',type:'crop',count:20,source:'exchange:old'}}};away.relations[other.id]=0;visit(w,1);
+ const original=w.readyEvent;w.readyEvent=function(id,s,t){return original(id,id==='townAskDiplomacy'?away:s,id==='townAskDiplomacy'?other:t);};try{backgroundEvent(w,target,'townAskDiplomacy');}finally{w.readyEvent=original;}
+ assert.equal(away.relations[other.id],2);assert.equal(other.relations[away.id],2);const choice=target.state.planet._paultendoLife.localChoices.at(-1);assert.equal(choice.choice,'yes');assert.equal(choice.cause.kind,'help');assert.equal(choice.cause.source,'exchange:old');assert.equal(choice.partner,other.id);assert.match(choice.reason,/remember supplies/);assert.equal(w.planet._paultendoLife.localChoices.length,0);check(g,warnings);
+ const restored=await makeGame({save:plain(w.generateSave())});t.after(restored.close);assert.deepEqual(plain(restored.window._paultendoUniverse.worlds[2].state.planet._paultendoLife.localChoices[0]),plain(choice));assert.deepEqual(restored.errors,[]);
+});
+
+test('a closed town can reject useful neighbours and worsen real relations without a player intervention',async t=>{
+ const {g,w,away,target,warnings}=await setup(t);quietDaily(w);visit(w,2);const other=neighbour(w,away);away.jobs={};away.resources={crop:1};away.values={justice:0,wealth:0,openness:-5,order:0,change:0};away.relations[other.id]=0;visit(w,1);
+ const original=w.readyEvent;w.readyEvent=function(id,s,t){return original(id,id==='townAskDiplomacy'?away:s,id==='townAskDiplomacy'?other:t);};try{backgroundEvent(w,target,'townAskDiplomacy');}finally{w.readyEvent=original;}
+ assert.equal(away.relations[other.id],-2);assert.equal(other.relations[away.id],-2);const choice=target.state.planet._paultendoLife.localChoices.at(-1);assert.equal(choice.choice,'no');assert.equal(choice.cause.kind,'belief');assert.match(choice.reason,/closed to outsiders/);assert.equal(target.state.planet._paultendoLife.decisions.length,0);assert.equal(w.regToArray('process').filter(p=>p.type==='war').length,0);check(g,warnings);
+});
+
+test('an insular faith distinguishes outsiders from members of the same faith',async t=>{
+ for(const shared of [false,true]){
+  const {g,w,away,target,warnings}=await setup(t);quietDaily(w);visit(w,2);const other=neighbour(w,away),args={choice:'yes'};w.gameEvents.religionEmerges.func(away,null,args);args.religion.tenets=['insular'];away.influences.faith=9;away.values={openness:0};away.jobs={};away.resources={crop:1};away.relations[other.id]=0;if(shared)other.religion=away.religion;visit(w,1);
+  const original=w.readyEvent;w.readyEvent=function(id,s,t){return original(id,id==='townAskDiplomacy'?away:s,id==='townAskDiplomacy'?other:t);};try{backgroundEvent(w,target,'townAskDiplomacy');}finally{w.readyEvent=original;}
+  const choice=target.state.planet._paultendoLife.localChoices.at(-1);assert.ok(choice);assert.equal(choice.choice,shared?'yes':'no');assert.equal(away.relations[other.id],shared?2:-2);assert.equal(choice.cause.kind,shared?'supplies':'belief');if(!shared)assert.equal(choice.cause.religion,away.religion);check(g,warnings);
+ }
 });
