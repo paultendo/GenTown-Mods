@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.62**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.63**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.62/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.63/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.62)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.63)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -97,6 +97,8 @@ The regression tests cover startup, late installation and redraw, overlay creati
 Local samples can now favour the technical discoveries needed to work them. Actual purposes, a curious available worker or existing research interests determine whether a sample is worth investigating. Clay needed for overflowing grain stores can favour basic fire and shaping knowledge. Sand with an interested worker can favour hotter furnaces. The same recipe requirements guide these priorities, and the actual sample remains in store. Research never awards stock or local manufacturing mastery. Hunger, journeys, building work, illness, war and revolt also influence which eligible native branch gets proposed, alongside the town's research priorities. Refusals, prerequisites and native choice effects remain intact. Material research cannot promote Firebombing. Extended furnace weights stay within the existing bounded weighting model. Full progression and human pacing balance remain unverified.
 
 Today’s news appears above the day controls on desktop and in a compact disclosure on phones. It also starts folded on shorter desktop windows, leaving room for town totals. Expanded previews keep two lines with links to the full stories. Town flags retain their colours after reload, events link back to their full stories, and quiet days leave the space clear. Completed or failed workshops and distinct field outcomes make useful work and its consequences visible.
+
+Food now affects actual fighting strength. Soldiers and civilian defenders use the same town meals as everyone else, with no second food bill for battles. Short meals restrain raids, attacks and resistance. Recovery follows meals actually eaten over the latest three game days, rather than the arrival of a gift. Hungry people retain some fighting strength. The three-day window and minimum strength are initial balance values. Towns can ask friendly neighbours for food during a war, and shared stores or payment still determine the answer. Supplies can pass between coalition allies, detour around enemy-held ground, or wait with their cargo when no safe route remains. Opposing sides, embargoes and travel laws still block exchange. The Chronicle and settlement link short rations and recovery to the actual supplies and meals, preserving the history through reload. Unknown meals do not invent recovery reports. Human pacing and the wider conflict balance remain unverified.
 
 Persistent needs now give eligible native research more attention within the usual daily event, with a bounded effect and no extra popup stream. Proposals favour the settlement facing the problem, retain their reason through choice and reload, and still respect prerequisites and refusals. Repeated successful workshop practice can give available makers a reason to teach their skills, opening education through actual work. Resolving the need removes its extra attention.
 

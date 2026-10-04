@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.62/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.63/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.62";
+    const MOD_VERSION = "1.6.63";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -4673,7 +4673,7 @@
             const level=livingDiscoveryBranches()[discovery?.key]?.levels.find(item=>item.level===discovery.level);
             return level&&livingTownKnown(town)?{label:'Explore the discovery',open:()=>openUnlockDetail(discovery.key,level,town.id)}:null;
         }
-        const lists = {localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
+        const lists = {rations:state.warRations, localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
         const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
         if (!record) return null;
         if (ref.kind === 'food' || ref.kind === 'exchange') {
@@ -4688,6 +4688,7 @@
             ? (record.towns || []).map(id=>regGet('town',id)).find(livingTownKnown)
             : regGet('town',record.town);
         if (!livingTownKnown(town)) return null;
+        if (ref.kind === 'rations') return {label:'Follow the supplies',open:()=>openWarRationStory(record)};
         if (ref.kind === 'localChoice') return {label:'Their choice',open:()=>openLocalTownChoice(record)};
         if (ref.kind === 'inquiry') return {label:'Follow the work',open:()=>openLivingInquiry(record)};
         if (ref.kind === 'craft') return {label:'Follow their work',open:()=>openLivingArtifactWork(record)};
@@ -4700,13 +4701,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
+        if (!['rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
+        if (!ref || !['rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -5265,6 +5266,7 @@
         state.materialWork ||= [];
         state.inquiries ||= [];
         state.localChoices ||= [];
+        state.warRations ||= [];
         state.teachings ||= [];
         state.teachingSeen ||= {};
         state.nextId ||= 1;
@@ -6837,13 +6839,17 @@
         if(COMMODITIES[type]?.edible)rememberFoodExchange(from,to,kind,count,id);
     }
     function commodityPath(from,to) {
-        if(!from||!to||from.end||to.end||from.pop<=0||to.pop<=0||from.id===to.id||hasIssue(from,'war')||hasIssue(to,'war')||areAtWar(from,to)||hasEmbargo(from,to)||hasEmbargo(to,from)) return null;
+        if(!from||!to||from.end||to.end||from.pop<=0||to.pop<=0||from.id===to.id||areAtWar(from,to)||hasEmbargo(from,to)||hasEmbargo(to,from)) return null;
         if(happen('Legality',null,from,{law:'travel'})===false||happen('Legality',null,to,{law:'travel'})===false) return null;
         const connected=!!getTradeRouteBetween(from,to)?.active;
         // First contact can be local. Longer journeys need the actual established route.
         if(!connected&&(getTownDistance(from,to)>6||!(planet.unlocks.trade>=10))) return null;
-        const path=getCachedPath(from,to,40);
-        if(path?.some(c=>c.b==='water')&&!(planet.unlocks.travel>=60)) return null;
+        const enemies=new Set(regToArray('town').filter(town=>areAtWar(from,town)||areAtWar(to,town)).map(town=>town.id));
+        const canEnter=chunk=>!enemies.has(chunk.v?.s)&&(chunk.b!=='water'||planet.unlocks.travel>=60);
+        let path=getCachedPath(from,to,40);
+        // The ordinary road cache knows terrain, not who now holds a border.
+        // Try a real detour rather than closing every route during a war.
+        if(path?.some(chunk=>!canEnter(chunk)))path=findPath(getAnchorChunk(from),getAnchorChunk(to),{canEnter});
         return path?.length?path:null;
     }
     function commodityTravelDays(path) {return Math.max(1,Math.ceil((computePathTravelCost(path) || path.length)/EXCHANGE_PACE.chunksPerDay));}
@@ -7134,7 +7140,7 @@
         return candidates[0];
     }
     function observeLivingFoodNeed(town,hunger) {
-        if(hunger.days<2||hasIssue(town,'war')||planet.day-(hunger.lastFoodRequest || -999)<EXCHANGE_PACE.retryDays) return;
+        if(hunger.days<2||planet.day-(hunger.lastFoodRequest || -999)<EXCHANGE_PACE.retryDays) return;
         if(commodityExchangeState().exchanges.some(r=>r.buyer===town.id&&!r.resolved)) return;
         const supplier=findCommoditySupplier(town,['crop','livestock']);
         if(supplier&&newCommodityJourney(town,supplier.town,supplier.path,'need',supplier.type))hunger.lastFoodRequest=planet.day;
@@ -8313,6 +8319,8 @@
                 ...localChoices.slice(-12).reverse().map(record=>({text:`Day ${record.day} · ${record.title}`,func:()=>openLocalTownChoice(record)}))
             ],`${town.name} · Choices made here`);markLivingStoryControls();openExecutive();});section.appendChild(choices);
         }
+        const rations=livingWorldState().warRations.findLast(record=>record.town===town.id);
+        if(rations){const supplies=document.createElement('button');supplies.textContent='Meals through the fighting';supplies.addEventListener('click',()=>{closePopups();openWarRationStory(rations);});section.appendChild(supplies);}
         appendLivingTownSpecies(town, section);
         const places = livingPlaceItems(town);
         if (places.length) {
@@ -21952,6 +21960,67 @@
         return getMilitaryLevel() < EARLY_WAR_CONFIG.eraThreshold;
     }
 
+    // Rations come from the native population meal, which already includes
+    // soldiers. Battles never charge a second meal. These are balance values,
+    // with a short recovery window rather than a reward on delivery or a date.
+    const WAR_RATIONS = {days:3,minStrength:0.35};
+    function warRationState(town) {
+        const meals=(town?._paultendoFoodFlow || []).filter(meal=>meal.day<=planet.day&&
+            meal.day>planet.day-WAR_RATIONS.days&&meal.wanted>0&&Number.isFinite(meal.consumed));
+        const wanted=meals.reduce((sum,meal)=>sum+meal.wanted,0);
+        const eaten=meals.reduce((sum,meal)=>sum+Math.min(meal.wanted,Math.max(0,meal.consumed)),0);
+        const fraction=wanted?Math.min(1,eaten/wanted):1;
+        return {observed:!!wanted,complete:new Set(meals.map(meal=>meal.day)).size===WAR_RATIONS.days,
+            fraction,strength:WAR_RATIONS.minStrength+(1-WAR_RATIONS.minStrength)*fraction,
+            meals:meals.map(meal=>({day:meal.day,wanted:meal.wanted,consumed:meal.consumed}))};
+    }
+    function observeWarRations(process) {
+        if (!process || process.done || process.end) return;
+        const state=livingWorldState();
+        for(const id of process.towns || []) {
+            const town=regGet('town',id);if(!town||town.end||town.pop<=0)continue;
+            const rations=warRationState(town);if(!rations.observed)continue;
+            const short=rations.fraction<1-1e-9;
+            let record=state.warRations.find(record=>record.war===process.id&&record.town===town.id);
+            if(!record&&!short)continue;
+            if(!record){record={id:`rations:${process.id}:${town.id}`,war:process.id,town:town.id,day:planet.day,steps:[],lastDay:null};state.warRations.push(record);}
+            if(record.lastDay===planet.day)continue;
+            record.lastDay=planet.day;record.meals=rations.meals;record.fraction=rations.fraction;
+            // One new full meal cannot tell us that missing days were fed.
+            if(!short&&record.short&&!rations.complete)continue;
+            if(record.short===short)continue;
+            record.short=short;
+            const text=short?`${townRef(town.id)} fights on short rations. People have less strength for the fighting.`
+                :`Steady full meals help ${townRef(town.id)} recover strength for the fighting.`;
+            record.steps.push({day:planet.day,short,meals:structuredClone(rations.meals),text});
+            if(record.steps.length>24)record.steps.splice(1,record.steps.length-24);
+            if(livingTownKnown(town))modLog('memory',text,short?'warning':null,{town,observedStory:true,highlight:true,story:{kind:'rations',id:record.id}});
+        }
+        if(state.warRations.length>96) {
+            const active=new Set(regFilter('process',p=>p.type==='war'&&!p.done&&!p.end).map(p=>p.id));
+            const old=state.warRations.filter(record=>!active.has(record.war));
+            const removed=new Set(old.slice(0,state.warRations.length-96).map(record=>record.id));
+            state.warRations=state.warRations.filter(record=>!removed.has(record.id));
+        }
+    }
+    function openWarRationStory(record) {
+        const town=regGet('town',record.town);if(!livingTownKnown(town))return;
+        const items=[{text:'← Back to settlement',func:()=>{closePopups();closeExecutive();openRegBrowser(town,'town');}},
+            {heading:true,text:'Meals through the fighting'},{text:'The people defending and fighting for this town eat from the same stores as everyone else. Short meals weaken them. Steady full meals help them recover.'}];
+        for(const step of record.steps)items.push({text:`Day ${step.day} · ${step.text}`});
+        const process=regGet('process',record.war),active=process&&!process.done&&!process.end;
+        const rations=warRationState(town);
+        const today=!active?'The fighting has ended.':!rations.observed?'There has been no fresh word about their meals.'
+            :rations.fraction<1-1e-9?'The town is still weakened by recent short meals.'
+            :rations.complete?'Recent meals have met the town’s needs.':'Their latest meals were full.';
+        items.push({heading:true,text:'Today'},{text:today});
+        const food=commodityExchangeState().exchanges.filter(exchange=>exchange.uses?.some(use=>
+            use.kind==='meals'&&use.town===town.id&&(use.lastDay || use.day)>=record.day));
+        if(food.length)items.push({heading:true,text:'Food that reached them'});
+        for(const exchange of food.slice(-4))items.push({text:'Follow the supplies',func:()=>openCommodityJourney(exchange)});
+        populateExecutive(items,`${escapeLivingText(town.name)} · Meals through the fighting`);markLivingStoryControls();openExecutive();
+    }
+
     function getEarlyWarStrength(town) {
         if (!town) return 1;
         const pop = town.pop || 0;
@@ -21961,7 +22030,7 @@
         if (hasTradition(town, "martial")) strength *= 1.15;
         if (unrest > 60) strength *= 0.9;
         if (town.famine && !town.famine.ended) strength *= 0.8;
-        return strength;
+        return strength * warRationState(town).strength;
     }
 
     function getEarlyWarReadiness(town, other) {
@@ -22158,7 +22227,7 @@
             else {
                 const soldiers = town.jobs?.soldier || 0;
                 const military = town.influences?.military || 0;
-                strength += soldiers * (1 + military * 0.05) + (town.pop || 0) * 0.05;
+                strength += (soldiers * (1 + military * 0.05) + (town.pop || 0) * 0.05) * warRationState(town).strength;
             }
         }
         return strength;
@@ -23100,7 +23169,7 @@
     function attemptEarlyRaid(attacker, defender, defence = 0) {
         if (!attacker || !defender || attacker.end || defender.end) return false;
         if (!attacker.center || !defender.center) return false;
-        if (Math.random() > EARLY_WAR_CONFIG.raidChance / (1 + defence / Math.max(1, getEarlyWarStrength(defender)))) return false;
+        if (Math.random() > EARLY_WAR_CONFIG.raidChance * warRationState(attacker).strength / (1 + defence / Math.max(1, getEarlyWarStrength(defender)))) return false;
 
         const distance = getTownDistance(attacker, defender);
         if (distance !== null && distance > EARLY_WAR_CONFIG.raidDistance) return false;
@@ -23187,9 +23256,9 @@
                 happen("Influence", null, target, { happy: -0.05, temp: true });
 
                 const scarcity = getTownScarcityPressure(town) + getTownScarcityPressure(target);
-                const skirmishChance = 0.12 + Math.min(0.12, scarcity * 0.03);
+                const skirmishChance = (0.12 + Math.min(0.12, scarcity * 0.03)) * warRationState(town).strength;
                 if (Math.random() < skirmishChance) {
-                    const defence = farmToolDefence(target,true);
+                    const defence = farmToolDefence(target,true) * warRationState(target).strength;
                     const ordinaryLoss = Math.max(1, Math.floor((target.pop || 1) * EARLY_WAR_CONFIG.casualtyRate));
                     const expectedLoss = ordinaryLoss / (1 + defence / Math.max(1,getEarlyWarStrength(target)));
                     const loss = defence ? Math.floor(expectedLoss) + (Math.random() < expectedLoss % 1 ? 1 : 0) : ordinaryLoss;
@@ -23230,13 +23299,15 @@
         if (!attacker.center) { try { happen("UpdateCenter", null, attacker); } catch {} }
         if (!defender.center) { try { happen("UpdateCenter", null, defender); } catch {} }
 
-        const attackerSoldiers = attacker.jobs?.soldier || 0;
-        const defenderSoldiers = defender.jobs?.soldier || 0;
-        const defence = farmToolDefence(defender);
+        const attackerRations = warRationState(attacker).strength, defenderRations = warRationState(defender).strength;
+        const attackerSoldiers = (attacker.jobs?.soldier || 0) * attackerRations;
+        const defenderSoldiers = (defender.jobs?.soldier || 0) * defenderRations;
+        const defence = farmToolDefence(defender) * defenderRations;
         const power = attackerSoldiers / Math.max(1, attackerSoldiers + defenderSoldiers + defence);
 
         let chunkCount = (Math.floor((planet.unlocks?.military || 0) / 10) + 2) * power;
         chunkCount *= (0.6 + (participation || 0.6) * 0.6);
+        chunkCount *= attackerRations;
         if (chunkCount < 1 && Math.random() < chunkCount) chunkCount = 1;
         chunkCount = Math.floor(chunkCount);
         chunkCount = Math.min(chunkCount, defender.size || 0);
@@ -23377,6 +23448,7 @@
         metaEvents.processWar.func = function(subject, target, args) {
             const hasSides = ensureWarSides(subject);
             if (hasSides) {
+                observeWarRations(subject);
                 if (isEarlyWarProcess(subject)) {
                     processEarlyWar(subject);
                     return;
@@ -36220,6 +36292,7 @@
 
     function findPath(startChunk, endChunk, opts = {}) {
         if (!startChunk || !endChunk) return null;
+        if (opts.canEnter && (!opts.canEnter(startChunk) || !opts.canEnter(endChunk))) return null;
         if (startChunk.x === endChunk.x && startChunk.y === endChunk.y) return [startChunk];
         const roughDist = Math.abs(startChunk.x - endChunk.x) + Math.abs(startChunk.y - endChunk.y);
         const adaptiveMax = Math.min(200000, Math.max(20000, roughDist * 200));
@@ -36257,6 +36330,7 @@
             const neighbors = getNeighborChunks(current);
             for (let i = 0; i < neighbors.length; i++) {
                 const neighbor = neighbors[i];
+                if (opts.canEnter && !opts.canEnter(neighbor)) continue;
                 const moveCost = getMovementCost(neighbor);
                 if (moveCost === Infinity) continue;
                 const neighborKey = getChunkKey(neighbor.x, neighbor.y);
