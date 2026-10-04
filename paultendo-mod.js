@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.75/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.76/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.75";
+    const MOD_VERSION = "1.6.76";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -1862,23 +1862,23 @@
         style.id = "paultendoChronicleStyles";
         style.textContent = `
             #paultendoChronicleHeader {
-                display: flex;
-                flex-wrap: wrap;
-                justify-content: flex-end;
-                align-items: center;
-                gap: 4px;
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: start;
+                gap: 0.5em;
                 margin: 0 0 0.25em;
             }
+            #paultendoChronicleHeader > .paultendoChronicleToggle { grid-column: 2; justify-self: end; }
             #paultendoChronicleHighlights {
-                margin: 0.75em 0.4em 0.4em;
+                margin: 0;
+                min-width: 0;
+                grid-column: 1;
+                grid-row: 1;
                 text-align: left;
                 font-size: 0.85em;
                 color: #c9c9bf;
             }
             #paultendoChronicleHighlights[hidden] { display: none; }
-            #statsPanel > #paultendoChronicleHighlights { flex: 0 0 auto; max-height: 8em; overflow-y: auto; }
-            #statsPanel:has(> #paultendoChronicleHighlights:not([hidden])) #statsMain { flex: 1 1 0; min-height: 0; }
-            #statsPanel:has(> #paultendoChronicleHighlights) #underStats { flex: 0 0 auto; }
 
             #paultendoChronicleHighlights > summary {
                 cursor: pointer;
@@ -1897,7 +1897,9 @@
                 border: none;
                 text-decoration: underline;
                 cursor: pointer;
-                margin-left: 0.4em;
+                margin: 0;
+                padding: 0 0.25em;
+                box-sizing: border-box;
                 min-height: 36px;
             }
             #paultendoChronicleHighlights :is(summary,button,[role="link"]):focus-visible {
@@ -1967,17 +1969,10 @@
             highlights.hidden = true;
             highlights.innerHTML = '<summary id="paultendoChronicleToday">Today</summary><div id="paultendoChronicleHeadlines"></div>';
         }
-        const compact = window.innerWidth <= 600;
-        const host = compact ? header : document.getElementById('statsPanel');
-        if (host && highlights.parentNode !== host) {
-            if (compact) host.appendChild(highlights);
-            else host.insertBefore(highlights, document.getElementById('underStats'));
+        if (highlights.parentNode !== header) {
+            header.insertBefore(highlights, document.getElementById('paultendoChronicleFollow'));
         }
-        const compactNews = compact || window.innerHeight < 850;
-        if (highlights._paultendoCompactNews !== compactNews) {
-            highlights.open = !compactNews;
-            highlights._paultendoCompactNews = compactNews;
-        }
+        // News starts folded. Resizing must not undo the player's choice to read it.
         if (!header._paultendoResizeBound) {
             window.addEventListener('resize', ensureChronicleHeader);
             header._paultendoResizeBound = true;
@@ -8936,6 +8931,19 @@
 
     function initLivingWorld() {
         installNativeTechNeeds();
+        const lawEvent=gameEvents.townLaw;
+        if(lawEvent?.value&&!lawEvent.value._paultendoLocal) {
+            const base=lawEvent.value;
+            lawEvent.value=function(subject,town,args) {
+                if(PAULTENDO_STATE.backgroundWorld===undefined)return base.apply(this,arguments);
+                const candidates=Object.keys(allLaws).map(law=>localLawPreference(town,law)).filter(p=>p&&p.allowed!==happen('Legality',null,town,{law:p.law}));
+                if(!candidates.length)return false;
+                const policy=weightedChoice(candidates,p=>p.weight);
+                args.result=policy.allowed;args.influence=policy.law.split('.')[0];args.name=livingLawName(policy.law);
+                return policy.law;
+            };
+            lawEvent.value._paultendoLocal=true;
+        }
         const projectStart=gameEvents.townProjectStart;
         if (projectStart?.value && !projectStart.value._paultendoLocal) {
             const base=projectStart.value;
@@ -9023,6 +9031,10 @@
                     return result;
                 }
                 if(subject.done || subject.end) return;
+                if(happen('Legality',null,town,{law:'travel.construction'})===false) {
+                    constructionStep(subject,'law','Building work is forbidden here. The workers leave the site alone.');
+                    return;
+                }
                 const meal=(town._paultendoFoodFlow || []).findLast(e=>e.day<=planet.day&&e.day>=planet.day-1&&e.wanted>0&&Number.isFinite(e.consumed));
                 if(meal?meal.consumed<meal.wanted:mealStock(town)<nativeMealNeed(town)) {
                     constructionStep(subject,'hungry','Building work stops while people go hungry.');return;
@@ -15061,7 +15073,67 @@
 
     // Only these synchronous native proposals have a local decision policy.
     // Naming, player interventions and choice dialogs still need the player.
-    const LOCAL_CHOICE_EVENTS = new Set(['increaseResearch','townAskDiplomacy','townProjectStart']);
+    const LOCAL_CHOICE_EVENTS = new Set(['increaseResearch','townAskDiplomacy','townProjectStart','townLaw']);
+
+    // Competing wants can support a law that harms another part of town life.
+    // The margin and recovery interval are initial pacing calibration. These
+    // plans grant no law, supplies, workers, history or random draws by reading.
+    const LOCAL_LAW_PACE={margin:1,recoveryDays:30};
+    function localLawPreference(town,law) {
+        if(!town||town.end||town.pop<=0||!Object.hasOwn(allLaws,law)||!(planet.unlocks.government>=10))return null;
+        if(town._paultendoLocalLawDay!=null&&planet.day-town._paultendoLocalLawDay<LOCAL_LAW_PACE.recoveryDays)return null;
+        const field=law.split('.')[0],gate=field==='farm'?'farm':field==='travel'?'travel':null;
+        if(gate&&!(townKnowledgeLevel(town,gate)>=10))return null;
+        const state=livingWorldState(),values=town.values || {},influences=town.influences || {},pressures=[];
+        const add=(allowed,weight,text,evidence={})=>{if(weight>0)pressures.push({allowed,weight,text,...evidence});};
+        const conviction=(axis,scale,positive,negative)=>{
+            const value=values[axis] || 0;
+            add(value*scale>0,Math.abs(value*scale)/5,value*scale>0?positive:negative,{kind:'value',axis,value});
+        };
+        const short=Math.max(0,foodBuffer(town)-mealStock(town))/Math.max(1,foodBuffer(town));
+        if(law==='farm') {
+            add(true,short*3,'The food stores are running short. They want to let people grow food.',{kind:'food',food:mealStock(town),wanted:foodBuffer(town)});
+            add(true,Math.min(2,(town.jobs?.farmer || 0)/Math.max(1,town.pop)*2),'The growers want to keep working their fields.',{kind:'work',role:'farmer',workers:town.jobs?.farmer || 0});
+        } else if(law==='travel') {
+            conviction('openness',1,'They want people and goods to move freely.','They want to keep outsiders at a distance.');
+            const exchange=state.exchanges.findLast(r=>[r.buyer,r.seller].includes(town.id)&&!r.resolved&&!r.cancelled);
+            if(exchange)add(true,2,'A shipment the town needs cannot move while travel is forbidden.',{kind:'exchange',exchange:exchange.id});
+            const survey=state.sampling.findLast(s=>s.town===town.id&&['outbound','collecting','returning'].includes(s.status));
+            if(survey)add(true,2,'Their workers need to bring materials back from the field.',{kind:'survey',survey:survey.id});
+            const creed=getTownReligion(town);
+            if((influences.faith || 0)>4&&creed?.tenets?.includes('insular'))add(false,(influences.faith-4)/3,'Their faith teaches them to keep outsiders at a distance.',{kind:'belief',religion:creed.id,faith:influences.faith});
+            if(hasIssue(town,'war')&&(values.order || 0)>0)add(false,values.order/5,'Fighting has made their rulers want to restrict movement.',{kind:'war',war:town.issues.war,order:values.order});
+        } else if(law==='travel.construction') {
+            const project=regToArray('process').findLast(p=>p.type==='project'&&p.town===town.id&&!p.done&&!p.end);
+            if(project)add(true,2,'An unfinished building needs its workers back.',{kind:'building',project:project.id});
+        } else if(law==='travel.expansion') {
+            const capacity=$c.maxPopulation(town),crowding=Math.max(0,town.pop-capacity*.8)/Math.max(1,capacity*.2);
+            add(true,Math.min(3,crowding*2),'People want more room for the town to grow.',{kind:'crowding',population:town.pop,capacity});
+            if(hasIssue(town,'war'))add(false,2,'They want to hold the ground they have while the fighting continues.',{kind:'war',war:town.issues.war});
+        } else if(law==='happy.speech') {
+            conviction('justice',1,'They believe people should be heard.','Their rulers put little value on people having a say.');
+            conviction('openness',1,'They welcome voices that challenge them.','Their rulers distrust unwelcome voices.');
+            conviction('order',-1,'They want fewer restrictions on what people can say.','Their rulers want silence and obedience.');
+            if(hasIssue(town,'revolution')&&(values.order || 0)>0)add(false,values.order/5,'Their rulers are trying to silence dissent during the revolt.',{kind:'revolution',revolution:town.issues.revolution,order:values.order});
+        } else if(field==='crime') {
+            add(false,Math.max(0,influences.crime || 0)/4,'Crime has made them want to enforce the law.',{kind:'crime',crime:influences.crime || 0});
+            add(false,Math.max(0,values.order || 0)/5,'They believe rules should be enforced.',{kind:'value',axis:'order',value:values.order || 0});
+            add(false,Math.max(0,values.justice || 0)/5,'They want to protect people from wrongdoing.',{kind:'value',axis:'justice',value:values.justice || 0});
+            if(law==='crime.gambling') {
+                add(true,Math.max(0,values.openness || 0)/5,'They would rather let people decide how to spend their money.',{kind:'value',axis:'openness',value:values.openness || 0});
+                add(true,Math.max(0,-(values.order || 0))/5,'They dislike restrictions on private pleasures.',{kind:'value',axis:'order',value:values.order || 0});
+            }
+        } else if(law==='faith.religion') {
+            const creed=getTownReligion(town);
+            if(creed)add(true,Math.max(0,influences.faith || 0)/4,'People want to practise the faith they share.',{kind:'belief',religion:creed.id,faith:influences.faith || 0});
+            conviction('justice',1,'They believe people should be free to practise their faith.','Their rulers want to control religious practice.');
+            conviction('openness',1,'They welcome different beliefs.','Their rulers distrust beliefs beyond their control.');
+        }
+        const score=pressures.reduce((n,p)=>n+(p.allowed?1:-1)*p.weight,0);
+        if(Math.abs(score)<LOCAL_LAW_PACE.margin)return null;
+        const allowed=score>0,winner=pressures.filter(p=>p.allowed===allowed).sort((a,b)=>b.weight-a.weight)[0];
+        return {law,allowed,weight:Math.abs(score),reason:winner.text,cause:{kind:'law',law,allowed,score,pressures,values:{...values}}};
+    }
 
     // Civic wants compete for native buildings through their actual effects.
     // These weights are pacing calibration. Knowledge, laws, supplies and the
@@ -15131,6 +15203,11 @@
     function localTownChoice(id, caller) {
         const town = id === 'townAskDiplomacy' ? caller.subject : caller.target;
         if (!town || town.end || town.pop <= 0) return null;
+        if(id==='townLaw') {
+            const policy=localLawPreference(town,caller.args.value);
+            if(!policy||typeof caller.args.result!=='boolean')return null;
+            return {town,choice:caller.args.result===policy.allowed?'yes':'no',reason:policy.reason,cause:policy.cause};
+        }
         if (id === 'townProjectStart') {
             const project=localProjectCandidates(town).find(p=>p.type===caller.args.value);
             const site=project&&findTownMarkerSpot(town);
@@ -15191,18 +15268,21 @@
         const state = livingWorldState(), town = policy.town;
         const building=id==='townProjectStart';
         if (building && (result?._reg!=='process'||result.type!=='project'||result.town!==town.id)) return;
-        const title = building ? `A new ${caller.args.value.replace(/_/g,' ')}` : id === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : 'A neighbour at the table';
+        const law=id==='townLaw';
+        const title = law?`${titleCase(livingLawName(caller.args.value))} law`:building ? `A new ${caller.args.value.replace(/_/g,' ')}` : id === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : 'A neighbour at the table';
         const text = id === 'increaseResearch'
             ? `${townRef(town.id)} gives ${researchInfluences[caller.args.value] || caller.args.value} research ${policy.choice==='yes'?'more':'less'} attention.`
+            : law?`${townRef(town.id)} ${policy.choice==='yes'?'makes':'keeps'} ${livingLawName(caller.args.value)} ${happen('Legality',null,town,{law:caller.args.value})?'legal':'illegal'}.`
             : building ? `${townRef(town.id)} begins building a ${caller.args.value.replace(/_/g,' ')}.`
             : `${townRef(town.id)} ${policy.choice==='yes'?'welcomes':'turns away'} ${townRef(policy.partner.id)}.`;
         const record = {id:`local:${state.nextId++}`,day:planet.day,town:town.id,partner:policy.partner?.id || null,event:id,
             value:caller.args.value,choice:policy.choice,title,text,reason:policy.reason,cause:policy.cause,
             before:{research:before.research,relations:before.relations},after:{research:{...town.research},relations:{...town.relations}}};
+        if(law){record.before.legal=before.legal;record.before.influences=before.influences;record.after.legal=livingTownSnapshot(town).legal;record.after.influences={...town.influences};town._paultendoLocalLawDay=planet.day;}
         if (building) {record.project=result.id;result._paultendoLocalChoice=record.id;result.x=policy.site.x;result.y=policy.site.y;}
         state.localChoices.push(record);
         if (state.localChoices.length > 96) state.localChoices.shift();
-        logMessage(`${text} ${escapeLivingText(policy.reason)}`,null,{_paultendoStory:{kind:'localChoice',id:record.id}});
+        if(livingTownKnown(town))logMessage(`${text} ${escapeLivingText(policy.reason)}`,null,{_paultendoStory:{kind:'localChoice',id:record.id},_paultendoHighlight:law&&policy.choice==='yes'});
     }
 
     function openLocalTownChoice(record) {
@@ -15235,6 +15315,18 @@
                 items.push({text:`Visit the ${record.value.replace(/_/g,' ')}`,func:()=>{closePopups();closeExecutive();openRegBrowser(marker,'marker');}});
             for (const exchange of (livingWorldState().exchanges || []).filter(e=>e.uses?.some(use=>use.kind==='construction'&&use.id===record.project)&&stateExchangeForLocalChoice(e.id)).slice(-3))
                 items.push({text:`Follow the ${COMMODITIES[exchange.type]?.label || exchange.type}`,func:()=>openCommodityJourney(exchange)});
+        } else if(record.event==='townLaw') {
+            const opposing=record.cause.pressures?.filter(p=>p.allowed!==record.cause.allowed).sort((a,b)=>b.weight-a.weight)[0];
+            if(opposing)items.push({heading:true,text:'The other side'},{text:escapeLivingText(opposing.text)});
+            const delta=Object.fromEntries(Object.keys(record.after.influences || {}).map(key=>[key,(record.after.influences[key] || 0)-(record.before.influences?.[key] || 0)]));
+            const effects=livingInfluencePhrases(delta);
+            if(effects.length)items.push({heading:true,text:'What changed'},...effects.map(text=>({text})));
+            items.push({heading:true,text:'Today'},{text:escapeLivingText(livingTraceNow({kind:'law',key:record.value,value:record.after.legal[record.value]},town))});
+            const project=record.cause.pressures?.find(p=>p.project)?.project,process=project&&regGet('process',project);
+            if(process&&!process.end)items.push({text:'Follow the building work',func:()=>{closeExecutive();openRegBrowser(process,'process');}});
+            const surveyId=record.cause.pressures?.find(p=>p.survey)?.survey;
+            const work=surveyId&&livingWorldState().sampling.find(s=>s.id===surveyId);
+            if(work)items.push({text:'Follow the search for materials',func:()=>openMaterialSurvey(work)});
         } else {
             const other = regGet('town',record.partner);
             if (livingTownKnown(other)) {
@@ -15244,7 +15336,7 @@
                 if (current) items.push({heading:true,text:'Today'},{text:escapeLivingText(current)});
             }
         }
-        const source = record.cause.exchange || record.cause.source;
+        const source = record.cause.exchange || record.cause.source || record.cause.pressures?.find(p=>p.exchange)?.exchange;
         const exchange = stateExchangeForLocalChoice(source);
         if (exchange) items.push({text:'Follow the exchange',func:()=>openCommodityJourney(exchange)});
         populateExecutive(items,`${town.name} · ${record.title}`);markLivingStoryControls();openExecutive();

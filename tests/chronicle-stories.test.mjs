@@ -149,7 +149,7 @@ test('today’s news keeps native coloured flags, opens towns and original event
  const native=entry(w,id).querySelector('.entityName .font2');assert.ok(native);
  await new Promise(r=>setTimeout(r,40));
  let highlights=w.document.getElementById('paultendoChronicleHighlights');
- assert.equal(highlights.parentNode.id,'statsPanel');assert.equal(highlights.hidden,false);
+ assert.equal(highlights.parentNode.id,'paultendoChronicleHeader');assert.equal(highlights.hidden,false);
  let flag=highlights.querySelector('.font2');assert.equal(flag.style.color,native.style.color);assert.equal(flag.style.backgroundColor,native.style.backgroundColor);
  let visited;w.handleEntityClick=el=>{visited=el.dataset.id;};
  highlights.querySelector('.entityName').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));assert.equal(visited,String(town.id));
@@ -181,8 +181,8 @@ test('quiet days leave space for choices and compact news stays beside the Chron
  Object.defineProperty(w,'innerWidth',{value:390,writable:true});w.dispatchEvent(new w.Event('resize'));
  assert.equal(highlights.parentNode.id,'paultendoChronicleHeader');assert.equal(highlights.open,false);
  highlights.open=true;w.innerWidth=1200;w.innerHeight=1000;w.dispatchEvent(new w.Event('resize'));
- assert.equal(highlights.parentNode.id,'statsPanel');assert.equal(highlights.open,true);
- w.innerHeight=768;w.dispatchEvent(new w.Event('resize'));assert.equal(highlights.open,false);
+ assert.equal(highlights.parentNode.id,'paultendoChronicleHeader');assert.equal(highlights.open,true);
+ w.innerHeight=768;w.dispatchEvent(new w.Event('resize'));assert.equal(highlights.open,true);
  highlights.open=true;w.dispatchEvent(new w.Event('resize'));assert.equal(highlights.open,true,'A player can keep the compact news open');
  assert.ok(proposal.querySelector('[type="yes"]'));assert.deepEqual(game.errors,[]);
 });

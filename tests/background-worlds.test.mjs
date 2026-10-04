@@ -85,7 +85,7 @@ test('native automatic diplomacy can start a real background war without involvi
 
 test('player interventions and naming prompts are never chosen for inactive worlds',async t=>{
  const {g,w,target,warnings}=await setup(t);target.state.planet.unlocks.faith=0;const name=w.userSettings.playerName,unlocks=plain(target.state.planet.unlocks);
- for(const id of ['playerAskName','speciesDiscover','swayDiscoveryExpedition','townLaw'])backgroundEvent(w,target,id);
+ for(const id of ['playerAskName','speciesDiscover','swayDiscoveryExpedition','townFlag'])backgroundEvent(w,target,id);
  assert.equal(w.userSettings.playerName,name);assert.deepEqual(plain(target.state.planet.unlocks),unlocks);assert.deepEqual(plain(target.state.planet._paultendoRecentEvents),[]);check(g,warnings);
 });
 
