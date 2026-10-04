@@ -119,6 +119,12 @@ npm run simulate -- --days 1000 --seeds 7,42,123 --policies yes,mixed,skip
 
 The runner uses actual game turns and decisions. It writes campaign reports, a timeline and importable world saves to an isolated output directory. Reports track discoveries, population, shortages, unfinished work and events without usable controls. Continue an exported save with `--save /path/to/world.planet`. The [campaign harness guide](docs/campaign-harness.txt) explains the policies, checks and reproduction limits.
 
-## Credits
+## Credits and ownership
 
-**R74n created GenTown**, including its engine, styles, fonts and icons. Its framework made this mod possible. The local snapshot retains the original source and credit. Source URLs and SHA-256 hashes are recorded in [vendor/gentown/upstream.json](vendor/gentown/upstream.json). The [R74n Content License](vendor/gentown/LICENSE.txt) applies to those assets. `index.html` adapts the original game page for local loading. The paultendo overhaul lives in `paultendo-mod.js` and can be installed independently.
+**The paultendo overhaul is paultendo’s work.** The original mod code in [paultendo-mod.js](paultendo-mod.js), its added systems and original supporting code and documentation belong to paultendo. The mod installs independently through GenTown’s Add mod feature. Attribution to GenTown does not attribute paultendo’s original work to R74n.
+
+**R74n created the original GenTown.** Its engine, original styles, fonts, icons and other upstream content remain credited to R74n. The preserved copy is in [vendor/gentown](vendor/gentown), with source URLs and SHA-256 hashes in [upstream.json](vendor/gentown/upstream.json). The [R74n Content License](vendor/gentown/LICENSE.txt) is included for R74n’s content. It is not presented as a blanket licence for this repository or a licence grant for paultendo’s original code.
+
+**Adapted files contain work from both sources.** [index.html](index.html) adapts R74n’s original game page for local loading. Its upstream portions retain their original attribution and applicable terms. The original additions by paultendo remain paultendo’s work. Any third-party components retain their own notices and licences.
+
+This README does not grant a separate licence to reuse paultendo’s original code.
