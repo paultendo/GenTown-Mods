@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.80/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.81/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.80";
+    const MOD_VERSION = "1.6.81";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -4675,6 +4675,10 @@
             const level=livingDiscoveryBranches()[discovery?.key]?.levels.find(item=>item.level===discovery.level);
             return level&&livingTownKnown(town)?{label:'Explore the discovery',open:()=>openUnlockDetail(discovery.key,level,town.id)}:null;
         }
+        if(ref.kind==='accounts') {
+            const report=regToArray('town').flatMap(t=>t._paultendoAccounts?.reports || []).find(r=>r.id===ref.id&&r.published!=null);
+            return report&&report.published<=planet.day&&livingTownKnown(regGet('town',report.town))?{label:'Read the accounts',open:()=>openTownAccountsReport(report)}:null;
+        }
         const lists = {voyage:state.seaVoyages, credit:state.credit, sampling:state.sampling, rations:state.warRations, localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
         const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
         if (!record) return null;
@@ -4706,13 +4710,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
+        if (!['accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
+        if (!ref || !['accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -5300,8 +5304,8 @@
         unlockBanking:[6,{lumber:1}], unlockContracts:[6,{lumber:1}], unlockMarkets:[8,{lumber:2}],
         unlockGuilds:[10,{lumber:2}], unlockCorporations:[16,{lumber:2}],
         unlockTaxation:[4,{}], unlockBureaucracy:[8,{lumber:1}], unlockCourts:[10,{}], unlockConstitution:[14,{lumber:1}],
-        unlockWriting:[6,{clay:1}], unlockLibraries:[10,{lumber:2}],
-        unlockPrinting:[12,{metal:2,lumber:2}], unlockUniversities:[16,{lumber:2}],
+        unlockWriting:[6,{clay:1}], unlockLibraries:[10,{lumber:2,paper:2}],
+        unlockPrinting:[12,{metal:2,lumber:2,paper:4}], unlockUniversities:[16,{lumber:2,paper:4}],
         unlockScientificMethod:[18,{glass:1,metal:1}], unlockMedicine:[14,{glass:1,charcoal:2}],
         unlockFortifications:[10,{brick:2}], unlockStandingArmies:[12,{}],
         unlockFirearms:[14,{metal:3,charcoal:2}], unlockArtillery:[20,{steel:4,charcoal:2}],
@@ -6532,6 +6536,7 @@
         lumber:{label:'timber',role:'lumberer'},
         metal:{label:'metal',role:'miner'},
         clay:{label:'clay',role:'miner',description:'Soft earth that holds a shape when wet. Heat can turn it into something harder.'},
+        paper:{label:'paper',role:'lumberer',description:'Wood fibres worked into thin sheets. Writers can carry more words than they could on a clay tablet. Accounts, libraries and printing use up the sheets.'},
         charcoal:{label:'charcoal',role:'lumberer',description:'Timber burned with little air. A small, dark fuel for a hotter fire.'},
         brick:{label:'bricks',role:'miner',description:'Clay shaped, dried and fired. The blocks can take the place of stone in a building.'},
         sand:{label:'sand',role:'miner',description:'Pale grains gathered from dry ground. The finest samples may change in a fierce enough fire.'},
@@ -6552,6 +6557,7 @@
     // Recipe durations, sample sizes and first-trial risks are game calibration.
     // Knowledge is local. Global milestones open possibilities, never award stock.
     const MATERIAL_RECIPES = {
+        paper:{cost:{lumber:1},output:4,days:5,needs:{education:30,smith:20},sample:'lumber',established:{education:50},roles:['lumberer','scholar'],risk:0.25,method:'pulping',success:'The wet fibres dry into sheets. A mark stays on the surface without cutting into clay.',failure:'The fibres dry unevenly. The sheets tear apart when lifted.'},
         charcoal:{cost:{lumber:2},output:1,days:3,needs:{fire:10},sample:'lumber',established:{fire:40},roles:['lumberer','miner'],risk:0.15,success:'The timber holds its shape, but turns black. It burns hotter than the wood they started with.',failure:'Air gets into the covered fire. The timber burns away to ash.'},
         brick:{cost:{clay:2,charcoal:1},output:2,days:5,needs:{fire:20,smith:20},sample:'clay',established:{fire:40},roles:['miner'],risk:0.35,success:'The clay comes out hard. The blocks keep their shape even when soaked.',failure:'The firing leaves cracks through the clay. These blocks will not hold a wall.'},
         glass:{cost:{sand:3,charcoal:2,rock:1},output:2,days:7,needs:{fire:50,smith:30},sample:'sand',established:{fire:50},roles:['miner','scholar'],risk:0.3,success:'The cloudy melt cools into glass. Held up to the light, its clearer patches show the world beyond.',failure:'The heat leaves a brittle, cloudy mass. It crumbles before it can be worked.'},
@@ -7007,7 +7013,10 @@
         return work;
     }
     function materialDirectNeed(town,type) {
-        const promised=commodityWorkClaims(town).filter(c=>['voyage','inquiry','craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        let promised=commodityWorkClaims(town).filter(c=>['accounts','voyage','inquiry','craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        // Actual recordkeeping can give a town a reason to try a lighter
+        // writing surface before it has learned to make one successfully.
+        if(type==='paper'&&townAccountsWritingNeed(town))promised=Math.max(promised,1);
         if(type==='brick')return Math.ceil(materialConstructionNeed(town)/2)+Math.max(0,promised-commodityStock(town,type));
         return Math.max(0,promised-commodityStock(town,type));
     }
@@ -7126,13 +7135,13 @@
                 }
                 work.status='working';work.started=planet.day;
                 for(const input of work.inputs)rememberCommodityUse(town,input,{kind:'material',id:work.id,name:work.type});
-                materialStep(work,recipe.method==='assembly'?`${work.name} begins fitting the parts together in ${town.name}.`:`${work.name} begins the ${recipe.method==='shaping'?'shaping':work.type==='charcoal'?'covered fire':'firing'} in ${town.name}.`);
+                materialStep(work,recipe.method==='assembly'?`${work.name} begins fitting the parts together in ${town.name}.`:recipe.method==='pulping'?`${work.name} begins working the wood fibres into wet sheets in ${town.name}.`:`${work.name} begins the ${recipe.method==='shaping'?'shaping':work.type==='charcoal'?'covered fire':'firing'} in ${town.name}.`);
                 continue;
             }
             advanceMaterialApprentice(town,work,person);
             if(--work.remaining>0)continue;
             const risk=(work.type==='brick'&&townKnowledgeLevel(town,'fire')>=40?0.08:recipe.risk)*(work.lesson?0.4:1);
-            if(work.trial&&work.roll<risk){work.status='failed';work.finished=planet.day;materialStep(work,`${recipe.method==='assembly'?`${work.name} tests the finished parts.`:recipe.method==='shaping'?`${work.name} puts the pieces aside.`:`${work.name} opens the fire.`} ${recipe.failure}`);continue;}
+            if(work.trial&&work.roll<risk){work.status='failed';work.finished=planet.day;materialStep(work,`${recipe.method==='assembly'?`${work.name} tests the finished parts.`:recipe.method==='pulping'?`${work.name} lifts the dried sheets.`:recipe.method==='shaping'?`${work.name} puts the pieces aside.`:`${work.name} opens the fire.`} ${recipe.failure}`);continue;}
             const entry=encounterMaterial(town,work.type);entry.technique ||= {day:planet.day,work:work.id,person:work.person};
             materialHands(town,work.type)[work.person] ||= {day:planet.day,work:work.id,...(work.lesson?{visit:work.lesson.exchange,teacher:work.lesson.person,from:work.lesson.from}:{})};
             if(work.apprentice?.days>=work.apprentice?.needed) {
@@ -7190,7 +7199,7 @@
         }
         const work=livingWorldState().materialWork.filter(w=>w.town===town.id).slice(-8).reverse();
         if(work.length)items.push({heading:true,text:'At the workshop'});
-        for(const w of work)items.push({text:`${escapeLivingText(w.name)} · ${COMMODITIES[w.type].label}<span class="paultendoStoryProse">${{waiting:'Gathering materials',working:MATERIAL_RECIPES[w.type].method==='assembly'?'Fitting the parts':MATERIAL_RECIPES[w.type].method==='shaping'?'Shaping the tools':'The fire is burning',made:'Finished',failed:MATERIAL_RECIPES[w.type].method==='assembly'?'The assembly failed':MATERIAL_RECIPES[w.type].method==='shaping'?'The stone or metal split':'The firing failed',storing:'Waiting for room',lost:'Workshop lost',withdrawn:'Work put aside'}[w.status]}</span>`,func:()=>openMaterialWork(w)});
+        for(const w of work)items.push({text:`${escapeLivingText(w.name)} · ${COMMODITIES[w.type].label}<span class="paultendoStoryProse">${{waiting:'Gathering materials',working:MATERIAL_RECIPES[w.type].method==='assembly'?'Fitting the parts':MATERIAL_RECIPES[w.type].method==='shaping'?'Shaping the tools':MATERIAL_RECIPES[w.type].method==='pulping'?'Working the fibres':'The fire is burning',made:'Finished',failed:MATERIAL_RECIPES[w.type].method==='assembly'?'The assembly failed':MATERIAL_RECIPES[w.type].method==='shaping'?'The stone or metal split':MATERIAL_RECIPES[w.type].method==='pulping'?'The sheets tore apart':'The firing failed',storing:'Waiting for room',lost:'Workshop lost',withdrawn:'Work put aside'}[w.status]}</span>`,func:()=>openMaterialWork(w)});
         for(const survey of livingWorldState().sampling.filter(w=>w.town===town.id).slice(-4).reverse())items.push({text:`${escapeLivingText(survey.name)} · Looking for ${COMMODITIES[survey.type].label}<span class="paultendoStoryProse">${{outbound:'On the way',collecting:'At the source',returning:'Coming home',arrived:'Samples brought home',empty:'Returned empty-handed',lost:'Contact lost'}[survey.status]}</span>`,func:()=>openMaterialSurvey(survey)});
         populateExecutive(items,'Materials and workshops');markLivingStoryControls();openExecutive();
     }
@@ -7293,6 +7302,7 @@
     }
     function commodityWorkClaims(town,excludeExchange) {
         const claims=[];
+        if(townAccountsWritingNeed(town))claims.push({kind:'accounts',id:`accounts:${town.id}`,cost:{[townAccountsMedium(town)]:1}});
         const storage=grainStorageNeed(town);if(storage)claims.push({kind:'storage',id:`storage:${town.id}`,cost:{pottery:storage}});
         const tools=farmToolNeed(town);if(tools)claims.push({kind:'equipment',id:`tools:${town.id}`,cost:{[farmToolKind(town)]:tools}});
         if(skyInstrumentWanted(town))claims.push({kind:'sky',id:`sky:${town.id}`,cost:{telescope:1}});
@@ -7431,6 +7441,7 @@
         if(use.kind==='charter')return `${town} packs ${goods} from this exchange for its settlers’ journey.`;
         if(use.kind==='flight')return `${town} sends a sky vessel from this exchange on a flight.`;
         if(use.kind==='storage')return `${town} sets clay vessels from this exchange beside its grain stores.`;
+        if(use.kind==='accounts')return `${town} uses ${goods} from this exchange to write its accounts.`;
         if(use.kind==='construction')return `${town} uses ${goods} from this exchange to build a ${(use.name || 'building').replace(/_/g,' ')}.`;
         if(use.kind==='material')return `${town} uses ${goods} from this exchange while making ${COMMODITIES[use.name]?.label || 'new materials'}.`;
         if(use.kind==='inquiry')return `${town} uses ${goods} from this exchange in trials for ${(use.name || 'a new method').toLowerCase()}.`;
@@ -7890,6 +7901,7 @@
             if(claim.kind==='inquiry'){const work=livingWorldState().inquiries.find(w=>w.id===claim.id);if(work)items.push({text:'Follow their trials',func:()=>openLivingInquiry(work)});}
             if(claim.kind==='equipment')items.push({text:'Visit the fields',func:()=>openFarmTools(regGet('town',record.buyer))});
             if(claim.kind==='storage')items.push({text:'Visit the grain stores',func:()=>openGrainStores(regGet('town',record.buyer))});
+            if(claim.kind==='accounts'&&regGet('town',record.buyer)?._paultendoAccounts)items.push({text:'Visit the town’s books',func:()=>openTownAccounts(regGet('town',record.buyer))});
             if(claim.kind==='craft'){
                 const work=livingWorldState().artifactWork.find(w=>w.id===claim.id),artifact=work?.artifact&&livingWorldState().artifacts.find(a=>a.id===work.artifact);
                 if(artifact&&livingArtifactKnown(artifact))items.push({text:`Visit ${escapeLivingText(artifactTitle(artifact))}`,func:()=>openLivingArtifact(artifact)});
@@ -8969,6 +8981,9 @@
         }
         if(livingWorldState().artifactWork.some(w=>w.town===town.id)){
             const work=document.createElement('button');work.textContent='Work and inventions';work.addEventListener('click',()=>{closePopups();openLivingTownWork(town);});section.appendChild(work);
+        }
+        if(town._paultendoAccounts) {
+            const accounts=document.createElement('button');accounts.textContent='Accounts';accounts.addEventListener('click',()=>{closePopups();openTownAccounts(town);});section.appendChild(accounts);
         }
         for(const work of livingWorldState().inquiries.filter(w=>w.town===town.id&&['waiting','working'].includes(w.status))) {
             const button=document.createElement('button');button.textContent=`${work.title} · Work in progress`;button.addEventListener('click',()=>{closePopups();openLivingInquiry(work);});section.appendChild(button);
@@ -15241,7 +15256,7 @@
         if(!diff)return null;
         const result=Math.max(0,Math.round((current+diff)*100)/100);
         const collection=Math.min(wealth,employed*result/evasion);
-        return {diff,result,reason,cause:{kind:'tax',cash,wealth,employed,upkeep,debt,building,target,short,desired,collection,solidarity,authority,privateClaim,poor,projects:projects.map(p=>p.id),loans:loans.map(l=>l.id),teaching:care?.id,religion:faith?creed?.id:null}};
+        return {diff,result,reason,cause:{kind:'tax',cash,wealth,employed,upkeep,debt,building,target,short,desired,collection,solidarity,authority,privateClaim,poor,projects:projects.map(p=>p.id),loans:loans.map(l=>l.id),teaching:care?.id,religion:faith?creed?.id:null,report:latestPublishedTownAccounts(town)}};
     }
     function installLocalEconomicProposals() {
         for(const id of ['townEcon','townTaxChange']) {
@@ -15667,6 +15682,10 @@
                 if(effects.length)items.push({heading:true,text:'What changed'},...effects.map(text=>({text})));
             } else {
                 const cause=record.cause;
+                if(cause.report?.published!=null&&cause.report.published<=record.day&&cause.report.until<=record.day) {
+                    const report=cause.report;
+                    items.push({text:townAccountsSummary(report)},{text:'Read the published accounts',func:()=>openTownAccountsReport(report)});
+                }
                 // A policy may use exact accounts internally. Its Chronicle is
                 // a public account, not access to every resident's finances.
                 // No tax returns or public treasury reports exist yet, so do
@@ -18854,6 +18873,143 @@
         };
         town._paultendoEconomy = snapshot;
         return snapshot;
+    }
+
+    // Eight consecutive evening entries is an initial reporting cadence. The
+    // opening balance is observed, never reconstructed from hidden wealth.
+    // Missing entries restart the period on the same unfinished writing surface.
+    const TOWN_ACCOUNTS_PACE={days:8,history:12,sourceAge:30};
+    function townAccountsKnown(town) {
+        return !!town&&!town.end&&town.pop>0&&townKnowledgeLevel(town,'education')>=30&&townKnowledgeLevel(town,'government')>=30&&townKnowledgeLevel(town,'trade')>=30;
+    }
+    function townAccountsRole(town) {
+        return ['merchant','scholar'].find(role=>inquiryRoleFree(town,role));
+    }
+    function townAccountsWanted(town) {
+        const flow=town._paultendoCashFlow?.day===planet.day?town._paultendoCashFlow:null;
+        return townAccountsKnown(town)&&!!(town._paultendoAccounts||town.tax>0||commodityStock(town,'cash')>0||flow?.received>0||flow?.spent>0);
+    }
+    function townAccountsWritingNeed(town) {
+        return townAccountsWanted(town)&&!town._paultendoAccounts?.paid&&mealStock(town)>=nativeMealNeed(town)&&!!townAccountsRole(town)?1:0;
+    }
+    function townAccountsMedium(town) {
+        return town._paultendoMaterials?.paper||commodityStock(town,'paper')>0?'paper':'clay';
+    }
+    function townAccountsPublication(town) {
+        const values=town.values || {},government=town.gov || town.governmentType || 'tribal';
+        const scrutiny=Math.max(0,values.openness || 0)+Math.max(0,values.justice || 0),control=Math.max(0,values.order || 0);
+        const closed=(isAutocraticGov(government)||town.legal?.['happy.speech']===false)&&control>scrutiny;
+        return {allowed:!closed,government,reason:closed?'The rulers keep the books out of public view.':'The town makes its accounts public.'};
+    }
+    function latestPublishedTownAccounts(town) {
+        const report=(town?._paultendoAccounts?.reports || []).filter(r=>r.published!=null&&r.published<=planet.day&&r.until<=planet.day&&planet.day-r.until<=TOWN_ACCOUNTS_PACE.sourceAge).at(-1);
+        // Preserve the actual source available then, including after its parent
+        // ledger is trimmed. Later accounts cannot rewrite an older article.
+        return report?structuredClone(report):null;
+    }
+    function approximatePublicCash(value) {
+        return value>0?`about ${Number(value.toPrecision(2)).toLocaleString()} cash`:'no cash';
+    }
+    function townAccountsSummary(report) {
+        const tax=report.kinds.tax?.received || 0;
+        return `Accounts issued on Day ${report.published} listed ${report.closing>0?approximatePublicCash(report.closing)+' in the public purse':'an empty public purse'}. ${tax>0?`They recorded ${approximatePublicCash(tax)} in taxes`:'No tax receipts were recorded'} between Days ${report.from} and ${report.until}.`;
+    }
+    function publishTownAccounts(town,report) {
+        const publication=townAccountsPublication(town);
+        if(!publication.allowed||report.published!=null)return;
+        // Native overnight notices are delivered the following morning.
+        // Use that same issue date, while keeping the observed period intact.
+        report.published=planet.day+(sunsetting?1:0);report.publication=publication;
+        if(livingTownKnown(town))logMessage(`${townRef(town.id)} publishes its accounts for Days ${report.from}–${report.until}.`,null,{_paultendoStory:{kind:'accounts',id:report.id},_paultendoHighlight:true});
+    }
+    function keepTownAccounts(town) {
+        if(!townAccountsWanted(town))return;
+        const book=town._paultendoAccounts ||= {reports:[],entries:[],paid:false};
+        if(book.lastAttempt===planet.day)return;
+        book.lastAttempt=planet.day;
+        const role=townAccountsRole(town),cash=commodityStock(town,'cash');
+        if(!role||mealStock(town)<nativeMealNeed(town)) {
+            book.phase=role?'food':'hands';book.entries=[];book.opening=null;return;
+        }
+        // Issuing completed books does not require new writing materials.
+        const withheld=book.reports.filter(r=>r.published==null).at(-1);
+        if(withheld)publishTownAccounts(town,withheld);
+        // A clerk is generated for actual work in an existing occupation,
+        // rather than to supply a voice for an article. This is an evening
+        // routine and cannot use someone away on a journey or ongoing work.
+        if(!book.paid) {
+            const preferred=townAccountsMedium(town),claims=commodityWorkClaims(town).filter(c=>c.kind!=='accounts');
+            const spare=type=>commodityStock(town,type)-claims.reduce((n,c)=>n+(c.cost?.[type] || 0),0);
+            const medium=spare(preferred)>=1?preferred:preferred==='paper'&&spare('clay')>=1?'clay':null;
+            if(!medium){book.phase='materials';book.wanted=preferred;return;}
+            book.inputs=[];book.work=`accounts-work:${livingWorldState().nextId++}`;
+            const before=commodityStock(town,medium);
+            withCommodityUse({kind:'accounts',id:book.work,name:'town accounts',inputs:book.inputs},()=>happen('RemoveResource',null,town,{type:medium,count:1}));
+            if(before-commodityStock(town,medium)!==1){book.phase='materials';return;}
+            book.paid=true;book.medium=medium;
+            for(const input of book.inputs)rememberCommodityUse(town,input,{kind:'accounts',id:book.work,name:'town accounts'});
+        }
+        const person=livingCommunityPerson(town,role);
+        const keeper={person:person.id,name:person.name,role,label:livingPersonLabel(person)};
+        book.keeper=keeper;
+        // Private records may be released after a change of rule or values.
+        // Their period and amounts stay unchanged, and issue dates remain real.
+        const flow=town._paultendoCashFlow?.day===planet.day?town._paultendoCashFlow:{received:0,spent:0,kinds:{}};
+        const previous=book.entries.at(-1) || book.opening;
+        if(!previous||previous.day!==planet.day-1) {
+            book.opening={day:planet.day,cash};book.entries=[];book.phase='writing';return;
+        }
+        const expected=previous.cash+(flow.received || 0)-(flow.spent || 0);
+        if(!Number.isFinite(expected)||Math.abs(expected-cash)>1e-7*Math.max(1,Math.abs(cash),Math.abs(expected))) {
+            // A direct resource edit, incomplete instrumentation or a missed
+            // entry is not a receipt. Never invent a source to balance books.
+            book.opening={day:planet.day,cash};book.entries=[];book.phase='gap';return;
+        }
+        book.phase='writing';book.entries.push({day:planet.day,cash,received:flow.received || 0,spent:flow.spent || 0,kinds:structuredClone(flow.kinds || {}),keeper});
+        if(book.entries.length<TOWN_ACCOUNTS_PACE.days)return;
+        const kinds={};
+        for(const entry of book.entries)for(const [kind,amounts] of Object.entries(entry.kinds)) {
+            const total=kinds[kind] ||= {received:0,spent:0};total.received+=amounts.received || 0;total.spent+=amounts.spent || 0;
+        }
+        const report={id:`accounts:${livingWorldState().nextId++}`,town:town.id,townName:town.name,from:book.opening.day+1,until:planet.day,
+            opening:book.opening.cash,closing:cash,received:book.entries.reduce((n,e)=>n+e.received,0),spent:book.entries.reduce((n,e)=>n+e.spent,0),kinds,
+            keepers:[...new Map(book.entries.map(e=>[e.keeper.person,e.keeper])).values()],medium:book.medium,inputs:structuredClone(book.inputs),published:null,publication:townAccountsPublication(town)};
+        book.reports.push(report);if(book.reports.length>TOWN_ACCOUNTS_PACE.history)book.reports.shift();
+        publishTownAccounts(town,report);
+        book.entries=[];book.opening={day:planet.day,cash};book.paid=false;book.phase=report.published==null?'withheld':'ready';
+    }
+    function openTownAccountsReport(report) {
+        const town=regGet('town',report.town);
+        if(!livingTownKnown(town)||report.published==null||report.published>planet.day)return;
+        const amount=n=>`${(Math.round(n*100)/100).toLocaleString()} cash`;
+        const items=[{text:'← Back to accounts',func:()=>openTownAccounts(town)},{text:`Issued on Day ${report.published}. Covers Days ${report.from}–${report.until}.`},
+            {text:townAccountsSummary(report)},{heading:true,text:'From the books'},
+            {text:`Opening purse: ${amount(report.opening)}. Closing purse: ${amount(report.closing)}.`},
+            {text:`Receipts: ${amount(report.received)}. Payments: ${amount(report.spent)}.`}];
+        const names={tax:'Taxes',trade:'Trade',upkeep:'Upkeep',wages:'Wages',loan:'Loans',other:'Other entries'};
+        for(const [kind,totals] of Object.entries(report.kinds))if(totals.received||totals.spent)
+            items.push({text:`${escapeLivingText(names[kind] || 'Other entries')}: ${amount(totals.received)} received, ${amount(totals.spent)} paid.`});
+        items.push({text:`Written on ${report.medium==='paper'?'paper':'clay tablets'}. Kept by ${escapeLivingText(commaList(report.keepers.map(p=>`${p.name}, ${p.label.toLowerCase()}`)))}.`});
+        for(const input of report.inputs || []) {
+            const exchange=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);
+            if(exchange)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(exchange)});
+            if(input.production?.world===skyWorldId()&&input.production.passage===travelerState().passage) {
+                const work=livingWorldState().materialWork.find(w=>w.id===input.production.work);
+                if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'The workshop that made the paper',func:()=>openMaterialWork(work)});
+            }
+        }
+        for(const keeper of report.keepers){const person=findLivingPerson(town,keeper.person);if(person&&livingPersonAvailable(person,town))items.push({text:`Meet ${escapeLivingText(person.name)}`,func:()=>openLivingPerson(town,person)});}
+        populateExecutive(items,`${escapeLivingText(report.townName)} publishes its accounts`);markLivingStoryControls();openExecutive();
+    }
+    function openTownAccounts(town) {
+        if(!livingTownKnown(town)||!town._paultendoAccounts)return;
+        const book=town._paultendoAccounts,items=[{text:'← Back to settlement',func:()=>{closeExecutive();openRegBrowser(town,'town');}}];
+        const descriptions={materials:`The clerk needs ${book.wanted==='paper'?'paper or clay':'clay'} for the next set of records.`,hands:'Nobody is free to keep the books.',food:'Short meals have interrupted the books.',gap:'There are missing entries. The clerk has begun a fresh account.',writing:'The next accounts are being written.',withheld:'The rulers kept the latest accounts to themselves.',ready:'The latest accounts have been issued.'};
+        items.push({text:descriptions[book.phase] || 'The books are being kept.'});
+        const reports=book.reports.filter(r=>r.published!=null&&r.published<=planet.day).slice().reverse();
+        for(const report of reports)items.push({text:`Days ${report.from}–${report.until} · Issued on Day ${report.published}`,func:()=>openTownAccountsReport(report)});
+        if(!reports.length)items.push({text:'No accounts have been made public yet.'});
+        populateExecutive(items,`${escapeLivingText(town.name)} · Accounts`);markLivingStoryControls();openExecutive();
     }
 
     function recordCashFlow(town,delta,kind='other') {
@@ -38976,6 +39132,12 @@
                 war.objective = { id: "independence", label: "independence", targetId: subject.id };
             }
         }
+    });
+
+    // Keep this after the financial daily events: these are observed closing
+    // balances for the day that is ending, in visited and inactive worlds.
+    modEvent('townKeepAccounts',{
+        daily:true,subject:{reg:'town',all:true},check:town=>townAccountsWanted(town),func:town=>keepTownAccounts(town)
     });
 
     // A mod installed through Add Mod must initialize and redraw immediately;

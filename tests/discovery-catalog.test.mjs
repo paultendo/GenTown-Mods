@@ -71,7 +71,7 @@ test('advanced breakthroughs notify once and keep their true date and origin thr
   const game = await makeGame(); t.after(game.close);
   const { window } = game; const town = settleGame(game);
   window.planet.unlocks.education = 30;
-  window.planet.day = 40;town.pop=20;town.jobs={scholar:2};town.research={education:100};town.resources={crop:1000,lumber:2};
+  window.planet.day = 40;town.pop=20;town.jobs={scholar:2};town.research={education:100};town.resources={crop:1000,lumber:2,paper:2};
   for(const id of ['townBirth','townDeath','townExpand','townEat'])window.gameEvents[id].func=()=>{};
   window.gameEvents.processAll.func=()=>{};const choose=window.chooseEvent;window.chooseEvent=()=>null;
   window.doEvent('unlockLibraries', window.readyEvent('unlockLibraries'));

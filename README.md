@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.80**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.81**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.80/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.81/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.80)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.81)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -30,6 +30,12 @@ Open `http://localhost:4173/`. This loads the mod with the current engine snapsh
 The local origin has its own saves; it does not share storage with r74n.com. The development server listens on loopback and serves only game assets. It does not expose repository configuration.
 
 ## Compatibility and verification
+
+Commodity demand, supply, shared work claims, journeys and use histories respond to actual town state. Allowed uses, recipes, technical prerequisites and numerical effects are still authored rules. The game does not yet infer uses from a general model of material properties.
+
+Paper now has a workshop and a use. Local Writing and shaping knowledge let available lumberers or scholars try pulping one timber into four sheets over five work days. Trials can fail, and food, workers, war and competing materials still govern the work. Actual recordkeeping and waiting library inquiries can create demand before the town knows how to make it. Imports can supply sheets without teaching papermaking. New library, printing and university trials use paper, while unfinished saved inquiries retain their original recipes.
+
+Town accounts require local Writing, Bureaucracy and Currency, actual public money or tax activity, food and a free merchant or scholar. Each set consumes one clay tablet or one paper unit. Known paper is preferred, with clay still usable when sheets are unavailable or reserved for other work. After an observed opening balance, eight consecutive evening entries form a dated account of actual public receipts and payments. Missing hands, meals or entries restart the period without inventing income. Rulers and local values can keep completed accounts private. Published books appear in the Chronicle, link to their keeper and materials, and can provide a dated source for later tax articles. Articles round reported public amounts and never infer residents’ private balances. Issuing an older account retains its original period and gives it the actual publication date. Reloading and reading books add no entries or payments. The eight-evening period and thirty-day news source window are initial pacing values. Tax returns, durable book objects, physical ink and a wider model of literacy remain future work.
 
 Sea exploration now starts with a real local vessel. Preparing a crossing creates workshop demand. A coastal boat takes four timber and six work days, while a sailing vessel takes eight timber, two metal and ten work days. Local sailing and navigation knowledge bound the water that can be crossed. A named, available crew takes the vessel out of stores, moves along actual tiles and brings the same vessel home with its maker recorded. Closed borders can hold the vessel offshore, full stores can delay unloading, and the loss of its home port loses the held vessel. Returning accounts can support later local travel inquiry. Proposals, viewing a story and reloading grant no ships, discovery bonuses or instant trade routes. Towns can also start this preparation themselves. Stolen sea charts copy an actual returned crossing. Sea requests now share the commodity economy. Either settlement can provide an actual vessel, with a coastal hull carrying up to 24 supplies and a sailing vessel up to 96. A supplier's crew first visits the receiving town, then takes its request back to the supplying quay. Local workshop orders, aid, trade and barter retain their actual needs and terms. Goods must cross before entering stores. Payment held in escrow at the receiving town takes a separate return crossing. A crew stays occupied through waiting, delivery, payment and the vessel's return. Changed needs cancel preparation. Closed trade borders and full stores hold deliveries. Surviving carriers return cancelled cargo through actual ports. Two useful completed exchanges can establish a sea route with measured travel time. Ordinary credit, repayment goods and captured war supplies still use ground transport. Separate crew provisions and naval warfare remain further work. Cargo limits and journey timing are initial calibration that needs longer human playtesting.
 

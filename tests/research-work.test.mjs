@@ -54,7 +54,7 @@ test('hidden town research changes no visible reports and does not reveal its ma
 });
 
 test('knowledge work respects real building supplies and can use timber once an alternative meets construction needs',async t=>{
- const g=await makeGame();t.after(g.close);const {w,town,warnings}=setup(g);w.planet.unlocks.education=30;add(w,town,'lumber',2);w.happen('Create',town,null,{type:'project',subtype:'school',cost:8},'process');const work=start(w,'unlockLibraries');next(w);
+ const g=await makeGame();t.after(g.close);const {w,town,warnings}=setup(g);w.planet.unlocks.education=30;add(w,town,'paper',2);add(w,town,'lumber',2);w.happen('Create',town,null,{type:'project',subtype:'school',cost:8},'process');const work=start(w,'unlockLibraries');next(w);
  assert.equal(work.status,'waiting');assert.equal(town.resources.lumber,2);assert.match(open(w,work).textContent,/Other work already needs/);add(w,town,'rock',4);next(w);assert.equal(work.status,'waiting','The obsolete workshop releases its timber later in this tick');next(w);assert.equal(work.status,'working',JSON.stringify({work,resources:town.resources,processes:w.regToArray('process'),material:w.planet._paultendoLife.materialWork}));assert.equal(town.resources.lumber || 0,0);assert.equal(town.resources.rock,4);assert.equal(w.planet.unlocks.education,30);check(g,warnings);
 });
 
