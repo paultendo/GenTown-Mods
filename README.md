@@ -1,18 +1,32 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.89**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
+Version **1.6.90**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.89/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.90/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.89)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.90)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
+
+## Towns and political communities
+
+Open a town and choose **Council**. Wider agreements appear through actual contact, trade, food dependence, shared backgrounds and security concerns. Talks take time. Speaking for or against a proposal can influence opinion, but the participating towns still decide.
+
+Towns can share a common market, defence pact, confederation, federation, republic, crown or feudal compact. A town retains its population, territory, discoveries, occupations and beliefs. Treaties can overlap, while a town cannot owe sovereign authority to two governments. Charters specify common powers, contributions, customs, borders and autonomy. They can be amended, and common councils can pass laws or embargoes. Contributions, customs, grants and refunds transfer existing money. Defence promises require actual fed soldiers.
+
+Political support comes from the existing occupations and residents, their outlooks, beliefs, taxes, food security, relations and recent exchanges. Sustained support can produce agreements without player instructions. Broken obligations and unequal burdens can erode consent. Colonies and vassals can seek autonomy, independence or another protector. Remote districts can separate through a real transfer of land, population, inventories and knowledge. Repression may delay organisation while increasing later resistance. A declaration can be recognised or contested through the existing war systems.
+
+Workers can organise, bargain and strike. A strike interrupts their resource work, workshops, research and personal craft. Wage settlements move cash from the town purse to private wealth. Religious disagreements can produce new rites with inherited doctrine and a reason for changing it. Contented towns keep their faith. Religious difference alone creates neither war nor political secession.
+
+Saved alliances enter as existing tax-free pacts. New political histories, accounts, movements, votes and strikes persist across reloads and advance in inactive worlds too. Completed talks remain available under **Past gatherings**. Reading the council does not advance time or reroll people, and day refreshes cannot repeat an action.
+
+This is a simulation of communities and representative occupations, rather than one political agent for every inhabitant. Charter defaults and deliberation speeds are authored game rules. Food, cash, territory and workers remain real constraints. The automated scenarios cover consequences and conservation, but long campaign pacing still needs playtesting.
 
 ## Run locally
 

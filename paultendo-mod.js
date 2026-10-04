@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.89/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.90/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.89";
+    const MOD_VERSION = "1.6.90";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -4673,6 +4673,14 @@
     function resolveChronicleStory(ref) {
         const state = planet?._paultendoLife;
         if (!state || !ref) return null;
+        if(ref.kind==='politics') {
+            const politics=planet._paultendoPolitics,record=politics&&[...politics.proposals,...politics.groups,...politics.movements,...politics.unions].find(r=>r.id===ref.id);
+            if(!record)return null;
+            const candidates=Array.isArray(record.members)?record.members:[record.town];
+            const town=candidates.map(id=>regGet('town',id)).find(livingTownKnown)||(record.history || []).map(h=>regGet('town',h.town)).find(livingTownKnown);
+            if(!town)return null;
+            return {label:'Visit the council',open:()=>politics.proposals.includes(record)?openPoliticalProposal(record,town):politics.groups.includes(record)?openPoliticalGroup(record,town):politics.movements.includes(record)?openPoliticalMovement(record):openPoliticalUnion(record)};
+        }
         if(ref.kind==='charter') {
             const registry=getColonizationRegistry(),charter=[...(registry?.charters || []),...(registry?.history || [])].find(c=>String(c.id)===String(ref.id));
             return frontierKnown(charter)?{label:'Follow the settlers',open:()=>openFrontierCharter(charter)}:null;
@@ -4740,13 +4748,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['land','clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
+        if (!['politics','land','clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['land','clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
+        if (!ref || !['politics','land','clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -5580,7 +5588,7 @@
             if(work.status==='waiting'&&!inquiryCause(town,discovery,person)){work.status='abandoned';work.finished=planet.day;inquiryStep(work,`${work.name} leaves the question for another time. The town has other concerns now.`);continue;}
             const occupied=state.materialWork.some(w=>w.town===town.id&&materialWorkHasHand(w,work.person)&&['waiting','working'].includes(w.status))||state.artifactWork.some(w=>w.town===town.id&&w.person===work.person&&['gathering','working'].includes(w.status))||state.inquiries.some(w=>w.id!==work.id&&w.town===town.id&&w.person===work.person&&w.status==='working')||state.surfaceMarks.some(w=>w.town===town.id&&w.person===work.person&&w.status==='working'&&w.phase==='working')||state.clues.some(c=>c.town===town.id&&c.study?.person===work.person&&c.study.status==='working'&&!c.study.pause);
             const surveying=state.sampling.some(w=>w.town===town.id&&w.person===work.person&&['outbound','collecting','returning'].includes(w.status));
-            const blocked=!livingTeachingPersonAvailable(person,town)||occupied||surveying||seaCrewBusy(town,work.person)?'hands':Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(town,key)<level)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            const blocked=!livingTeachingPersonAvailable(person,town)||occupied||surveying||seaCrewBusy(town,work.person)||politicalLaborStopped(town,person?.role)?'hands':Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(town,key)<level)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
             if(blocked) {
                 if(work.delay!==blocked){work.delay=blocked;inquiryStep(work,{hands:`${work.name} is no longer free to tend the work.`,knowledge:'The work needs knowledge the town no longer has.',war:`Fighting pulls ${work.name} away from the work.`,food:`${work.name} puts the work aside. There is not enough food.`}[blocked]);}
                 continue;
@@ -5800,7 +5808,7 @@
             if(work.status==='gathering'){
                 if(!recipe||(work.parent&&!parent)||(parent&&!workingArtifactHolder(parent,town,person))||parent?.status==='hoarded'){work.status='abandoned';artifactWorkStep(work,'The idea is put aside. Its maker or inspiration is no longer there.',record);continue;}
                 if(work.autonomous&&!livingInventionCauses(town).some(c=>c.key===work.cause.key)){work.status='abandoned';artifactWorkStep(work,`${person.name} puts the idea aside. The need that began it has passed.`,record);continue;}
-                if(hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town)||Object.entries(recipe.cost).some(([type,count])=>commodityStock(town,type)<count))continue;
+                if(politicalLaborStopped(town,person?.role)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town)||Object.entries(recipe.cost).some(([type,count])=>commodityStock(town,type)<count))continue;
                 work.status='working';work.started=planet.day;work.due=planet.day+work.days;work.lastCheckedDay=planet.day;
                 artifactWorkStep(work,`${person.name} has the materials. Work on the ${LIVING_ARTIFACTS[work.kind].name.toLowerCase()} begins in ${town.name}.`,record);
                 continue;
@@ -5811,11 +5819,11 @@
             work.lastCheckedDay=planet.day;
             const referenceReady=(!work.parent||parent)&&(!parent||workingArtifactHolder(parent,town,person))&&parent?.status!=='hoarded';
             const warWork=recipe&&referenceReady&&livingArtifactWarWork(town,person,work);
-            const pause=hasIssue(town,'war')&&!warWork?'war':town&&mealStock(town)<nativeMealNeed(town)?'food':null;
+            const pause=politicalLaborStopped(town,person?.role)?'strike':hasIssue(town,'war')&&!warWork?'war':town&&mealStock(town)<nativeMealNeed(town)?'food':null;
             if(recipe&&livingTeachingPersonAvailable(person,town)&&referenceReady&&pause){
                 const stopped=Math.max(0,planet.day-lastChecked);
                 work.due+=stopped;work.pauseDays=(work.pauseDays || 0)+stopped;
-                if(work.pause!==pause)artifactWorkStep(work,pause==='war'?`${person.name} sets the work down while the fighting continues.`:`${person.name} sets the work down. There is not enough food to keep working.`,record);
+                if(work.pause!==pause)artifactWorkStep(work,pause==='strike'?`${person.name} joins the stoppage. The work waits.`:pause==='war'?`${person.name} sets the work down while the fighting continues.`:`${person.name} sets the work down. There is not enough food to keep working.`,record);
                 work.pause=pause;continue;
             }
             if(work.pause){delete work.pause;artifactWorkStep(work,`${person?.name || work.name} returns to the unfinished work.`,record);}
@@ -8093,7 +8101,7 @@
             }
             if(work.status==='waiting'&&work.purpose?.exchange&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
             const surveying=state.sampling.some(w=>w.town===town.id&&w.person===work.person&&['outbound','collecting','returning'].includes(w.status));
-            const blocked=!livingTeachingPersonAvailable(person,town)||surveying||seaCrewBusy(town,work.person)?'hands':!materialTechniqueAvailable(work.type,town)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            const blocked=!livingTeachingPersonAvailable(person,town)||surveying||seaCrewBusy(town,work.person)||politicalLaborStopped(town,person?.role)?'hands':!materialTechniqueAvailable(work.type,town)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
             if(blocked){
                 const pause={hands:`${work.name} cannot tend the work. It waits for them.`,knowledge:`The workshop cannot keep working this way.`,war:`Fighting pulls ${work.name} away from the work.`,food:`${work.name} puts the work aside. There is not enough food in ${town.name}.`}[blocked];
                 if(work.delay?.reason!==blocked){work.delay={reason:blocked,day:planet.day};materialStep(work,pause);}
@@ -8279,7 +8287,7 @@
         // First contact can be local. Longer journeys need the actual established route.
         if(!connected&&(getTownDistance(from,to)>6||!(planet.unlocks.trade>=10))) return marine||record?.sea?seaFreightPath(from,to,record):null;
         const enemies=new Set(regToArray('town').filter(town=>areAtWar(from,town)||areAtWar(to,town)).map(town=>town.id));
-        const canEnter=chunk=>!enemies.has(chunk.v?.s)&&(chunk.b!=='water'||planet.unlocks.travel>=60);
+        const canEnter=chunk=>!enemies.has(chunk.v?.s)&&!politicalBorderClosed(from,chunk.v?.s)&&!politicalBorderClosed(to,chunk.v?.s)&&(chunk.b!=='water'||planet.unlocks.travel>=60);
         let path=getCachedPath(from,to,40);
         // The ordinary road cache knows terrain, not who now holds a border.
         // Try a real detour rather than closing every route during a war.
@@ -8846,6 +8854,7 @@
             // Native AddRelation already updates both towns.
             improveRelations(buyer,seller,1);
             rememberCommodityExchange(seller,buyer,record.kind==='aid'?'aid':'trade',record.type,record.delivered,record.id);
+            politicalCustoms(record,buyer,seller);
             if(record.payment&&record.payment.type!=='cash')rememberCommodityExchange(buyer,seller,'trade',record.payment.type,record.paid,record.id);
             const existingRoute=getTradeRouteBetween(buyer,seller),route=existingRoute || commodityRouteFromArrivals(record,buyer,seller);
             if(route?.active){route.totalGoods=(route.totalGoods || 0)+record.delivered;route.caravans=(route.caravans || 0)+1;route.lastCaravanDay=planet.day;}
@@ -9995,6 +10004,7 @@
             const people = document.createElement('button'); people.textContent = 'Meet the people';
             people.addEventListener('click', () => { closePopups(); openLivingPeople(town); }); section.appendChild(people);
         }
+        if (town.pop > 0) { const council=document.createElement('button'); council.textContent='Council'; council.addEventListener('click',()=>{closePopups();openPoliticalCouncil(town);}); section.appendChild(council); }
         const objects=livingWorldState().artifacts.filter(a=>a.town===town.id&&livingArtifactKnown(a));
         for(const object of objects){const button=document.createElement('button');button.textContent=`${artifactTitle(object)} · Its story`;button.addEventListener('click',()=>{closePopups();openLivingArtifact(object);});section.appendChild(button);}
         if(livingWorldState().teachings.some(t=>t.town===town.id)) {
@@ -10283,7 +10293,7 @@
         for(const [id,type,role] of [['townFarm','crop','farmer'],['townMine','rock','miner'],['townLumber','lumber','lumberer']]) {
             const event=gameEvents[id];if(!event?.perChunk||event.perChunk._paultendoSurfaceRead)continue;
             const base=event.perChunk;
-            event.perChunk=function(town,target,chunk){const before=commodityStock(town,type),result=base.apply(this,arguments);if(commodityStock(town,type)>before)visitSurfaceMarks(town,[chunk],{role});return result;};
+            event.perChunk=function(town,target,chunk){if(politicalLaborStopped(town,role))return;const before=commodityStock(town,type),result=base.apply(this,arguments);if(commodityStock(town,type)>before)visitSurfaceMarks(town,[chunk],{role});return result;};
             event.perChunk._paultendoSurfaceRead=true;
         }
         const fertility=actionables.chunk.asTarget.Fertility;
@@ -10317,6 +10327,7 @@
         if(typeof refreshExecutive==='function'&&!refreshExecutive._paultendoLivingView) {
             const base=refreshExecutive;
             refreshExecutive=function() {
+                if(refreshPoliticalCouncilView())return;
                 // Native refresh re-clicks the button which opened a panel.
                 // A craft or whisper button must not become another instruction
                 // each time the day changes. Refresh the displayed story instead.
@@ -12870,7 +12881,7 @@
             if(!held&&(livingWorldState().seaVoyages.some(v=>v.town===owner.id&&SEA_ACTIVE.includes(v.status))||!seaCrewRole(owner)))continue;
             if(!held&&commodityStock(owner,type)<1&&!MATERIAL_RECIPES[type].roles.some(role=>inquiryRoleFree(owner,role)))continue;
             const path=seaPath(owner,getAnchorChunk(seller),type,getAnchorChunk(buyer));
-            if(!path||path.some(c=>!seaCanEnter(buyer,c)||!seaCanEnter(seller,c)))continue;
+            if(!path||path.some(c=>!seaCanEnter(buyer,c)||!seaCanEnter(seller,c)||politicalBorderClosed(buyer,c.v?.s)||politicalBorderClosed(seller,c.v?.s)))continue;
             path.sea={town:owner.id,type};return path;
         }
         return null;
@@ -18822,6 +18833,593 @@
     });
 
     // =========================================================================
+    // POLITICAL COMMUNITIES
+    // Charters describe powers, not bonuses. Daily deliberation uses observed
+    // livelihoods, supplies, obligations and history; it consumes no RNG.
+    // =========================================================================
+    const POLITICAL_PACE = Object.freeze({ debate: 8, settlement: 18, dues: 10, memory: 80, recovery: 40 });
+    const POLITICAL_CHARTERS = Object.freeze({
+        market: { name: 'Common market', market: true, borders: true, defense: false, law: false, rate: 0, customs: .05, autonomy: 1 },
+        pact: { name: 'Defence pact', market: false, borders: false, defense: true, law: false, rate: .02, customs: 0, autonomy: 1 },
+        confederation: { name: 'Confederation', market: true, borders: true, defense: true, law: false, rate: .03, customs: .03, autonomy: .85 },
+        federation: { name: 'Federation', market: true, borders: true, defense: true, law: true, rate: .05, customs: .03, autonomy: .65 },
+        republic: { name: 'United republic', market: true, borders: true, defense: true, law: true, rate: .06, customs: .04, autonomy: .45 },
+        crown: { name: 'Shared crown', market: true, borders: true, defense: true, law: true, rate: .06, customs: .04, autonomy: .45 },
+        feudal: { name: 'Feudal compact', market: false, borders: true, defense: true, law: false, rate: .08, customs: 0, autonomy: .35 }
+    });
+    function politicalState() {
+        return planet._paultendoPolitics ||= { version: 1, nextId: 1, groups: [], proposals: [], movements: [], unions: [], history: [], lastDay: null };
+    }
+    function politicalId() { return 'civic-' + politicalState().nextId++; }
+    function politicalTowns() { return regToArray('town').filter(t => t && !t.end && t.pop > 0); }
+    function politicalHistory(owner, kind, data = {}) {
+        const entry = { day: planet.day, kind, ...data };
+        (owner.history ||= []).push(entry);
+        // Current commitments and accounts are separate from the bounded diary.
+        if (owner.history.length > 120) owner.history.splice(0, owner.history.length - 120);
+        return entry;
+    }
+    function politicalNews(owner, text, type = 'misc') {
+        politicalHistory(owner, 'news', { text });
+        const ids = Array.isArray(owner.members) ? owner.members : [owner.town];
+        if (ids.some(id => livingTownKnown(regGet('town', id)))) {
+            logMessage(escapeLivingText(text), type, {_paultendoStory:{kind:'politics',id:owner.id}});
+        }
+    }
+    function stateGroupById(id){return (planet._paultendoPolitics?.groups || []).find(g=>g.id===id&&!g.ended);}
+    function politicalGroups(town, power) {
+        return (planet._paultendoPolitics?.groups || []).filter(g => !g.ended && g.members.includes(town.id) && (!power || g.terms[power]));
+    }
+    function politicalShared(a, b, power) { return politicalGroups(a, power).find(g => g.members.includes(b.id)); }
+    function politicalTenets(town) { return getTownReligion(town)?.tenets || []; }
+    function politicalBackground(a, b) {
+        if (a.id === b.id) return 1;
+        let affinity = a.former === b.id || b.former === a.id || a.former && a.former === b.former ? .35 : 0;
+        const ca = a._paultendoColony, cb = b._paultendoColony;
+        if (ca?.originTownId === b.id && ca.originWorldId === skyWorldId() || cb?.originTownId === a.id && cb.originWorldId === skyWorldId()) affinity += .35;
+        if (ca && cb && ca.originWorldId === cb.originWorldId && ca.originTownId === cb.originTownId) affinity += .35;
+        if (a.religion && a.religion === b.religion) affinity += .25;
+        const ra = getTownReligion(a), rb = getTownReligion(b);
+        if (ra && rb && (ra.parent === rb.id || rb.parent === ra.id || ra.parent && ra.parent === rb.parent)) affinity += .1;
+        const ta = Object.keys(a.culture?.traditions || {}), tb = Object.keys(b.culture?.traditions || {});
+        affinity += ta.length ? .2 * ta.filter(k => tb.includes(k)).length / ta.length : 0;
+        return Math.min(1, affinity);
+    }
+    function politicalDependency(town) {
+        const rel = (planet._paultendoVassals || []).find(r => r.subjectId === town.id);
+        if (rel) return { kind: 'vassal', parent: regGet('town', rel.overlordId), rel, autonomy: rel.autonomy };
+        const colony = town._paultendoColony;
+        if (!colony || colony.sovereign) return null;
+        const parent = colony.originWorldId === skyWorldId() ? regGet('town', colony.originTownId) : getTownByRef({ worldId: colony.originWorldId, townId: colony.originTownId });
+        if (!parent || parent.end || parent.pop <= 0) return null;
+        return { kind: 'colony', parent, rel: colony, autonomy: colony.autonomy ?? .6, distant: colony.originWorldId !== skyWorldId() };
+    }
+    function politicalSignals(town, other = null) {
+        const need = Math.max(1, nativeMealNeed(town)), food = mealStock(town);
+        const hunger = clampValue(1 - food / (need * 4), 0, 1);
+        const rights = town.legal || {}, values = town.values || {}, tenets = politicalTenets(town);
+        const oppression = ['happy.speech', 'happy.rights', 'education.religion'].filter(k => rights[k] === false).length / 3;
+        const tax = clampValue(town.tax || 0, 0, 1), unrest = clampValue((town.unrest || 0) / 100, 0, 1);
+        const war = hasIssue(town, 'war') ? 1 : 0;
+        const exchanges = (planet._paultendoLife?.exchanges || []).filter(e => e.arrived != null && planet.day - e.arrived <= POLITICAL_PACE.memory && e.delivered > 0 && (e.buyer === town.id || e.seller === town.id) && (!other || e.buyer === town.id && e.seller === other.id || e.seller === town.id && e.buyer === other.id));
+        const incoming = exchanges.filter(e => e.buyer === town.id);
+        const aid = incoming.filter(e => e.kind === 'aid').reduce((n, e) => n + e.delivered, 0);
+        const meals = incoming.filter(e => COMMODITIES[e.type]?.edible).reduce((n, e) => n + e.delivered, 0);
+        const trade = Math.min(1, exchanges.length / 6), reliance = Math.min(1, meals / (need * 20));
+        const memory = other && town._paultendoPoliticalMemory?.[other.id];
+        return { hunger, oppression, tax, unrest, war, trade, reliance, aid: Math.min(1, aid / (need * 8)), grievance: clampValue((memory?.grievance || 0) / 10, 0, 1),
+            relation: other ? clampValue((getRelations(town, other) + getRelations(other, town)) / 40, -1, 1) : 0,
+            affinity: other ? politicalBackground(town, other) : 0, justice: (values.justice || 0) / 10, openness: (values.openness || 0) / 10,
+            order: (values.order || 0) / 10, wealth: (values.wealth || 0) / 10, tenets };
+    }
+    function politicalCohorts(town) {
+        const jobs = Object.entries(town.jobs || {}).filter(([, n]) => n > 0), total = jobs.reduce((n, [, count]) => n + count, 0);
+        const scale = total > town.pop ? town.pop / total : 1;
+        const groups = jobs.map(([role, count]) => ({ role, count: count * scale }));
+        if (total < town.pop) groups.push({ role: 'resident', count: town.pop - total });
+        return groups;
+    }
+    function politicalSupport(town, terms, other = null, action = 'join') {
+        const s = politicalSignals(town, other), positions = [];
+        for (const cohort of politicalCohorts(town)) {
+            const craft = ['miner', 'lumberer', 'smith', 'builder', 'potter'].includes(cohort.role), merchant = cohort.role === 'merchant', soldier = cohort.role === 'soldier', priest = cohort.role === 'priest';
+            let support = .48 + s.relation * .18 + s.affinity * .12 - s.grievance * .25;
+            if (terms.market) support += s.trade * .25 + s.reliance * .2 + s.openness * .09 + (merchant ? .16 : craft ? -.06 * s.wealth : 0);
+            if (terms.defense) support += s.war * .22 + s.order * .08 + (soldier ? .12 : 0) - (s.tenets.includes('pacifism') ? .12 : 0);
+            if(terms.closedBorders)support+=s.order*.1-s.trade*.25-(merchant?.15:0)+ (s.tenets.includes('insular')?.1:0);
+            if (terms.law) support += s.justice * .08 - (1 - terms.autonomy) * (.25 - s.affinity * .15);
+            support -= (terms.rate || 0) * (1 + s.hunger + s.tax * 2);
+            if (priest && s.tenets.includes('insular')) support -= .16;
+            if (terms.form === 'crown' || terms.form === 'feudal') support += s.order * .2 - s.justice * .2 + (s.tenets.includes('hierarchical') ? .15 : 0);
+            if (terms.form === 'republic' || terms.form === 'federation') support += s.justice * .15 + s.openness * .1 - s.order * .06;
+            if (action === 'leave') support = 1 - support + s.oppression * .2 + s.unrest * .2;
+            if (action === 'law') {support = .5 + s.justice * .22 + s.openness * .1 - s.order * .1 + s.oppression * .15;if(terms.restriction)support=1-support+s.war*.2;}
+            const voices = (town._paultendoPeople || []).filter(p => p.role === cohort.role && livingTeachingPersonAvailable(p, town));
+            if (voices.length) support += voices.reduce((n, p) => n + (p.outlook === 'guarded' ? -.06 : p.outlook === 'curious' ? .06 : 0), 0) / voices.length;
+            positions.push({ role: cohort.role, count: cohort.count, support: clampValue(support, 0, 1) });
+        }
+        const support = positions.reduce((n, c) => n + c.count * c.support, 0) / Math.max(1, town.pop);
+        const reasons = [s.trade > .2 && 'goods exchanged with neighbours', s.reliance > .2 && 'food arriving from outside', s.war && 'fighting nearby', s.tax > .25 && 'heavy taxes', s.oppression > 0 && 'voices being silenced', s.grievance > .2 && 'broken obligations', s.affinity > .2 && 'a shared past'].filter(Boolean);
+        return { support, positions, reasons, signals: s };
+    }
+    function politicalContact(a, b) {
+        return a && b && a.id !== b.id && !areAtWar(a, b) && (getTradeRouteBetween(a, b)?.active || politicalBackground(a, b) > .3 || getTownDistance(a, b) <= 6 && Math.abs(getRelations(a, b)) > 0);
+    }
+    function politicalFormAvailable(town, form) {
+        return ['market', 'pact'].includes(form) || townKnowledgeLevel(town, 'government') >= (['confederation', 'feudal', 'crown'].includes(form) ? 20 : 40);
+    }
+    function politicalPetition(town, members, form, options = {}) {
+        const state = politicalState(), charter = POLITICAL_CHARTERS[form];
+        if (!charter || !town || town.end || !politicalFormAvailable(town, form)) return null;
+        const ids = [...new Set([town.id, ...members])], other = ids.filter(id => id !== town.id).map(id => regGet('town', id));
+        if (ids.length < 2 || other.some(t => !politicalContact(town, t) || !politicalFormAvailable(t, form))) return null;
+        const type = options.type || 'found';
+        if (state.proposals.some(p => !p.resolved && p.type === type && p.form === form && p.members.slice().sort().join(',') === ids.slice().sort().join(','))) return null;
+        const terms = { ...charter, form, ...options.terms };
+        terms.rate = clampValue(terms.rate, 0, .15); terms.customs = clampValue(terms.customs, 0, .15); terms.autonomy = clampValue(terms.autonomy, .1, 1);
+        const p = { id: politicalId(), type, town: town.id, members: ids, form, terms, group: options.group, day: planet.day, due: planet.day + POLITICAL_PACE.debate, advocacy: {}, votes: {}, history: [], ...options.data };
+        state.proposals.push(p); politicalNews(p, town.name + ' opens talks on a ' + charter.name.toLowerCase() + '.'); return p;
+    }
+    function politicalMemberVote(town, p) {
+        const other = p.members.filter(id => id !== town.id).map(id => regGet('town', id)).filter(t => t && !t.end);
+        const opinions = other.map(t => politicalSupport(town, p.terms, t, p.type === 'law' ? 'law' : 'join'));
+        const support = opinions.reduce((n, o) => n + o.support, 0) / Math.max(1, opinions.length) + clampValue(p.advocacy[town.id] || 0, -.12, .12);
+        return { support: clampValue(support, 0, 1), yes: support >= .55, reasons: [...new Set(opinions.flatMap(o => o.reasons))] };
+    }
+    function politicalRemember(town, other, kind, amount) {
+        const memory = town._paultendoPoliticalMemory ||= {}, entry = memory[other.id] ||= { grievance: 0, help: 0, history: [] };
+        entry[kind] = clampValue((entry[kind] || 0) + amount, 0, 10); politicalHistory(entry, kind, { amount, other: other.id });
+    }
+    function politicalRatify(p) {
+        if (p.resolved) return;
+        const towns = p.members.map(id => regGet('town', id));
+        if (towns.some(t => !t || t.end || t.pop <= 0) || towns.some(a => towns.some(b => a !== b && areAtWar(a, b)))) { p.resolved = planet.day; p.status = 'withdrawn'; return; }
+        p.votes = Object.fromEntries(towns.map(t => [t.id, politicalMemberVote(t, p)]));
+        const group = p.group && politicalState().groups.find(g => g.id === p.group && !g.ended);
+        const accepted = p.type === 'law' && group ? politicalCouncilConsent(group, p.votes) : towns.every(t => p.votes[t.id].yes);
+        p.resolved = planet.day; p.status = accepted ? 'agreed' : 'refused';
+        if (!accepted) { politicalNews(p, 'The talks end without agreement.'); return; }
+        if (p.type === 'law') {
+            if (!group || !group.terms.law || !p.law || !['happy.speech', 'happy.rights', 'travel', 'education.religion'].includes(p.law)) { p.status = 'withdrawn'; return; }
+            group.laws ||= {}; group.laws[p.law] = p.allowed;
+            for (const town of towns) { town.legal ||= {}; town.legal[p.law] = p.allowed; }
+            politicalNews(group, group.name + (p.allowed ? ' protects ' : 'restricts ') + p.law.split('.').at(-1) + '.'); return;
+        }
+        if (p.type === 'amend' || p.type === 'admit') {
+            if (p.terms.law && towns.some(t => politicalGroups(t,'law').some(g=>g.id!==p.group) || politicalDependency(t)&&politicalDependency(t).rel.terms?.compact!==p.group)) { p.status='withdrawn';return; }
+            if (p.form==='feudal' && p.form!==group?.form) { p.status='withdrawn';return; }
+            if (!group) { p.status = 'withdrawn'; return; }
+            if (p.type === 'admit') for (const t of towns) if (!group.members.includes(t.id)) { group.members.push(t.id); group.accounts[t.id] = { paid: 0, received: 0, arrears: 0 }; }
+            if(group.form==='feudal'&&p.form!=='feudal')for(const rel of (planet._paultendoVassals || []).slice())if(rel.terms?.compact===group.id)endVassalRelation(rel,'an equal charter');
+            group.terms = { ...p.terms }; group.form = p.form; for(const rel of planet._paultendoVassals || [])if(rel.terms?.compact===group.id){rel.autonomy=group.terms.autonomy;rel.terms.tribute=group.terms.rate;} politicalHistory(group, 'charter', { proposal: p.id, members: group.members.slice(), terms: { ...p.terms } });
+            politicalNews(group, group.name + ' agrees a new charter.'); return;
+        }
+        // A town can enter several treaties, but cannot owe sovereignty twice.
+        if (p.terms.law && towns.some(t => politicalGroups(t, 'law').length || politicalDependency(t))) { p.status = 'withdrawn'; return; }
+        if (p.form === 'feudal' && towns.slice(1).some(t => politicalDependency(t))) { p.status = 'withdrawn'; return; }
+        if(p.form==='feudal')for(const subject of towns.slice(1)){const seen=new Set([subject.id]);let ancestor=towns[0];while(ancestor){if(seen.has(ancestor.id)){p.status='withdrawn';politicalNews(p,'An existing oath prevents the new compact.');return;}seen.add(ancestor.id);ancestor=getTownOverlord(ancestor);}}
+        const g = { id: politicalId(), name: towns[0].name + ' ' + (p.form === 'market' ? 'Market League' : p.form === 'pact' ? 'Pact' : p.form === 'crown' ? 'Crown' : p.form === 'republic' ? 'Republic' : p.form === 'feudal' ? 'Compact' : POLITICAL_CHARTERS[p.form].name),
+            form: p.form, terms: { ...p.terms }, members: p.members.slice(), founded: planet.day, leader: towns[0].id, treasury: 0, accounts: {}, history: [], sanctions: [], laws: {}, legitimacy: 1 };
+        towns.forEach(t => g.accounts[t.id] = { paid: 0, received: 0, arrears: 0 }); politicalState().groups.push(g); p.created = g.id;
+        if (g.form === 'feudal') for (const subject of towns.slice(1)) {
+            const rel = createVassalRelation(towns[0], subject, { autonomy: g.terms.autonomy, resentment: 0, terms: { origin: 'compact', compact: g.id, tribute: g.terms.rate, protection: true, land: getTownClaimedChunks(subject).map(c => getChunkKey(c.x, c.y)) } });
+            if (!rel) politicalLeave(g, subject, 'could not swear the oath');
+        }
+        politicalHistory(g, 'founded', { proposal: p.id }); politicalNews(g, g.name + ' is founded.', 'milestone');
+    }
+    function politicalCouncilConsent(group, votes) {
+        const members = group.members.map(id => regGet('town', id)).filter(t => t && !t.end);
+        if (group.form === 'crown' || group.form === 'feudal') return !!votes[group.leader]?.yes && members.filter(t => votes[t.id]?.yes).length >= Math.ceil(members.length / 2);
+        if (group.form === 'confederation' || group.form === 'market' || group.form === 'pact') return members.every(t => votes[t.id]?.yes);
+        const total = members.reduce((n, t) => n + (group.form === 'republic' ? t.pop : 1), 0);
+        return members.reduce((n, t) => n + (votes[t.id]?.yes ? group.form === 'republic' ? t.pop : 1 : 0), 0) > total / 2;
+    }
+    function politicalLeave(group, town, reason = 'withdrawal') {
+        if (!group || group.ended || !group.members.includes(town.id)) return false;
+        const share = Math.min(group.treasury, Math.max(0, group.treasury / group.members.length));
+        group.treasury -= share; applyTownCashDelta(town, share, 'other');
+        group.members = group.members.filter(id => id !== town.id);
+        if(group.sourceAlliance){const alliance=(planet.alliances || []).find(a=>a.id===group.sourceAlliance);if(alliance){alliance.members=alliance.members.filter(id=>id!==town.id);if(alliance.members.length<2)planet.alliances=planet.alliances.filter(a=>a!==alliance);}}
+        for (const rel of (planet._paultendoVassals || []).slice()) if (rel.terms?.compact === group.id && (rel.subjectId === town.id || rel.overlordId === town.id)) endVassalRelation(rel, reason);
+        politicalHistory(group, 'left', { town: town.id, reason, refunded: share });
+        politicalNews({ ...group, members: [...group.members, town.id], history: group.history }, town.name + ' leaves ' + group.name + '.', 'milestone');
+        if (group.leader === town.id) group.leader = group.members[0];
+        if (group.members.length < 2) {
+            for (const id of group.members) { const member = regGet('town', id); if (member && !member.end) { applyTownCashDelta(member, group.treasury, 'other'); group.treasury = 0; } }
+            group.ended = planet.day; group.sanctions = [];
+        }
+        return true;
+    }
+    function politicalCollectiveEmbargo(a, b) {
+        return politicalGroups(a).some(g => g.sanctions.some(s => !s.ended && s.target === b.id)) || politicalGroups(b).some(g => g.sanctions.some(s => !s.ended && s.target === a.id));
+    }
+    function politicalBorderClosed(a, holder) {
+        const owner = regGet('town', holder); if (!owner || owner.id === a.id) return false;
+        return politicalCollectiveEmbargo(a, owner) || politicalGroups(owner).some(g => g.terms.closedBorders && !g.members.includes(a.id));
+    }
+    function politicalCustoms(exchange, buyer, seller) {
+        if (!exchange || exchange._politicalCustoms || exchange.kind !== 'trade' || exchange.payment?.type !== 'cash' || !exchange.paid) return;
+        exchange._politicalCustoms = true;
+        const group = politicalGroups(seller, 'market').find(g => !g.members.includes(buyer.id) && g.terms.customs > 0);
+        if (!group) return;
+        const due = exchange.paid * group.terms.customs, paid = Math.min(commodityStock(seller, 'cash'), due);
+        applyTownCashDelta(seller, -paid, 'trade'); group.treasury += paid;
+        group.accounts[seller.id].paid += paid; politicalHistory(group, 'customs', { exchange: exchange.id, town: seller.id, paid });
+        exchange.customs = { group: group.id, paid, due };
+    }
+    function politicalFinance(group) {
+        if (group.lastDues != null && planet.day - group.lastDues < POLITICAL_PACE.dues) return;
+        group.lastDues = planet.day;
+        for (const id of group.members) {
+            const town = regGet('town', id); if (!town || town.end) continue;
+            const account = group.accounts[id] ||= { paid: 0, received: 0, arrears: 0 };
+            const receipts = town._paultendoCashFlow?.day === planet.day ? town._paultendoCashFlow.received : 0;
+            const due = Math.max(0, receipts + commodityStock(town, 'cash') * .1) * group.terms.rate;
+            // Feudal dues use the same contract here, not a second legacy tribute.
+            const paid = Math.min(commodityStock(town, 'cash'), due);
+            applyTownCashDelta(town, -paid, 'other'); group.treasury += paid; account.paid += paid; account.arrears += due - paid;
+            politicalHistory(group, 'dues', { town: id, due, paid });
+        }
+        const needy = group.members.map(id => regGet('town', id)).filter(t => t && !t.end && (mealStock(t) < nativeMealNeed(t) * 2 || hasIssue(t, 'war')));
+        if (needy.length && group.treasury > 0) {
+            const fund = group.treasury;
+            for (const t of needy) { const grant = Math.min(group.treasury, fund / needy.length); group.treasury -= grant; applyTownCashDelta(t, grant, 'other'); group.accounts[t.id].received += grant; politicalHistory(group, 'grant', { town: t.id, paid: grant }); }
+        }
+    }
+    function politicalDefend(group) {
+        if (!group.terms.defense) return;
+        for (const war of getActiveWars()) {
+            const defenderId = war.cause?.targetId || war.defender || war.target?.id || war.target;
+            if (!group.members.includes(defenderId)) continue;
+            const side = getWarSideIndex(war, defenderId); if (side == null) continue;
+            const defender = regGet('town', defenderId);
+            for (const id of group.members) {
+                const t = regGet('town', id);
+                if (!t || t.end || getWarSideIndex(war, id) != null || hasIssue(t, 'war')) continue;
+                if (mealStock(t) < nativeMealNeed(t) * 2 || !(t.jobs?.soldier > 0)) { politicalRemember(defender, t, 'grievance', .05); continue; }
+                if (politicalSupport(t, group.terms, defender).support < .5) continue;
+                if (addTownToWarSide(war, id, side)) { ensureIssues(t); t.issues.war = war.id; politicalHistory(group, 'defense', { town: id, war: war.id }); politicalNews(group, t.name + ' sends help to ' + defender.name + '.', 'warning'); }
+            }
+        }
+    }
+    function politicalMovement(town, kind, target, pressure, reasons, data = {}) {
+        const state = politicalState(), key = [town.id, kind, target].join(':');
+        let m = state.movements.find(m => m.key === key && !m.resolved);
+        if (!m && pressure < .38) return null;
+        if (!m) {
+            const last = state.movements.findLast(m => m.key === key && m.resolved);
+            if (last && planet.day - last.resolved < POLITICAL_PACE.recovery) return null;
+            m = { id: politicalId(), key, town: town.id, kind, target, day: planet.day, support: .1, momentum: 0, history: [], ...data }; state.movements.push(m);
+        }
+        m.reasons = reasons; m.pressure = clampValue(pressure, 0, 1);
+        m.support += (m.pressure - m.support) * .14;
+        m.momentum = Math.max(0, m.momentum + (m.support >= .55 ? m.support : -.8));
+        if (!m.announced && m.support >= .45) { m.announced = planet.day; politicalNews(m, town.name + (kind === 'faith' ? ' debates its old teachings.' : kind === 'regional' ? ' hears calls for a separate town.' : ' hears calls for greater independence.')); }
+        if (m.support < .15 && planet.day - m.day > POLITICAL_PACE.debate) { m.resolved = planet.day; m.status = 'faded'; }
+        return m;
+    }
+    function politicalConcession(m, kind) {
+        if (!m || m.resolved) return false;
+        const town = regGet('town', m.town); if (!town || town.end) return false;
+        if (m.actions?.[kind]!=null && planet.day-m.actions[kind]<POLITICAL_PACE.debate)return false;
+        (m.actions ||= {})[kind]=planet.day;
+        if (kind === 'silence') {
+            m.repression = (m.repression || 0) + .2; town.legal ||= {}; town.legal['happy.speech'] = false;
+            town.unrest = clampValue((town.unrest || 0) + 8, 0, 100); m.momentum = Math.max(0, m.momentum - 2);
+            politicalHistory(m, 'silenced'); politicalNews(m, 'Guards break up the gathering in ' + town.name + '.', 'warning'); return true;
+        }
+        if (kind === 'support') { m.advocacy = clampValue((m.advocacy || 0) + .12, 0, .24); politicalHistory(m, 'encouraged'); return true; }
+        if (kind === 'rights') { town.legal ||= {}; town.legal['happy.speech'] = town.legal['happy.rights'] = true; town.tax = Math.max(0, (town.tax || 0) - .1); town.unrest = Math.max(0, (town.unrest || 0) - 12); m.concession = planet.day; politicalHistory(m, 'concession'); politicalNews(m, town.name + ' grants a hearing and lowers the levy.'); return true; }
+        const dep = politicalDependency(town);
+        if (kind === 'autonomy' && dep) { dep.rel.autonomy = Math.min(1, dep.autonomy + .25); if (dep.kind === 'vassal') dep.rel.resentment = Math.max(0, dep.rel.resentment - 3); dep.rel.concession = planet.day; politicalHistory(m, 'autonomy'); return true; }
+        return false;
+    }
+    function politicalProtectorCandidates(town){
+        const terms={...POLITICAL_CHARTERS.feudal,form:'feudal'};
+        return politicalTowns().filter(t=>t.id!==town.id&&politicalContact(town,t)&&t.pop>town.pop&&politicalFormAvailable(t,'feudal')&&politicalSupport(t,terms,town).support>=.55)
+            .map(t=>({town:t,score:politicalSupport(town,terms,t).support})).filter(o=>o.score>=.55).sort((a,b)=>b.score-a.score||a.town.id-b.town.id);
+    }
+    function politicalResolveIndependence(m, town) {
+        if (m.momentum < POLITICAL_PACE.settlement || m.support < .6) return;
+        if (m.kind === 'exit') {
+            const group = politicalState().groups.find(g => g.id === m.target && !g.ended);
+            if (group) politicalLeave(group, town, 'the town withdrew its consent');
+        } else if (m.kind === 'independence') {
+            const dep = politicalDependency(town); if (!dep) { m.resolved = planet.day; m.status = 'settled'; return; }
+            const peaceful = dep.autonomy >= .8 || (dep.parent.values?.justice || 0) >= 4 || dep.parent.pop < town.pop;
+            if (dep.kind === 'vassal') {const compact=stateGroupById(dep.rel.terms?.compact);if(compact)politicalLeave(compact,town,'independence');else endVassalRelation(dep.rel, peaceful ? 'independence recognised' : 'independence declared');}
+            else { dep.rel.sovereign = planet.day; dep.rel.autonomy = 1; }
+            if(dep.distant&&!peaceful){
+                dep.rel.disputed=planet.day;
+                if(dep.parent.jobs?.soldier>0&&dep.parent.resources?.cargo_vessel>0&&isSpaceRouteBetween({worldId:dep.rel.originWorldId,townId:dep.parent.id},{worldId:skyWorldId(),townId:town.id})) {
+                    const war=createSpaceWar({worldId:dep.rel.originWorldId,townId:dep.parent.id},{worldId:skyWorldId(),townId:town.id});if(war)war.cause={id:'colonial_independence',movement:m.id};
+                }
+            }
+            if (!dep.distant) {
+                politicalRemember(town, dep.parent, peaceful ? 'help' : 'grievance', peaceful ? 1 : 3);
+                if (!peaceful && !hasIssue(town, 'war') && !hasIssue(dep.parent, 'war')) {
+                    const war = startWar(dep.parent, town); if (war) { war.cause = { id: 'independence', label: 'a disputed declaration of independence', subjectId: dep.parent.id, targetId: town.id }; war.objective = { id: 'vassalize', targetId: town.id }; }
+                }
+            }
+            m.peaceful = peaceful;
+            const protectors=politicalProtectorCandidates(town),preferred=protectors.find(p=>p.town.id===m.protector)||((town.values?.order || 0)>3&&(town.values?.justice || 0)<0?protectors[0]:null);
+            if(preferred&&preferred.town.id!==dep.parent.id){const offer=politicalPetition(preferred.town,[town.id],'feudal');if(offer)m.protectorPetition=offer.id;}
+            politicalNews(m, town.name + (peaceful ? ' wins recognition as an independent town.' : ' declares independence. Its former ruler refuses to recognise it.'), peaceful ? 'milestone' : 'warning');
+        } else if (m.kind === 'regional') {
+            const chunks = (m.chunks || []).map(k => planet.chunks[k]).filter(c => c?.v?.s === town.id);
+            if (chunks.length < SECESSION_CONFIG.minSplitSize || town.pop < 12) { m.resolved = planet.day; m.status = 'dispersed'; return; }
+            const peaceful = (town.values?.justice || 0) > 3 && town.legal?.['happy.speech'] !== false;
+            const child = createSecessionTown(town, chunks, { peaceful, type: 'breakaway' }); if (!child) return;
+            m.child = child.id;
+            if (!peaceful && !hasIssue(town, 'war')) { const war = startWar(town, child); if (war) { war.cause = { id: 'secession', label: 'a disputed secession', subjectId: town.id, targetId: child.id }; war.objective = { id: 'vassalize', targetId: child.id }; } }
+            politicalNews(m, child.name + ' separates from ' + town.name + '.', 'milestone');
+        }
+        m.resolved = planet.day; m.status = 'independent';
+    }
+    function politicalReligiousPressure(town) {
+        const religion = getTownReligion(town), s = politicalSignals(town); if (!religion) return { pressure: 0, reasons: [], doctrine: null };
+        const origin = regGet('town', religion.foundingTown), reasons = [];
+        let pressure = s.oppression * .25, doctrine;
+        if (s.justice > .3 && religion.tenets.includes('hierarchical')) { pressure += s.justice * .4; reasons.push('priests reserving authority for a few'); doctrine = 'egalitarian'; }
+        if (s.war && religion.tenets.includes('pacifism') && town.jobs?.soldier > 0) { pressure += .35; reasons.push('soldiers defending the town despite the teaching against war'); doctrine = 'militarism'; }
+        if (s.war && s.unrest > .3 && religion.tenets.includes('militarism') && s.hunger > .3) { pressure += .3; reasons.push('families bearing the cost of fighting'); doctrine = 'pacifism'; }
+        if (s.trade > .3 && religion.tenets.includes('insular')) { pressure += .3; reasons.push('traders learning from outsiders'); doctrine = 'trade'; }
+        if (origin && origin.id !== town.id) { const relation = politicalSignals(town, origin); pressure += Math.max(0, -relation.relation) * .3 + relation.grievance * .3; if (relation.relation < -.2) reasons.push('resentment of the founding town'); }
+        if (s.oppression) reasons.push('worshippers being silenced');
+        return { pressure: Math.min(1, pressure), reasons, doctrine: doctrine || (s.justice > 0 ? 'egalitarian' : 'hierarchical') };
+    }
+    function politicalSchism(m, town) {
+        const old = getTownReligion(town); if(old&&!old.followers)old.followers=politicalTowns().filter(t=>t.religion===old.id).map(t=>t.id); if (!old || m.momentum < POLITICAL_PACE.settlement || m.support < .6) return;
+        const state = politicalState();
+        const nextId = Math.max(0, ...planet.religions.map(r => r.id)) + 1;
+        const newFaith = { ...structuredClone(old), id: nextId, name: town.name + ' Rite', foundingTown: town.id, founded: planet.day, parent: old.id, followers: [], cohesion: 60, extinct: false, reformed: false };
+        const opposed = { egalitarian: 'hierarchical', hierarchical: 'egalitarian', militarism: 'pacifism', pacifism: 'militarism', trade: 'insular' };
+        newFaith.tenets = old.tenets.filter(t => t !== opposed[m.doctrine]); if (!newFaith.tenets.includes(m.doctrine)) newFaith.tenets.push(m.doctrine);
+        const effects={egalitarian:{happy:.3},hierarchical:{crime:-.3},militarism:{military:.5},pacifism:{military:-.3,happy:.3},trade:{trade:.5},insular:{}};
+        for(const [key,amount] of Object.entries(effects[opposed[m.doctrine]] || {}))newFaith.influences[key]=(newFaith.influences[key] || 0)-amount;
+        for(const [key,amount] of Object.entries(effects[m.doctrine] || {}))if(!old.tenets.includes(m.doctrine))newFaith.influences[key]=(newFaith.influences[key] || 0)+amount;
+        newFaith.tenetNames = newFaith.tenets.slice(); newFaith._paultendoCause = { movement: m.id, reasons: m.reasons.slice(), origin: old.id };
+        const candidateMovements = state.movements.filter(r => !r.resolved && r.kind === 'faith' && r.target === old.id && r.doctrine === m.doctrine && r.support >= .6);
+        for (const r of candidateMovements) { const follower = regGet('town', r.town); if (!follower || follower.end || follower.religion !== old.id) continue; follower.religion = nextId; newFaith.followers.push(follower.id); old.followers = old.followers.filter(id => id !== follower.id); r.resolved = planet.day; r.status = 'schism'; r.religion = nextId; }
+        planet.religions.push(newFaith); politicalNews(m, town.name + ' establishes a new rite.', 'milestone');
+        // A difference in worship creates no war, political exit or blanket grudge.
+    }
+    function politicalUnionPressure(town, role) {
+        const s = politicalSignals(town), wage = town._paultendoLabor?.[role]?.wage || 0;
+        const tax = Math.max(0, s.tax - .15), poverty = Math.max(0, 1 - (town.wealth || 0) / Math.max(1, town.pop * 4));
+        return clampValue(s.hunger * .3 + tax * .7 + s.oppression * .2 + s.unrest * .25 + poverty * .15 - Math.min(.4, wage), 0, 1);
+    }
+    function politicalUnionBargain(union, action) {
+        if (!union || union.ended) return false;
+        const town = regGet('town', union.town); if (!town || town.end || !(town.jobs?.[union.role] > 0)) return false;
+        if (action === 'pay') {
+            if(union.lastPaid!=null && planet.day-union.lastPaid<POLITICAL_PACE.dues)return false;
+            const workers = Math.min(town.pop, town.jobs[union.role]), due = workers * .1, paid = Math.min(commodityStock(town, 'cash'), due);
+            if (!paid) return false; applyTownCashDelta(town, -paid, 'wages'); town.wealth = (town.wealth || 0) + paid;
+            (town._paultendoLabor ||= {})[union.role] = { wage: paid / workers, until: planet.day + POLITICAL_PACE.dues };
+            union.lastPaid=planet.day; union.grievance = Math.max(0, union.grievance - paid / Math.max(1, due) * .4); politicalHistory(union, 'paid', { paid, due });
+        } else if (action === 'rights') { if(union.recognised===planet.day)return false;union.recognised=planet.day; town.legal ||= {}; town.legal['happy.speech'] = true; union.grievance *= .65; delete union.banned; politicalHistory(union, 'recognised'); }
+        else if (action === 'ban') { if(union.banned)return false; union.banned = planet.day; union.grievance = Math.min(1, union.grievance + .25); town.legal ||= {}; town.legal['happy.speech'] = false; town.unrest = Math.min(100, (town.unrest || 0) + 5); politicalHistory(union, 'banned'); }
+        else return false;
+        if (union.grievance < .4) { union.strike = false; union.status = 'bargaining'; }
+        return true;
+    }
+    function politicalLaborStopped(town, role) { return (planet._paultendoPolitics?.unions || []).some(u => u.town === town?.id && u.role === role && !u.ended && u.strike); }
+    function politicalAdvanceUnions(town) {
+        const state = politicalState();
+        for (const [role, count] of Object.entries(town.jobs || {})) {
+            if (count < 3 || ['soldier', 'priest', 'resident'].includes(role)) continue;
+            const pressure = politicalUnionPressure(town, role);
+            let union = state.unions.find(u => u.town === town.id && u.role === role && !u.ended);
+            if (!union && pressure < .4) continue;
+            if (!union) { union = { id: politicalId(), town: town.id, role, day: planet.day, name: town.name + ' ' + titleCase(role) + ' Association', grievance: 0, support: 0, history: [], status: 'gathering' }; state.unions.push(union); }
+            union.members = Math.min(town.pop, count);
+            union.grievance += (pressure + (union.banned ? .15 : 0) - union.grievance) * .12;
+            union.support += (union.grievance - union.support) * .12;
+            if (!union.announced && union.support >= .3) { union.announced = planet.day; politicalNews(union, union.name + ' asks for better terms.'); }
+            if (union.grievance >= .58 && union.support >= .45 && !union.strike) { union.strike = planet.day || true; union.status = 'strike'; politicalNews(union, 'The ' + role + ' workers in ' + town.name + ' stop work.', 'warning'); }
+            if (union.strike && union.grievance < .4) { union.strike = false; union.status = 'bargaining'; politicalNews(union, 'The ' + role + ' workers in ' + town.name + ' return to work.'); }
+            if (union.announced && planet.day - (union.lastBargain || union.day) >= POLITICAL_PACE.debate && (town.values?.justice || 0) > 2 && mealStock(town)>=nativeMealNeed(town)*2 && politicalUnionBargain(union, 'pay')) union.lastBargain = planet.day;
+            union.allies = state.unions.filter(u => u !== union && !u.ended && u.role === role && u.support > .3 && politicalContact(town, regGet('town', u.town))).map(u => u.id);
+        }
+        for (const u of state.unions.filter(u => u.town === town.id && !u.ended)) if (!(town.jobs?.[u.role] >= 3)) { u.ended = planet.day; u.strike = false; u.status = 'dispersed'; }
+        for (const [role, contract] of Object.entries(town._paultendoLabor || {})) if (contract.until < planet.day) delete town._paultendoLabor[role];
+    }
+    function politicalAdvanceTown(town) {
+        const state = politicalState(), s = politicalSignals(town), dep = politicalDependency(town);
+        for(const memory of Object.values(town._paultendoPoliticalMemory || {})){memory.grievance=Math.max(0,(memory.grievance || 0)*.995);memory.help=Math.max(0,(memory.help || 0)*.998);}
+        if (dep) {
+            const current = dep.distant ? { reliance: 0, aid: 0, affinity: .35, relation: 0, grievance: 0 } : politicalSignals(town, dep.parent);
+            const missed = clampValue((dep.rel.resentment || 0) / 10, 0, 1), isolated = dep.distant ? .15 : 0;
+            const pressure = s.unrest * .4 + s.oppression * .2 + s.tax * .4 + missed * .5 + (1-dep.autonomy)*.15 + current.grievance * .3 + isolated - current.aid * .3 - current.reliance * .25 - current.affinity * .1;
+            const m = politicalMovement(town, 'independence', (dep.distant ? dep.rel.originWorldId + ':' : '') + dep.parent.id, pressure, [s.tax > .2 && 'tribute and taxes', missed > .3 && 'resentment of the ruler', isolated && 'a distant parent town', current.reliance > .2 && 'dependence on imported food'].filter(Boolean));
+            if (m) { m.pressure = clampValue(m.pressure + (m.advocacy || 0) + (m.repression || 0), 0, 1); m.support += (m.pressure - m.support) * .08; politicalResolveIndependence(m, town); }
+        }
+        for (const group of politicalGroups(town)) {
+            const others = group.members.filter(id => id !== town.id).map(id => regGet('town', id)).filter(t => t && !t.end);
+            const opposition = others.reduce((n, t) => n + politicalSupport(town, group.terms, t, 'leave').support, 0) / Math.max(1, others.length);
+            const account = group.accounts[town.id] || {};
+            const pressure = opposition + (1-group.legitimacy)*.15 + Math.min(.2, (account.arrears || 0) / Math.max(1, town.pop)) + Math.max(0, (account.paid || 0) - (account.received || 0)) / Math.max(100, town.pop * 50);
+            const m = politicalMovement(town, 'exit', group.id, pressure, ['the terms of ' + group.name, (account.paid || 0) > (account.received || 0) && 'contributing more than it receives'].filter(Boolean));
+            if (m) politicalResolveIndependence(m, town);
+        }
+        // Spatially distinct, contiguous districts have their own political memory.
+        const claimed = getTownClaimedChunks(town);
+        if (claimed.length >= SECESSION_CONFIG.minSplitSize * 2 && town.pop >= 12 && !hasIssue(town, 'war')) {
+            const district = town._paultendoDistrict ||= { chunks: (splitTownTerritory(town, Math.floor(claimed.length * .3)) || []).map(c => getChunkKey(c.x, c.y)) };
+            const cells = district.chunks.map(k => planet.chunks[k]).filter(c => c?.v?.s === town.id), center = getTownCenter(town);
+            const remote = center && cells.length ? Math.min(1, cells.reduce((n, c) => n + Math.hypot(c.x - center[0], c.y - center[1]), 0) / cells.length / 12) : 0;
+            const pressure = s.unrest * .5 + s.tax * .5 + s.oppression * .25 + remote * .2;
+            const m = cells.length >= SECESSION_CONFIG.minSplitSize && politicalMovement(town, 'regional', 'district', pressure, [remote > .3 && 'distance from the town centre', s.tax > .2 && 'taxes collected here', s.oppression > 0 && 'local voices being silenced'].filter(Boolean), { chunks: district.chunks.slice() });
+            if (m) { m.pressure = clampValue(m.pressure + (m.advocacy || 0) + (m.repression || 0), 0, 1); m.support += (m.pressure - m.support) * .08; politicalResolveIndependence(m, town); }
+        }
+        const religion = getTownReligion(town), religious = politicalReligiousPressure(town);
+        if (religion) { const m = politicalMovement(town, 'faith', religion.id, religious.pressure, religious.reasons, { doctrine: religious.doctrine }); if (m) { m.doctrine = religious.doctrine; politicalSchism(m, town); } }
+        politicalAdvanceUnions(town);
+    }
+    function politicalAdvanceGroups() {
+        const state = politicalState();
+        for (const group of state.groups.filter(g => !g.ended)) {
+            for (const id of group.members.slice()) { const town = regGet('town', id); if (!town || town.end || town.pop <= 0) { group.members = group.members.filter(k => k !== id); politicalHistory(group, 'lostMember', { town: id }); } }
+            if (group.members.length < 2) { group.ended = planet.day; for (const id of group.members) { const town = regGet('town', id); if (town) { applyTownCashDelta(town, group.treasury, 'other'); group.treasury = 0; } } group.sanctions = []; continue; }
+            if (!group.members.includes(group.leader)) group.leader = group.members[0];
+            if (group.form !== 'crown' && group.form !== 'feudal' && planet.day - (group.lastElection ?? group.founded) >= 30) {
+                group.lastElection = planet.day;
+                const nominees = group.members.map(id => regGet('town', id));
+                group.leader = nominees.map(t => ({ id: t.id, score: nominees.reduce((n, voter) => n + (getRelations(voter, t) + getRelations(t, voter)) + (group.accounts[voter.id]?.received || 0), 0) })).sort((a, b) => b.score - a.score || a.id - b.id)[0].id;
+                politicalHistory(group, 'election', { leader: group.leader });
+            }
+            politicalFinance(group); politicalDefend(group);
+            const votes = Object.fromEntries(group.members.map(id => { const town = regGet('town', id); return [id, { yes: (town.values?.justice || 0) > 0 || group.form === 'crown' && id === group.leader }]; }));
+            for (const sanction of group.sanctions.filter(s => !s.ended)) {
+                const enemy = regGet('town', sanction.target);
+                if (!enemy || enemy.end || group.members.includes(sanction.target) || group.members.every(id => getRelations(regGet('town', id), enemy) >= 0 && !areAtWar(regGet('town', id), enemy))) { sanction.ended = planet.day; politicalHistory(group, 'embargoLifted', { target: sanction.target }); }
+            }
+            if (group.terms.law) for (const id of group.members) { const town = regGet('town', id); for (const [law, allowed] of Object.entries(group.laws)) { if (town.legal?.[law] !== allowed) { politicalRemember(town, regGet('town', group.leader), 'grievance', .04); group.legitimacy = Math.max(0, group.legitimacy - .001); } } }
+            group.legitimacy = clampValue(group.legitimacy + (politicalCouncilConsent(group, votes) ? .002 : -.002), 0, 1);
+        }
+    }
+    function politicalAdoptAlliances(){
+        const state=politicalState();
+        for(const alliance of planet.alliances || []){
+            let group=state.groups.find(g=>g.sourceAlliance===alliance.id);
+            if(!group){group={id:politicalId(),sourceAlliance:alliance.id,name:alliance.name,form:'pact',terms:{...POLITICAL_CHARTERS.pact,form:'pact',rate:0},members:alliance.members.slice(),founded:alliance.formed || planet.day,leader:alliance.members[0],treasury:0,accounts:{},history:[],sanctions:[],laws:{},legitimacy:1};state.groups.push(group);}
+            if(group.ended)continue;
+            for(const id of group.members.slice())if(!alliance.members.includes(id)){const town=regGet('town',id);if(town)politicalLeave(group,town,'left the alliance');}
+            if(!group.ended){group.members=alliance.members.slice();for(const id of group.members)group.accounts[id] ||= {paid:0,received:0,arrears:0};}
+        }
+        for(const group of state.groups.filter(g=>g.sourceAlliance&&!g.ended))if(!(planet.alliances || []).some(a=>a.id===group.sourceAlliance)){for(const id of group.members.slice()){const town=regGet('town',id);if(town)politicalLeave(group,town,'the alliance dissolved');}}
+    }
+    function advancePoliticalCommunities() {
+        const state = politicalState(); if (state.lastDay === planet.day) return; state.lastDay = planet.day;
+        politicalAdoptAlliances();
+        const towns = politicalTowns();
+        for(const u of state.unions)if(!regGet('town',u.town)||regGet('town',u.town).end||regGet('town',u.town).pop<=0){u.ended ||= planet.day;u.strike=false;}
+        for(const m of state.movements)if(!m.resolved&&(!regGet('town',m.town)||regGet('town',m.town).end||regGet('town',m.town).pop<=0)){m.resolved=planet.day;m.status='dispersed';}
+        for (const p of state.proposals.filter(p => !p.resolved && p.due <= planet.day)) politicalRatify(p);
+        politicalAdvanceGroups();
+        for (const town of towns) politicalAdvanceTown(town);
+        // Existing alliances keep their identity, while sustained dealings can
+        // produce a separate market or a negotiated constitutional charter.
+        for (let i = 0; i < towns.length; i++) for (let j = i + 1; j < towns.length; j++) {
+            const a = towns[i], b = towns[j]; if (!politicalContact(a, b)) continue;
+            const pa = a._paultendoPoliticalTalks ||= {}, key = b.id;
+            const form = politicalShared(a, b, 'market') ? !politicalShared(a, b, 'law') && politicalFormAvailable(a, 'federation') && politicalFormAvailable(b, 'federation') ? 'federation' : null : hasIssue(a, 'war') || hasIssue(b, 'war') ? 'pact' : 'market';
+            if (!form) continue;
+            const terms = { ...POLITICAL_CHARTERS[form], form }, opinion = Math.min(politicalSupport(a, terms, b).support, politicalSupport(b, terms, a).support);
+            const useful = politicalSignals(a, b).trade > .2 || politicalSignals(b, a).reliance > .2 || form === 'pact' || politicalShared(a, b, 'market');
+            if (!useful || opinion < .62) { delete pa[key]; continue; }
+            const talk = pa[key] ||= { day: planet.day, form }; if (talk.form !== form) { pa[key] = { day: planet.day, form }; continue; }
+            if (planet.day - talk.day < POLITICAL_PACE.debate || talk.proposed && planet.day - talk.proposed < POLITICAL_PACE.recovery) continue;
+            politicalPetition(a, [b.id], form); talk.proposed = planet.day;
+        }
+    }
+    modEvent('townCouncilDeliberation',{daily:true,subject:{reg:'player',id:1},func:advancePoliticalCommunities});
+    function politicalCouncilAction(group, town, action, target = null) {
+        if (!group || group.ended || !group.members.includes(town.id)) return false;
+        if (action === 'leave') { const m = politicalMovement(town, 'exit', group.id, .7, ['a petition to leave ' + group.name]); if (m) politicalConcession(m, 'support'); return !!m; }
+        if (action === 'embargo' && target && !group.members.includes(target.id)) {
+            const votes = Object.fromEntries(group.members.map(id => { const voter = regGet('town', id), s = politicalSignals(voter, target); return [id, { yes: s.relation < -.15 || areAtWar(voter, target) || s.grievance > .3 }]; }));
+            if (!politicalCouncilConsent(group, votes) || group.sanctions.some(s => !s.ended && s.target === target.id)) return false;
+            group.sanctions.push({ target: target.id, day: planet.day, votes }); politicalNews(group, group.name + ' closes trade with ' + target.name + '.', 'warning'); return true;
+        }
+        return false;
+    }
+    let politicalView=null;
+    function populatePoliticalExecutive(items,title,render=null){
+        politicalView={planet,title:title.toLowerCase(),render:render || (()=>populatePoliticalExecutive(items,title))};
+        populateExecutive(items,title);markLivingStoryControls();openExecutive();
+    }
+    function refreshPoliticalCouncilView(){
+        if(politicalView?.planet!==planet||politicalView.title!==currentExecutive)return false;
+        politicalView.render();return true;
+    }
+    function openPoliticalMovement(m) {
+        const town = regGet('town', m.town); if (!town || !livingTownKnown(town)) return;
+        const items = [{ text: '← Back to the council', func: () => openPoliticalCouncil(town) }, { text: escapeLivingText(m.reasons?.join('. ') || 'People are gathering to discuss their future.'), class: 'paultendoLifeBody' }];
+        if (m.resolved) items.push({ text: escapeLivingText(m.status === 'independent' ? 'The town has gone its own way.' : m.status === 'schism' ? 'A new rite has taken root.' : 'The gathering has dispersed.'), class: 'paultendoLifeBody' });
+        else {
+            items.push({ text: m.support >= .6 ? 'The gathering has broad support.' : 'Opinions are still divided.', class: 'paultendoLifeBody' });
+            if(m.kind==='independence')for(const offer of politicalProtectorCandidates(town))if(livingTownKnown(offer.town))items.push({text:'Seek protection from '+escapeLivingText(offer.town.name),func:()=>{if(!m.resolved){m.protector=offer.town.id;politicalConcession(m,'support');}openPoliticalMovement(m);}});
+            for (const [kind, label] of [['support', 'Encourage their cause'], ['rights', 'Urge a hearing and a lighter levy'], ['autonomy', 'Urge greater autonomy'], ['silence', 'Send guards to silence them']]) if (kind !== 'autonomy' || politicalDependency(town)) items.push({ text: label, func: () => { politicalConcession(m, kind); openPoliticalMovement(m); } });
+        }
+        populatePoliticalExecutive(items, m.kind === 'faith' ? 'A new teaching' : 'A town of their own',()=>openPoliticalMovement(m)); markLivingStoryControls(); openExecutive();
+    }
+    function openPoliticalCharter(group,town) {
+        const items=[{text:'← Back to the community',func:()=>openPoliticalGroup(group,town)}];
+        for(const [label,terms] of [
+            ['Ask for a lighter contribution',{rate:group.terms.rate/2}],
+            ['Raise contributions to the common purse',{rate:Math.min(.15,group.terms.rate+.02)}],
+            ['Keep more decisions in each town',{autonomy:Math.min(1,group.terms.autonomy+.2)}],
+            ['Open the outer borders',{closedBorders:false}],
+            ['Close the outer borders',{closedBorders:true}],
+            ['End the common customs levy',{customs:0}]
+        ])items.push({text:label,func:()=>{const p=politicalPetition(town,group.members,group.form,{type:'amend',group:group.id,terms:{...group.terms,...terms}});if(p)openPoliticalProposal(p,town);}});
+        populatePoliticalExecutive(items,'The charter',()=>openPoliticalCharter(group,town));markLivingStoryControls();openExecutive();
+    }
+    function openPoliticalPast(town) {
+        const state=planet._paultendoPolitics,items=[{text:'← Back to the council',func:()=>openPoliticalCouncil(town)}];
+        for(const p of (state?.proposals || []).filter(p=>p.members.includes(town.id)&&p.resolved).slice(-8).reverse())items.push({text:'Day '+p.resolved+' · '+POLITICAL_CHARTERS[p.form].name,func:()=>openPoliticalProposal(p,town)});
+        for(const m of (state?.movements || []).filter(m=>m.town===town.id&&m.resolved).slice(-8).reverse())items.push({text:'Day '+m.resolved+' · '+(m.kind==='faith'?'A change of worship':'A gathering remembered'),func:()=>openPoliticalMovement(m)});
+        populatePoliticalExecutive(items,'Past gatherings',()=>openPoliticalPast(town));markLivingStoryControls();openExecutive();
+    }
+    function openPoliticalProposal(p, town) {
+        const items = [{ text: '← Back to the council', func: () => openPoliticalCouncil(town) }];
+        items.push({ text: escapeLivingText(p.members.map(id => {const t=regGet('town',id);return livingTownKnown(t)?t.name:'A neighbouring town';}).join(', ')), class: 'paultendoLifeBody' });
+        items.push({ text: escapeLivingText([p.terms.market && 'Goods can cross the shared market', p.terms.defense && 'Members promise help if attacked', p.terms.law && 'The common council can set agreed laws', p.terms.rate && 'Members contribute to a common purse', p.terms.autonomy < 1 && 'Some decisions belong to the wider community'].filter(Boolean).join('. ') + '.'), class: 'paultendoLifeBody' });
+        if (!p.resolved) {
+            for (const id of p.members) { const voter = regGet('town', id); if (!voter || !livingTownKnown(voter)) continue; const vote = politicalMemberVote(voter, p); items.push({ text: escapeLivingText(voter.name + (vote.support >= .55 ? ' leans towards the agreement.' : ' has doubts.') + (vote.reasons.length ? ' People talk about ' + vote.reasons.join(', ') + '.' : '')), class: 'paultendoLifeBody' }); }
+            const other=p.members.map(id=>regGet('town',id)).find(t=>t&&t.id!==town.id);
+            const opinion=politicalSupport(town,p.terms,other);
+            for(const position of opinion.positions)if(position.count>=3)items.push({text:escapeLivingText(titleCase(position.role)+' households '+(position.support>=.55?'mostly favour the agreement.':position.support<.4?'mostly oppose it.':'are divided.')),class:'paultendoLifeBody'});
+            const speaker=(town._paultendoPeople || []).find(person=>livingTeachingPersonAvailable(person,town)&&opinion.positions.some(c=>c.role===person.role));
+            if(speaker){const position=opinion.positions.find(c=>c.role===speaker.role),quote=position.support>=.55?(opinion.signals.reliance>.2?'We depend on what comes down that road.':p.terms.defense?'We should not have to face an attack alone.':'There is something to gain by working together.'):'I want to know what we will have to give up.';items.push({text:escapeLivingText('“'+quote+'” '+speaker.name),class:'paultendoLifeBody'});}
+            if (!p.advocacy[town.id]) for (const [label, amount] of [['Speak for the agreement', .12], ['Speak against the agreement', -.12]]) items.push({ text: label, func: () => { if (!p.resolved && !p.advocacy[town.id]) { p.advocacy[town.id] = amount; politicalHistory(p, 'advocacy', { town: town.id, amount }); } openPoliticalProposal(p, town); } });
+            items.push({ text: 'The towns will decide after the talks.', class: 'paultendoLifeBody' });
+        } else items.push({ text: p.status === 'agreed' ? 'The towns reached an agreement.' : 'The talks have ended.', class: 'paultendoLifeBody' });
+        populatePoliticalExecutive(items, POLITICAL_CHARTERS[p.form].name,()=>openPoliticalProposal(p,town)); markLivingStoryControls(); openExecutive();
+    }
+    function openPoliticalGroup(group, town) {
+        const items = [{ text: '← Back to the council', func: () => openPoliticalCouncil(town) }];
+        for (const id of group.members) { const member = regGet('town', id); if (livingTownKnown(member)) items.push({ text: escapeLivingText(member.name + (id === group.leader ? ' · Council seat' : '')), func: () => { closeExecutive(); openRegBrowser(member, 'town'); } }); }
+        items.push({ text: escapeLivingText(group.terms.name + '. The common purse holds about ' + Math.round(group.treasury / 10) * 10 + ' cash.'), class: 'paultendoLifeBody' });
+        for (const entry of group.history.slice(-6).reverse()) if (entry.kind === 'news') items.push({ text: escapeLivingText(entry.text), class: 'paultendoLifeBody' });
+        if (!group.ended && group.members.includes(town.id)) {
+            items.push({text:'Discuss the charter',func:()=>openPoliticalCharter(group,town)});
+            items.push({ text: 'Ask the town to leave', func: () => { politicalCouncilAction(group, town, 'leave'); openPoliticalCouncil(town); } });
+            for (const form of ['confederation', 'federation', 'republic', 'crown']) if (form !== group.form && politicalFormAvailable(town, form)) items.push({ text: 'Discuss a ' + POLITICAL_CHARTERS[form].name.toLowerCase(), func: () => { const p = politicalPetition(town, group.members, form, { type: 'amend', group: group.id }); if (p) openPoliticalProposal(p, town); } });
+            if (group.terms.law) for (const [law, label] of [['happy.speech', 'Protect the right to speak'], ['happy.rights', 'Protect residents’ rights'], ['travel', 'Open the borders']]) items.push({ text: label, func: () => { const p = politicalPetition(town, group.members, group.form, { type: 'law', group: group.id, data: { law, allowed: true } }); if (p) openPoliticalProposal(p, town); } });
+            if(group.terms.law)items.push({text:'Restrict public dissent',func:()=>{const p=politicalPetition(town,group.members,group.form,{type:'law',group:group.id,terms:{...group.terms,restriction:true},data:{law:'happy.speech',allowed:false}});if(p)openPoliticalProposal(p,town);}});
+            for (const outsider of politicalTowns().filter(t => !group.members.includes(t.id) && livingTownKnown(t) && politicalContact(town, t))) {
+                items.push({ text: 'Invite ' + escapeLivingText(outsider.name), func: () => { const p = politicalPetition(town, [...group.members, outsider.id], group.form, { type: 'admit', group: group.id }); if (p) openPoliticalProposal(p, town); } });
+                items.push({ text: 'Call for an embargo on ' + escapeLivingText(outsider.name), func: () => { const passed = politicalCouncilAction(group, town, 'embargo', outsider); populatePoliticalExecutive([{ text: passed ? 'The council backs the embargo.' : 'The council will not back the embargo.' }, { text: '← Back', func: () => openPoliticalGroup(group, town) }], group.name); openExecutive(); } });
+            }
+        }
+        populatePoliticalExecutive(items, escapeLivingText(group.name),()=>openPoliticalGroup(group,town)); markLivingStoryControls(); openExecutive();
+    }
+    function openPoliticalUnion(union) {
+        const town = regGet('town', union.town); if (!town || !livingTownKnown(town)) return;
+        const items = [{ text: '← Back to the council', func: () => openPoliticalCouncil(town) }, { text: union.strike ? 'Work has stopped. The workers want better terms.' : 'Workers meet to press their claims.', class: 'paultendoLifeBody' }];
+        for (const [action, label] of [['pay', 'Pay the workers from the town purse'], ['rights', 'Recognise their right to meet'], ['ban', 'Ban the association']]) if (!union.ended) items.push({ text: label, func: () => { const ok = politicalUnionBargain(union, action); if (!ok) { populatePoliticalExecutive([{ text: 'The town cannot pay what is being asked.' }, { text: '← Back', func: () => openPoliticalUnion(union) }], escapeLivingText(union.name)); openExecutive(); } else openPoliticalUnion(union); } });
+        for (const id of union.allies || []) { const ally = politicalState().unions.find(u => u.id === id), other = ally && regGet('town', ally.town); if (livingTownKnown(other)) items.push({ text: escapeLivingText(other.name + ' has workers with the same concerns.'), class: 'paultendoLifeBody' }); }
+        populatePoliticalExecutive(items, escapeLivingText(union.name),()=>openPoliticalUnion(union)); markLivingStoryControls(); openExecutive();
+    }
+    function openPoliticalCouncil(town) {
+        if (!town || town.end || !livingTownKnown(town)) return;
+        const state = planet._paultendoPolitics, items = [{ text: '← Back to settlement', func: () => { closeExecutive(); openRegBrowser(town, 'town'); } }];
+        const dep = politicalDependency(town); if (dep) items.push({ text: escapeLivingText((dep.kind === 'colony' ? 'Founded from ' : 'Bound by oath to ') + dep.parent.name + '.'), class: 'paultendoLifeBody' });
+        for (const m of (state?.movements || []).filter(m => m.town === town.id && !m.resolved)) items.push({ text: m.kind === 'faith' ? 'Debate over the old teachings' : m.kind === 'exit' ? 'A petition to leave' : 'Calls for independence', func: () => openPoliticalMovement(m) });
+        for (const u of (state?.unions || []).filter(u => u.town === town.id && !u.ended && u.announced)) items.push({ text: escapeLivingText(u.name + (u.strike ? ' · On strike' : '')), func: () => openPoliticalUnion(u) });
+        for (const p of (state?.proposals || []).filter(p => p.members.includes(town.id) && !p.resolved)) items.push({ text: POLITICAL_CHARTERS[p.form].name + ' · Talks underway', func: () => openPoliticalProposal(p, town) });
+        for (const g of politicalGroups(town)) items.push({ text: escapeLivingText(g.name), func: () => openPoliticalGroup(g, town) });
+        const neighbours = politicalTowns().filter(t => t.id !== town.id && livingTownKnown(t) && politicalContact(town, t));
+        for (const other of neighbours) items.push({ text: 'Talk with ' + escapeLivingText(other.name), func: () => { populatePoliticalExecutive([{ text: '← Back to the council', func: () => openPoliticalCouncil(town) }, ...Object.entries(POLITICAL_CHARTERS).filter(([form]) => politicalFormAvailable(town, form) && politicalFormAvailable(other, form) && !politicalShared(town, other, form === 'market' ? 'market' : form === 'pact' ? 'defense' : 'law')).map(([form, charter]) => ({ text: charter.name, func: () => { const p = politicalPetition(town, [other.id], form); if (p) openPoliticalProposal(p, town); } }))], 'Talks with ' + escapeLivingText(other.name)); openExecutive(); } });
+        if((state?.proposals || []).some(p=>p.members.includes(town.id)&&p.resolved)||(state?.movements || []).some(m=>m.town===town.id&&m.resolved))items.push({text:'Past gatherings',func:()=>openPoliticalPast(town)});
+        if (items.length === 1) items.push({ text: 'The town settles its affairs here. Wider agreements begin when it meets its neighbours.', class: 'paultendoLifeBody' });
+        populatePoliticalExecutive(items, escapeLivingText(town.name + ' Council'),()=>openPoliticalCouncil(town)); markLivingStoryControls(); openExecutive();
+    }
+
+    // =========================================================================
     // ALLIANCE SYSTEM
     // Towns can form formal alliances that persist and affect diplomacy/war
     // =========================================================================
@@ -18860,7 +19458,7 @@
     // Check if two towns are allied
     function areAllied(town1, town2) {
         const alliance = getTownAlliance(town1);
-        return alliance && alliance.members.includes(town2.id);
+        return !!(alliance && alliance.members.includes(town2.id)) || !!politicalShared(town1,town2,'defense');
     }
 
     // Create a new alliance between two towns
@@ -19534,6 +20132,9 @@
     function createVassalRelation(overlord, subject, options = {}) {
         if (!overlord || !subject || overlord.id === subject.id) return null;
         initVassals();
+        if (getTownOverlord(subject) || politicalGroups(subject,'law').length) return null;
+        const seen = new Set([subject.id]); let ancestor = overlord;
+        while (ancestor) { if (seen.has(ancestor.id)) return null; seen.add(ancestor.id); ancestor = getTownOverlord(ancestor); }
         if (getVassalRelation(overlord.id, subject.id)) return null;
 
         const rel = normalizeVassalRelation({
@@ -19757,6 +20358,7 @@
             initVassals();
             planet._paultendoVassals.forEach(rel => {
                 normalizeVassalRelation(rel);
+                if (rel.terms?.compact && politicalState().groups.some(g=>g.id===rel.terms.compact&&!g.ended)) return;
                 if (planet.day - rel.lastTributeDay >= VASSAL_CONFIG.tributeInterval) {
                     applyVassalTribute(rel);
                 }
@@ -19787,8 +20389,8 @@
             initVassals();
             planet._paultendoVassals.forEach(rel => {
                 normalizeVassalRelation(rel);
-                maybeDefectVassal(rel);
-                maybeTriggerVassalRebellion(rel);
+                // Independence and allegiance are now debated by the subject.
+                // The daily political layer owns the decision and its consequences.
             });
         }
     });
@@ -20523,7 +21125,7 @@
     // Embargo system
     function hasEmbargo(town1, town2) {
         initEconomics();
-        return planet.embargoes.some(e =>
+        return politicalCollectiveEmbargo(town1, town2) || planet.embargoes.some(e =>
             (e.fromId === town1.id && e.toId === town2.id) ||
             (e.fromId === town2.id && e.toId === town1.id)
         );
@@ -31661,7 +32263,7 @@
 
     // Religious schism - religion splits into two
     modEvent("religiousSchism", {
-        random: true,
+        random: false,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
         value: (subject, target, args) => {
@@ -39990,8 +40592,11 @@
         const seed = splitChunks[Math.floor(splitChunks.length / 2)];
         if (!seed) return null;
 
-        const newTown = happen("Create", parentTown, null, { x: seed.x, y: seed.y, pop: 0 }, "town");
-        if (!newTown) return null;
+        // Native settlement creation only accepts unclaimed land and supplies
+        // free founding crops. A partition moves an existing district instead.
+        const newTown = defaultTown();
+        newTown.pop=0;newTown.start=planet.day;newTown.center=[seed.x,seed.y];newTown.startBiome=seed.b;
+        regAdd('town',newTown);
         ensureTownState(newTown);
 
         newTown.former = parentTown.id;
@@ -40034,10 +40639,34 @@
             }
         });
 
-        const migrateCount = Math.max(2, Math.round((parentTown.pop || 1) * (transferred / (parentTown.size + transferred)) * 0.7));
-        if (migrateCount > 0) {
-            happen("Migrate", parentTown, newTown, { count: migrateCount });
+        const oldPop = Math.max(1,parentTown.pop || 1), ratio = transferred / (parentTown.size + transferred);
+        const migrateCount = Math.min(Math.max(0,oldPop-2),Math.max(2,Math.round(oldPop*ratio)));
+        const removed = happen("RemovePop",null,parentTown,{count:migrateCount});
+        const moved = removed?.count || 0;
+        happen("AddPop",null,newTown,{count:moved});
+        for(const [job,count] of Object.entries(removed?.jobs || {})) newTown.jobs[job]=(newTown.jobs[job] || 0)+count;
+        const wealth = Math.max(0,parentTown.wealth || 0)*moved/oldPop;
+        parentTown.wealth=Math.max(0,(parentTown.wealth || 0)-wealth);newTown.wealth=(newTown.wealth || 0)+wealth;
+        for(const [type,count] of Object.entries(parentTown.resources || {})) {
+            const share=type==='cash'?count*moved/oldPop:Math.floor(count*moved/oldPop);
+            if(share<=0)continue;
+            if(type==='cash'){applyTownCashDelta(parentTown,-share,'other');applyTownCashDelta(newTown,share,'other');continue;}
+            const before=commodityStock(newTown,type);happen('AddResource',null,newTown,{type,count:share});
+            const added=commodityStock(newTown,type)-before;
+            if(added>0){
+                const inputs=[];withCommodityUse({kind:'transport',id:'partition-'+newTown.id,inputs},()=>removeCommodityStock(parentTown,type,added));
+                const lots=((newTown._paultendoCommodityLots ||= {})[type] ||= []),tracked=inputs.reduce((n,i)=>n+i.count,0);
+                if(added>tracked)lots.push({count:added-tracked,from:parentTown.id,partition:newTown.id});
+                for(const input of inputs)lots.push({...structuredClone(input),partition:newTown.id});
+            }
         }
+        newTown._paultendoLocalDiscoveries=structuredClone(parentTown._paultendoLocalDiscoveries || {});
+        newTown._paultendoPeople=[];
+        for(const person of (parentTown._paultendoPeople || []).slice()) {
+            if(livingTeachingPersonAvailable(person,parentTown)&&newTown._paultendoPeople.filter(p=>p.role===person.role).length<(newTown.jobs?.[person.role] || 0)) {newTown._paultendoPeople.push(person);parentTown._paultendoPeople=parentTown._paultendoPeople.filter(p=>p!==person);}
+        }
+        for(const artifact of livingWorldState().artifacts)if(artifact.town===parentTown.id&&newTown._paultendoPeople.some(p=>p.id===artifact.person)){artifact.town=newTown.id;artifact.townName=newTown.name;livingArtifactEvent(artifact,`Its bearer carries it into ${newTown.name}.`);}
+        const faith=getTownReligion(parentTown);if(faith){faith.followers ||= [parentTown.id];if(!faith.followers.includes(newTown.id))faith.followers.push(newTown.id);}
 
         try { happen("UpdateCenter", null, parentTown); } catch {}
         try { happen("UpdateCenter", null, newTown); } catch {}
@@ -40088,7 +40717,7 @@
     }
 
     modEvent("townSecession", {
-        random: true,
+        random: false,
         weight: $c.VERY_RARE,
         subject: { reg: "town", random: true },
         value: (subject) => {
