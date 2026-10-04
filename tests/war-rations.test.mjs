@@ -14,7 +14,7 @@ function check(g){assert.deepEqual(g.errors,[]);}
 
 test('actual short meals reduce an army’s territorial attack without adding another food bill or awarding gear',async t=>{
  const losses=[];
- for(const hungry of [false,true]){const g=await makeGame();t.after(g.close);const {w,a,b,war}=setup(g);const meal=eat(w,a,hungry?1:1000);eat(w,b,1000);assert.equal(meal.consumed<meal.wanted,hungry);const food=plain([a.resources,b.resources]),military=w.planet.unlocks.military,size=b.size;fight(w,war,0);losses.push(size-b.size);assert.deepEqual(plain([a.resources,b.resources]),food);assert.equal(w.planet.unlocks.military,military);assert.equal(a.jobs.soldier,40);check(g);}
+ for(const hungry of [false,true]){const g=await makeGame();t.after(g.close);const {w,a,b,war}=setup(g);const meal=eat(w,a,hungry?1:1000);eat(w,b,1000);assert.equal(meal.consumed<meal.wanted,hungry);const food=plain([a.resources,b.resources]),military=w.planet.unlocks.military,size=b.size;fight(w,war,0);losses.push(size-b.size);const captured=w.planet._paultendoLife.exchanges.filter(r=>r.kind==='seizure').reduce((sum,r)=>sum+r.cargo,0);assert.equal((a.resources.crop || 0)+(b.resources.crop || 0)+captured,(food[0].crop || 0)+(food[1].crop || 0));assert.deepEqual(plain(a.resources),food[0]);assert.equal(w.planet.unlocks.military,military);assert.equal(a.jobs.soldier,40);check(g);}
  assert.ok(losses[0]>losses[1],JSON.stringify(losses));assert.ok(losses[1]>0,'Hungry soldiers can still fight');
 });
 

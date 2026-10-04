@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.64/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.65/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.64";
+    const MOD_VERSION = "1.6.65";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -6978,6 +6978,11 @@
     }
     function exchangeUseText(record,use) {
         const town=exchangeTownLabel(record,use.town),goods=COMMODITIES[use.type].label;
+        if(record.kind==='seizure') {
+            if(!use.known&&!record.known?.[use.town]&&!livingTownKnown(regGet('town',use.town)))return `${town} puts the captured ${goods} to use.`;
+            if(use.kind==='meals')return `Captured ${goods} feeds people in ${town}.`;
+            return `${town} uses captured ${goods}${use.kind==='construction'?` to build a ${(use.name || 'building').replace(/_/g,' ')}`:use.kind==='material'?` to make ${COMMODITIES[use.name]?.label || 'new materials'}`:use.kind==='inquiry'?` in trials for ${(use.name || 'a new method').toLowerCase()}`:use.kind==='tools'?' in its fields':' in its work'}.`;
+        }
         if(!use.known&&!record.known?.[use.town]&&!livingTownKnown(regGet('town',use.town)))return `${town} puts ${goods} from this exchange to use.`;
         if(use.kind==='meals')return `${goods[0].toUpperCase()+goods.slice(1)} from this exchange feeds people in ${town}.`;
         if(use.kind==='tools')return `${town} takes ${goods} from this exchange into its fields.`;
@@ -7090,11 +7095,14 @@
             case 'aid':return `${seller} sends ${step.count} ${goods} to ${buyer}.${step.reason==='remembered'?' They remember help that once came the other way.':step.reason==='practice'?' Helping neighbours has become a practice here.':step.reason==='belief'?' They put their belief in shared provision into practice.':step.reason==='shared'?' They share from the town’s stores.':''}`;
             case 'trade':return `${seller} sends ${step.count} ${goods} to ${buyer} for ${step.payment.count} in payment.`;
             case 'barter':return `${seller} sends ${step.count} ${goods} to ${buyer} in exchange for ${step.payment.count} ${payment}. Both supplies travel with the carriers.`;
-            case 'arrive':return `${step.count} ${goods} reach ${buyer}.${step.payment?` ${seller} receives ${step.payment.count} ${payment} in return.`:''} The towns remember the exchange.`;
+            case 'seizure':return `Raiders from ${buyer} take ${step.count} ${goods} from ${seller}. The supplies are on the road home. ${seller} remembers the theft.`;
+            case 'return':return `The road home opens. The carriers set off again with the captured ${goods}.`;
+            case 'war':return `${buyer} goes to war with ${seller} over the refused food request.`;
+            case 'arrive':return record.kind==='seizure'?`${step.count} captured ${goods} reach ${buyer} and enter its stores.`:`${step.count} ${goods} reach ${buyer}.${step.payment?` ${seller} receives ${step.payment.count} ${payment} in return.`:''} The towns remember the exchange.`;
             case 'refuse':return step.reason==='stores'?`${seller} cannot spare ${goods} without leaving its own people or work short.`:step.reason==='rivalry'?`${seller} refuses the request from its rival.`:step.reason==='outsiders'?`${seller} keeps its stores for its own people.`:`${seller} asks for payment, but the towns cannot agree on an exchange.`;
             case 'recovered':return `${buyer} no longer needs the ${goods}. The request is withdrawn.`;
-            case 'blocked':return `The journey between ${buyer} and ${seller} is blocked. The carriers wait with their cargo.`;
-            case 'closed':return `The journey between ${buyer} and ${seller} can no longer reach its destination.`;
+            case 'blocked':return record.kind==='seizure'?`The road home is blocked. The carriers wait with the captured ${goods}.`:`The journey between ${buyer} and ${seller} is blocked. The carriers wait with their cargo.`;
+            case 'closed':return record.kind==='seizure'?`The carriers can no longer return to ${buyer}. Their cargo is lost.`:`The journey between ${buyer} and ${seller} can no longer reach its destination.`;
             case 'threat':return `${buyer} threatens ${seller} over the food it refused to send. Relations worsen and the risk of war grows.`;
             case 'used':return exchangeUseText(record,step.use);
             case 'withheld':return `${exchangeTownLabel(record,step.town)} keeps its way of making ${COMMODITIES[step.type].label} to itself.`;
@@ -7108,7 +7116,7 @@
         if(record.steps.length>24) record.steps.splice(1,record.steps.length-24);
         for(const id of [record.buyer,record.seller]) if(livingTownKnown(regGet('town',id))) record.known[id]=true;
         const visibleTown=[record.buyer,record.seller].map(id=>regGet('town',id)).find(livingTownKnown);
-        if(visibleTown) modLog('memory',escapeLivingText(exchangeStepText(record,step)),kind==='threat'?'warning':null,{town:visibleTown,observedStory:true,story:{kind:'exchange',id:record.id}});
+        if(visibleTown) modLog('memory',escapeLivingText(exchangeStepText(record,step)),['threat','war','seizure'].includes(kind)?'warning':null,{town:visibleTown,observedStory:true,story:{kind:'exchange',id:record.id}});
     }
     function newCommodityJourney(buyer,seller,path,source='need',type='crop') {
         const state=commodityExchangeState();
@@ -7192,11 +7200,38 @@
         hunger.threatened=true;worsenRelations(buyer,seller,2);worsenRelations(seller,buyer,2);bumpWarPressure(buyer,seller,3);
         happen('Influence',null,buyer,{happy:-0.2});record.threat=true;noteExchangeStep(record,'threat');return true;
     }
+    function capturedSupplyPath(town,origin) {
+        if(!town||town.end||town.pop<=0||!origin)return null;
+        const enemies=new Set(regToArray('town').filter(other=>areAtWar(town,other)).map(other=>other.id));
+        return findPath(getAnchorChunk(origin),getAnchorChunk(town),{canEnter:chunk=>!enemies.has(chunk.v?.s)&&(chunk.b!=='water'||planet.unlocks.travel>=60)});
+    }
+    function captureWarSupplies(attacker,defender,chunk,war,carriers) {
+        if(!war||war.done||attacker.end||defender.end||!areAtWar(attacker,defender)||chunk.v.s===defender.id||carriers<1)return;
+        const state=commodityExchangeState();
+        if(state.exchanges.some(r=>r.kind==='seizure'&&r.buyer===attacker.id&&(!r.resolved||r.day===planet.day))||state.exchanges.length>=EXCHANGE_PACE.maxHistory&&state.exchanges.every(r=>!r.resolved))return;
+        const path=capturedSupplyPath(attacker,chunk);if(!path?.length)return;
+        const candidates=Object.keys(COMMODITIES).map(type=>{
+            const inTransit=state.exchanges.filter(r=>r.buyer===attacker.id&&r.type===type&&!r.resolved).reduce((sum,r)=>sum+(r.cargo || 0),0);
+            const demand=Math.max(0,commodityDemand(attacker,type,path)-inTransit);
+            const count=Math.floor(Math.min(demand,commodityStock(defender,type),Math.max(0,commodityCapacity(attacker,type)-commodityStock(attacker,type)-inTransit),Math.floor(carriers)*2));
+            return {type,count,weight:count>0?commodityUnitValue(attacker,type,commodityStock(attacker,type),demand,path):0};
+        }).filter(c=>c.count>0);
+        candidates.sort((a,b)=>b.weight-a.weight||a.type.localeCompare(b.type));
+        const pick=candidates[0];if(!pick)return;
+        const inputs=[],removed=withCommodityUse({kind:'transport',inputs},()=>removeCommodityStock(defender,pick.type,pick.count));
+        if(removed<=0)return;
+        const record={id:`exchange:${state.nextId++}`,type:pick.type,buyer:attacker.id,seller:defender.id,names:{[attacker.id]:attacker.name,[defender.id]:defender.name},known:{},day:planet.day,source:'raid',kind:'seizure',war:war.id,origin:{x:chunk.x,y:chunk.y},cause:war.cause?.source || null,purposes:COMMODITIES[pick.type].edible?[{kind:'meals'}]:commodityWorkClaims(attacker),status:'carrying',due:planet.day+commodityTravelDays(path),steps:[],resolved:false,cargo:removed,cargoLots:commodityCargoLots(removed,inputs)};
+        state.exchanges.push(record);
+        while(state.exchanges.length>EXCHANGE_PACE.maxHistory){const index=state.exchanges.findIndex(r=>r.resolved);if(index<0)break;state.exchanges.splice(index,1);}
+        const memory=exchangeMemory(defender,attacker);memory.lost ||= {};memory.lost[pick.type]=(memory.lost[pick.type] || 0)+removed;memory.lastTheft={day:planet.day,type:pick.type,count:removed,source:record.id};
+        recordGrudge(defender,attacker.id,'stores taken',Math.min(3,1+removed/Math.max(1,nativeMealNeed(defender))));
+        worsenRelations(defender,attacker,2);recordTraffic(path,0.2);noteExchangeStep(record,'seizure',{count:removed});
+    }
     function advanceCommodityJourneys() {
         for(const record of commodityExchangeState().exchanges.filter(r=>!r.resolved&&r.due<=planet.day)) {
             const buyer=regGet('town',record.buyer),seller=regGet('town',record.seller);
-            if(!buyer||buyer.end||buyer.pop<=0||!seller||seller.end||seller.pop<=0) {record.resolved=true;record.status='lost';record.lost={type:record.type,count:record.cargo,payment:record.paymentCargo || 0};record.cargo=0;record.paymentCargo=0;noteExchangeStep(record,'closed');continue;}
-            const path=commodityPath(buyer,seller);
+            if(!buyer||buyer.end||buyer.pop<=0||record.kind!=='seizure'&&(!seller||seller.end||seller.pop<=0)) {record.resolved=true;record.status='lost';record.lost={type:record.type,count:record.cargo,payment:record.paymentCargo || 0};record.cargo=0;record.paymentCargo=0;noteExchangeStep(record,'closed');continue;}
+            const path=record.kind==='seizure'?capturedSupplyPath(buyer,record.origin):commodityPath(buyer,seller);
             if(record.status==='making') {
                 const work=livingWorldState().materialWork.find(w=>w.id===record.manufacture?.work);
                 if(!work||['lost','failed'].includes(work.status)){record.resolved=true;record.status='unfilled';noteExchangeStep(record,'workLost');continue;}
@@ -7229,6 +7264,7 @@
                 if(COMMODITIES[record.type].edible)foodRefusalCanBecomeThreat(record,buyer,seller);continue;
             }
             if(!path){record.status='waiting';record.due=planet.day+1;if(record.steps.at(-1)?.kind!=='blocked')noteExchangeStep(record,'blocked');continue;}
+            if(record.kind==='seizure'&&record.status==='waiting'){record.status='carrying';record.due=planet.day+commodityTravelDays(path);noteExchangeStep(record,'return');continue;}
             if(record.cargo>0) {
                 const before=commodityStock(buyer,record.type);happen('AddResource',seller,buyer,{type:record.type,count:record.cargo});
                 const received=Math.max(0,commodityStock(buyer,record.type)-before);
@@ -7245,6 +7281,11 @@
             }
             if(record.cargo>0||record.paymentCargo>0){record.due=planet.day+1;continue;}
             record.resolved=true;record.status='arrived';record.arrived=planet.day;
+            if(record.kind==='seizure') {
+                const memory=exchangeMemory(buyer,seller || {id:record.seller});memory.seized ||= {};memory.seized[record.type]=(memory.seized[record.type] || 0)+record.delivered;
+                if(buyer.famine&&!buyer.famine.ended&&mealStock(buyer)>=foodBuffer(buyer))buyer.famine.ended=true;
+                recordTraffic(path,0.2);noteExchangeStep(record,'arrive',{count:record.delivered});continue;
+            }
             improveRelations(buyer,seller,1);improveRelations(seller,buyer,1);
             rememberCommodityExchange(seller,buyer,record.kind==='aid'?'aid':'trade',record.type,record.delivered,record.id);
             if(record.payment&&record.payment.type!=='cash')rememberCommodityExchange(buyer,seller,'trade',record.payment.type,record.paid,record.id);
@@ -7262,6 +7303,8 @@
         const known=[record.buyer,record.seller].map(id=>regGet('town',id)).find(livingTownKnown);if(!known)return;
         const items=[{text:'← Back to trade and neighbours',func:()=>openCommodityHistory(known)}];
         for(const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(exchangeStepText(record,step))}`});
+        const cause=record.cause&&commodityExchangeState().exchanges.find(r=>r.id===record.cause);
+        if(cause&&[cause.buyer,cause.seller].some(id=>livingTownKnown(regGet('town',id))))items.push({text:'Before the fighting',func:()=>openCommodityJourney(cause)});
         const production=record.manufacture&&livingWorldState().materialWork.find(w=>w.id===record.manufacture.work);
         if(production&&livingTownKnown(regGet('town',record.seller)))items.push({text:'Visit the workshop',func:()=>openMaterialWork(production)});
         if(livingTownKnown(regGet('town',record.buyer)))for(const claim of record.purposes || []) {
@@ -7285,7 +7328,7 @@
             const root=commodityExchangeState().exchanges.find(r=>r.id===previous.source);if(root&&resolveChronicleStory({kind:'food',id:root.id}))items.push({text:'Remember the earlier help',func:()=>openCommodityJourney(root)});
         }
         for(const id of [record.buyer,record.seller]){const town=regGet('town',id);if(livingTownKnown(town))items.push({text:`Visit ${escapeLivingText(town.name)}`,func:()=>{closeExecutive();openRegBrowser(town,'town');}});}
-        populateExecutive(items,'Trade and neighbours');markLivingStoryControls();openExecutive();
+        populateExecutive(items,record.kind==='seizure'?'Taken in the fighting':'Trade and neighbours');markLivingStoryControls();openExecutive();
     }
     function openCommodityHistory(town) {
         if(!livingTownKnown(town))return;
@@ -22650,6 +22693,9 @@
         const candidates = [];
         if (!instigator || !defender) return candidates;
 
+        const refused=commodityExchangeState().exchanges.findLast(record=>record.buyer===instigator.id&&record.seller===defender.id&&record.status==='refused'&&record.threat&&COMMODITIES[record.type]?.edible&&planet.day-(record.steps.findLast(step=>step.kind==='threat')?.day ?? record.day)<=EXCHANGE_PACE.flowDays);
+        if(refused&&mealStock(instigator)<nativeMealNeed(instigator)&&commodityStock(defender,refused.type)>0)candidates.push({id:'supplies',label:'the refused food request',weight:3,source:refused.id,type:refused.type});
+
         if (hasGrudge(instigator, defender.id)) {
             candidates.push({ id: "revenge", label: "revenge", weight: 3 });
         }
@@ -22716,6 +22762,8 @@
         const defenderPop = defender?.pop || 0;
         const defenderSize = defender?.size || 0;
 
+        if(cause.id==='supplies')return {id:'seize_supplies',label:'supplies for its people',source:cause.source,type:cause.type};
+
         if (cause.id === "seize_wonder") {
             return { id: "seize_wonder", label: "seize wonder", asset: cause.asset };
         }
@@ -22752,7 +22800,9 @@
         process.initiator = process.initiator || instigator.id;
         process.defender = process.defender || defender.id;
 
-        logMessage(`War ignites between {{regname:town|${instigator.id}}} and {{regname:town|${defender.id}}}: {{b:${cause.label}}} (demand: {{b:${objective.label}}}).`, "warning");
+        const request=cause.id==='supplies'&&commodityExchangeState().exchanges.find(r=>r.id===cause.source);
+        if(request)noteExchangeStep(request,'war',{war:process.id});
+        else logMessage(`War ignites between {{regname:town|${instigator.id}}} and {{regname:town|${defender.id}}}: {{b:${cause.label}}} (demand: {{b:${objective.label}}}).`, "warning");
     }
 
     function applyVassalWarJoin(process) {
@@ -23305,7 +23355,7 @@
         return process._paultendoEarlyDuration;
     }
 
-    function attemptEarlyRaid(attacker, defender, defence = 0) {
+    function attemptEarlyRaid(attacker, defender, defence = 0, war = null) {
         if (!attacker || !defender || attacker.end || defender.end) return false;
         if (!attacker.center || !defender.center) return false;
         if (Math.random() > EARLY_WAR_CONFIG.raidChance * warRationState(attacker).strength / (1 + defence / Math.max(1, getEarlyWarStrength(defender)))) return false;
@@ -23329,6 +23379,7 @@
             chunk.v.s = attacker.id;
             attacker.size = (attacker.size || 0) + 1;
         }
+        if(chunk.v.s!==defender.id)captureWarSupplies(attacker,defender,chunk,war,Math.floor(getEarlyWarStrength(attacker)*EARLY_WAR_CONFIG.raidChance));
 
         if (typeof happen === "function") {
             try { happen("UpdateCenter", null, attacker); } catch {}
@@ -23405,7 +23456,7 @@
                         happen("Death", null, target, { count: loss, cause: "war" });
                         process.deaths = (process.deaths || 0) + loss;
                     }
-                    attemptEarlyRaid(town, target, defence);
+                    attemptEarlyRaid(town, target, defence, process);
                 }
             }
         }
@@ -23433,7 +23484,7 @@
         return false;
     }
 
-    function performLateWarAttack(attacker, defender, participation, warStats) {
+    function performLateWarAttack(attacker, defender, participation, warStats, war = null) {
         if (!attacker || !defender || attacker.end || defender.end) return;
         if (!attacker.center) { try { happen("UpdateCenter", null, attacker); } catch {} }
         if (!defender.center) { try { happen("UpdateCenter", null, defender); } catch {} }
@@ -23471,6 +23522,7 @@
                 chunk.v.s = attacker.id;
                 attacker.size = (attacker.size || 0) + 1;
             }
+            if(i===0&&chunk.v.s!==defender.id)captureWarSupplies(attacker,defender,chunk,war,attackerSoldiers);
             happen("UpdateCenter", null, attacker);
             happen("UpdateCenter", null, defender);
         }
@@ -23537,7 +23589,7 @@
                 happen("Influence", null, town, { happy: -0.1, temp: true });
                 happen("Influence", null, target, { happy: -0.1, temp: true });
 
-                performLateWarAttack(town, target, participation[town.id], warStats);
+                performLateWarAttack(town, target, participation[town.id], warStats, process);
             }
         }
 
