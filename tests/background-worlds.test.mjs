@@ -18,8 +18,9 @@ test('native resize before planet creation is safe without the local launcher gu
  assert.ok(g.window.planet.config);g.window.dispatchEvent(new g.window.Event('resize'));assert.deepEqual(g.errors,[]);
 });
 test('inactive settlements eat actual food, harvest and mine through native daily events',async t=>{
- const {g,w,away,target,warnings}=await setup(t);const day=target.state.planet.day;
- let farm=0,mine=0;for(const [id,key] of [['townFarm','farm'],['townMine','mine']]){const e=w.gameEvents[id],base=e.perChunk;e.perChunk=function(subject,...args){if(w.planet===target.state.planet){if(key==='farm')farm++;else mine++;}return base.call(this,subject,...args);};e.chunkRate=1;}
+ const {g,w,away,target,warnings}=await setup(t);const day=target.state.planet.day;away.resources.crop=100;
+ // Leave room in the native stores and fix only the native harvest roll so this checks actual background production.
+ let farm=0,mine=0;for(const [id,key] of [['townFarm','farm'],['townMine','mine']]){const e=w.gameEvents[id],base=e.perChunk;e.perChunk=function(subject,...args){if(w.planet===target.state.planet){if(key==='farm')farm++;else mine++;}const random=w.Math.random;if(key==='farm')w.Math.random=()=>0;try{return base.call(this,subject,...args);}finally{w.Math.random=random;}};e.chunkRate=1;}
  next(w);assert.equal(target.state.planet.day,day+1);assert.ok(away._paultendoFoodFlow.some(flow=>flow.consumed>0));assert.ok(farm>0);assert.ok(mine>0);assert.ok(away._paultendoFoodFlow.some(flow=>flow.harvest>0));check(g,warnings);
 });
 test('shortages cause native starvation instead of guaranteed background growth',async t=>{

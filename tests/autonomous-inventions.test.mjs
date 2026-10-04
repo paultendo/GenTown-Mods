@@ -78,3 +78,44 @@ test('an autonomously made object can enter the actual Traveler loop with its ca
  const g=await makeGame();t.after(g.close);const {w,town}=setup(g);const work=notice(w,town),made=finish(w,work);for(let n=0;n<3;n++)next(w);town.influences.disease=0;w.openRegBrowser(town,'town');[...w.document.querySelectorAll('.paultendoTownLife button')].find(b=>b.textContent.endsWith(' · Its story')).click();click(w,`Speak to ${made.name}`);click(w,'Will you entrust');const promise=life(w).whispers.at(-1);promise.roll=0;w.planet.day=promise.due-1;next(w);assert.ok(made.returnOffer);w.planet.day=made.returnOffer.earliest-1;next(w);assert.equal(made.status,'returned');const object=w._paultendoUniverse.traveler.pack.find(a=>a.lineage===made.lineage);assert.equal(object.origin.cause.key,'illness');assert.equal(object.origin.whisper,undefined);
  w.document.getElementById('actionItem-annals').click();click(w,'The Traveler');click(w,'The way back');click(w,'Return to the beginning');w.handlePrompt(true);assert.equal(w.planet.day,1);assert.equal(w._paultendoUniverse.traveler.passage,1);const carried=w._paultendoUniverse.traveler.pack.find(a=>a.lineage===made.lineage);assert.equal(carried.origin.maker.name,work.name);assert.equal(carried.origin.cause.text,work.cause.text);const restored=await makeGame({save:plain(w.generateSave())});t.after(restored.close);assert.equal(restored.window._paultendoUniverse.traveler.pack.find(a=>a.lineage===made.lineage).origin.cause.key,'illness');errors(g);errors(restored);
 });
+
+
+function wartimeFixture(w,town){
+ // Hold population and jobs fixed so these tests isolate actual work and its crises.
+ for(const id of ['townEat','townEmploy','warPressureDynamics'])w.gameEvents[id].func=()=>{};
+ const war=w.happen('Create',town,null,{type:'war',towns:[town.id]},'process');town.issues.war=war.id;return war;
+}
+function ordinaryLens(w,town){
+ town.influences.disease=0;town.research={farm:100};town.guidanceTrust=90;
+ for(const p of town._paultendoPeople){p.outlook='curious';p.trust=90;}
+ click(w,'Doctor');click(w,'Make something of your own');click(w,'Make a clear lens');
+ const voice=life(w).whispers.at(-1);voice.roll=0;w.planet.day=voice.due-1;next(w);return life(w).artifactWork.at(-1);
+}
+test('a crisis pauses an ordinary unfinished object through its deadline and reload, then real work resumes',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g),work=ordinaryLens(w,town),due=work.due;
+ const war=wartimeFixture(w,town);for(let n=0;n<work.days+2;n++)next(w);
+ assert.equal(work.status,'working');assert.equal(work.pause,'war');assert.equal(work.progress,undefined);assert.equal(work.wartime,undefined);assert.ok(work.due>due);assert.equal(work.materials,undefined);assert.equal(work.steps.filter(s=>s.text.includes('fighting continues')).length,1);
+ const restored=await makeGame({save:plain(w.generateSave())});t.after(restored.close);const rw=restored.window;controlled(rw);for(const id of ['townEat','townEmploy','warPressureDynamics'])rw.gameEvents[id].func=()=>{};
+ const rt=rw.regGet('town',town.id),copy=life(rw).artifactWork.find(x=>x.id===work.id);assert.equal(copy.pause,'war');rw.happen('Finish',null,rw.regGet('process',war.id));delete rt.issues.war;
+ rt.resources.crop=0;next(rw);assert.equal(copy.pause,'food');const remaining=copy.due-rw.planet.day;next(rw);assert.equal(copy.due-rw.planet.day,remaining);
+ rt.resources.crop=1000;const metal=rt.resources.metal,glass=rt.resources.glass;const made=finish(rw,copy);assert.equal(rt.resources.metal,metal-2);assert.equal(rt.resources.glass,glass-1);assert.equal(made.origin.wartime,undefined);assert.equal(copy.steps.filter(s=>s.text.includes('returns to the unfinished')).length,1);errors(g);errors(restored);
+});
+
+test('a real military need keeps suitable work going through war, while hunger still stops it',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g,{miner:20,soldier:20});town.research={military:100};for(let n=0;n<3;n++)next(w);const work=life(w).artifactWork.find(x=>x.autonomous);assert.equal(work.kind,'fork');const war=wartimeFixture(w,town);
+ town.resources.crop=0;next(w);assert.equal(work.pause,'food');assert.equal(work.wartime,undefined);town.resources.crop=1000;
+ const before=town.resources.metal,made=finish(w,work);assert.equal(town.resources.metal,before-3);assert.equal(made.origin.wartime[0].war,war.id);assert.equal(made.origin.wartime[0].meaning,'drills');assert.ok(made.origin.wartime[0].days>0);assert.ok(made.events.some(e=>e.text.includes('finished while Wick was at war')));errors(g);
+});
+
+test('ordinary work can rarely persist during war without daily rerolls or free inputs, and carries that unexpected history',async t=>{
+ const g=await makeGame();t.after(g.close);const {w,town}=setup(g),work=ordinaryLens(w,town);
+ while(!work.progress)next(w);next(w);const war=wartimeFixture(w,town),sample=200;
+ // A cohort isolates the rarity check on the same genuine unfinished work.
+ life(w).artifactWork=Array.from({length:sample},(_,n)=>({...plain(work),id:`wartime-sample:${n}`,steps:[],due:w.planet.day+100,warPersistence:undefined}));
+ next(w);const cohort=life(w).artifactWork,continued=cohort.filter(x=>x.wartime?.some(c=>c.meaning==='persistence'));
+ assert.ok(continued.length>0&&continued.length<sample/10,`${continued.length}/${sample} continued`);const rolls=plain(cohort.map(x=>x.warPersistence));
+ for(let n=0;n<3;n++)next(w);assert.deepEqual(plain(cohort.map(x=>x.warPersistence)),rolls);assert.equal(cohort.filter(x=>x.wartime?.length).length,continued.length);
+ const chosen=continued[0];life(w).artifactWork=[chosen];const saved=plain(w.generateSave());const restored=await makeGame({save:saved});t.after(restored.close);const rw=restored.window;controlled(rw);for(const id of ['townEat','townEmploy','warPressureDynamics'])rw.gameEvents[id].func=()=>{};
+ const copy=life(rw).artifactWork[0],rt=rw.regGet('town',town.id),metal=rt.resources.metal;rw.planet.day=copy.due-1;next(rw);assert.equal(copy.status,'made');assert.equal(rt.resources.metal,metal-2);
+ const made=life(rw).artifacts.find(a=>a.id===copy.artifact);assert.equal(made.origin.wartime[0].meaning,'persistence');assert.equal(made.origin.wartime[0].war,war.id);assert.equal(made.origin.cause,undefined);assert.ok(made.events.some(e=>e.text.includes('ordinary idea')));assert.equal(made.events.find(e=>e.text.includes('ordinary idea')).day,made.origin.wartime[0].day);assert.ok(made.events.every((e,n)=>!n||e.day>=made.events[n-1].day));assert.equal(made.quality,.6);errors(g);errors(restored);
+});

@@ -5,7 +5,8 @@ const life=w=>w.planet._paultendoLife;
 const plain=x=>JSON.parse(JSON.stringify(x));
 const panel=w=>w.document.getElementById('actionSubList');
 function click(w,text){const button=[...panel(w).querySelectorAll('[role="button"]')].find(e=>e.textContent.includes(text));assert.ok(button,`${text}: ${panel(w).textContent}`);button.click();}
-function controlled(w){for(const id of ['townFarm','townTame','townMine','townLumber','townBirth','townDeath','townExpand','townEconomyTick','townTax'])if(w.gameEvents[id]){if(w.gameEvents[id].func)w.gameEvents[id].func=()=>{};if(w.gameEvents[id].perChunk)w.gameEvents[id].perChunk=()=>{};}w.gameEvents.processAll.func=()=>{};}
+// War consequences have separate scenarios. These orders keep a peaceful route.
+function controlled(w){for(const id of ['warPressureDynamics','townFarm','townTame','townMine','townLumber','townBirth','townDeath','townExpand','townEconomyTick','townTax'])if(w.gameEvents[id]){if(w.gameEvents[id].func)w.gameEvents[id].func=()=>{};if(w.gameEvents[id].perChunk)w.gameEvents[id].perChunk=()=>{};}w.gameEvents.processAll.func=()=>{};}
 function next(w){const choose=w.chooseEvent;w.chooseEvent=()=>null;try{w.nextDay();}finally{w.chooseEvent=choose;}}
 function add(w,town,type,count){w.happen('AddResource',null,town,{type,count});}
 function people(w,town){w.openRegBrowser(town,'town');[...w.document.querySelectorAll('.paultendoTownLife button')].find(e=>e.textContent==='Meet the people').click();for(const p of town._paultendoPeople){p.outlook='curious';p.trust=90;}}

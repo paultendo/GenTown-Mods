@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.76/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.77/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.76";
+    const MOD_VERSION = "1.6.77";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -5591,7 +5591,7 @@
         craft: {title:'Something of their own',words:'Try making something of your own.'}
     };
     // A reply is quick. Work and attachment develop while the rest of the world continues.
-    const LIVING_PACE = {reply:2, work:{fork:6,lens:8,compass:10}, invention:{notice:3,retry:30,priorityScale:10}, purpose:{kept:4,healing:6,song:8,drills:12,study:16,revered:28,hoarded:24}, attachment:{generous:-2,curious:0,steadfast:6,guarded:10}, objectLife:12};
+    const LIVING_PACE = {reply:2, work:{fork:6,lens:8,compass:10}, wartimePersistence:0.04, invention:{notice:3,retry:30,priorityScale:10}, purpose:{kept:4,healing:6,song:8,drills:12,study:16,revered:28,hoarded:24}, attachment:{generous:-2,curious:0,steadfast:6,guarded:10}, objectLife:12};
     const LIVING_FIGURE_ROLES = { SCHOLAR:'scholar', INVENTOR:'scholar', GENERAL:'soldier', HERO:'soldier', TYRANT:'soldier', PROPHET:'priest', HEALER:'doctor', ARTIST:'musician' };
     let livingPersonView = null;
     let livingArtifactView = null;
@@ -5708,6 +5708,22 @@
         // Existing unfinished lenses keep the recipe promised in their save.
         return work.recipe || (work.kind==='lens'?{...current,cost:{rock:3,metal:2}}:current);
     }
+    function livingArtifactWarWork(town,person,work) {
+        if(!hasIssue(town,'war')||!livingTeachingPersonAvailable(person,town))return null;
+        const war=town.issues.war;
+        if(work.kind==='fork'&&town.jobs?.soldier>0&&townKnowledgeLevel(town,'military')>=10&&livingResearchPriority(town.research)==='military')
+            return {war,meaning:'drills',soldiers:town.jobs.soldier,text:`${person.name} keeps working through the fighting. The soldiers still need a note to set their drills.`};
+        if(work.kind==='lens'&&town.jobs?.doctor>0&&(town.influences.disease || 0)>=2)
+            return {war,meaning:'healing',disease:town.influences.disease,text:`${person.name} keeps working through the fighting. The sick still need a clearer lens.`};
+        // A rare act of persistence can give an ordinary object an unexpected
+        // history. Only work already shaped before the fighting qualifies.
+        const started=regGet('process',war)?.start;
+        if(!work.progress||started!=null&&work.progress>=started||!['curious','steadfast'].includes(livingPersonMind(person).outlook))return null;
+        work.warPersistence ||= {};
+        const resolve=work.warPersistence[war] ||= {roll:livingArtifactRandom(work,`war-work:${war}`)()};
+        if(resolve.roll>=LIVING_PACE.wartimePersistence)return null;
+        return {war,meaning:'persistence',text:`${person.name} keeps at the nearly finished work despite the fighting. It began as an ordinary idea.`};
+    }
     function advanceLivingArtifactWork() {
         const state=livingWorldState();
         for(const work of state.artifactWork.filter(w=>['gathering','working'].includes(w.status))) {
@@ -5719,12 +5735,32 @@
                 if(!recipe||(work.parent&&!parent)||(parent&&!workingArtifactHolder(parent,town,person))||parent?.status==='hoarded'){work.status='abandoned';artifactWorkStep(work,'The idea is put aside. Its maker or inspiration is no longer there.',record);continue;}
                 if(work.autonomous&&!livingInventionCauses(town).some(c=>c.key===work.cause.key)){work.status='abandoned';artifactWorkStep(work,`${person.name} puts the idea aside. The need that began it has passed.`,record);continue;}
                 if(hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town)||Object.entries(recipe.cost).some(([type,count])=>commodityStock(town,type)<count))continue;
-                work.status='working';work.started=planet.day;work.due=planet.day+work.days;
+                work.status='working';work.started=planet.day;work.due=planet.day+work.days;work.lastCheckedDay=planet.day;
                 artifactWorkStep(work,`${person.name} has the materials. Work on the ${LIVING_ARTIFACTS[work.kind].name.toLowerCase()} begins in ${town.name}.`,record);
                 continue;
             }
+            // Temporary crises delay real work instead of destroying it when
+            // a calendar deadline happens to fall during hunger or fighting.
+            const lastChecked=work.lastCheckedDay ?? work.started;
+            work.lastCheckedDay=planet.day;
+            const referenceReady=(!work.parent||parent)&&(!parent||workingArtifactHolder(parent,town,person))&&parent?.status!=='hoarded';
+            const warWork=recipe&&referenceReady&&livingArtifactWarWork(town,person,work);
+            const pause=hasIssue(town,'war')&&!warWork?'war':town&&mealStock(town)<nativeMealNeed(town)?'food':null;
+            if(recipe&&livingTeachingPersonAvailable(person,town)&&referenceReady&&pause){
+                const stopped=Math.max(0,planet.day-lastChecked);
+                work.due+=stopped;work.pauseDays=(work.pauseDays || 0)+stopped;
+                if(work.pause!==pause)artifactWorkStep(work,pause==='war'?`${person.name} sets the work down while the fighting continues.`:`${person.name} sets the work down. There is not enough food to keep working.`,record);
+                work.pause=pause;continue;
+            }
+            if(work.pause){delete work.pause;artifactWorkStep(work,`${person?.name || work.name} returns to the unfinished work.`,record);}
+            if(warWork&&planet.day>lastChecked&&Object.entries(recipe.cost).every(([k,n])=>(town.resources[k]||0)>=n)&&referenceReady){
+                work.wartime ||= [];
+                let context=work.wartime.find(c=>c.war===warWork.war&&c.meaning===warWork.meaning);
+                if(!context){context={...warWork,day:planet.day,days:0};work.wartime.push(context);artifactWorkStep(work,warWork.text,record);}
+                context.days+=Math.min(work.days,planet.day-lastChecked);
+            }
             if(planet.day<work.due) {
-                if(!work.progress&&planet.day>=work.started+Math.ceil((work.due-work.started)/2)&&recipe&&Object.entries(recipe.cost).every(([k,n])=>(town.resources[k]||0)>=n)&&(!parent||workingArtifactHolder(parent,town,person))&&!hasIssue(town,'war')&&mealStock(town)>=nativeMealNeed(town)) {
+                if(!work.progress&&planet.day-work.started-(work.pauseDays || 0)>=Math.ceil(work.days/2)&&recipe&&Object.entries(recipe.cost).every(([k,n])=>(town.resources[k]||0)>=n)&&(!parent||workingArtifactHolder(parent,town,person))&&(!hasIssue(town,'war')||warWork)&&mealStock(town)>=nativeMealNeed(town)) {
                     work.progress=planet.day;
                     const progress={fork:'The prongs are shaped. They are still finding the note.',lens:'The glass is taking shape. The centre is clearer than the edges.',compass:'The needle moves, but still catches against its case.'}[work.kind];
                     const text=`${person.name} keeps working. ${progress}`;
@@ -5733,7 +5769,7 @@
                 continue;
             }
             let text;
-            if(!recipe||!livingTeachingPersonAvailable(person,town)||(work.parent&&!parent)||(parent&&!workingArtifactHolder(parent,town,person))||parent?.status==='hoarded'||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town)||Object.entries(recipe?.cost || {}).some(([k,n])=>(town?.resources?.[k]||0)<n)) {
+            if(!recipe||!livingTeachingPersonAvailable(person,town)||(work.parent&&!parent)||(parent&&!workingArtifactHolder(parent,town,person))||parent?.status==='hoarded'||hasIssue(town,'war')&&!warWork||mealStock(town)<nativeMealNeed(town)||Object.entries(recipe?.cost || {}).some(([k,n])=>(town?.resources?.[k]||0)<n)) {
                 work.status='abandoned';text='The unfinished work is put aside. The hands, peace or materials it needed are no longer there.';
             } else {
                 const before={...town.resources};
@@ -5756,7 +5792,12 @@
                         return {...input,world:skyWorldId(),passage:travelerState().passage,town:source?.id,townName:source?.name,known:!!exchange?.known?.[source?.id]||livingTownKnown(source)};
                     });
                     text=`${person.name} finishes ${artifactTitle(artifact)} in ${town.name}. The rough edges show where their own hands took over.`;
+                    if(work.wartime?.length){
+                        artifact.origin.wartime=structuredClone(work.wartime);
+                        for(const context of work.wartime)artifact.events.push({day:context.day,text:context.text,town:town.id,knownTown:livingTownKnown(town)});
+                    }
                     carryLivingArtifact(artifact,town,person,text);
+                    if(work.wartime?.length&&hasIssue(town,'war'))livingArtifactEvent(artifact,`It was finished while ${town.name} was at war.`,town,null,true);
                     if(work.cause?.recipient&&livingPersonMind(person).outlook!=='guarded') {
                         const recipient=livingCommunityPerson(town,work.cause.recipient);
                         if(recipient&&recipient.id!==person.id)carryLivingArtifact(artifact,town,recipient,`${person.name} brings ${artifactPhrase(artifact)} to ${recipient.name}, the ${livingPersonLabel(recipient).toLowerCase()} whose work began the idea.`);
@@ -5828,7 +5869,7 @@
         const town=regGet('town',work.town);if(!livingTownKnown(town))return;
         const items=[{text:'← Back to work and inventions',func:()=>openLivingTownWork(town)},{text:`${escapeLivingText(work.name || workingLivingPerson(town,work.person)?.name || 'A worker')} · ${escapeLivingText(town.name)}`}];
         if(work.cause)items.push({text:escapeLivingText(work.cause.text)});
-        items.push({text:{gathering:'The idea waits for materials.',working:'Their work is underway.',made:'The object is finished.',abandoned:'The unfinished work has been put aside.'}[work.status]});
+        items.push({text:work.pause==='war'?'The work waits for peace.':work.pause==='food'?'The work waits until there is enough food.':{gathering:'The idea waits for materials.',working:'Their work is underway.',made:'The object is finished.',abandoned:'The unfinished work has been put aside.'}[work.status]});
         if(work.materials)items.push({text:`Used ${commaList(Object.entries(work.materials).map(([type,count])=>`${count} ${COMMODITIES[type].label}`))}.`});
         if(work.status==='gathering')items.push({text:`They are looking for ${commaList(Object.entries(work.recipe.cost).filter(([type,count])=>commodityStock(town,type)<count).map(([type,count])=>`${count-commodityStock(town,type)} ${COMMODITIES[type].label}`)) || 'a quiet day to begin'}.`});
         for(const step of work.steps || [])if(step.text!==work.cause?.text)items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
@@ -15315,6 +15356,15 @@
                 items.push({text:`Visit the ${record.value.replace(/_/g,' ')}`,func:()=>{closePopups();closeExecutive();openRegBrowser(marker,'marker');}});
             for (const exchange of (livingWorldState().exchanges || []).filter(e=>e.uses?.some(use=>use.kind==='construction'&&use.id===record.project)&&stateExchangeForLocalChoice(e.id)).slice(-3))
                 items.push({text:`Follow the ${COMMODITIES[exchange.type]?.label || exchange.type}`,func:()=>openCommodityJourney(exchange)});
+        } else if(record.event==='governmentEvolution') {
+            items.push({text:`Support for a different rule held for ${record.cause.debate.days} days.`});
+            const opposing=record.cause.opposition?.slice().sort((a,b)=>b.weight-a.weight)[0];
+            if(opposing)items.push({heading:true,text:'The old order'},{text:escapeLivingText(opposing.text)});
+            const delta=Object.fromEntries(Object.keys(record.after.influences).map(key=>[key,(record.after.influences[key] || 0)-(record.before.influences[key] || 0)]));
+            const effects=livingInfluencePhrases(delta);
+            if(effects.length)items.push({heading:true,text:'What changed'},...effects.map(text=>({text})));
+            const current=getTownGovernment(town);
+            items.push({heading:true,text:'Today'},{text:`The town is ${current.description}.`});
         } else if(record.event==='townLaw') {
             const opposing=record.cause.pressures?.filter(p=>p.allowed!==record.cause.allowed).sort((a,b)=>b.weight-a.weight)[0];
             if(opposing)items.push({heading:true,text:'The other side'},{text:escapeLivingText(opposing.text)});
@@ -22058,51 +22108,52 @@
         }
     };
 
+    function setGovernmentBonus(town, newGovId) {
+        const oldBonusId = town._governmentBonusId;
+        if (oldBonusId === newGovId) return;
+        for (const [influence, amount] of Object.entries(GOVERNMENT_TYPES[oldBonusId]?.bonuses || {}))
+            town.influences[influence] = (town.influences[influence] || 0) - amount;
+        for (const [influence, amount] of Object.entries(GOVERNMENT_TYPES[newGovId]?.bonuses || {}))
+            town.influences[influence] = (town.influences[influence] || 0) + amount;
+        town._governmentBonusId = newGovId;
+    }
+
     function initGovernment(town) {
         if (!town) return;
-
         const hadGovType = !!town.governmentType;
-        if (!hadGovType) {
-            if (town.gov && GOVERNMENT_TYPES[town.gov]) {
-                town.governmentType = town.gov;
-            } else {
-                town.governmentType = "tribal";
-            }
-        }
-
-        if (town._governmentBonusId === undefined && hadGovType && GOVERNMENT_TYPES[town.governmentType]) {
-            town._governmentBonusId = town.governmentType;
-        }
-
-        if (typeof govForms !== "undefined" && town.governmentType && govForms[town.governmentType]) {
-            town.gov = town.governmentType;
-        }
+        // A saved type can come from merely reading the default elders' page.
+        // Only an explicitly tracked bonus is safe to remove.
+        const nativeGov = GOVERNMENT_TYPES[town.gov] && town.gov;
+        if (nativeGov && hadGovType && nativeGov !== town.governmentType) setGovernmentBonus(town,nativeGov);
+        town.governmentType = nativeGov || town.governmentType || 'tribal';
     }
 
     function applyGovernmentType(town, newGovId) {
         if (!town || !GOVERNMENT_TYPES[newGovId]) return false;
+        const oldGovId = town.governmentType || town.gov || 'tribal';
         initGovernment(town);
-
-        const oldBonusId = town._governmentBonusId;
-        if (oldBonusId && GOVERNMENT_TYPES[oldBonusId] && GOVERNMENT_TYPES[oldBonusId].bonuses) {
-            for (const [influence, amount] of Object.entries(GOVERNMENT_TYPES[oldBonusId].bonuses)) {
-                town.influences[influence] = (town.influences[influence] || 0) - amount;
-            }
-        }
-
-        town.governmentType = newGovId;
-        const newGov = GOVERNMENT_TYPES[newGovId];
-        if (newGov.bonuses) {
-            for (const [influence, amount] of Object.entries(newGov.bonuses)) {
-                town.influences[influence] = (town.influences[influence] || 0) + amount;
-            }
-        }
-
-        town._governmentBonusId = newGovId;
-        if (typeof govForms !== "undefined" && govForms[newGovId]) {
-            town.gov = newGovId;
-        }
+        setGovernmentBonus(town,newGovId);
+        town.governmentType = town.gov = newGovId;
+        if(oldGovId!==newGovId){town._paultendoGovernmentChangeDay=planet.day;delete town._paultendoGovernmentDiscussion;}
         return true;
+    }
+
+    // Native proposals keep their original influence effects, while both
+    // government fields and the mod's tracked bonus describe the same rule.
+    if (gameEvents.townGov) {
+        const base = gameEvents.townGov.func;
+        gameEvents.townGov.value = (_,town) => {
+            const available = getAvailableGovernments(town).filter(g=>govForms[g.id]);
+            return available.length ? choose(available).id : false;
+        };
+        gameEvents.townGov.func = function(subject,town,args) {
+            if (!canHaveGovernment(town,args.value) || !govForms[args.value]) return;
+            initGovernment(town);
+            if (town.gov === args.value) return;
+            const result = base.apply(this,arguments);
+            applyGovernmentType(town,args.value);
+            return result;
+        };
     }
 
     // Get a town's government type
@@ -22328,13 +22379,10 @@
     // Check if a town qualifies for a government type
     function canHaveGovernment(town, govId) {
         const gov = GOVERNMENT_TYPES[govId];
-        if (!gov) return false;
+        if (!gov || !town || town.end || town.pop<=0) return false;
 
         for (const [key, value] of Object.entries(gov.requires)) {
-            if (key === "government" || key === "faith" || key === "trade") {
-                // Check global unlocks
-                if ((planet.unlocks[key] || 0) < value) return false;
-            }
+            if (townKnowledgeLevel(town,key) < value) return false;
         }
         return true;
     }
@@ -22372,51 +22420,72 @@
     // Government Evolution Events
     // -------------------------------------------------------------------------
 
-    // Towns can evolve their government type
+    // A sustained political preference grows out of competing values and
+    // actual roles. Stronger pressure settles sooner. These thresholds and
+    // the recovery interval are initial pacing calibration, not fixed eras.
+    const GOVERNMENT_PACE = {margin:1.5,minDays:8,maxDays:30,recoveryDays:90};
+    function governmentPreference(town,govId) {
+        const v=town.values || {},i=town.influences || {},pressures=[];
+        const add=(weight,text,evidence)=>{if(weight>0)pressures.push({weight,text,...evidence});};
+        const civic=['council','republic','democracy','commune'].includes(govId);
+        if(civic) {
+            add(Math.max(0,v.justice || 0)/4,'They want more people to have a say.',{kind:'value',axis:'justice',value:v.justice});
+            add(Math.max(0,v.openness || 0)/6,'They welcome voices beyond the old rulers.',{kind:'value',axis:'openness',value:v.openness});
+        }
+        if(isAutocraticGov(govId)) {
+            add(Math.max(0,v.order || 0)/4,'They want power gathered under a firmer hand.',{kind:'value',axis:'order',value:v.order});
+            const soldiers=town.jobs?.soldier || 0;
+            if(soldiers && hasIssue(town,'war'))add(Math.min(3,soldiers/Math.max(1,town.pop)*12),'The soldiers want a stronger command while the fighting continues.',{kind:'war',war:town.issues.war,soldiers});
+        }
+        if(govId==='democracy'||govId==='republic') {
+            const scholars=town.jobs?.scholar || 0;
+            add(Math.min(2,scholars/Math.max(1,town.pop)*8),'Their scholars argue for wider representation.',{kind:'work',role:'scholar',workers:scholars});
+        }
+        if(govId==='democracy')add(Math.max(0,v.change || 0)/5,'They want to broaden who can take part in government.',{kind:'value',axis:'change',value:v.change});
+        if(govId==='dictatorship')add(Math.max(0,-(v.justice || 0))/4,'Their rulers give little weight to dissent.',{kind:'value',axis:'justice',value:v.justice});
+        if(govId==='theocracy' && getTownReligion(town))add(Math.max(0,i.faith || 0)/3,'Their shared faith draws them toward religious rule.',{kind:'belief',religion:town.religion,faith:i.faith});
+        if(govId==='oligarchy')add(Math.max(0,v.wealth || 0)/3,'They believe wealth should carry more authority.',{kind:'value',axis:'wealth',value:v.wealth});
+        if(govId==='commune')add(Math.max(0,-(v.wealth || 0))/3,'They distrust rule built on private wealth.',{kind:'value',axis:'wealth',value:v.wealth});
+        if(govId==='anarchy')add(Math.max(0,-(v.order || 0))/3,'They want fewer rulers over their lives.',{kind:'value',axis:'order',value:v.order});
+        if(govId==='tribal'||govId==='monarchy')add(Math.max(0,-(v.change || 0))/4,'They want to keep rule in familiar hands.',{kind:'value',axis:'change',value:v.change});
+        const score=pressures.reduce((n,p)=>n+p.weight,0);
+        return {id:govId,score,pressures};
+    }
+    function changingGovernmentPreference(town) {
+        if(!town||town.end||town.pop<=0||hasIssue(town,'revolution'))return null;
+        const current=getTownGovernment(town).id;
+        if(town._paultendoGovernmentChangeDay!=null && planet.day-town._paultendoGovernmentChangeDay<GOVERNMENT_PACE.recoveryDays)return null;
+        const incumbent=governmentPreference(town,current);
+        const best=getAvailableGovernments(town).map(g=>governmentPreference(town,g.id)).sort((a,b)=>b.score-a.score)[0];
+        if(!best || best.score-incumbent.score<GOVERNMENT_PACE.margin)return null;
+        return {...best,oldGov:current,gap:best.score-incumbent.score,opposition:incumbent.pressures};
+    }
     modEvent("governmentEvolution", {
-        daily: true,
-        subject: { reg: "town", all: true },
-        value: (subject, target, args) => {
-            const available = getAvailableGovernments(subject);
-            if (available.length === 0) return false;
-
-            // Small daily chance
-            if (Math.random() > 0.01) return false;
-
-            // Pick a government that matches their strongest influence
-            const currentGov = getTownGovernment(subject);
-            let bestMatch = null;
-            let bestScore = -Infinity;
-
-            for (const gov of available) {
-                let score = 0;
-                // Prefer governments that match town's character
-                if (gov.requires.faith && (subject.influences.faith || 0) > 3) score += 2;
-                if (gov.requires.trade && (subject.influences.trade || 0) > 3) score += 2;
-                if (gov.id === "democracy" && (subject.influences.education || 0) > 4) score += 3;
-                if (gov.id === "monarchy" && (subject.influences.military || 0) > 3) score += 2;
-                if (gov.id === "anarchy" && (subject.influences.crime || 0) > 2) score += 2;
-
-                // Add randomness
-                score += Math.random() * 2;
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMatch = gov;
-                }
-            }
-
-            if (bestMatch) {
-                args.newGov = bestMatch;
-                args.oldGov = currentGov;
-                return true;
-            }
-            return false;
+        daily:true,
+        subject:{reg:'town',all:true},
+        value:(town,_,args)=>{
+            const preference=changingGovernmentPreference(town);
+            if(!preference){delete town._paultendoGovernmentDiscussion;return false;}
+            let debate=town._paultendoGovernmentDiscussion;
+            if(!debate || debate.id!==preference.id || debate.oldGov!==preference.oldGov || debate.lastDay<planet.day-1)
+                debate=town._paultendoGovernmentDiscussion={id:preference.id,oldGov:preference.oldGov,since:planet.day,days:0,lastDay:null};
+            if(debate.lastDay!==planet.day){debate.days++;debate.lastDay=planet.day;}
+            const required=Math.max(GOVERNMENT_PACE.minDays,Math.min(GOVERNMENT_PACE.maxDays,Math.ceil(48/preference.gap)));
+            if(debate.days<required)return false;
+            args.preference=preference;args.debate={...debate};return true;
         },
-        func: (subject, target, args) => {
-            applyGovernmentType(subject, args.newGov.id);
-
-            logMessage(`{{regname:town|${subject.id}}} becomes a {{b:${args.newGov.name}}}, ${args.newGov.description}.`, "milestone");
+        func:(town,_,args)=>{
+            const preference=changingGovernmentPreference(town);
+            if(!preference || preference.id!==args.preference?.id)return;
+            const before={government:getTownGovernment(town).id,influences:{...town.influences}};
+            applyGovernmentType(town,preference.id);
+            town._paultendoGovernmentChangeDay=planet.day;delete town._paultendoGovernmentDiscussion;
+            const state=livingWorldState(),reason=preference.pressures.slice().sort((a,b)=>b.weight-a.weight)[0].text;
+            const record={id:`local:${state.nextId++}`,day:planet.day,town:town.id,event:'governmentEvolution',value:preference.id,choice:'yes',title:'A change of government',
+                text:`${townRef(town.id)} becomes a ${GOVERNMENT_TYPES[preference.id].name.toLowerCase()}, ${GOVERNMENT_TYPES[preference.id].description}.`,reason,
+                cause:{kind:'government',...preference,debate:args.debate},before,after:{government:preference.id,influences:{...town.influences}}};
+            state.localChoices.push(record);if(state.localChoices.length>96)state.localChoices.shift();
+            if(livingTownKnown(town))logMessage(`${record.text} ${escapeLivingText(reason)}`,'milestone',{_paultendoStory:{kind:'localChoice',id:record.id}});
         }
     });
 

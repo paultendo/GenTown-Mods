@@ -186,3 +186,11 @@ test('a replacement completed after the promise can bring the actual handover fo
  assert.equal(replacement.status,'study');next(w);assert.equal(a.status,'returned');assert.ok(w.planet.day<originalDue);
  assert.deepEqual(g.errors,[]);
 });
+
+test('a wartime pause cannot preserve a project whose actual inspiration has been lost',async t=>{
+ const g=await makeGame();t.after(g.close);const w=g.window,town=prepare(g),parent=leave(w,town),{work}=craft(w,town,parent);
+ for(const id of ['townEat','townEmploy','warPressureDynamics'])w.gameEvents[id].func=()=>{};w.gameEvents.processAll.func=()=>{};
+ const war=w.happen('Create',town,null,{type:'war',towns:[town.id]},'process');town.issues.war=war.id;town.influences.disease=0;next(w);assert.equal(work.pause,'war');w.planet._paultendoLife.artifacts=w.planet._paultendoLife.artifacts.filter(a=>a.id!==parent.id);
+ for(let n=0;n<work.days+2&&work.status==='working';n++){town.influences.disease=0;next(w);}
+ assert.equal(work.status,'abandoned');assert.equal(work.materials,undefined);assert.equal(w.planet._paultendoLife.artifacts.length,0);assert.equal(work.wartime,undefined);assert.deepEqual(g.errors,[]);
+});
