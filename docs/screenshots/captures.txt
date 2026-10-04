@@ -1,0 +1,33 @@
+README SCREENSHOTS
+
+Captured on 5 October 2026 from the actual local GenTown game interface.
+Base engine: GenTown 1.4 / gt5, as recorded in vendor/gentown/upstream.json.
+Mod: v1.6.92 for story panels, v1.6.93 for the refreshed world and headlines.
+The v1.6.93 code change only aligns the Read label with headline text.
+
+Campaign: seed 42, yes policy, Day 601, Ujoris e.
+Source: the exported day-601.planet from the v1.6.92 sealed release matrix.
+The campaign and its results are recorded in docs/qa/release-1.6.92.json.
+This was an automated test campaign, not a claimed human playthrough.
+
+world.jpg: the known map, fields, settlements and expanded news.
+workshop.jpg: Duster, metal handtools made by Sémena, apprentice Faziel.
+work.jpg: North Montezumad, active and earlier work.
+voyage.jpg: Wayfarer 597, a completed voyage led by Lanny.
+discovery.jpg: North Montezumad, Dolius's completed road inquiry.
+object.jpg: Howin's tuning fork, its origin and current keeper Ditma.
+whisper.jpg: Ditma's outlook and the available interventions.
+trade.jpg: stone requested, shipped, received and used for a stadium.
+council.jpg: the recorded Day 497 common market agreement and votes.
+headlines.jpg: the Read alignment correction, retained as UI evidence.
+
+World is a full browser screenshot at the normal 1280 by 720 viewport.
+Story images are direct crops of the existing right-hand game panel.
+Headlines is a direct crop of the expanded news area after the correction.
+Some histories continue below the panel and can be scrolled in the game.
+No story text, names, outcomes or interface elements were composited.
+No decisions were made to stage these captures.
+
+The images include original GenTown assets and paultendo additions.
+See README.md, LICENSE.md and THIRD_PARTY_NOTICES.txt for their authorship
+and applicable terms. These screenshots do not change those terms.

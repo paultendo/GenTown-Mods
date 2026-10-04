@@ -1,0 +1,63 @@
+{
+  "version": "1.6.93",
+  "date": "2026-10-05",
+  "change": "Top-align the Read label in Chronicle headlines while retaining the 36px minimum button height. Add the README screenshot tour.",
+  "sourceHashes": {
+    "index.html": "19eccde1a476ad46e0a2b88fb8888bef334e3506f8d42f3f7a99198f10a08159",
+    "paultendo-mod.js": "311e4cb2efa6eb0f126b8fca6975764a518117a42d9dc7d8d979249282d5aa69",
+    "vendor/gentown/load.js": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+    "vendor/gentown/perlin.js": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+    "vendor/gentown/standalone.js": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+    "vendor/gentown/gentown.js": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+    "vendor/gentown/gentown-data.js": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+    "vendor/gentown/gentown-mass.js": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+    "app/boot.js": "db769df1d0f01c9e11bf64c333f167ccb842c0ef80bd84842140b4b71540953d",
+    "app/ready.js": "52c4b776993e06f053f82cb56e9e012d962077753f1d106d2dab8a333a331a78",
+    "scripts/lib/game.mjs": "2db8895e37c4ed6ed7a7b011e53556c4a2b73d33ecccf43ba470bb33dc069b94",
+    "scripts/lib/campaign.mjs": "712261bf607f99354f95f948c13e0ce56c6cb8e74031c4bd731af69530c2acbb",
+    "scripts/simulate.mjs": "175021ff19fb9accf8e924dfc51263214ff23eb9fc46f28a9930076b8ac944de"
+  },
+  "campaignEvidence": "docs/qa/release-1.6.92.json",
+  "browserChecks": {
+    "desktopViewport": [
+      1280,
+      720
+    ],
+    "mobileViewport": [
+      390,
+      844
+    ],
+    "headlineTextMatchesReadTextTop": true,
+    "minimumButtonHeight": 36,
+    "readmeImages": 9,
+    "allImagesLoaded": true,
+    "mobileReadmeWidth": 390,
+    "mobileReadmeScrollWidth": 390
+  },
+  "screenshotHashes": {
+    "docs/screenshots/council.jpg": "ae34d875f8eaf3462c0f1ca3ffb134aed392978c52fb69dbb396cb6df0e47b5a",
+    "docs/screenshots/discovery.jpg": "e1a0f6d0a0f41713c256b7e46042115649ba465791e8d041d543426d9f6c5324",
+    "docs/screenshots/headlines.jpg": "a35ac79eaa44dd16cab55dc0287444a060a2bab20deea6ad5bc8cc09307c66bc",
+    "docs/screenshots/object.jpg": "35f2b38e88f9ce9137aa432e09253e577d63f3326c52e0ae41d9d271ce54ce01",
+    "docs/screenshots/trade.jpg": "2f17558d4a5c98835a2f99a93d4e3b3a42c6bc9d67f9f83fc708c15e5b23173f",
+    "docs/screenshots/voyage.jpg": "7071b078f3c99f44e4209f1f83ba8ed0153bb63a7d004c430cda59d5da056948",
+    "docs/screenshots/whisper.jpg": "1505ce4fb5dc9f0a888d9370a43bec05557573ac7a10b7a2fd39668452c1bd57",
+    "docs/screenshots/work.jpg": "52c2d754d5dd8c0c8c5d32e94d1c1e324f587906294a769ebd03a44928e4774f",
+    "docs/screenshots/workshop.jpg": "f724fcda6afc49c4ff6feab58f89ebe1bab95ab80cce450fe4262febad57070e",
+    "docs/screenshots/world.jpg": "c40c86c31170de90cc10b5032990d6e7228d8f71ac74ad54a40ca1c163adbc92"
+  },
+  "automatedChecks": {
+    "command": "npm test",
+    "total": 677,
+    "initialSuitePass": 676,
+    "initialSuiteFail": 1,
+    "initialFailure": "Late-install version assertion expected 1.6.92 instead of 1.6.93.",
+    "correction": "Updated the expected version in tests/runtime.test.mjs.",
+    "rerunCommand": "node --test --test-name-pattern='installing after GenTown has loaded' tests/runtime.test.mjs",
+    "correctedCheckPass": 1,
+    "correctedCheckFail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "syntaxCheck": "npm run check passed"
+  }
+}

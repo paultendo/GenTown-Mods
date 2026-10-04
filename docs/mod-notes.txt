@@ -1,5 +1,13 @@
 Implementation notes
 
+Version 1.6.93
+
+The Read label in today's news now aligns with the first line of its headline.
+The button keeps its 36-pixel minimum height for clicking and tapping.
+The README includes real campaign screenshots and a short tour of work,
+exploration, object histories, Traveler choices, exchanges and council talks.
+The full comparison with base GenTown remains available below the tour.
+
 Version 1.6.92
 
 Campaign-driven repairs: self-reporting random events run automatically, while real messages, naming prompts and Yes/No choices retain their controls. This prevents invisible proposals and the later native usurp/freeplay callback from trying to use a missing message. Native event-catalog rebuilds exclude retired random:false events, including the old secession and religious-schism rolls. The causal council and religious movements remain active.

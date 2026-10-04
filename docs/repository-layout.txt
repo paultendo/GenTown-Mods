@@ -21,6 +21,9 @@ tests/ checks simulation behaviour, resource conservation and compatibility.
 package.json and package-lock.json describe the development dependencies.
 docs/release-1.6.92.txt and docs/qa/ preserve the evidence for the published
 v1.6.92 release. They describe that release, not later untested changes.
+docs/release-1.6.93.txt records the subsequent headline alignment correction.
+docs/screenshots/ contains genuine game captures used in the README, with
+their source campaign and capture details in captures.txt.
 
 hot-swap-mod.js is paultendo's separate development utility. It is not
 loaded by the default launcher. Updating the overhaul still requires a

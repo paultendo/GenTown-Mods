@@ -1,22 +1,62 @@
 # paultendo’s GenTown overhaul
 
-A world of towns with their own needs, discoveries and beliefs. People explore, make things, trade, argue and sometimes go to war. You can lend a hand, plant an idea or stir up trouble. The consequences belong to the world.
+Follow a tool from the workshop to the fields, a crew from shore to shore, or a rumour into a discovery. Towns keep their own needs, knowledge and grudges. You can help them, leave an object behind, or give someone a dangerous idea.
 
-Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.92**, tested with the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
+Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.93**. Based on **GenTown 1.4 / gt5**, checked on 4 October 2026.
+
+[![Towns, fields, roads and today’s news on Ujoris e](docs/screenshots/world.jpg)](docs/screenshots/world.jpg)
+
+*Ujoris e, Day 601. Five towns share the known land. Beyond their borders, much of the world is still hidden.*
 
 ## Install
 
 Export your existing save from **Saves** first. In GenTown, choose **Settings → Add mod** and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.92/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.93/paultendo-mod.js
 ```
 
-Reload after adding it. This replaces older paultendo mod URLs automatically. The Chronicle shows `paultendo-mod active (v1.6.92)` after settling a town and advancing a day. Use the versioned CDN URL. Raw GitHub script URLs and the mixed-case GitHub Pages path do not install reliably through GenTown’s loader. Avoid combining this with other large overhaul mods.
+Reload after adding it. This replaces older paultendo mod URLs automatically. The Chronicle shows `paultendo-mod active (v1.6.93)` after settling a town and advancing a day. Use the versioned CDN URL. Raw GitHub script URLs and the mixed-case GitHub Pages path do not install reliably through GenTown’s loader. Avoid combining this with other large overhaul mods.
 
 This addresses the installation issue reported in [GenTown-Mods #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
+## A few stories from one world
+
+These are real game screens from a release-test campaign. The people, work, journeys and agreements are recorded in its save. Click any image to see it at full size.
+
+### At the bench
+
+Sémena is shaping metal handtools in Duster, with Faziel learning alongside her. In North Montezumad, telescope work is waiting for supplies. Each job has its own workers, ingredients and progress.
+
+<a href="docs/screenshots/workshop.jpg"><img src="docs/screenshots/workshop.jpg" width="320" alt="Sémena making metal handtools, with Faziel learning at the bench"></a> <a href="docs/screenshots/work.jpg"><img src="docs/screenshots/work.jpg" width="320" alt="A town’s work overview showing telescopes and handtools awaiting materials, with completed roads below"></a>
+
+### Across the water
+
+Lanny’s crew brought a sailing vessel home after reaching another shore. An account of the crossing gave Dolius a reason to investigate roads. The resulting discovery took trials, time and stone.
+
+<a href="docs/screenshots/voyage.jpg"><img src="docs/screenshots/voyage.jpg" width="320" alt="A completed sailing voyage with links to the vessel’s construction and the shore reached"></a> <a href="docs/screenshots/discovery.jpg"><img src="docs/screenshots/discovery.jpg" width="320" alt="Dolius’s road research, prompted by a returning crew’s account of a crossing"></a>
+
+### What became of Howin’s fork
+
+Howin made a tuning fork when the town’s musicians wanted a note they could sing together. It passed through several hands, survived the loss of its town, and was found by Ditma. You can name creations and whisper to the people who keep them. Ditma could share the fork, hide it, or entrust it to the Traveler.
+
+<a href="docs/screenshots/object.jpg"><img src="docs/screenshots/object.jpg" width="320" alt="Howin’s tuning fork, its maker, the need that inspired it, and its current keeper"></a> <a href="docs/screenshots/whisper.jpg"><img src="docs/screenshots/whisper.jpg" width="320" alt="Ditma’s guarded outlook and choices to encourage sharing, secrecy or entrusting the fork to the Traveler"></a>
+
+### Neighbours with terms
+
+New Montezumad needed stone for a stadium. The exchange records the request, shipment, arrival and eventual use. Elsewhere, two towns agreed to a common market with an outside customs levy. Council talks keep the obligations and the towns’ votes.
+
+<a href="docs/screenshots/trade.jpg"><img src="docs/screenshots/trade.jpg" width="320" alt="211 stone travelling from Montezumad to New Montezumad and being used to build a stadium"></a> <a href="docs/screenshots/council.jpg"><img src="docs/screenshots/council.jpg" width="320" alt="A common market agreed by Wayfarer 597 and Montezumad, with a five percent outside customs levy"></a>
+
+The same world also has creeds, rivalries, celebrations, wars and places marked by earlier inhabitants. Weather and disasters can leave lasting changes to the land. Much later, local advances and constructed vessels can open journeys to other worlds. The comparison below explains those systems and how far they go.
+
+[Capture details](docs/screenshots/captures.txt).
+
 ## Compared with base GenTown
+
+<details>
+<summary>Open the full feature comparison</summary>
+
 
 This comparison is against the [current official game](https://r74n.com/gentown/), **GenTown 1.4 / gt5**, checked on **4 October 2026**. Its scripts match the [vendored source snapshot](vendor/gentown/upstream.json). GenTown already has procedural worlds, town building, discoveries, occupations, taxes, governments, colonies, diplomacy, war and disasters. This mod keeps that foundation and extends how those systems interact.
 
@@ -36,6 +76,8 @@ This comparison is against the [current official game](https://r74n.com/gentown/
 | Records, clues and lore | The Chronicle and Timeline record events. Astronomy reveals other worlds and telescopes reveal moons. | News stories link to actual changes and can include saved quotes from named residents. Reporting uses available observations and records rather than revealing everyone's exact private wealth. Written accounts, carved signs on outcrops and recorded buildings, diagrams, objects and unfamiliar effects can carry clues. Curiosity can precede understanding. |
 | Other worlds | Astronomy provides views of the generated star system. | Early observations stay with a town's night charts. Wider views appear later. Actual flights require local advances, constructed vessels and supplies. Rocketry enables preparation, while passenger travel also needs life support. Settlement needs people, tools, building supplies, provisions and suitable landing ground. Settlers carry their supported knowledge. Inactive worlds continue supported simulation work. |
 | Playing and saving | Native prompts, panels, maps, unlocks and saves provide the interface. | Linked news with coloured flags, readable work histories, explanatory unlock entries, discovery-gated menus and clearer live decision controls. Autoplay offers pause and speed controls. Map redraws, late installation, reloads, background worlds and save size received compatibility fixes. |
+
+</details>
 
 <details>
 <summary>The 43 additional advances</summary>
@@ -71,19 +113,11 @@ You do not have to manage every project. Short replies, journeys, workshop work 
 
 Objects keep their makers and histories. A rare object finished during war can gain a meaning its maker never intended. Player-named work can travel through the Traveler’s later passages, carrying the story of where it came from.
 
-## This finishing pass
-
-Towns now grow within the room their land, local building methods and maintained buildings provide. Recent meals matter. Hunger slows growth, and famine follows sustained missed meals. A food delivery helps, but people need to eat regularly before recovery is recorded.
-
-Migrants carry actual inhabitants, occupations, supplies and their share of private wealth. A crowded destination can limit a voluntary move. A conquered town's people still transfer with it. Occupations cannot appear without an available inhabitant. Events that report their own consequences now happen without an invisible unanswered question.
-
-An unfinished instrument can send the workshop looking for glass, and glass can create demand for fuel. A maker waiting for missing supplies can do other work. Repeated orders share the workshop with other unmet needs, so farm tools cannot keep a crew's boat waiting forever. Ingredients still take knowledge, materials and time. Route caches rebuild from the map instead of filling saved games with copied tiles.
-
-Research, workshop batches, personal inventions and sample journeys share one work overview. Active work comes first, with smaller, muted status text and folded older histories. Council talks retain the actual obligations, votes and outcomes. Story links work with a keyboard, and pending decisions are easier to reach on phones.
-
 ## Playtesting
 
 Try a new town as well as an existing save. Follow one shortage through its work, exchanges and eventual result. Speak for or against a council proposal, then return when the talks end. Reload while something is underway and check that its progress, map and history survive.
+
+Version **1.6.93** adds this screenshot tour and fixes the alignment of the news links. Its [release checks](docs/release-1.6.93.txt) cover the current version and the desktop and phone layouts.
 
 Useful feedback includes the mod version, day, what you expected, what happened and an exported save where possible. Quiet stretches, repeated interruptions and advances that arrive too easily matter as much as crashes. Longer campaign balance still needs human playtesting.
 

@@ -1,0 +1,37 @@
+V1.6.93 RELEASE VERIFICATION
+5 October 2026
+
+Change
+The Read label is top-aligned with the first line of Chronicle headlines.
+Its minimum clickable height remains 36 pixels. No simulation rules changed.
+The README now has nine real game screenshots, captions about the recorded
+work and events, and an expandable comparison with base GenTown.
+
+Checks
+npm run check passed.
+The full 677-test suite passed 676 checks. One late-install assertion still
+expected v1.6.92. The expected version was corrected to v1.6.93, and the
+isolated late-install check passed. No other tests failed or were skipped.
+
+Browser checks used the real local game and an imported Day 601 release
+campaign. At 1280x720 and 390x844, the top of each Read label's text exactly
+matched its headline's first line. The minimum button height stayed 36px.
+
+README rendering used GitHub's Markdown renderer. All nine images loaded.
+The panel images sit side by side on desktop and wrap on a 390px phone
+viewport without horizontal overflow. Captures are direct browser images,
+with origins recorded in docs/screenshots/captures.txt.
+
+Campaign evidence remains in docs/qa/release-1.6.92.json: nine campaigns,
+5,100 actual turns. This release changes headline CSS, version identifiers
+and documentation. All other files in its 13-file source manifest retain
+their recorded v1.6.92 hashes. The vendored GenTown snapshot is unchanged.
+
+Mod SHA-256
+311e4cb2efa6eb0f126b8fca6975764a518117a42d9dc7d8d979249282d5aa69
+
+Install
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.93/paultendo-mod.js
+
+Source and screenshot hashes, viewport checks and test results are in
+docs/qa/release-1.6.93.json.
