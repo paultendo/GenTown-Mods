@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.82/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.83/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.82";
+    const MOD_VERSION = "1.6.83";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -4679,9 +4679,10 @@
             const report=regToArray('town').flatMap(t=>t._paultendoAccounts?.reports || []).find(r=>r.id===ref.id&&r.published!=null);
             return report&&report.published<=planet.day&&livingTownKnown(regGet('town',report.town))?{label:'Read the accounts',open:()=>openTownAccountsReport(report)}:null;
         }
-        const lists = {voyage:state.seaVoyages, credit:state.credit, sampling:state.sampling, rations:state.warRations, localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
+        const lists = {clue:state.clues, inscription:state.surfaceMarks, voyage:state.seaVoyages, credit:state.credit, sampling:state.sampling, rations:state.warRations, localChoice:state.localChoices, inquiry:state.inquiries, craft:state.artifactWork, material:state.materialWork, exchange:state.exchanges, food:state.exchanges || state.foodJourneys, teaching:state.teachings, whisper:state.whispers, artifact:state.artifacts, decision:state.decisions};
         const record = lists[ref.kind]?.find(item => String(item.id) === String(ref.id));
         if (!record) return null;
+        if(ref.kind==='inscription')return surfaceMarkKnown(record)?{label:'Look at the mark',open:()=>openSurfaceMark(record)}:null;
         if(ref.kind==='credit')return [record.borrower,record.lender].some(id=>livingTownKnown(regGet('town',id)))?{label:'Follow the debt',open:()=>openCreditStory(record)}:null;
         if (ref.kind === 'food' || ref.kind === 'exchange') {
             if (![record.buyer,record.seller].map(id=>regGet('town',id)).some(livingTownKnown)) return null;
@@ -4695,6 +4696,7 @@
             ? (record.towns || []).map(id=>regGet('town',id)).find(livingTownKnown)
             : regGet('town',record.town);
         if (!livingTownKnown(town)) return null;
+        if(ref.kind==='clue')return {label:'What caught their eye',open:()=>openObservedClue(record)};
         if(ref.kind==='voyage')return {label:'Follow the crossing',open:()=>openSeaVoyage(record)};
         if (ref.kind === 'sampling') return {label:'Follow the survey',open:()=>openMaterialSurvey(record)};
         if (ref.kind === 'rations') return {label:'Follow the supplies',open:()=>openWarRationStory(record)};
@@ -4710,13 +4712,13 @@
 
     function chronicleStoryFromElement(entry) {
         const kind = entry?.getAttribute('data-story-kind'), id = entry?.getAttribute('data-story-id');
-        if (!['accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
+        if (!['clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(kind) || !id) return null;
         return {kind,id};
     }
 
     function attachChronicleStory(entry, ref) {
         entry.querySelectorAll('.paultendoChronicleStoryLink').forEach(link=>link.remove());
-        if (!ref || !['accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
+        if (!ref || !['clue','inscription','accounts','voyage','credit','sampling','rations','localChoice','inquiry','craft','material','storage','tools','sky','flight','charter','courier','exchange','food','teaching','whisper','artifact','decision','discovery'].includes(ref.kind)) return;
         entry.setAttribute('data-story-kind', ref.kind);
         entry.setAttribute('data-story-id', String(ref.id));
         const story = resolveChronicleStory(ref);
@@ -5285,6 +5287,9 @@
         state.warRations ||= [];
         state.teachings ||= [];
         state.teachingSeen ||= {};
+        state.surfaceMarks ||= [];
+        state.clues ||= state.surfaceClues || [];
+        delete state.surfaceClues;
         state.nextId ||= 1;
         return state;
     }
@@ -5335,7 +5340,7 @@
     function beginLocalInquiry(town,discovery,cause,guidance=null) {
         if(!localInquiryEligible(town,discovery))return null;
         const person=livingCommunityPerson(town,cause.role),recipe=INQUIRY_RECIPES[discovery.event];if(!person||!recipe)return null;
-        const days=Math.max(2,recipe[0]-(guidance?2:0));
+        const days=Math.max(2,recipe[0]-(guidance?(guidance.helpDays ?? 2):0));
         const work={id:`inquiry:${livingWorldState().nextId++}`,event:discovery.event,key:discovery.key,level:discovery.level,title:discovery.name,town:town.id,person:person.id,name:person.name,role:person.role,cause:structuredClone(cause),day:planet.day,lastDay:planet.day,days,remaining:days,prototypeCost:{...recipe[1]},cost:{...recipe[1]},status:'waiting',inputs:[],steps:[],...(guidance?{guidance:structuredClone(guidance)}:{})};
         livingWorldState().inquiries.push(work);work.cost=workshopFuelCost(town,{...work.prototypeCost},work);
         inquiryStep(work,`${person.name} begins work on ${discovery.name.toLowerCase()}. ${cause.text}`);
@@ -5380,7 +5385,11 @@
         options.sort((a,b)=>Number(b.waiting)-Number(a.waiting));
         return options[0] || null;
     }
-    function localKnowledgeAccount(offer) {return offer.known||livingTownKnown(regGet('town',offer.from))?`${offer.name}'s account of the work`:'an account of the work brought by visitors';}
+    function localKnowledgeAccount(offer) {
+        if(offer.observation)return 'what they noticed in the fields';
+        if(offer.mark)return 'a diagram found on '+(livingWorldState().surfaceMarks.find(m=>m.id===offer.mark)?.surface.name || 'a carved surface');
+        return offer.known||(!offer.world||offer.world===skyWorldId())&&livingTownKnown(regGet('town',offer.from))?`${offer.name}'s account of the work`:'an account of the work brought by visitors';
+    }
     function receiveLocalKnowledge(town,offer,record) {
         if(!offer||offer.withheld||record.knowledgeReception?.[town.id])return;
         const discovery=EXTENDED_DISCOVERIES.find(d=>d.event===offer.event),cause=discovery&&inquiryCause(town,discovery);
@@ -5399,7 +5408,10 @@
         noteExchangeStep(record,'knowledge',{town:town.id,title:offer.title,person:person.name});
     }
     function inquiryWorkerBusy(town,person) {
-        return livingWorldState().inquiries.some(work=>work.town===town.id&&work.person===person.id&&work.status==='working');
+        const state=livingWorldState();
+        return state.inquiries.some(work=>work.town===town.id&&work.person===person.id&&work.status==='working')
+            || state.surfaceMarks.some(work=>work.town===town.id&&work.person===person.id&&work.status==='working'&&work.phase==='working')
+            || state.clues.some(clue=>clue.town===town.id&&clue.study?.person===person.id&&clue.study.status==='working'&&!clue.study.pause);
     }
     function inquiryRoleFree(town,role) {
         if(role!=='resident'&&!(town.jobs?.[role]>0))return false;
@@ -5523,7 +5535,7 @@
             if(localDiscoveryKnown(town,discovery)){work.status='superseded';work.finished=planet.day;inquiryStep(work,`${work.name} puts the work aside. The town already knows this way.`);continue;}
             if(work.status==='waiting')work.cost=workshopFuelCost(town,{...(work.prototypeCost || work.cost)},work);
             if(work.status==='waiting'&&!inquiryCause(town,discovery,person)){work.status='abandoned';work.finished=planet.day;inquiryStep(work,`${work.name} leaves the question for another time. The town has other concerns now.`);continue;}
-            const occupied=state.materialWork.some(w=>w.town===town.id&&materialWorkHasHand(w,work.person)&&['waiting','working'].includes(w.status))||state.artifactWork.some(w=>w.town===town.id&&w.person===work.person&&['gathering','working'].includes(w.status))||state.inquiries.some(w=>w.id!==work.id&&w.town===town.id&&w.person===work.person&&w.status==='working');
+            const occupied=state.materialWork.some(w=>w.town===town.id&&materialWorkHasHand(w,work.person)&&['waiting','working'].includes(w.status))||state.artifactWork.some(w=>w.town===town.id&&w.person===work.person&&['gathering','working'].includes(w.status))||state.inquiries.some(w=>w.id!==work.id&&w.town===town.id&&w.person===work.person&&w.status==='working')||state.surfaceMarks.some(w=>w.town===town.id&&w.person===work.person&&w.status==='working'&&w.phase==='working')||state.clues.some(c=>c.town===town.id&&c.study?.person===work.person&&c.study.status==='working'&&!c.study.pause);
             const surveying=state.sampling.some(w=>w.town===town.id&&w.person===work.person&&['outbound','collecting','returning'].includes(w.status));
             const blocked=!livingTeachingPersonAvailable(person,town)||occupied||surveying||seaCrewBusy(town,work.person)?'hands':Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(town,key)<level)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
             if(blocked) {
@@ -5569,7 +5581,7 @@
         if(work.started!=null&&Object.keys(work.cost).length)items.push({text:`Used ${Object.entries(work.cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`).join(', ')}.`});
         for(const id of work.cause.evidence?.exchanges || []) {const exchange=commodityExchangeState().exchanges.find(r=>r.id===id);if(exchange)items.push({text:`Day ${exchange.arrived} · The exchange that raised the question`,func:()=>openCommodityJourney(exchange)});}
         for(const id of work.cause.evidence?.voyages || []){const voyage=livingWorldState().seaVoyages.find(v=>v.id===id);if(voyage)items.push({text:'The crossing that raised the question',func:()=>openSeaVoyage(voyage)});}
-        if(work.guidance){const journey=commodityExchangeState().exchanges.find(r=>r.id===work.guidance.exchange),source=livingWorldState().inquiries.find(w=>w.id===work.guidance.source);if(journey)items.push({text:'The visitors who brought the idea',func:()=>openCommodityJourney(journey)});if(source&&livingTownKnown(regGet('town',source.town)))items.push({text:'The work they learned from',func:()=>openLivingInquiry(source)});}
+        if(work.guidance){const journey=commodityExchangeState().exchanges.find(r=>r.id===work.guidance.exchange),source=(!work.guidance.world||work.guidance.world===skyWorldId())&&livingWorldState().inquiries.find(w=>w.id===work.guidance.source);if(journey)items.push({text:'The visitors who brought the idea',func:()=>openCommodityJourney(journey)});if(source&&livingTownKnown(regGet('town',source.town)))items.push({text:'The work they learned from',func:()=>openLivingInquiry(source)});const mark=livingWorldState().surfaceMarks.find(m=>m.id===work.guidance.mark);if(surfaceMarkKnown(mark))items.push({text:'The diagram they found',func:()=>openSurfaceMark(mark)});}
         for(const input of work.inputs || []){const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(record)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(record)});}
         const definition=EXTENDED_DISCOVERIES.find(d=>d.event===work.event);
         if(work.status==='learned')items.push({text:'Read the discovery',func:()=>openUnlockDetail(work.key,definition,town.id)});
@@ -5627,6 +5639,7 @@
         const visit = {day:planet.day,town:town.id,originName:town.name,knownOrigin:livingTownKnown(town),type:mission.type,purpose:mission.label,revealed,pathLength:path.length,tag:mission.tag || null};
         if (carrier) {visit.person = carrier.person; visit.name = carrier.name; visit.whisper = carrier.id;}
         place.visits.push(visit);
+        visitSurfaceMarks(town,path,carrier);
         if (place.visits.length > 24) place.visits.splice(1,place.visits.length-24);
         return place;
     }
@@ -6121,7 +6134,7 @@
     }
     function discoverLivingArtifacts(town,path) {
         if(!town||town.end||town.pop<=0) return;
-        const keys=new Set(path.map(c=>`${c.x},${c.y}`));
+        const keys=new Set(path.filter(c=>c&&Number.isFinite(c.x)&&Number.isFinite(c.y)).map(c=>`${c.x},${c.y}`));
         for(const artifact of livingWorldState().artifacts.filter(a=>a.status==='waiting'&&keys.has(a.place))) {
             if(artifact.lastSearch===planet.day) continue;
             artifact.lastSearch=planet.day;
@@ -6354,6 +6367,7 @@
         if (isChunkSuitableForTag(chunk,'fertile')) features.push('The ground can support crops.');
         if (isChunkSuitableForTag(chunk,'mineral')) features.push('The exposed rock offers ground for mineral surveys.');
         if (features.length) items.push({text:features.join(' ')});
+        for(const mark of livingWorldState().surfaceMarks.filter(m=>m.surface.x===place.x&&m.surface.y===place.y&&surfaceMarkKnown(m)))items.push({text:inscriptionText(surfaceMarkLabel(mark)),func:()=>openSurfaceMark(mark)});
         const owner = chunk.v?.s && regGet('town',chunk.v.s);
         if (livingTownKnown(owner)) items.push({text:`This ground is now held by ${escapeLivingText(owner.name)}.`,func:() => {closeExecutive();openRegBrowser(owner,'town');}});
         const road = chunk.v?.road;
@@ -6388,6 +6402,346 @@
         if (livingPlaceReturn(town,place)) items.push({text:'Whisper about this place',func:() => openLivingPeople(town,place.id)});
         else if (livingPlaceRival(town,place)) items.push({text:'Speak of this ground',func:() => openLivingPeople(town,place.id)});
         populateExecutive(items,escapeLivingText(place.name)); markLivingStoryControls(); openExecutive();
+    }
+
+    // Fixed surfaces stay at their coordinates. Their material comes from real
+    // ground or recorded construction, never from an imaginary stock payment.
+    // Work effort, available space and tool wear are initial game calibration.
+    const SURFACE_MARK_PACE={space:8,readings:24};
+    let surfaceMarkView=null;
+    function surfaceExists(surface) {
+        const chunk=chunkAt(surface?.x,surface?.y);if(!chunk)return false;
+        if(surface.kind==='outcrop')return isChunkSuitableForTag(chunk,'mineral');
+        const marker=regGet('marker',surface.marker);
+        return !!marker&&!marker.end&&marker.x===surface.x&&marker.y===surface.y;
+    }
+    function surfaceOwner(surface) {return chunkAt(surface.x,surface.y)?.v?.s || null;}
+    function surfaceAccess(town,surface) {
+        if(!town||town.end||town.pop<=0||!surfaceExists(surface)||town.legal?.travel===false)return false;
+        const owner=surfaceOwner(surface);if(owner&&owner!==town.id)return false;
+        const origin=getAnchorChunk(town),target=chunkAt(surface.x,surface.y);
+        if(!origin||Math.hypot(origin.x-target.x,origin.y-target.y)>getExplorationRange(town))return false;
+        return !!findPath(origin,target,{canEnter:c=>c&&c.b!=='water'&&(!c.v?.s||c.v.s===town.id)})?.length;
+    }
+    function surfaceSites(town) {
+        if(!town||town.end)return [];
+        const sites=[];
+        for(const marker of regToArray('marker')) {
+            if(marker.end||marker.town!==town.id)continue;
+            const project=regGet('process',marker.process),inputs=project?._paultendoBuilding?.inputs;
+            if(!project?.done||!inputs)continue;
+            const material=Object.entries(inputs).filter(([type,count])=>count>0&&materialActivityFit(type,'inscription',town)).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0]?.[0];
+            if(material)sites.push({id:`structure:${marker.id}`,kind:'structure',marker:marker.id,material,x:marker.x,y:marker.y,name:marker.name || project.subtype.replace(/_/g,' ')});
+        }
+        for(const chunk of Object.values(planet.chunks || {}))if(chunk.v?.s===town.id&&isChunkSuitableForTag(chunk,'mineral')&&materialActivityFit('rock','inscription',town))
+            sites.push({id:`outcrop:${chunk.x},${chunk.y}`,kind:'outcrop',material:'rock',x:chunk.x,y:chunk.y,name:`rock at ${chunk.x}, ${chunk.y}`});
+        return sites.filter(surface=>surfaceAccess(town,surface)&&livingWorldState().surfaceMarks.filter(m=>m.surface.id===surface.id&&m.status==='made').length<SURFACE_MARK_PACE.space);
+    }
+    function surfaceHandAvailable(town,person,except,{reading=false}={}) {
+        const state=livingWorldState();
+        return livingTeachingPersonAvailable(person,town)&&!seaCrewBusy(town,person.id)
+            &&!state.inquiries.some(w=>w.town===town.id&&w.person===person.id&&w.status==='working')
+            &&!state.surfaceMarks.some(w=>w.id!==except&&w.town===town.id&&w.person===person.id&&w.status==='working'&&w.phase==='working')
+            &&!state.clues.some(c=>c.id!==except&&c.town===town.id&&c.study?.person===person.id&&c.study.status==='working'&&!c.study.pause)
+            &&!state.materialWork.some(w=>w.town===town.id&&materialWorkHasHand(w,person.id)&&(reading?['working']:['waiting','working']).includes(w.status))
+            &&!state.artifactWork.some(w=>w.town===town.id&&w.person===person.id&&['gathering','working'].includes(w.status))
+            &&!state.sampling.some(w=>w.town===town.id&&w.person===person.id&&['outbound','collecting','returning'].includes(w.status));
+    }
+    function surfaceTool(town,mark) {
+        const held=new Set(livingWorldState().surfaceMarks.filter(m=>m.id!==mark?.id&&m.town===town.id&&m.status==='working'&&m.phase==='working').map(m=>m.tool));
+        return (town._paultendoCarvingTools || []).filter(tool=>tool.uses>0&&!held.has(tool.id)).sort((a,b)=>COMMODITIES[b.type].properties.workingEdge-COMMODITIES[a.type].properties.workingEdge)[0];
+    }
+    function surfaceToolType(town,mark) {
+        const claims=commodityWorkClaims(town,undefined,{skipSurfaceMarks:true}).filter(c=>c.id!==mark?.id);
+        const candidates=materialActivityCandidates(town,'carving');
+        return (candidates.find(({type})=>commodityStock(town,type)-commodityClaimedStock(town,type,claims)>=1)
+            ||candidates.find(({type})=>town._paultendoMaterials?.[type]||materialTechniqueAvailable(type,town)&&(town._paultendoMaterials?.[MATERIAL_RECIPES[type].sample]||commodityStock(town,MATERIAL_RECIPES[type].sample)>0))||candidates.at(-1)).type;
+    }
+    function surfaceMarkKnown(mark) {
+        return !!mark&&isChunkExplored(mark.surface.x,mark.surface.y)&&(mark.knownMaker||mark.seen||livingTownKnown(regGet('town',mark.town)));
+    }
+    function surfaceMarkLabel(mark) {return `${mark.source?.kind==='knowledge'?'A diagram':mark.words?'Words':'A sign'} on ${mark.surface.name}`;}
+    function surfaceMarkTitle(mark) {return mark.source?.kind==='knowledge'?'A carved diagram':mark.words?'Words left here':"A maker's mark";}
+    function surfaceMarkNoun(mark) {return mark.source?.kind==='knowledge'?'a diagram':mark.words?'words':'a sign';}
+    function inscriptionText(text) {return escapeLivingText(text).replaceAll('{','&#123;').replaceAll('}','&#125;');}
+    function surfaceMarkStep(mark,phase,text,notice=false) {
+        if(mark.phase===phase)return;mark.phase=phase;
+        mark.steps.push({day:planet.day,text});if(mark.steps.length>32)mark.steps.shift();
+        if(notice&&surfaceMarkKnown(mark))logMessage(`${livingTownKnown(regGet('town',mark.town))?townRef(mark.town)+': ':''}${inscriptionText(text)}`,null,{_paultendoStory:{kind:'inscription',id:mark.id},_paultendoHighlight:mark.status==='made'});
+    }
+    function beginSurfaceMark(town,person,surface,words=null,source=null,autonomous=false) {
+        if(!surfaceAccess(town,surface)||!materialActivityFit(surface.material,'inscription',town)||!livingTeachingPersonAvailable(person,town)||words&&townKnowledgeLevel(town,'education')<30)return null;
+        const state=livingWorldState();
+        if(state.surfaceMarks.some(m=>m.town===town.id&&m.person===person.id&&['proposed','waiting','working'].includes(m.status))
+            ||state.surfaceMarks.filter(m=>m.surface.id===surface.id&&m.status==='made').length>=SURFACE_MARK_PACE.space)return null;
+        const motif=chooseSeeded(mulberry32(fnv1a32(`${planet.config?.seed}:${person.id}:signature`)),['three crossed strokes','two linked circles','a circle above a line','three lines beside a circle']);
+        const mark={id:`inscription:${state.nextId++}`,town:town.id,townName:town.name,person:person.id,name:person.name,role:person.role,knownMaker:livingTownKnown(town),surface:{...surface},day:planet.day,
+            status:autonomous?'waiting':'proposed',due:planet.day+(autonomous?0:LIVING_PACE.reply),autonomous,words:words?.trim().slice(0,120) || null,motif,source:source&&structuredClone(source),steps:[],readings:[]};
+        state.surfaceMarks.push(mark);
+        surfaceMarkStep(mark,'idea',autonomous?`${person.name} sets out to leave ${surfaceMarkNoun(mark)} on ${surface.name}.`:`You ask ${person.name} to leave ${surfaceMarkNoun(mark)} on ${surface.name}.`,!autonomous);
+        return mark;
+    }
+    function advanceSurfaceMarks() {
+        const state=livingWorldState();
+        for(const mark of state.surfaceMarks) {
+            if(mark.lastDay===planet.day)continue;mark.lastDay=planet.day;
+            if(mark.status==='made') {
+                if(!surfaceExists(mark.surface)){mark.status='lost';mark.lost=planet.day;surfaceMarkStep(mark,'lost','The surface that held the mark is gone.');}
+                continue;
+            }
+            if(!['proposed','waiting','working'].includes(mark.status))continue;
+            const town=regGet('town',mark.town),person=town&&workingLivingPerson(town,mark.person);
+            if(!livingTeachingPersonAvailable(person,town)||!surfaceExists(mark.surface)) {mark.status='abandoned';surfaceMarkStep(mark,'abandoned','The unfinished mark has been left behind.',true);continue;}
+            if(mark.status==='proposed') {
+                if(mark.due>planet.day)continue;
+                const mind=livingPersonMind(person);
+                if(mind.trust<35&&mind.outlook==='guarded'){mark.status='refused';surfaceMarkStep(mark,'refused',`${person.name} keeps your words to themselves.`,true);continue;}
+                mark.status='waiting';surfaceMarkStep(mark,'agreed',`${person.name} agrees to leave the mark.`,true);
+            }
+            const blocked=!surfaceAccess(town,mark.surface)?'access':!materialActivityFit(mark.surface.material,'inscription',town)||mark.words&&townKnowledgeLevel(town,'education')<30?'knowledge':
+                !surfaceHandAvailable(town,person,mark.id)?'hands':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            if(blocked){surfaceMarkStep(mark,blocked,{access:'They cannot reach the surface now.',knowledge:'They no longer have the knowledge to finish this mark.',hands:'Their other work comes first.',war:'The fighting has stopped the carving.',food:'Short meals have stopped the carving.'}[blocked]);continue;}
+            let tool=surfaceTool(town,mark);
+            if(!tool) {
+                const type=surfaceToolType(town,mark),other=commodityWorkClaims(town).filter(c=>c.id!==mark.id);
+                if(commodityStock(town,type)-commodityClaimedStock(town,type,other)<1){surfaceMarkStep(mark,'tools','They need a usable edge to cut the mark.');continue;}
+                tool={id:`carving-tool:${state.nextId++}`,type,uses:COMMODITIES[type].properties.edgeLife,day:planet.day,inputs:[]};
+                const before=commodityStock(town,type);
+                withCommodityUse({kind:'inscription',id:mark.id,name:'carving tools',inputs:tool.inputs},()=>happen('RemoveResource',null,town,{type,count:1}));
+                if(before-commodityStock(town,type)!==1)continue;
+                (town._paultendoCarvingTools ||= []).push(tool);
+                for(const input of tool.inputs)rememberCommodityUse(town,input,{kind:'inscription',id:mark.id,name:'carving tools'});
+            }
+            if(mark.tool!==tool.id){mark.tool=tool.id;(mark.tools ||= []).push({id:tool.id,type:tool.type,day:planet.day,inputs:structuredClone(tool.inputs)});}
+            if(mark.status==='waiting') {
+                const fit=materialActivityFit(mark.surface.material,'inscription',town);
+                mark.remaining=Math.max(1,Math.ceil(fit.method.effort/COMMODITIES[tool.type].properties.workingEdge));mark.status='working';mark.started=planet.day;
+                surfaceMarkStep(mark,'working',`${person.name} begins cutting the mark.`,true);continue;
+            }
+            surfaceMarkStep(mark,'working',`${person.name} returns to the carving.`);
+            tool.uses--;mark.remaining--;
+            if(mark.remaining>0)continue;
+            mark.status='made';mark.finished=planet.day;mark.owner=surfaceOwner(mark.surface);
+            if(mark.source?.kind==='knowledge') {
+                const discovery=EXTENDED_DISCOVERIES.find(d=>d.event===mark.source.event);
+                mark.fidelity=(mark.source.fidelity ?? 1)*(Object.entries(discovery.needsUnlock).every(([key,level])=>townKnowledgeLevel(town,key)>=level)?1:0.5);
+            }
+            surfaceMarkStep(mark,'made',`${person.name} leaves ${surfaceMarkNoun(mark)} on ${mark.surface.name}.`,true);
+        }
+    }
+    function surfaceKnowledgeSources(town,person=null) {
+        return EXTENDED_DISCOVERIES.flatMap(discovery=>{
+            const local=town._paultendoLocalDiscoveries?.[`${discovery.key}:${discovery.level}`];
+            const work=local&&livingWorldState().inquiries.find(w=>w.id===local.inquiry&&w.town===town.id&&w.status==='learned');
+            const maker=work&&workingLivingPerson(town,work.person);
+            if(!work||!livingTeachingPersonAvailable(maker,town)||person&&maker.id!==person.id)return [];
+            return [{kind:'knowledge',id:`${skyWorldId()}:${travelerState().passage}:${work.id}`,world:skyWorldId(),passage:travelerState().passage,from:town.id,townName:town.name,event:work.event,title:work.title,source:work.id,person:maker.id,name:maker.name,known:livingTownKnown(town),day:work.finished}];
+        });
+    }
+    function advanceClueIntrigue() {
+        const state=livingWorldState();
+        for(const clue of state.clues) {
+            if(clue.due>planet.day||clue.inquiry&&!clue.study||clue.study?.lastDay===planet.day||['finished','left'].includes(clue.study?.status))continue;
+            const town=regGet('town',clue.town),person=town&&workingLivingPerson(town,clue.person),mark=state.surfaceMarks.find(m=>m.id===clue.mark),source=mark?.source || clue.observation;
+            if(!livingTeachingPersonAvailable(person,town)||!source){if(clue.study)clue.study.status='left';continue;}
+            if(!clue.study) {
+                const mind=livingPersonMind(person),faith=person.role==='priest'&&(getTownReligion(town)||(town.influences.faith || 0)>0);
+                if(mind.outlook!=='curious'&&!faith)continue;
+                clue.study={person:person.id,name:person.name,day:planet.day,lastDay:planet.day,remaining:3,status:'waiting',steps:[]};
+            }
+            const study=clue.study;study.lastDay=planet.day;
+            const blocked=!surfaceHandAvailable(town,person,clue.id)?'hands':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            if(blocked){study.pause=blocked;continue;}delete study.pause;
+            if(study.status==='waiting'){study.status='working';study.started=planet.day;study.steps.push({day:planet.day,text:mark?`${person.name} follows the carved lines, trying to make sense of them.`:`${person.name} spends time with the unfamiliar tools, trying to understand what makes them useful.`});continue;}
+            if(--study.remaining>0)continue;
+            study.status='finished';study.finished=planet.day;
+            const discovery=EXTENDED_DISCOVERIES.find(d=>d.event===source.event),prepared=mark?Object.entries(discovery.needsUnlock).every(([key,level])=>townKnowledgeLevel(town,key)>=level):materialTechniqueAvailable(source.type,town);
+            const meaning=person.role==='priest'&&(getTownReligion(town)||(town.influences.faith || 0)>0)?'belief':person.role==='musician'?'song':prepared?'mechanism':'pattern';
+            study.interpretation={meaning,day:planet.day,prepared,faith:town.religion || null,outlook:livingPersonMind(person).outlook,
+                text:mark?{belief:`${person.name} thinks the signs carry a message meant for the town.`,song:`${person.name} hears a rhythm in the repeated shapes.`,mechanism:`${person.name} thinks the lines describe something that could be made.`,pattern:`${person.name} keeps finding patterns, but cannot say what they were meant for.`}[meaning]:`${person.name} wants to know why these tools help so much. They do not know how to make them yet.`};
+            study.steps.push({day:planet.day,text:study.interpretation.text});
+            const teaching=beginLivingCommunityTeaching(town,person,'learn',{type:'clue',mark:mark?.id,observation:clue.observation&&structuredClone(clue.observation),clue:clue.id,meaning,text:study.interpretation.text});
+            if(teaching)study.teaching=teaching.id;
+            if(livingTownKnown(town))logMessage(`${townRef(town.id)}: ${inscriptionText(study.interpretation.text)}`,null,{_paultendoStory:mark?{kind:'inscription',id:mark.id}:{kind:'clue',id:clue.id}});
+        }
+    }
+    function observeUnfamiliarFieldwork(town,set,kept) {
+        if(kept<=0||materialTechniqueAvailable(set.type,town))return;
+        const state=livingWorldState();
+        if(state.clues.some(c=>c.town===town.id&&c.observation?.kind==='fieldwork'&&c.observation.type===set.type))return;
+        const person=workingLivingPerson(town,set.person);if(!livingTeachingPersonAvailable(person,town))return;
+        const recipe=MATERIAL_RECIPES[set.type],discovery=EXTENDED_DISCOVERIES.find(d=>recipe?.needs[d.key]===d.level&&!localDiscoveryKnown(town,d));
+        const observation={kind:'fieldwork',type:set.type,set:set.id,title:'Unfamiliar handtools',event:discovery?.event,day:planet.day,extra:kept,inputs:structuredClone(set.inputs),
+            text:`${person.name} brings in more grain with these handtools. The town does not know how to make them.`};
+        const clue={id:`clue:${state.nextId++}`,town:town.id,person:person.id,name:person.name,day:planet.day,due:planet.day+LIVING_PACE.reply,attempts:{},status:'remembered',observation};
+        state.clues.push(clue);
+        if(livingTownKnown(town))logMessage(`${townRef(town.id)}: ${inscriptionText(observation.text)}`,null,{_paultendoStory:{kind:'clue',id:clue.id}});
+    }
+    function openObservedClue(clue) {
+        const town=regGet('town',clue.town);if(!livingTownKnown(town))return;
+        const mark=livingWorldState().surfaceMarks.find(m=>m.id===clue.mark);if(mark){openSurfaceMark(mark);return;}
+        const items=[{text:'← Back to the town',func:()=>{closeExecutive();openRegBrowser(town,'town');}},{heading:true,text:inscriptionText(clue.name)},
+            {text:`Day ${clue.day} · ${inscriptionText(clue.observation.text)}`}];
+        for(const step of clue.study?.steps || [])items.push({text:`Day ${step.day} · ${inscriptionText(step.text)}`});
+        const teaching=stateTeachingById(clue.study?.teaching);if(teaching)items.push({text:'What came of their idea',func:()=>openLivingTeaching(teaching)});
+        const inquiry=livingWorldState().inquiries.find(w=>w.id===clue.inquiry);if(inquiry)items.push({text:'What they tried next',func:()=>openLivingInquiry(inquiry)});
+        if(town._paultendoFarmTools)items.push({text:'Visit the fields',func:()=>openFarmTools(town)});
+        populateExecutive(items,inscriptionText(clue.observation.title));markLivingStoryControls();openExecutive();
+    }
+    function advanceRememberedClues() {
+        const state=livingWorldState();
+        for(const clue of state.clues) {
+            if(clue.lastDay===planet.day||clue.due>planet.day)continue;clue.lastDay=planet.day;
+            const mark=state.surfaceMarks.find(m=>m.id===clue.mark),source=mark?.source || clue.observation;
+            const town=regGet('town',clue.town),discovery=source&&EXTENDED_DISCOVERIES.find(d=>d.event===source.event);
+            if(!town||town.end||!discovery||clue.status==='left')continue;
+            if(localDiscoveryKnown(town,discovery)){clue.status='understood';continue;}
+            if(clue.inquiry){const work=state.inquiries.find(w=>w.id===clue.inquiry);if(work&&['waiting','working'].includes(work.status))continue;clue.status='left';continue;}
+            if(Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(town,key)<level)){clue.status='unfamiliar';continue;}
+            const cause=inquiryCause(town,discovery);if(!cause){clue.status='remembered';continue;}
+            const person=livingCommunityPerson(town,cause.role);
+            if(!surfaceHandAvailable(town,person)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town))continue;
+            const mind=livingPersonMind(person);
+            if(!clue.attempts[person.id]) {
+                const roll=mulberry32(fnv1a32(`${planet.config?.seed}:${clue.id}:${person.id}:diagram`))();
+                clue.attempts[person.id]={day:planet.day,interested:roll<clampChance(.6+(mind.outlook==='curious'?.25:mind.outlook==='guarded'?-.3:0),.05,.95)};
+            }
+            if(!clue.attempts[person.id].interested){clue.status='set_aside';continue;}
+            let work=state.inquiries.find(w=>w.town===town.id&&w.event===source.event&&['waiting','working'].includes(w.status));
+            if(work&&(work.status!=='waiting'||work.guidance))continue;
+            const guidance={...structuredClone(source),mark:mark?.id,observation:clue.observation&&structuredClone(clue.observation),clue:clue.id,to:town.id,found:clue.day,helpDays:mark?Math.floor(2*(mark.fidelity ?? 1)):0};
+            if(work){work.guidance=guidance;work.days=Math.max(2,work.days-guidance.helpDays);work.remaining=work.days;inquiryStep(work,`${work.name} studies the diagram. They still need to try the work here.`);}
+            else work=beginLocalInquiry(town,discovery,cause,guidance);
+            if(work){clue.inquiry=work.id;clue.status='studying';}
+        }
+    }
+    function observeSurfaceMarks() {
+        const state=livingWorldState();
+        for(const town of regToArray('town')) {
+            if(town.end||town.pop<=0||townKnowledgeLevel(town,'smith')<10||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town)||state.surfaceMarks.some(m=>m.town===town.id&&['proposed','waiting','working'].includes(m.status)))continue;
+            const voices=townKnowledgeLevel(town,'education')>=30?state.teachings.filter(t=>t.town===town.id&&t.active&&t.resolved&&!state.surfaceMarks.some(m=>m.source?.kind==='teaching'&&m.source.id===t.id)):[];
+            const sketches=(town._paultendoVisitorSketches || []).filter(s=>!state.surfaceMarks.some(m=>m.source?.kind==='knowledge'&&m.source.id===s.id));
+            const builders=(town._paultendoPeople || []).filter(p=>['miner','lumberer'].includes(p.role)&&livingPersonMind(p).outlook==='steadfast');
+            if(!sketches.length&&!voices.length&&(!builders.length||!regToArray('marker').some(m=>m.town===town.id&&regGet('process',m.process)?._paultendoBuilding?.inputs&&!state.surfaceMarks.some(s=>s.autonomous&&s.source?.kind==='building'&&s.source.marker===m.id))))continue;
+            const sites=surfaceSites(town);if(!sites.length)continue;
+            if(sketches.length) {
+                const person=(town._paultendoPeople || []).find(p=>['miner','lumberer','scholar'].includes(p.role)&&livingPersonMind(p).outlook==='curious'&&surfaceHandAvailable(town,p));
+                if(person){beginSurfaceMark(town,person,sites[0],null,sketches[0],true);continue;}
+            }
+            for(const voice of voices) {
+                const person=workingLivingPerson(town,voice.person);
+                if(townKnowledgeLevel(town,'education')>=30&&surfaceHandAvailable(town,person)&&['curious','steadfast'].includes(livingPersonMind(person).outlook)) {
+                    beginSurfaceMark(town,person,sites[0],voice.words,{kind:'teaching',id:voice.id,snapshot:voice},true);break;
+                }
+            }
+            if(state.surfaceMarks.some(m=>m.town===town.id&&['waiting','working'].includes(m.status)))continue;
+            for(const surface of sites.filter(s=>s.kind==='structure')) {
+                if(state.surfaceMarks.some(m=>m.autonomous&&m.source?.kind==='building'&&m.source.marker===surface.marker))continue;
+                const roles=surface.material==='lumber'?['lumberer','miner']:['miner','lumberer'];
+                const person=roles.map(role=>builders.find(p=>p.role===role)).find(p=>surfaceHandAvailable(town,p));
+                if(!person)continue;
+                beginSurfaceMark(town,person,surface,null,{kind:'building',marker:surface.marker},true);break;
+            }
+        }
+    }
+    function visitSurfaceMarks(town,path,carrier) {
+        const state=livingWorldState();if(!town||town.end||!path?.length||!state.surfaceMarks.some(m=>m.status==='made'))return;
+        const keys=new Set(path.map(c=>`${c.x},${c.y}`));
+        for(const mark of state.surfaceMarks.filter(m=>m.status==='made'&&keys.has(`${m.surface.x},${m.surface.y}`)&&surfaceExists(m.surface))) {
+            const person=carrier?.person?workingLivingPerson(town,carrier.person):livingCommunityPerson(town,carrier?.role || (town.jobs?.merchant>0?'merchant':'resident'));
+            if(!livingTeachingPersonAvailable(person,town))continue;
+            if(!carrier?.person&&!surfaceHandAvailable(town,person,undefined,{reading:true}))continue;
+            if(mark.readings.some(r=>r.town===town.id&&r.person===person.id&&r.day===planet.day))continue;
+            const understood=!mark.words||townKnowledgeLevel(town,'education')>=30;
+            const reading={day:planet.day,town:town.id,townName:town.name,person:person.id,name:person.name,known:livingTownKnown(town),understood};
+            mark.readings.push(reading);if(mark.readings.length>SURFACE_MARK_PACE.readings)mark.readings.shift();
+            if(livingTownKnown(town)&&isChunkExplored(mark.surface.x,mark.surface.y))mark.seen=true;
+            if(mark.source?.kind==='knowledge'&&!state.clues.some(c=>c.mark===mark.id&&c.town===town.id)) {
+                const clue={id:`surface-clue:${state.nextId++}`,mark:mark.id,town:town.id,person:person.id,name:person.name,day:planet.day,due:planet.day+LIVING_PACE.reply,attempts:{},status:'remembered'};
+                state.clues.push(clue);reading.clue=clue.id;
+                if(livingTownKnown(town))logMessage(`${townRef(town.id)}: ${inscriptionText(person.name)} notices a diagram on ${inscriptionText(mark.surface.name)}.`,null,{_paultendoStory:{kind:'inscription',id:mark.id}});
+            }
+            const parent=mark.source?.kind==='teaching'&&mark.source.snapshot;
+            if(!understood||!parent||state.teachingSeen[parent.origin.id]?.[town.id])continue;
+            const record={id:`teaching:${state.nextId++}`,origin:structuredClone(parent.origin),parent:parent.id,chain:[...parent.chain,{id:parent.id,town:parent.town,townName:parent.townName,knownTown:parent.origin.knownTown,name:parent.name,day:mark.finished,title:parent.title,words:parent.words}],
+                town:town.id,townName:town.name,person:person.id,name:person.name,role:person.role,topic:parent.topic,meaning:parent.meaning,words:mark.words,title:parent.title,hops:parent.hops+1,strength:parent.strength*0.65,
+                day:planet.day,due:planet.day+LIVING_PACE.reply,resolved:false,active:false,steps:[],contact:{type:'inscription',mark:mark.id,from:mark.town,to:town.id,day:planet.day,x:mark.surface.x,y:mark.surface.y}};
+            record.roll=mulberry32(fnv1a32(`${planet.config?.seed}:${mark.id}:${person.id}:${town.id}:reading`))();
+            record.steps.push({day:planet.day,text:`${person.name} finds words cut into ${mark.surface.name}.`});
+            state.teachings.push(record);(state.teachingSeen[parent.origin.id] ||= {})[town.id]=true;reading.teaching=record.id;
+            if(livingTownKnown(town))logMessage(escapeLivingText(record.steps[0].text),null,{_paultendoStory:{kind:'inscription',id:mark.id}});
+        }
+    }
+    function openSurfaceMark(mark) {
+        if(!surfaceMarkKnown(mark))return;
+        surfaceMarkView={planet,id:mark.id};livingPersonView=null;livingArtifactView=null;
+        const town=regGet('town',mark.town),known=mark.knownMaker||livingTownKnown(town);
+        const items=[{text:'← Back to marks',func:()=>openSurfaceMarks(town)},{text:`${inscriptionText(mark.surface.name)} · ${COMMODITIES[mark.surface.material].label}`},
+            {text:mark.source?.kind==='knowledge'?'A pattern of lines and shapes.':mark.words?`“${inscriptionText(mark.words)}”`:`${mark.motif[0].toUpperCase()+mark.motif.slice(1)}.`},
+            {text:mark.status==='lost'||mark.status==='made'&&!surfaceExists(mark.surface)?'The surface is gone. This is what was remembered there.':mark.status==='made'?`Cut on Day ${mark.finished}${known?` by ${inscriptionText(mark.name)}`:''}.`:inscriptionText(mark.steps.at(-1)?.text || 'The mark is unfinished.')}];
+        if(mark.source?.kind==='teaching'&&livingTownKnown(regGet('town',mark.source.snapshot.town)))items.push({text:'The belief behind these words',func:()=>openLivingTeaching(stateTeachingById(mark.source.id) || {...mark.source.snapshot,active:false})});
+        if(mark.source?.kind==='knowledge') {
+            const source=mark.source;
+            if(source.known)items.push({text:`${inscriptionText(source.name)} worked this out in ${inscriptionText(source.townName)}.`});
+            if(mark.fidelity<1)items.push({text:`${inscriptionText(mark.name)} copied unfamiliar lines, changing some details along the way.`});
+            if(source.via?.kind==='courier'){const route=getUniverse(false)?.spaceRoutes.find(r=>r.id===source.via.route);items.push({text:'The diagram came with a cargo vessel from another world.',...(spaceRouteKnown(route)?{func:()=>openSpaceRoute(route)}:{})});}
+            if(source.world===skyWorldId()&&source.passage===travelerState().passage){const work=livingWorldState().inquiries.find(w=>w.id===source.source);if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'Where the idea began',func:()=>openLivingInquiry(work)});}
+            for(const clue of livingWorldState().clues.filter(c=>c.mark===mark.id&&livingTownKnown(regGet('town',c.town)))) {
+                const reader=regGet('town',clue.town),work=livingWorldState().inquiries.find(w=>w.id===clue.inquiry);
+                if(clue.study) {
+                    items.push({text:inscriptionText(clue.study.interpretation?.text || `${clue.study.name} is following the lines, trying to make sense of them.`)});
+                    const teaching=stateTeachingById(clue.study.teaching);if(teaching)items.push({text:'What came of their idea',func:()=>openLivingTeaching(teaching)});
+                }
+                items.push({text:`${inscriptionText(reader.name)}: ${clue.status==='unfamiliar'?'the diagram is beyond what they know yet.':clue.status==='understood'?'the work is understood here.':clue.status==='set_aside'||clue.status==='left'?'the idea was put aside.':work?'someone is trying the work.':'the diagram has been remembered.'}`});
+                if(work)items.push({text:'See what they tried',func:()=>openLivingInquiry(work)});
+            }
+        }
+        if(mark.surface.marker){const marker=regGet('marker',mark.surface.marker);if(marker&&!marker.end&&isChunkExplored(marker.x,marker.y))items.push({text:'Visit the building',func:()=>{closeExecutive();openRegBrowser(marker,'marker');}});}
+        if(known)for(const step of mark.steps)items.push({text:`Day ${step.day} · ${inscriptionText(step.text)}`});
+        if(livingTownKnown(town)&&mark.tools?.length)items.push({text:'See the carving tools',func:()=>openSurfaceTools(town)});
+        for(const reading of mark.readings.filter(r=>r.known||livingTownKnown(regGet('town',r.town))).slice(-4)) {
+            items.push({text:`Day ${reading.day} · ${escapeLivingText(reading.name)} ${reading.understood?'noticed the mark':'could not read the words'}.`});
+            const teaching=stateTeachingById(reading.teaching);if(teaching&&livingTownKnown(regGet('town',teaching.town)))items.push({text:'What they made of it',func:()=>openLivingTeaching(teaching)});
+        }
+        if(livingTownKnown(town)){const person=workingLivingPerson(town,mark.person);if(person&&livingPersonAvailable(person,town))items.push({text:`Meet ${escapeLivingText(mark.name)}`,func:()=>openLivingPerson(town,person)});}
+        if(livingTownKnown(town)&&['proposed','waiting','working'].includes(mark.status))items.push({text:'Leave it unfinished',func:()=>{mark.status='abandoned';surfaceMarkStep(mark,'abandoned','You leave the unfinished mark alone.',true);openSurfaceMark(mark);}});
+        populateExecutive(items,surfaceMarkTitle(mark));markLivingStoryControls();openExecutive();
+    }
+    function openSurfaceTools(town) {
+        if(!livingTownKnown(town))return;
+        const items=[{text:'← Back to marks',func:()=>openSurfaceMarks(town)}];
+        for(const tool of town._paultendoCarvingTools || []) {
+            const fraction=tool.uses/COMMODITIES[tool.type].properties.edgeLife;
+            items.push({heading:true,text:COMMODITIES[tool.type].label},{text:fraction<=0?'The edge is worn out.':fraction<0.34?'The edge is badly worn.':fraction<0.67?'The edge shows some wear.':'The edge is still sharp.'});
+            for(const input of tool.inputs){const work=input.production&&livingWorldState().materialWork.find(w=>w.id===input.production.work&&input.production.world===skyWorldId()&&input.production.passage===travelerState().passage);if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'Visit the toolmaker',func:()=>openMaterialWork(work)});}
+        }
+        populateExecutive(items,'The carving tools');markLivingStoryControls();openExecutive();
+    }
+    function stateTeachingById(id) {return id&&livingWorldState().teachings.find(t=>t.id===id);}
+    function openSurfaceMarks(town) {
+        surfaceMarkView=null;if(!livingTownKnown(town))return;
+        const marks=livingWorldState().surfaceMarks.filter(m=>m.town===town.id&&surfaceMarkKnown(m));
+        const items=[{text:'← Back to settlement',func:()=>{closeExecutive();openRegBrowser(town,'town');}}];
+        for(const mark of marks.slice().reverse())items.push({text:inscriptionText(surfaceMarkLabel(mark)),func:()=>openSurfaceMark(mark)});
+        if(!marks.length)items.push({text:'No marks have been left here yet.'});
+        if(surfaceSites(town).some(s=>isChunkExplored(s.x,s.y)))items.push({text:'Ask someone to leave a mark',func:()=>openSurfaceMakers(town)});
+        populateExecutive(items,'Marks left here');markLivingStoryControls();openExecutive();
+    }
+    function openSurfaceMakers(town,surface=null) {
+        const items=[{text:'← Back to marks',func:()=>openSurfaceMarks(town)}];
+        for(const person of livingPeople(town,true).filter(p=>livingPersonAvailable(p,town)))items.push({text:escapeLivingText(person.name),func:()=>{
+            if(surface)openSurfaceMarkChoice(town,person,surface);
+            else {const sites=surfaceSites(town).filter(s=>isChunkExplored(s.x,s.y));populateExecutive([{text:'← Back to people',func:()=>openSurfaceMakers(town)},...sites.map(s=>({text:escapeLivingText(s.name),func:()=>openSurfaceMarkChoice(town,person,s)}))],'Choose a surface');markLivingStoryControls();openExecutive();}
+        }});
+        populateExecutive(items,'Who will leave the mark?');markLivingStoryControls();openExecutive();
+    }
+    function openSurfaceMarkChoice(town,person,surface) {
+        const begin=words=>{const mark=beginSurfaceMark(town,person,surface,words);if(mark)openSurfaceMark(mark);};
+        const items=[{text:'← Back to surfaces',func:()=>openSurfaceMakers(town,surface)},{text:`${escapeLivingText(person.name)} can leave a sign here. Carving needs a usable edge and time away from other work.`},
+            {text:'Leave their sign',func:()=>begin(null)}];
+        if(townKnowledgeLevel(town,'education')>=30)items.push({text:'Write a few words',func:()=>doPrompt({type:'ask',shuffle:false,limit:120,title:'Words for the surface',message:'What should they cut into it?',default:'',func:value=>{const words=String(value || '').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,120);if(words)begin(words);}})});
+        for(const source of surfaceKnowledgeSources(town,person))items.push({text:`Sketch ${source.title.toLowerCase()}`,func:()=>{const mark=beginSurfaceMark(town,person,surface,null,source);if(mark)openSurfaceMark(mark);}});
+        populateExecutive(items,escapeLivingText(surface.name));markLivingStoryControls();openExecutive();
     }
 
     function renderTravelerOpening() {
@@ -6428,7 +6782,7 @@
     function livingTeachingVoice(record,person) {
         if(record.topic==='learn') {
             const meaning=person.role==='soldier'?'drills':person.role==='priest'?'belief':person.role==='musician'?'song':'learning';
-            const words={drills:'Teach people what the veterans know.',belief:'Pass on your beliefs.',song:'Put what you know into a song.',learning:'Teach your neighbours what you know.'}[meaning];
+            const words=record.cause?.type==='clue'?{drills:'Look for lessons in the unfamiliar.',belief:'Someone left these signs for us.',song:'Remember the shapes in a song.',learning:'Try to understand the things no one can explain.'}[meaning]:{drills:'Teach people what the veterans know.',belief:'Pass on your beliefs.',song:'Put what you know into a song.',learning:'Teach your neighbours what you know.'}[meaning];
             return {topic:'learn',meaning,words};
         }
         if(record.topic==='care') {
@@ -6564,6 +6918,8 @@
             timber:{name:'wooden tally boards',preparation:2,needs:{smith:10}},
             stone:{name:'carved stone',preparation:4,needs:{smith:20}},masonry:{name:'carved bricks',preparation:4,needs:{smith:20}}
         }},
+        inscription:{property:'markRetention',minimum:1,methods:{timber:{effort:1,needs:{smith:10}},stone:{effort:2,needs:{smith:10}},masonry:{effort:2,needs:{smith:10}}}},
+        carving:{property:'workingEdge',minimum:1,forms:['handtool']},
         construction:{property:'loadBearing',minimum:1,defaults:['brick','rock','lumber']},
         workshopHeat:{property:'heat',minimum:2,defaults:['charcoal','coal'],methods:{preparedFuel:{},mineralFuel:{encounter:true,needs:{fire:40}}}},
         cleanCarbon:{property:'cleanCarbon',minimum:1,defaults:['charcoal']},
@@ -6702,9 +7058,10 @@
     function useFarmTools(town,gained) {
         const store=town?._paultendoFarmTools;
         if(!store||gained<=0||town.legal?.farm===false||!(town.jobs?.farmer>0)||town.end)return;
-        let hands=town.jobs.farmer,boost=0;
+        let hands=town.jobs.farmer,boost=0;const usedSets=[];
         for(const set of store.sets.filter(set=>set.uses>0).sort((a,b)=>FARM_TOOLS[b.type].boost-FARM_TOOLS[a.type].boost)) {
             const used=Math.min(hands,set.count,set.uses);if(!used)continue;
+            usedSets.push(set);
             hands-=used;set.uses-=used;boost+=used/town.jobs.farmer*FARM_TOOLS[set.type].boost;
             if(!set.uses)farmToolStep(town,`A set of ${COMMODITIES[set.type].label} in ${town.name} has worn out in the fields.`);
             if(!hands)break;
@@ -6715,6 +7072,7 @@
         const before=commodityStock(town,'crop');
         if(extra>0)happen('AddResource',null,town,{type:'crop',count:extra});
         const kept=commodityStock(town,'crop')-before;store.extra=(store.extra || 0)+kept;
+        if(usedSets.length===1)observeUnfamiliarFieldwork(town,usedSets[0],kept);
         if(kept>0&&store.lastReport===undefined) {
             store.lastReport=planet.day;
             farmToolStep(town,`The handtools help the farmers in ${town.name} bring in more of the harvest.`);
@@ -7051,7 +7409,7 @@
         return work;
     }
     function materialDirectNeed(town,type) {
-        let promised=commodityWorkClaims(town).filter(c=>['accounts','voyage','inquiry','craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
+        let promised=commodityWorkClaims(town).filter(c=>['inscription','accounts','voyage','inquiry','craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
         // Actual recordkeeping can give a town a reason to try a lighter
         // writing surface before it has learned to make one successfully.
         if(townAccountsMaterialImprovement(town,type))promised=Math.max(promised,1);
@@ -7338,7 +7696,7 @@
         const flow=foodFlow(town),runway=available/Math.max(1,flow.consumption);
         return Math.max(0.1,flow.consumption/Math.max(1,available)+demand/Math.max(1,available)+travelDays/Math.max(1,runway));
     }
-    function commodityWorkClaims(town,excludeExchange,{skipAccounts=false}={}) {
+    function commodityWorkClaims(town,excludeExchange,{skipAccounts=false,skipSurfaceMarks=false}={}) {
         const claims=[];
         const storage=grainStorageNeed(town);if(storage)claims.push({kind:'storage',id:`storage:${town.id}`,cost:{pottery:storage}});
         const tools=farmToolNeed(town);if(tools)claims.push({kind:'equipment',id:`tools:${town.id}`,cost:{[farmToolKind(town)]:tools}});
@@ -7364,6 +7722,8 @@
             // its inputs while waiting and pays for them when work begins.
             if(work&&['made','storing'].includes(work.status))claims.push({kind:'order',id:request.id,cost:{[request.type]:Math.min(request.manufacture.count,work.output-(work.cargo || 0))}});
         }
+        if(!skipSurfaceMarks)for(const mark of livingWorldState().surfaceMarks.filter(m=>m.town===town.id&&['waiting','working'].includes(m.status)&&!surfaceTool(town,m)))
+            claims.push({kind:'inscription',id:mark.id,cost:{[surfaceToolType(town,mark)]:1}});
         if(!skipAccounts&&townAccountsWritingNeed(town)) {
             const plan=townAccountsMaterialPlan(town,claims);
             if(plan)claims.push({kind:'accounts',id:`accounts:${town.id}`,cost:{[plan.type]:1}});
@@ -8006,6 +8366,7 @@
     }
     function noteLivingExchange(from,to,path,transport) {
         if(!from||!to||from.end||to.end||from.id===to.id||!path?.length||areAtWar(from,to)||hasIssue(from,'war')||hasIssue(to,'war')) return;
+        visitSurfaceMarks(from,path);
         carryLivingTeaching(from,to,path,transport);
         if(transport.type==='caravan') carryLivingTeaching(to,from,path,transport);
     }
@@ -8014,13 +8375,14 @@
         if(['defy','order'].includes(record.topic)&&(!(planet.unlocks.government>=10)||!town.gov||town.gov==='anarchy')) return {accepted:false,reason:'The old argument no longer fits how this town is ruled.'};
         if(hasIssue(town,'war')||hasIssue(town,'revolution')) return {accepted:false,reason:'The fighting leaves them no room to take up the visitors’ words.'};
         const from=regGet('town',record.contact.from);
-        if(!from||from.end||areAtWar(town,from)) return {accepted:false,reason:'The people who brought these words are no longer within reach.'};
+        const inscription=record.contact.type==='inscription';
+        if(!from||!inscription&&(from.end||areAtWar(town,from))) return {accepted:false,reason:'The people who brought these words are no longer within reach.'};
         const outlook=livingPersonMind(person).outlook,relation=town.relations?.[from.id] || 0;
         let chance=0.55+clampValue(relation,-5,5)*0.05+(outlook==='curious'?0.16:outlook==='guarded'?-0.2:0);
         if(record.topic==='care'&&outlook==='generous') chance+=0.15;
         if(record.topic==='defy') chance+=(town.influences.happy<-2?0.15:0)-(outlook==='steadfast'?0.2:0);
         if(record.topic==='order') chance+=(town.values?.order || 0)*0.015-(outlook==='generous'?0.15:0);
-        return {accepted:record.roll<clampChance(chance,0.05,0.95),reason:outlook==='guarded'?'They would rather keep to what their own people know.':'They hear the visitors out, then return to their own concerns.'};
+        return {accepted:record.roll<clampChance(chance,0.05,0.95),reason:outlook==='guarded'?'They would rather keep to what their own people know.':inscription?'The words do not fit what they need now.':'They hear the visitors out, then return to their own concerns.'};
     }
     function advanceLivingTeachings() {
         const state=livingWorldState();
@@ -8031,7 +8393,7 @@
             const reception=livingTeachingReception(town,person,record);
             const action=reception.accepted?actOnLivingWhisper(town,person,record):{acted:false,reason:reception.reason};
             if(action.acted) adoptLivingTeaching(record,record,person);
-            else {record.status=reception.accepted?'stalled':'refused';record.steps.push({day:planet.day,text:`${person.name} lets the visitors’ words pass. ${action.reason}`});}
+            else {record.status=reception.accepted?'stalled':'refused';record.steps.push({day:planet.day,text:`${person.name} ${record.contact.type==='inscription'?'leaves the carved words alone':'lets the visitors’ words pass'}. ${action.reason}`});}
             if(livingTownKnown(town)) modLog('memory',escapeLivingText(record.steps.at(-1).text),null,{town,observedStory:true,story:{kind:'teaching',id:record.id}});
             refreshLivingPersonView();
         }
@@ -8062,10 +8424,12 @@
         }
         for(const stop of record.chain) if((stop.knownTown||livingTownKnown(regGet('town',stop.town)))&&!(stop.id===origin.id&&stop.words===origin.words)) items.push({text:`Day ${stop.day} · ${escapeLivingText(stop.name)} in ${escapeLivingText(stop.townName)} passed on: “${escapeLivingText(stop.words)}”`});
         if(!record.resolved) items.push({text:`${escapeLivingText(record.name)} is still turning the words over.`});
-        for(const step of record.steps) if(step.text!==origin.cause?.text) items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        for(const step of record.steps) if(step.text!==origin.cause?.text) items.push({text:`Day ${step.day} · ${record.contact?.type==='inscription'?inscriptionText(step.text):escapeLivingText(step.text)}`});
         for(const phrase of livingInfluencePhrases(record.changes || {},5)) items.push({text:phrase+'.'});
         if(record.resolved&&record.status==='adopted') items.push({text:record.active?'People here still pass it on.':'Other words have since taken its place here.'});
         const source=regGet('town',origin.town),whisper=livingWorldState().whispers.find(w=>w.id===origin.whisper);
+        const mark=record.contact?.type==='inscription'&&livingWorldState().surfaceMarks.find(m=>m.id===record.contact.mark);
+        if(surfaceMarkKnown(mark))items.push({text:'The words on the surface',func:()=>openSurfaceMark(mark)});
         if(livingTownKnown(source)&&whisper) items.push({text:'Remember your whisper',func:()=>openLivingWhisperStory(source,whisper)});
         const person=findLivingPerson(town,record.person);
         if(person) items.push({text:`Visit ${escapeLivingText(person.name)}`,func:()=>openLivingPerson(town,person)});
@@ -8446,6 +8810,7 @@
         if(carriedWords.length) items.push({heading:true,text:'Words that reached them'});
         for(const record of carriedWords) items.push({text:escapeLivingText(record.title),func:()=>openLivingTeaching(record)});
         for(const object of livingWorldState().artifacts.filter(a=>a.person===person.id&&livingArtifactKnown(a))) items.push({text:`${escapeLivingText(artifactTitle(object))} · Its story`,func:()=>openLivingArtifact(object)});
+        for(const mark of livingWorldState().surfaceMarks.filter(m=>m.person===person.id&&m.town===town.id&&surfaceMarkKnown(m)))items.push({text:inscriptionText(surfaceMarkLabel(mark)),func:()=>openSurfaceMark(mark)});
         populateExecutive(items, escapeLivingText(person.name)); markLivingStoryControls(); openExecutive();
     }
 
@@ -9029,6 +9394,11 @@
         if(town._paultendoAccounts) {
             const accounts=document.createElement('button');accounts.textContent='Accounts';accounts.addEventListener('click',()=>{closePopups();openTownAccounts(town);});section.appendChild(accounts);
         }
+        if(livingWorldState().surfaceMarks.some(m=>m.town===town.id)||townKnowledgeLevel(town,'smith')>=10&&surfaceSites(town).some(s=>isChunkExplored(s.x,s.y))) {
+            const marks=document.createElement('button');marks.textContent='Marks left here';marks.addEventListener('click',()=>{closePopups();openSurfaceMarks(town);});section.appendChild(marks);
+        }
+        const noticed=livingWorldState().clues.filter(c=>c.town===town.id&&c.observation);
+        if(noticed.length){const button=document.createElement('button');button.textContent='Things people noticed';button.addEventListener('click',()=>{closePopups();populateExecutive(noticed.map(c=>({text:`Day ${c.day} · ${inscriptionText(c.observation.title)}`,func:()=>openObservedClue(c)})),'Things people noticed');markLivingStoryControls();openExecutive();});section.appendChild(button);}
         for(const work of livingWorldState().inquiries.filter(w=>w.town===town.id&&['waiting','working'].includes(w.status))) {
             const button=document.createElement('button');button.textContent=`${work.title} · Work in progress`;button.addEventListener('click',()=>{closePopups();openLivingInquiry(work);});section.appendChild(button);
         }
@@ -9265,6 +9635,12 @@
             mine.perChunk=function(town,target,chunk){const before=commodityStock(town,'rock');const result=base.apply(this,arguments);collectLocalMaterial(town,chunk,commodityStock(town,'rock')-before);return result;};
             mine.perChunk._paultendoMaterials=true;
         }
+        for(const [id,type,role] of [['townFarm','crop','farmer'],['townMine','rock','miner'],['townLumber','lumber','lumberer']]) {
+            const event=gameEvents[id];if(!event?.perChunk||event.perChunk._paultendoSurfaceRead)continue;
+            const base=event.perChunk;
+            event.perChunk=function(town,target,chunk){const before=commodityStock(town,type),result=base.apply(this,arguments);if(commodityStock(town,type)>before)visitSurfaceMarks(town,[chunk],{role});return result;};
+            event.perChunk._paultendoSurfaceRead=true;
+        }
         PAULTENDO_STATE.commoditiesReady=true;
         const resourceTotal=typeof textParserCommands==='object'&&textParserCommands.resourcetotal;
         if(resourceTotal?.func&&!resourceTotal.func._paultendoStorage) {
@@ -9289,6 +9665,8 @@
                 if(person&&currentExecutive===escapeLivingText(person.name).toLowerCase()){refreshLivingPersonView();return;}
                 const artifact=livingArtifactView?.planet===planet&&livingWorldState().artifacts.find(a=>a.id===livingArtifactView.id);
                 if(artifact&&currentExecutive===escapeLivingText(artifactTitle(artifact)).toLowerCase()){openLivingArtifact(artifact);return;}
+                const mark=surfaceMarkView?.planet===planet&&livingWorldState().surfaceMarks.find(m=>m.id===surfaceMarkView.id);
+                if(mark&&currentExecutive===surfaceMarkTitle(mark).toLowerCase()){openSurfaceMark(mark);return;}
                 return base.apply(this,arguments);
             };
             refreshExecutive._paultendoLivingView=true;
@@ -14786,7 +15164,7 @@
             // A busy workshop still needs its cargo vessel. Actual batches
             // allocate free hands separately, without erasing the route's need.
             const staffed=MATERIAL_RECIPES.cargo_vessel.roles.some(role=>town.jobs?.[role]>0);
-            return {town,stocks,demands,spares,room,values,cash:commodityStock(town,'cash'),trade:townKnowledgeLevel(town,'trade'),knowledge:materialTechniqueAvailable('cargo_vessel',town),staffed,war:hasIssue(town,'war'),fed:mealStock(town)>=foodBuffer(town),person,religion,faithKey:religion?(religion._paultendoOrigin || `${ref.worldId}:${religion.id}`):null,practice:livingWorldState().teachings.some(t=>t.town===town.id&&t.active&&['care','food'].includes(t.meaning))};
+            return {town,stocks,demands,spares,room,values,cash:commodityStock(town,'cash'),trade:townKnowledgeLevel(town,'trade'),knowledge:materialTechniqueAvailable('cargo_vessel',town),knownEvents:EXTENDED_DISCOVERIES.filter(d=>localDiscoveryKnown(town,d)).map(d=>d.event),staffed,war:hasIssue(town,'war'),fed:mealStock(town)>=foodBuffer(town),person,religion,faithKey:religion?(religion._paultendoOrigin || `${ref.worldId}:${religion.id}`):null,practice:livingWorldState().teachings.some(t=>t.town===town.id&&t.active&&['care','food'].includes(t.meaning))};
         },{silent:true});
     }
     function spaceCommodityTerms(route,buyer,seller,type,buyerRef,sellerRef) {
@@ -14839,6 +15217,12 @@
             if(Object.entries(cost).some(([type,n])=>commodityStock(town,type)-other.reduce((sum,c)=>sum+(c.cost[type] || 0),0)<n))return false;
             const trip={id:`courier:${route.id}:${(route.sequence || 0)+1}`,seller:{...route.seller},buyer:{...route.buyer},type:route.type,terms:structuredClone(terms),count:terms.count,cargo:terms.count,inputs:[],day:spaceDay(),arrival:spaceDay()+route.travelTime,status:'outbound',uses:[]};
             if(!spaceTake(town,cost,trip))return false;
+            // A vessel can carry an account from a real maker. The maker stays
+            // home, and a receiver must do their own copying and experiments.
+            if(!(seller.religion?.tenets?.includes('insular')&&seller.faithKey!==buyer.faithKey)&&(town.values?.openness || 0)>-3) {
+                const source=surfaceKnowledgeSources(town).find(s=>!buyer.knownEvents.includes(s.event)&&livingPersonMind(workingLivingPerson(town,s.person)).outlook==='curious');
+                if(source)trip.sketch={...source,via:{kind:'courier',route:route.id,journey:trip.id},shared:spaceDay()};
+            }
             route.sequence=(route.sequence || 0)+1;trip.lots=commodityCargoLots(trip.count,trip.inputs.filter(i=>i.type===trip.type));trip.vesselLots=commodityCargoLots(1,trip.inputs.filter(i=>i.type==='cargo_vessel'));
             route.journey=trip;route.status='outbound';delete route.pause;
             spaceRouteStep(route,`${spaceTownLabel(route.seller)} sends ${trip.count} ${COMMODITIES[trip.type].label} to ${spaceTownLabel(route.buyer)}. Arrival is expected around Day ${trip.arrival}.`,true);return true;
@@ -14872,6 +15256,10 @@
             if(payment&&!spaceTake(town,{[payment.type]:payment.count},paymentContext))return;
             if(spaceUnload(town,trip.type,trip.cargo,trip.lots,trip,trip.seller)!==trip.cargo){town.resources=before;town._paultendoCommodityLots=lots;town._paultendoCashFlow=flow;delete town._paultendoEconomy;trip.lots=commodityCargoLots(trip.count,trip.inputs.filter(i=>i.type===trip.type));return;}
             trip.delivered=trip.cargo;trip.cargo=0;trip.deliveredDay=day;
+            if(trip.sketch) {
+                const sketches=town._paultendoVisitorSketches ||= [];
+                if(!sketches.some(s=>s.id===trip.sketch.id))sketches.push({...structuredClone(trip.sketch),arrival:day});
+            }
             if(payment){trip.paymentCargo=payment.count;trip.paymentInputs=paymentContext.inputs;trip.paymentLots=commodityCargoLots(payment.count,paymentContext.inputs);}
             route.deliveries++;addSpaceWarRelation(trip.seller,trip.buyer,.2);
             if(trip.terms.kind==='aid'){const memory=((route.help ||= {})[getTownRefKey(trip.buyer)] ||= {received:{}});memory.received[trip.type]=(memory.received[trip.type] || 0)+trip.delivered;memory.lastHelpReceived={day,type:trip.type,count:trip.delivered,source:trip.id};}
@@ -15966,7 +16354,7 @@
     function advanceWorldLife() {
         for (const [name, step] of [
             ["Seasons", updateSeasonState], ["Whispers", advanceLivingWhispers], ["Material surveys", advanceMaterialSurveys], ["Research work", advanceLivingInquiries],
-            ["Artifact work", advanceLivingArtifactWork], ["Artifacts", advanceLivingArtifacts],
+            ["Surface marks", advanceSurfaceMarks], ["Curiosity about marks", advanceClueIntrigue], ["Remembered diagrams", advanceRememberedClues], ["New marks", observeSurfaceMarks], ["Artifact work", advanceLivingArtifactWork], ["Artifacts", advanceLivingArtifacts],
             ["Inventions", observeLivingInventions], ["Sky study", advanceSkyStudy],
             ["Sea crossings", advanceSeaVoyages], ["Commodity journeys", advanceCommodityJourneys], ["Field tools", advanceFarmTools],
             ["Material work", advanceMaterialWork], ["New field tools", advanceFarmTools],

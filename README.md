@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.82**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
+Version **1.6.83**, tested against the **GenTown 1.4 / gt5** engine snapshot on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.82/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.83/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.82)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.83)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -31,7 +31,11 @@ The local origin has its own saves; it does not share storage with r74n.com. The
 
 ## Compatibility and verification
 
-Commodity demand, supply, shared work claims, journeys and use histories respond to actual town state. Writing, construction, workshop fuel and handtools now share material properties and forms. Activities look for suitable capabilities, local methods and unclaimed stock, with familiar materials preferred. The same timber can become a writing board or go to the builders, and a shaped tool can work a field or help a civilian resist an attack. Raw metal is not a finished tool. Coal can provide workshop heat, while an ingredient still needs the properties required by its recipe. Relative properties, methods, recipes and numerical effects remain authored game rules. A broader model of discovered uses, cultural preferences and purposes remains work ahead. Cave walls and marks on buildings also need location, access and ownership rules before they can become usable surfaces.
+Commodity demand, supply, shared work claims, journeys and use histories respond to actual town state. Writing, construction, workshop fuel and handtools now share material properties and forms. Activities look for suitable capabilities, local methods and unclaimed stock, with familiar materials preferred. The same timber can become a writing board or go to the builders, and a shaped tool can work a field or help a civilian resist an attack. Raw metal is not a finished tool. Coal can provide workshop heat, while an ingredient still needs the properties required by its recipe. Relative properties, methods, recipes and numerical effects remain authored game rules. A broader model of discovered uses, cultural preferences and purposes remains work ahead. Marks can now stay on real mineral outcrops and completed structures whose construction material was recorded. Cave discovery and a wider range of surface uses remain work ahead.
+
+People can leave personal signs before Writing, carve their own words once they know Writing, or sketch techniques they actually learned. Marks need an accessible physical site, a paid handtool, free working time and meals. Tool edges wear and can be reused. A completed building or an active shared belief can inspire a mark without the Traveler. Work, exploration and actual journeys can bring readers to it. Carved beliefs can outlast their maker and be passed on, while the surface and its history stay at their coordinates. Reading pages does no work.
+
+An actual offworld cargo visit can bring an account from a curious maker who completed the source inquiry. A curious local person can copy it into a lasting diagram using local tools. The maker stays home. Discovering a diagram remembers a clue, and the town can return to it once it has the prerequisite knowledge and a reason to investigate. Curiosity can begin before those prerequisites: people spend working evenings examining the lines and may carry an uncertain pattern, a song or a religious interpretation into their community. This does not award the technology. Copying unfamiliar diagrams can alter details and reduce their usefulness. A willing worker trying the actual technology still needs the normal trial supplies and working days. Guidance saves at most two trial days. The same clue response also accepts observed effects. Actual harvest gains from tools a town cannot make can attract a farmer’s attention, with the tool set and its real inputs retained as evidence. Broader cultural, environmental and technological observations remain further adapters for this shared system. Source world, passage, inquiry and journey identities survive reload, so matching IDs on different planets cannot replace the actual source. Guarded or insular makers can keep their accounts home. Random alien arrivals, invented ancient inscriptions and the Traveler carrying drawings between histories have not been added.
 
 Paper now has a workshop and a use. Local Writing and shaping knowledge let available lumberers or scholars try pulping one timber into four sheets over five work days. Trials can fail, and food, workers, war and competing materials still govern the work. Actual recordkeeping and waiting library inquiries can create demand before the town knows how to make it. Imports can supply sheets without teaching papermaking. New library, printing and university trials use paper, while unfinished saved inquiries retain their original recipes.
 
