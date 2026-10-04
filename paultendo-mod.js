@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.78/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.79/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.78";
+    const MOD_VERSION = "1.6.79";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -8522,7 +8522,7 @@
     }
 
     function livingTownSnapshot(town) {
-        return { id: town.id, pop: town.pop || 0, jobs: {...town.jobs}, resources: {...town.resources}, influences: {...town.influences}, research: {...town.research}, legal: Object.fromEntries(Object.keys(allLaws).map(key => [key, happen('Legality', null, town, {law: key})])), publicHealthcare: town.publicHealthcare === true, relations: {...town.relations} };
+        return { id: town.id, pop: town.pop || 0, jobs: {...town.jobs}, resources: {...town.resources}, influences: {...town.influences}, research: {...town.research}, econ:town.econ,tax:town.tax || 0,legal: Object.fromEntries(Object.keys(allLaws).map(key => [key, happen('Legality', null, town, {law: key})])), publicHealthcare: town.publicHealthcare === true, relations: {...town.relations} };
     }
 
     function livingResearchPriority(research) {
@@ -8669,6 +8669,17 @@
             const title = level?.name || (caller.eventClass === 'townLaw' ? `${titleCase(caller.args.name || livingLawName(caller.args.value))} law` : caller.eventClass === 'establishHealthcare' ? 'Care for the sick' : caller.eventClass === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : caller.eventClass === 'townProjectStart' ? `A new ${String(caller.args.value).replace(/_/g, ' ')}` : 'A choice for the town');
             const projects = regToArray('process').filter(p => p.type === 'project' && !capture.processes.has(p.id)).map(p => ({ id: p.id, town: p.town, subtype: p.subtype, reported: false }));
             const record = { id: state.nextId++, day: planet.day, title, question: capture.question, automated: capture.automated, outcome: (selected.innerText || selected.textContent).trim(), text: capture.entry.querySelector('.logText')?.textContent || capture.question, towns, changes, projects, traces, received: typeof caller.args?.success === 'boolean' ? caller.args.success : null, logId: caller.logID };
+            if(['townEcon','townTaxChange'].includes(caller.eventClass)&&caller.args._paultendoEconomic) {
+                const town=caller.target,before=capture.before.find(t=>t.id===town?.id),choice=selected.getAttribute('type')==='yes'?'yes':'no';
+                const applied=choice==='no'||(caller.eventClass==='townEcon'?town?.econ===caller.args.value:town?.tax===caller.args.result);
+                if(before&&applied) {
+                    const news={id:`choice:${record.id}`,day:record.day,event:caller.eventClass,town:town.id,townName:town.name,choice,value:caller.args.value,
+                        reason:caller.args._paultendoEconomic.reason,cause:structuredClone(caller.args._paultendoEconomic.cause),
+                        before:{econ:before.econ,tax:before.tax,influences:before.influences},after:{econ:town.econ,tax:town.tax || 0,influences:{...town.influences}}};
+                    news.title=localTownChoiceTitle(news,town);news.text=escapeLivingText(news.title)+'.';news.quote=localEconomicQuote(news,town);
+                    record.economic=news;record.title=news.title;
+                }
+            }
             if(capture.need)record.need=capture.need;
             if (caller.eventClass === 'explorationExpeditionPrompt'||caller.eventClass==='swayDiscoveryExpedition') {
                 record.title = 'Beyond the town';
@@ -8845,6 +8856,7 @@
 
     function openLivingChoiceStory(town, decision) {
         if (!livingTownKnown(town)) return;
+        if(decision.economic){openLocalTownChoice(decision.economic);return;}
         const state = livingWorldState();
         const items = [{ text: '← Back to your mark', func: () => openLivingTownHistory(town) }];
         items.push({ heading: true, text: `Day ${decision.day} · ${decision.title}` });
@@ -8953,7 +8965,7 @@
             const choices = document.createElement('button');choices.textContent='Choices made here';
             choices.addEventListener('click',()=>{closePopups();populateExecutive([
                 {text:'← Back to settlement',func:()=>{closeExecutive();openRegBrowser(town,'town');}},
-                ...localChoices.slice(-12).reverse().map(record=>({text:`Day ${record.day} · ${record.title}`,func:()=>openLocalTownChoice(record)}))
+                ...localChoices.slice(-12).reverse().map(record=>({text:`Day ${record.day} · ${escapeLivingText(localTownChoiceTitle(record,town))}`,func:()=>openLocalTownChoice(record)}))
             ],`${town.name} · Choices made here`);markLivingStoryControls();openExecutive();});section.appendChild(choices);
         }
         const rations=livingWorldState().warRations.findLast(record=>record.town===town.id);
@@ -9018,6 +9030,7 @@
 
     function initLivingWorld() {
         installNativeTechNeeds();
+        installLocalEconomicProposals();
         const lawEvent=gameEvents.townLaw;
         if(lawEvent?.value&&!lawEvent.value._paultendoLocal) {
             const base=lawEvent.value;
@@ -9246,6 +9259,9 @@
             .paultendoChronicleStoryLink:hover { color: #fff1a0; }
             .paultendoChronicleStoryLink:focus-visible { outline: 2px solid #fff1a0; outline-offset: 2px; }
             #actionSubList .paultendoStoryProse { font-size: 0.82em; color: #bfc1b3; line-height: 1.35; border-bottom: none; padding-block: 0.2em 0.4em; }
+            #actionSubList .paultendoNewsQuote { margin: 0.65em 0; padding: 0 0 0 0.8em; border-left: 3px solid #6b6b50; }
+            #actionSubList .paultendoNewsQuote p { margin: 0 0 0.4em; color: #e2e4d7; }
+            #actionSubList .paultendoNewsQuote cite { font-style: normal; font-size: 0.9em; color: #bfc1b3; }
             #actionSubList .paultendoStoryLink .paultendoStoryProse { display: block; padding-block: 0.15em 0; }
             #actionSubList .paultendoStoryHeading { border-bottom: none; margin-top: 0.65em; }
             #actionSubList .paultendoStoryLink:has(+ .paultendoStoryProse) { color: #eee4aa; border-bottom: none; padding-bottom: 0; }
@@ -15160,7 +15176,91 @@
 
     // Only these synchronous native proposals have a local decision policy.
     // Naming, player interventions and choice dialogs still need the player.
-    const LOCAL_CHOICE_EVENTS = new Set(['increaseResearch','townAskDiplomacy','townProjectStart','townLaw']);
+    const LOCAL_CHOICE_EVENTS = new Set(['increaseResearch','townAskDiplomacy','townProjectStart','townLaw','townEcon','townTaxChange']);
+
+    const LOCAL_ECONOMIC_PACE={margin:1.25,taxStep:0.05,taxCeiling:0.5,reserveDays:8,recoveryDays:30};
+    function localEconomicPreference(town) {
+        if(!town||town.end||town.pop<=0||town.econ||townKnowledgeLevel(town,'trade')<10)return null;
+        const pressures=[],v=town.values || {},creed=getTownReligion(town),faith=Math.max(0,town.influences?.faith || 0);
+        const add=(form,weight,text,evidence={})=>{if(weight>0)pressures.push({form,weight,text,...evidence});};
+        add('socialism',Math.max(0,v.justice || 0)/4,'They want the town’s resources to serve everyone.',{kind:'value',axis:'justice',value:v.justice});
+        add('socialism',Math.max(0,-(v.wealth || 0))/4,'They distrust organising town life around private wealth.',{kind:'value',axis:'wealth',value:v.wealth});
+        add('capitalism',Math.max(0,v.wealth || 0)/4,'They believe people should keep the rewards of their work.',{kind:'value',axis:'wealth',value:v.wealth});
+        add('capitalism',Math.min(2,(town.jobs?.merchant || 0)/Math.max(1,town.pop)*8),'Their merchants want more room for private exchange.',{kind:'work',workers:town.jobs?.merchant || 0});
+        if(faith>4&&creed?.tenets?.includes('egalitarian'))add('socialism',(faith-4)/3,'Their faith calls for a fair share for everyone.',{kind:'belief',religion:creed.id,faith});
+        if(faith>4&&creed?.tenets?.includes('trade'))add('capitalism',(faith-4)/3,'Their faith honours trade and the bargains people make.',{kind:'belief',religion:creed.id,faith});
+        const care=livingWorldState().teachings.find(t=>t.town===town.id&&t.active&&['care','food'].includes(t.meaning));
+        if(care)add('socialism',2,'Looking after one another has become part of daily life here.',{kind:'practice',teaching:care.id});
+        const exchanges=(livingWorldState().exchanges || []).filter(e=>e.status==='arrived'&&e.delivered>0&&[e.buyer,e.seller].includes(town.id)&&planet.day-e.arrived>=0&&planet.day-e.arrived<=90).slice(-3);
+        for(const exchange of exchanges) {
+            if(exchange.kind==='aid')add('socialism',1,'They remember supplies shared when someone needed help.',{kind:'exchange',exchange:exchange.id});
+            else if(['trade','barter'].includes(exchange.kind))add('capitalism',1,'Useful goods have reached them through private bargains.',{kind:'exchange',exchange:exchange.id});
+        }
+        const scores=Object.keys(econForms).map(form=>({form,score:pressures.filter(p=>p.form===form).reduce((n,p)=>n+p.weight,0)})).sort((a,b)=>b.score-a.score);
+        if(!scores[0]||scores[0].score-(scores[1]?.score || 0)<LOCAL_ECONOMIC_PACE.margin)return null;
+        const winner=pressures.filter(p=>p.form===scores[0].form).sort((a,b)=>b.weight-a.weight)[0];
+        return {form:scores[0].form,reason:winner.text,cause:{kind:'economy',pressures,scores}};
+    }
+    function localTaxPreference(town) {
+        if(!town||town.end||town.pop<=0||!town.econ||town.econcrash||townKnowledgeLevel(town,'trade')<30||townKnowledgeLevel(town,'government')<20)return null;
+        if(town._paultendoLocalTaxDay!=null&&planet.day-town._paultendoLocalTaxDay<LOCAL_ECONOMIC_PACE.recoveryDays)return null;
+        const employed=Object.values(town.jobs || {}).reduce((n,v)=>n+Math.max(0,Number(v)||0),0),current=town.tax || 0;
+        if(!employed)return null;
+        const cash=commodityStock(town,'cash'),wealth=Math.max(0,town.wealth || 0),upkeep=computeTownEconomySnapshot(town).upkeep;
+        const projects=regToArray('process').filter(p=>p.type==='project'&&p.town===town.id&&!p.done&&!p.end&&p.cost>0);
+        const building=projects.reduce((n,p)=>n+p.cost,0),loans=(planet.loans || []).filter(l=>l.borrowerId===town.id&&l.remainingAmount>0);
+        const debt=loans.reduce((n,l)=>n+Math.min(l.remainingAmount,l.paymentPerTurn || 0),0);
+        const target=(upkeep+debt)*LOCAL_ECONOMIC_PACE.reserveDays+building,short=Math.max(0,target-cash);
+        const evasion=town.legal?.['crime.tax_evasion']?2:1;
+        let desired=Math.min(LOCAL_ECONOMIC_PACE.taxCeiling,short/LOCAL_ECONOMIC_PACE.reserveDays/employed*evasion);
+        const v=town.values || {},creed=getTownReligion(town),faith=(town.influences?.faith || 0)>4;
+        const care=livingWorldState().teachings.find(t=>t.town===town.id&&t.active&&['care','food'].includes(t.meaning));
+        const solidarity=Math.max(0,v.justice || 0)+Math.max(0,-(v.wealth || 0))+(care?4:0)+(faith&&creed?.tenets?.includes('egalitarian')?4:0);
+        const authority=Math.max(0,v.order || 0),privateClaim=Math.max(0,v.wealth || 0)+(faith&&creed?.tenets?.includes('trade')?4:0);
+        const poor=wealth<employed*LOCAL_ECONOMIC_PACE.reserveDays;
+        let reason=building>0?projects.length===1?`They want to help fund the ${projects[0].subtype.replace(/_/g,' ')} under construction.`:'They want to help fund the buildings under construction.':debt>0?'Payments to their lenders are coming due.':'The public purse needs enough to cover the town’s bills.';
+        if(!short){desired=0;reason='The public purse already covers the work and bills ahead.';}
+        else if(privateClaim>solidarity+authority){desired*=0.5;reason='They would rather keep more wealth in private hands, even while public bills wait.';}
+        if(poor&&solidarity>authority){desired=Math.min(desired,current/2);reason='They do not want people with little wealth to carry more of the town’s bills.';}
+        if(!wealth){desired=0;reason='There is no private wealth left to collect.';}
+        desired=Math.round(desired*100)/100;
+        const diff=Math.round(Math.max(-LOCAL_ECONOMIC_PACE.taxStep,Math.min(LOCAL_ECONOMIC_PACE.taxStep,desired-current))*100)/100;
+        if(!diff)return null;
+        const result=Math.max(0,Math.round((current+diff)*100)/100);
+        const collection=Math.min(wealth,employed*result/evasion);
+        return {diff,result,reason,cause:{kind:'tax',cash,wealth,employed,upkeep,debt,building,target,short,desired,collection,solidarity,authority,privateClaim,poor,projects:projects.map(p=>p.id),loans:loans.map(l=>l.id),teaching:care?.id,religion:faith?creed?.id:null}};
+    }
+    function installLocalEconomicProposals() {
+        for(const id of ['townEcon','townTaxChange']) {
+            const event=gameEvents[id];if(!event?.value||event.value._paultendoEconomic)continue;
+            event.value=function(_,town,args={}) {
+                const policy=id==='townEcon'?localEconomicPreference(town):localTaxPreference(town);
+                if(!policy)return false;
+                args._paultendoEconomic=structuredClone(policy);
+                if(id==='townTaxChange')args.result=policy.result;
+                return id==='townEcon'?policy.form:policy.diff;
+            };
+            event.value._paultendoEconomic=true;
+            const message=event.message;
+            event.message=function(_,town,args){
+                let text=message.apply(this,arguments);
+                if(id==='townTaxChange') {
+                    const change=args.result===0?'abolish its income tax':!town.tax?`introduce a ${Math.round(args.result*100)}% income tax`:`${args.value>0?'raise':'lower'} its income tax to ${Math.round(args.result*100)}%`;
+                    text=`Motion from ${townRef(town.id)} to ${change}.`;
+                }
+                return `${text}\n\n${escapeLivingText(args._paultendoEconomic?.reason || '')}`;
+            };
+            const apply=event.func;
+            event.func=function(_,town,args) {
+                if(id==='townEcon'&&(town.econ||townKnowledgeLevel(town,'trade')<10||!Object.hasOwn(econForms,args.value)))return;
+                if(id==='townTaxChange'&&(!Number.isFinite(args.result)||args.result<0||args.result>1||townKnowledgeLevel(town,'trade')<30||townKnowledgeLevel(town,'government')<20))return;
+                const result=apply.apply(this,arguments);
+                if(id==='townTaxChange')town._paultendoLocalTaxDay=planet.day;
+                delete town._paultendoEconomy;
+                return result;
+            };
+        }
+    }
 
     // Competing wants can support a law that harms another part of town life.
     // The margin and recovery interval are initial pacing calibration. These
@@ -15290,6 +15390,12 @@
     function localTownChoice(id, caller) {
         const town = id === 'townAskDiplomacy' ? caller.subject : caller.target;
         if (!town || town.end || town.pop <= 0) return null;
+        if(id==='townEcon'||id==='townTaxChange') {
+            const policy=id==='townEcon'?localEconomicPreference(town):localTaxPreference(town);
+            if(!policy)return null;
+            const agrees=id==='townEcon'?caller.args.value===policy.form:caller.args.result===policy.result;
+            return {town,choice:agrees?'yes':'no',reason:policy.reason,cause:policy.cause};
+        }
         if(id==='townLaw') {
             const policy=localLawPreference(town,caller.args.value);
             if(!policy||typeof caller.args.result!=='boolean')return null;
@@ -15356,9 +15462,12 @@
         const building=id==='townProjectStart';
         if (building && (result?._reg!=='process'||result.type!=='project'||result.town!==town.id)) return;
         const law=id==='townLaw';
+        const economic=id==='townEcon'||id==='townTaxChange';
+        if(economic&&policy.choice==='yes'&&(id==='townEcon'?town.econ!==caller.args.value:town.tax!==caller.args.result))return;
         const title = law?`${titleCase(livingLawName(caller.args.value))} law`:building ? `A new ${caller.args.value.replace(/_/g,' ')}` : id === 'increaseResearch' ? `${titleCase(researchInfluences[caller.args.value] || caller.args.value)} research` : 'A neighbour at the table';
         const text = id === 'increaseResearch'
             ? `${townRef(town.id)} gives ${researchInfluences[caller.args.value] || caller.args.value} research ${policy.choice==='yes'?'more':'less'} attention.`
+            : economic?id==='townEcon'?`${townRef(town.id)} ${policy.choice==='yes'?'adopts':'rejects'} ${escapeLivingText(caller.args.value)}.`:policy.choice==='yes'?`${townRef(town.id)} ${town.tax?'sets its income tax at '+Math.round(town.tax*100)+'%':'abolishes its income tax'}.`:`${townRef(town.id)} keeps its current tax.`
             : law?`${townRef(town.id)} ${policy.choice==='yes'?'makes':'keeps'} ${livingLawName(caller.args.value)} ${happen('Legality',null,town,{law:caller.args.value})?'legal':'illegal'}.`
             : building ? `${townRef(town.id)} begins building a ${caller.args.value.replace(/_/g,' ')}.`
             : `${townRef(town.id)} ${policy.choice==='yes'?'welcomes':'turns away'} ${townRef(policy.partner.id)}.`;
@@ -15366,17 +15475,88 @@
             value:caller.args.value,choice:policy.choice,title,text,reason:policy.reason,cause:policy.cause,
             before:{research:before.research,relations:before.relations},after:{research:{...town.research},relations:{...town.relations}}};
         if(law){record.before.legal=before.legal;record.before.influences=before.influences;record.after.legal=livingTownSnapshot(town).legal;record.after.influences={...town.influences};town._paultendoLocalLawDay=planet.day;}
+        if(economic){record.townName=town.name;Object.assign(record.before,{econ:before.econ,tax:before.tax,influences:before.influences});Object.assign(record.after,{econ:town.econ,tax:town.tax || 0,influences:{...town.influences}});record.title=localTownChoiceTitle(record,town);record.quote=localEconomicQuote(record,town);}
         if (building) {record.project=result.id;result._paultendoLocalChoice=record.id;result.x=policy.site.x;result.y=policy.site.y;}
         state.localChoices.push(record);
         if (state.localChoices.length > 96) state.localChoices.shift();
-        if(livingTownKnown(town))logMessage(`${text} ${escapeLivingText(policy.reason)}`,null,{_paultendoStory:{kind:'localChoice',id:record.id},_paultendoHighlight:law&&policy.choice==='yes'});
+        if(livingTownKnown(town))logMessage(`${text} ${escapeLivingText(policy.reason)}`,null,{_paultendoStory:{kind:'localChoice',id:record.id},_paultendoHighlight:(law||economic)&&policy.choice==='yes'});
+    }
+
+    function localTownChoiceTitle(record,town) {
+        const name=record.townName || town.name;
+        if(record.event==='townEcon')return `${name} ${record.choice==='yes'?'adopts':'rejects'} ${record.value}`;
+        if(record.event==='townTaxChange') {
+            const rate=Math.round((record.after.tax || 0)*100),before=record.before.tax || 0;
+            if(record.choice!=='yes')return rate?`${name} keeps its ${rate}% income tax`:`${name} rejects an income tax`;
+            if(!rate)return `${name} abolishes its income tax`;
+            return `${name} ${!before?'introduces':record.after.tax>before?'raises':'cuts'} ${!before?'a ': 'its income tax to '}${rate}%${!before?' income tax':''}`;
+        }
+        return record.title;
+    }
+
+    function localEconomicQuote(record,town) {
+        // Interview people who already exist. Never add a speaker, meet them
+        // for the player, consume simulation randomness or reroll on reading.
+        const linkedFigures=(planet.figures || []).filter(f=>f.hometown===town.id&&f._paultendoPerson);
+        const figures=linkedFigures.filter(f=>!f.died&&!f._hidden)
+            .map(f=>({...f._paultendoPerson,name:f.name,role:LIVING_FIGURE_ROLES[f.type] || 'resident',figure:f}));
+        const figureIds=new Set(linkedFigures.map(f=>f._paultendoPerson.id));
+        const people=[...figures,...(town._paultendoPeople || []).filter(p=>!figureIds.has(p.id))].filter(p=>livingTeachingPersonAvailable(p,town)
+            &&!seaCrewBusy(town,p.id)&&!livingWorldState().sampling.some(w=>w.town===town.id&&w.person===p.id&&['outbound','collecting','returning'].includes(w.status)));
+        const project=(record.cause.projects || []).map(id=>regGet('process',id)).find(p=>p&&!p.end&&!p.done);
+        const hungry=mealStock(town)<nativeMealNeed(town);
+        const candidates=[];
+        for(const person of people) {
+            const outlook=livingPersonMind(person).outlook;
+            if(!Object.hasOwn(LIVING_OUTLOOKS,outlook))continue;
+            // A wary resident need not speak on the record under a harsh rule.
+            if(outlook==='guarded'&&isAutocraticGov(town.gov || town.governmentType)&&(town.values?.order || 0)>=8&&(town.values?.justice || 0)<=0)continue;
+            let words,stance='uncertain',weight=person.role==='resident'?1:2;
+            if(record.event==='townTaxChange') {
+                const raised=record.after.tax>record.before.tax;
+                if(record.after.tax===record.before.tax){words='I don’t think we’ve heard the last of this.';}
+                else if(raised&&hungry){words='We need food before another tax.';stance='opposed';weight+=person.role==='farmer'?3:1;}
+                else if(!raised){
+                    words=outlook==='generous'?'People need a bit of breathing room.':outlook==='guarded'?'About time they left some of it with us.':project&&outlook==='curious'?`I hope the ${project.subtype.replace(/_/g,' ')} still gets finished.`:'Good. We need something left for ourselves.';
+                    stance=outlook==='curious'&&project?'uncertain':'supportive';
+                } else if(outlook==='guarded') {words='They’ll take their share. Let’s see if we get anything for it.';stance='opposed';}
+                else if(outlook==='generous') {words=project?`If it gets the ${project.subtype.replace(/_/g,' ')} finished, I’ll pay my share.`:'I’ll pay my share. Just don’t take meals off someone else’s table.';stance='supportive';}
+                else if(outlook==='curious'){words=project?`Let’s see if this gets the ${project.subtype.replace(/_/g,' ')} finished.`:'Let’s see what they do with it.';}
+                else if((town.values?.order || 0)>0&&project){words='The work won’t pay for itself.';stance='supportive';}
+                else {words=record.before.tax?'First one levy, then another. Where does it stop?':'We managed without it before.';stance='opposed';}
+                if(project?.subtype==='school'&&person.role==='scholar'||project?.subtype==='hospital'&&person.role==='doctor'||project?.subtype==='fortress'&&person.role==='soldier')weight+=3;
+            } else if(record.event==='townEcon') {
+                if(record.choice!=='yes')words='I don’t think we’ve heard the last of this.';
+                else if(record.value==='socialism') {
+                    if(outlook==='generous'){words='If there’s food in town, we should all eat.';stance='supportive';}
+                    else if(outlook==='guarded'){words='I’ll believe in sharing when I see it.';stance='opposed';}
+                    else if(outlook==='curious')words='Let’s see whether it reaches the people who need it.';
+                    else words='I want to know who decides what’s fair.';
+                } else {
+                    if(outlook==='generous'){words='What happens to the people who can’t find work?';stance='opposed';}
+                    else if(outlook==='guarded'||person.role==='merchant'){words='Let me keep what I earn.';stance='supportive';}
+                    else if(outlook==='curious'){words='If I make something useful, I ought to be able to sell it.';stance='supportive';}
+                    else {words='A bargain’s a bargain. Keep your word.';stance='supportive';}
+                }
+                if(person.role==='merchant')weight+=3;
+            }
+            if(words)candidates.push({person,outlook,words,stance,weight});
+        }
+        if(!candidates.length)return null;
+        const rand=mulberry32(fnv1a32(`${planet.config?.seed}:${record.id}:${record.day}:economic-voice`));
+        let roll=rand()*candidates.reduce((n,c)=>n+c.weight,0),chosen=candidates.at(-1);
+        for(const candidate of candidates){roll-=candidate.weight;if(roll<0){chosen=candidate;break;}}
+        const {person,outlook,words,stance}=chosen;
+        return {person:person.id,name:person.name,role:person.role,label:livingPersonLabel(person),outlook,words,stance,day:record.day,
+            context:{hungry,project:project&&{id:project.id,type:project.subtype},beforeTax:record.before.tax,tax:record.after.tax,economy:record.after.econ}};
     }
 
     function openLocalTownChoice(record) {
         const town = regGet('town',record.town);
         if (!livingTownKnown(town)) return;
+        const economic=record.event==='townEcon'||record.event==='townTaxChange',title=localTownChoiceTitle(record,town);
         const items = [{text:'← Back to settlement',func:()=>{closePopups();closeExecutive();openRegBrowser(town,'town');}},
-            {heading:true,text:`Day ${record.day} · ${record.title}`},{text:record.text},{text:escapeLivingText(record.reason)}];
+            economic?{text:`Day ${record.day}`}:{heading:true,text:`Day ${record.day} · ${escapeLivingText(title)}`},{text:record.text},{text:escapeLivingText(record.reason)}];
         if (record.event === 'increaseResearch') {
             const previous = livingResearchPriority(record.before.research), chosen = livingResearchPriority(record.after.research);
             if (chosen && chosen !== previous) items.push({text:previous
@@ -15402,6 +15582,32 @@
                 items.push({text:`Visit the ${record.value.replace(/_/g,' ')}`,func:()=>{closePopups();closeExecutive();openRegBrowser(marker,'marker');}});
             for (const exchange of (livingWorldState().exchanges || []).filter(e=>e.uses?.some(use=>use.kind==='construction'&&use.id===record.project)&&stateExchangeForLocalChoice(e.id)).slice(-3))
                 items.push({text:`Follow the ${COMMODITIES[exchange.type]?.label || exchange.type}`,func:()=>openCommodityJourney(exchange)});
+        } else if(record.event==='townEcon'||record.event==='townTaxChange') {
+            if(record.event==='townEcon') {
+                const other=record.cause.pressures.filter(p=>p.form!==record.value).sort((a,b)=>b.weight-a.weight)[0];
+                if(other)items.push({heading:true,text:'The other side'},{text:escapeLivingText(other.text)});
+                const delta=Object.fromEntries(Object.keys(record.after.influences).map(key=>[key,(record.after.influences[key] || 0)-(record.before.influences[key] || 0)]));
+                const effects=livingInfluencePhrases(delta);
+                if(effects.length)items.push({heading:true,text:'What changed'},...effects.map(text=>({text})));
+            } else {
+                const cause=record.cause;
+                // A policy may use exact accounts internally. Its Chronicle is
+                // a public account, not access to every resident's finances.
+                // No tax returns or public treasury reports exist yet, so do
+                // not disguise hidden balances as estimates or invent sources.
+                if(cause.debt>0&&cause.building>0)items.push({text:'Loan payments were also coming due.'});
+                if(cause.privateClaim>0&&record.reason!=='They would rather keep more wealth in private hands, even while public bills wait.')items.push({text:'Some residents would rather keep their earnings.'});
+                if(record.choice==='yes'&&record.after.tax>0)items.push({text:'How much the tax will bring in remains to be seen.'});
+                for(const id of cause.projects || []) {const project=regGet('process',id);if(project&&!project.end)items.push({text:'Follow the building work',func:()=>{closeExecutive();openRegBrowser(project,'process');}});}
+            }
+            if(town.econ!==record.after.econ||(town.tax || 0)!==record.after.tax)
+                items.push({heading:true,text:'Now'},{text:town.econ?`The town follows ${escapeLivingText(town.econ)}.`:'No economic system has been adopted.'},{text:town.tax?`The income tax is ${Math.round(town.tax*100)}%.`:'There is no income tax.'});
+            if(record.quote){
+                const quote=record.quote;
+                items.push({text:`<blockquote class="paultendoNewsQuote"><p>“${escapeLivingText(quote.words)}”</p><cite>${escapeLivingText(quote.name)}, ${escapeLivingText(quote.label.toLowerCase())}</cite></blockquote>`});
+                const person=findLivingPerson(town,quote.person);
+                if(person&&livingPersonAvailable(person,town))items.push({text:`Meet ${escapeLivingText(person.name)}`,func:()=>openLivingPerson(town,person)});
+            }
         } else if(record.event==='governmentEvolution') {
             items.push({text:`Support for a different rule held for ${record.cause.debate.days} days.`});
             const opposing=record.cause.opposition?.slice().sort((a,b)=>b.weight-a.weight)[0];
@@ -15435,7 +15641,7 @@
         const source = record.cause.exchange || record.cause.source || record.cause.pressures?.find(p=>p.exchange)?.exchange;
         const exchange = stateExchangeForLocalChoice(source);
         if (exchange) items.push({text:'Follow the exchange',func:()=>openCommodityJourney(exchange)});
-        populateExecutive(items,`${town.name} · ${record.title}`);markLivingStoryControls();openExecutive();
+        populateExecutive(items,escapeLivingText(economic?title:`${town.name} · ${title}`));markLivingStoryControls();openExecutive();
     }
 
     function stateExchangeForLocalChoice(id) {
