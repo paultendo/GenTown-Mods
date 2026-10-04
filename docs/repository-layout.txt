@@ -1,0 +1,46 @@
+Repository layout
+4 October 2026
+
+Player installation
+
+paultendo-mod.js is the independently installable overhaul. Use the
+versioned CDN URL and instructions in README.md. The inherited utilities
+listed in THIRD_PARTY_NOTICES.txt are not required for this installation.
+
+Local game
+
+index.html adapts the original GenTown page. app/ contains the original
+paultendo launcher support and presentation changes. vendor/gentown/
+contains the upstream engine, styles and fonts. icons/ contains the
+original game icons used by the engine and launcher. Keep both directories.
+
+Development and verification
+
+scripts/ contains the loopback development server and campaign harness.
+tests/ checks simulation behaviour, resource conservation and compatibility.
+package.json and package-lock.json describe the development dependencies.
+docs/release-1.6.92.txt and docs/qa/ preserve the evidence for the published
+v1.6.92 release. They describe that release, not later untested changes.
+
+hot-swap-mod.js is paultendo's separate development utility. It is not
+loaded by the default launcher. Updating the overhaul still requires a
+page reload, as described in README.md.
+
+Documentation
+
+README.md describes the current release, installation and comparison with
+base GenTown. LICENSE.md separates ownership and permissions.
+THIRD_PARTY_NOTICES.txt identifies inherited assets and utilities.
+docs/campaign-harness.txt describes the simulation runner.
+docs/mod-notes.txt is a dated development record, including older results
+and limitations. It is not the current installation guide.
+The earlier root-level design plans and assessments have been removed.
+Their previous contents remain in Git history. Current behaviour and
+remaining limits belong in README.md and the implementation notes.
+
+Inherited independent utilities
+
+better_mod_loader.mjs, whirl-load.js, world-configurator.js, example_mod.js
+and mods.json are retained at their original paths for existing links.
+They have separate provenance and are not part of the tested overhaul.
+Moving or deleting them could break users' existing installation URLs.

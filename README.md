@@ -123,8 +123,12 @@ The runner uses actual game turns and decisions. It writes campaign reports, a t
 
 **The paultendo overhaul is paultendo’s work.** The original mod code in [paultendo-mod.js](paultendo-mod.js), its added systems and original supporting code and documentation belong to paultendo. The mod installs independently through GenTown’s Add mod feature. Attribution to GenTown does not attribute paultendo’s original work to R74n.
 
-**R74n created the original GenTown.** Its engine, original styles, fonts, icons and other upstream content remain credited to R74n. The preserved copy is in [vendor/gentown](vendor/gentown), with source URLs and SHA-256 hashes in [upstream.json](vendor/gentown/upstream.json). The [R74n Content License](vendor/gentown/LICENSE.txt) is included for R74n’s content. It is not presented as a blanket licence for this repository or a licence grant for paultendo’s original code.
+**R74n created the original GenTown.** Its engine, original styles, icons and other original upstream content remain credited to R74n. The preserved engine and supporting files are in [vendor/gentown](vendor/gentown), with source URLs and SHA-256 hashes in [upstream.json](vendor/gentown/upstream.json). Original game icons are in [icons](icons). The [R74n Content License](vendor/gentown/LICENSE.txt) is included for R74n’s content. It is not presented as a blanket licence for this repository or a licence grant for paultendo’s original code.
+
+**The fonts have their own authors and terms.** VT323 is by the VT323 Project Authors, including Peter Hull, under the [SIL Open Font License 1.1](vendor/gentown/fonts/VT323-LICENSE.txt). Public Pixel is by GGBotNet, released under [CC0 1.0 Universal](vendor/gentown/fonts/PublicPixel-LICENSE.txt).
 
 **Adapted files contain work from both sources.** [index.html](index.html) adapts R74n’s original game page for local loading. Its upstream portions retain their original attribution and applicable terms. The original additions by paultendo remain paultendo’s work. Any third-party components retain their own notices and licences.
 
-This README does not grant a separate licence to reuse paultendo’s original code.
+See [LICENSE.md](LICENSE.md) for the ownership separation, permission to play the published mod and the terms governing reuse of paultendo’s original work.
+
+The [third-party notices](THIRD_PARTY_NOTICES.txt) identify inherited assets and independent utilities. The [repository guide](docs/repository-layout.txt) explains which files run the overhaul and which are development tools.

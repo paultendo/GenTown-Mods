@@ -1,0 +1,58 @@
+Third-party material in this repository
+
+GenTown by R74n
+
+Original engine, supporting scripts and styles: vendor/gentown/
+Original game icons: icons/
+Original game-page portions: index.html
+Source: https://r74n.com/gentown/
+Licence: vendor/gentown/LICENSE.txt
+Source URLs and hashes: vendor/gentown/upstream.json
+
+Fonts supplied with the upstream game
+
+vendor/gentown/fonts/VT323-Regular.ttf
+Copyright 2011, The VT323 Project Authors (peter.hull@oikoi.com)
+Designer: Peter Hull
+Licence: SIL Open Font License 1.1
+Full licence: vendor/gentown/fonts/VT323-LICENSE.txt
+Licence source: https://github.com/google/fonts/blob/main/ofl/vt323/OFL.txt
+
+vendor/gentown/fonts/PublicPixel.ttf
+Designer: GGBotNet
+Terms: Creative Commons Zero 1.0 Universal
+Full terms: vendor/gentown/fonts/PublicPixel-LICENSE.txt
+Source: https://github.com/ggbotnet/fonts-cc0/tree/main/Public%20Pixel
+Terms source: https://github.com/ggbotnet/fonts-cc0/blob/main/LICENSE
+
+Authors and licence identifiers were checked against the embedded name
+records in the bundled font files. These are third-party fonts, not
+original work by paultendo or R74n. Their original binaries are unchanged.
+
+Inherited contributions from the GenTown-Mods repository
+
+better_mod_loader.mjs, whirl-load.js, world-configurator.js and mods.json:
+contributions recorded under Whirling in the inherited Git history.
+
+example_mod.js:
+contributions recorded under slweeb in the inherited Git history.
+
+Source repository: https://github.com/R74nCom/GenTown-Mods
+
+These independent utilities remain at their original paths for existing
+links. They are not loaded by the overhaul's default launcher and are not
+part of the tested paultendo overhaul. Their presence does not establish
+compatibility with the current game or grant new reuse permissions.
+
+Dependencies
+
+Dependencies installed by npm retain the licences and notices supplied in
+their packages. package-lock.json records the dependency versions used by
+the development and testing tools.
+
+Ownership
+
+This notice attributes third-party material only. It makes no claim that
+paultendo owns these upstream contributions or that their contributors
+own paultendo's original code. Original paultendo work is addressed in
+LICENSE.md. Existing third-party terms and notices remain applicable.
