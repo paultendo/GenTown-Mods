@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.79/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.80/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.79";
+    const MOD_VERSION = "1.6.80";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -8676,8 +8676,20 @@
                     const news={id:`choice:${record.id}`,day:record.day,event:caller.eventClass,town:town.id,townName:town.name,choice,value:caller.args.value,
                         reason:caller.args._paultendoEconomic.reason,cause:structuredClone(caller.args._paultendoEconomic.cause),
                         before:{econ:before.econ,tax:before.tax,influences:before.influences},after:{econ:town.econ,tax:town.tax || 0,influences:{...town.influences}}};
-                    news.title=localTownChoiceTitle(news,town);news.text=escapeLivingText(news.title)+'.';news.quote=localEconomicQuote(news,town);
+                    news.title=localTownChoiceTitle(news,town);news.text=escapeLivingText(news.title)+'.';news.quote=localTownQuote(news,town);
                     record.economic=news;record.title=news.title;
+                }
+            }
+            if(['townLaw','increaseResearch','townProjectStart'].includes(caller.eventClass)) {
+                const town=caller.target?._reg==='town'?caller.target:caller.subject?._reg==='town'?caller.subject:null;
+                const before=capture.before.find(t=>t.id===town?.id);
+                if(before) {
+                    const news={id:`choice:${record.id}`,day:record.day,event:caller.eventClass,town:town.id,value:caller.args.value,
+                        choice:selected.getAttribute('type')==='yes'?'yes':'no',project:projects.find(p=>p.town===town.id)?.id,
+                        before,after:livingTownSnapshot(town)};
+                    // Only describe the result that actually happened, rather
+                    // than a proposal's promised effect.
+                    if(news.event!=='townProjectStart'||news.choice==='no'||news.project)record.quote=localTownQuote(news,town);
                 }
             }
             if(capture.need)record.need=capture.need;
@@ -8865,6 +8877,7 @@
         if (decision.received === false) items.push({ text: 'The nudge did not take hold.' });
         if (decision.text !== decision.question) items.push({ text: escapeLivingText(decision.text) });
         for (const change of decision.changes.filter(c => c.town === town.id)) items.push({ text: escapeLivingText(change.text) });
+        if(decision.quote?.town===town.id)appendLivingNewsQuote(items,town,decision.quote);
         if (livingPlaceKnown(state.places[decision.place])) {
             const place = state.places[decision.place];
             items.push({text:`Visit ${escapeLivingText(place.name)}`,func:() => openLivingPlace(place,town.id)});
@@ -15475,8 +15488,9 @@
             value:caller.args.value,choice:policy.choice,title,text,reason:policy.reason,cause:policy.cause,
             before:{research:before.research,relations:before.relations},after:{research:{...town.research},relations:{...town.relations}}};
         if(law){record.before.legal=before.legal;record.before.influences=before.influences;record.after.legal=livingTownSnapshot(town).legal;record.after.influences={...town.influences};town._paultendoLocalLawDay=planet.day;}
-        if(economic){record.townName=town.name;Object.assign(record.before,{econ:before.econ,tax:before.tax,influences:before.influences});Object.assign(record.after,{econ:town.econ,tax:town.tax || 0,influences:{...town.influences}});record.title=localTownChoiceTitle(record,town);record.quote=localEconomicQuote(record,town);}
+        if(economic){record.townName=town.name;Object.assign(record.before,{econ:before.econ,tax:before.tax,influences:before.influences});Object.assign(record.after,{econ:town.econ,tax:town.tax || 0,influences:{...town.influences}});record.title=localTownChoiceTitle(record,town);}
         if (building) {record.project=result.id;result._paultendoLocalChoice=record.id;result.x=policy.site.x;result.y=policy.site.y;}
+        record.quote=localTownQuote(record,town);
         state.localChoices.push(record);
         if (state.localChoices.length > 96) state.localChoices.shift();
         if(livingTownKnown(town))logMessage(`${text} ${escapeLivingText(policy.reason)}`,null,{_paultendoStory:{kind:'localChoice',id:record.id},_paultendoHighlight:(law||economic)&&policy.choice==='yes'});
@@ -15494,7 +15508,7 @@
         return record.title;
     }
 
-    function localEconomicQuote(record,town) {
+    function localTownQuote(record,town) {
         // Interview people who already exist. Never add a speaker, meet them
         // for the player, consume simulation randomness or reroll on reading.
         const linkedFigures=(planet.figures || []).filter(f=>f.hometown===town.id&&f._paultendoPerson);
@@ -15503,8 +15517,9 @@
         const figureIds=new Set(linkedFigures.map(f=>f._paultendoPerson.id));
         const people=[...figures,...(town._paultendoPeople || []).filter(p=>!figureIds.has(p.id))].filter(p=>livingTeachingPersonAvailable(p,town)
             &&!seaCrewBusy(town,p.id)&&!livingWorldState().sampling.some(w=>w.town===town.id&&w.person===p.id&&['outbound','collecting','returning'].includes(w.status)));
-        const project=(record.cause.projects || []).map(id=>regGet('process',id)).find(p=>p&&!p.end&&!p.done);
+        const project=[record.project,...(record.cause?.projects || [])].map(id=>id&&regGet('process',id)).find(p=>p&&!p.end&&!p.done);
         const hungry=mealStock(town)<nativeMealNeed(town);
+        const atWar=hasIssue(town,'war');
         const candidates=[];
         for(const person of people) {
             const outlook=livingPersonMind(person).outlook;
@@ -15539,6 +15554,58 @@
                     else {words='A bargain’s a bargain. Keep your word.';stance='supportive';}
                 }
                 if(person.role==='merchant')weight+=3;
+            } else if(record.event==='increaseResearch') {
+                const more=(record.after.research?.[record.value] || 0)>(record.before.research?.[record.value] || 0);
+                const less=(record.after.research?.[record.value] || 0)<(record.before.research?.[record.value] || 0);
+                if(!more&&!less)continue;
+                const roles={farm:['farmer'],travel:['sailor','lumberer'],smith:['miner','craftsman'],education:['scholar'],military:['soldier'],faith:['priest'],trade:['merchant']};
+                const relevant=roles[record.value]?.includes(person.role);
+                if(relevant)weight+=4;
+                if(hungry&&record.value!=='farm') {words=more?'We need something to eat before we need more of that.':'Good. Put that effort into feeding us.';stance=more?'opposed':'supportive';}
+                else if(relevant){
+                    words=more?outlook==='guarded'?'Let’s see if any of it helps the people doing the work.':outlook==='steadfast'?'There are things worth learning. Don’t forget what already works.':'There’s plenty we still haven’t worked out. I’m glad someone’s listening.':'The work hasn’t gone away just because they’ve lost interest.';
+                    stance=more?(outlook==='guarded'?'uncertain':'supportive'):'opposed';
+                    if(atWar&&person.role==='soldier'){weight+=3;words=more?'We’re fighting now. That work can’t wait.':'We’re still fighting. This is no time to give up on it.';}
+                }
+                else if(outlook==='curious'){words=more?'Someone ought to find out. We can’t keep guessing.':'We were only just getting somewhere.';stance=more?'supportive':'opposed';}
+                else if(outlook==='steadfast'){words=more?'We have work to do. I hope this is worth the time.':'Better to get on with what we know.';stance=more?'uncertain':'supportive';}
+                else if(outlook==='generous'){words=more?'If they learn something useful, I hope they pass it on.':'I hope the people who needed that work aren’t forgotten.';}
+                else {words=more?'Whose idea was this? And who gets to use what they find?':'Let them explain why before they ask for more.';}
+            } else if(record.event==='townLaw') {
+                const allowed=record.after.legal?.[record.value],previous=record.before.legal?.[record.value];
+                if(typeof allowed!=='boolean'||allowed===previous)continue;
+                if(record.value==='farm'&&person.role==='farmer') {
+                    weight+=5;words=allowed?outlook==='guarded'?'They shut us out of the fields. Now they want us back.':'We can get back to the fields. That’s all I wanted.':'What are we supposed to eat if we can’t grow anything?';stance=allowed?(outlook==='guarded'?'uncertain':'supportive'):'opposed';
+                } else if(record.value==='happy.speech') {
+                    if(outlook==='steadfast'&&person.role==='soldier'){weight+=4;words=allowed?'People can argue. An order is still an order.':'Orders don’t hold if everyone argues over them.';stance=allowed?'uncertain':'supportive';}
+                    else if(outlook==='generous'){words=allowed?'People should be heard, even when it’s uncomfortable.':hungry?'You won’t quiet a hungry street by forbidding people to talk.':'They’d rather silence us than listen.';stance=allowed?'supportive':'opposed';}
+                    else if(outlook==='curious'){words=allowed?'How else will we find out what’s wrong?':'A question shouldn’t make you an enemy.';stance=allowed?'supportive':'opposed';}
+                    else {words=allowed?'Let’s see how long they let us speak.':'I’ve said enough.';}
+                } else if(record.value==='travel'&&['merchant','sailor'].includes(person.role)) {
+                    weight+=4;words=allowed?'I can get moving again. There’s work waiting.':'They’ve shut the way out. My work is on the other side.';stance=allowed?'supportive':'opposed';
+                } else if(['crime.theft','crime.fraud','crime.arson','crime.murder'].includes(record.value)) {
+                    const harm={ 'crime.theft':'taking what belongs to someone else','crime.fraud':'cheating people','crime.arson':'burning people’s homes','crime.murder':'killing people' }[record.value];
+                    words=allowed?`They’re allowing ${harm}. How is anyone supposed to feel safe?`:outlook==='guarded'?'A rule on paper won’t stop them. Let’s see who actually gets caught.':'Good. People should be able to live without fearing their neighbours.';
+                    stance=allowed?'opposed':outlook==='guarded'?'uncertain':'supportive';
+                } else if(record.value==='happy.unemployment'&&outlook==='generous') {
+                    words=allowed?'Not everyone can find work. They shouldn’t be punished for it.':'Find people work before you punish them for having none.';stance=allowed?'supportive':'opposed';
+                } else if(record.value==='faith.religion'&&person.role==='priest') {
+                    weight+=4;words=allowed?'We can gather again. People have missed that.':'They can close our gathering place. They can’t tell us what to believe.';stance=allowed?'supportive':'opposed';
+                } else if(outlook==='generous'){words=allowed?'I hope this makes life easier for the people who were struggling.':'It’s easy to make a rule when someone else has to live with it.';stance=allowed?'uncertain':'opposed';}
+                else if(outlook==='steadfast'){words=allowed?'They keep changing the rules.':'A rule is a rule. Apply it to everyone.';stance=allowed?'uncertain':'supportive';}
+                else {words=allowed?'We’ll see what people make of it.':'I want to know who this rule is meant for.';}
+            } else if(record.event==='townProjectStart') {
+                const type=String(record.value).replace(/_/g,' '),begun=!!project;
+                if(!begun&&record.choice!=='no')continue;
+                const relevant=project?.subtype==='school'&&person.role==='scholar'||project?.subtype==='hospital'&&person.role==='doctor'||project?.subtype==='fortress'&&person.role==='soldier';
+                if(relevant)weight+=4;
+                if(hungry&&record.value!=='farm'){words=begun?`Building that ${type} won’t feed us tonight.`:'We need food before another building.';stance=begun?'opposed':'supportive';}
+                else if(hungry){words=begun?'We need those fields. I hope we can hold on until they’re ready.':'We’re hungry already. We needed those fields.';stance=begun?'supportive':'opposed';}
+                else if(relevant){words=`We needed that ${type}. ${begun?'Now it needs people to finish it.':'We still do.'}`;stance=begun?'supportive':'opposed';}
+                else if(outlook==='guarded'){words=begun?'I’ll believe it when the walls are standing.':'Who was going to pay for it, anyway?';}
+                else if(outlook==='generous'){words=begun?'I hope there’s room for everyone who needs it.':'Someone was counting on that getting built.';stance=begun?'uncertain':'opposed';}
+                else if(outlook==='curious'){words=begun?`I’d like to see what we can do with a ${type}.`:`We could have done something with that ${type}.`;stance=begun?'supportive':'opposed';}
+                else {words=begun?'Plenty of things need fixing already.':'Better to look after what we’ve got.';stance=begun?'uncertain':'supportive';}
             }
             if(words)candidates.push({person,outlook,words,stance,weight});
         }
@@ -15547,8 +15614,16 @@
         let roll=rand()*candidates.reduce((n,c)=>n+c.weight,0),chosen=candidates.at(-1);
         for(const candidate of candidates){roll-=candidate.weight;if(roll<0){chosen=candidate;break;}}
         const {person,outlook,words,stance}=chosen;
-        return {person:person.id,name:person.name,role:person.role,label:livingPersonLabel(person),outlook,words,stance,day:record.day,
-            context:{hungry,project:project&&{id:project.id,type:project.subtype},beforeTax:record.before.tax,tax:record.after.tax,economy:record.after.econ}};
+        return {town:town.id,person:person.id,name:person.name,role:person.role,label:livingPersonLabel(person),outlook,words,stance,day:record.day,
+            context:{hungry,project:project&&{id:project.id,type:project.subtype},beforeTax:record.before.tax,tax:record.after.tax,economy:record.after.econ,
+                event:record.event,value:record.value,allowed:record.after.legal?.[record.value],atWar}};
+    }
+
+    function appendLivingNewsQuote(items,town,quote) {
+        if(!quote)return;
+        items.push({text:`<blockquote class="paultendoNewsQuote"><p>“${escapeLivingText(quote.words)}”</p><cite>${escapeLivingText(quote.name)}, ${escapeLivingText(quote.label.toLowerCase())}</cite></blockquote>`});
+        const person=findLivingPerson(town,quote.person);
+        if(person&&livingPersonAvailable(person,town))items.push({text:`Meet ${escapeLivingText(person.name)}`,func:()=>openLivingPerson(town,person)});
     }
 
     function openLocalTownChoice(record) {
@@ -15557,6 +15632,7 @@
         const economic=record.event==='townEcon'||record.event==='townTaxChange',title=localTownChoiceTitle(record,town);
         const items = [{text:'← Back to settlement',func:()=>{closePopups();closeExecutive();openRegBrowser(town,'town');}},
             economic?{text:`Day ${record.day}`}:{heading:true,text:`Day ${record.day} · ${escapeLivingText(title)}`},{text:record.text},{text:escapeLivingText(record.reason)}];
+        appendLivingNewsQuote(items,town,record.quote);
         if (record.event === 'increaseResearch') {
             const previous = livingResearchPriority(record.before.research), chosen = livingResearchPriority(record.after.research);
             if (chosen && chosen !== previous) items.push({text:previous
@@ -15602,12 +15678,6 @@
             }
             if(town.econ!==record.after.econ||(town.tax || 0)!==record.after.tax)
                 items.push({heading:true,text:'Now'},{text:town.econ?`The town follows ${escapeLivingText(town.econ)}.`:'No economic system has been adopted.'},{text:town.tax?`The income tax is ${Math.round(town.tax*100)}%.`:'There is no income tax.'});
-            if(record.quote){
-                const quote=record.quote;
-                items.push({text:`<blockquote class="paultendoNewsQuote"><p>“${escapeLivingText(quote.words)}”</p><cite>${escapeLivingText(quote.name)}, ${escapeLivingText(quote.label.toLowerCase())}</cite></blockquote>`});
-                const person=findLivingPerson(town,quote.person);
-                if(person&&livingPersonAvailable(person,town))items.push({text:`Meet ${escapeLivingText(person.name)}`,func:()=>openLivingPerson(town,person)});
-            }
         } else if(record.event==='governmentEvolution') {
             items.push({text:`Support for a different rule held for ${record.cause.debate.days} days.`});
             const opposing=record.cause.opposition?.slice().sort((a,b)=>b.weight-a.weight)[0];
