@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.90/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.91/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.90";
+    const MOD_VERSION = "1.6.91";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -5621,14 +5621,81 @@
         const old=state.inquiries.filter(w=>!['waiting','working','learned'].includes(w.status));
         if(old.length>128){const ids=new Set(old.slice(0,old.length-128).map(w=>w.id));state.inquiries=state.inquiries.filter(w=>!ids.has(w.id));}
     }
+    // Story refreshes redraw the page. They never re-click the instruction
+    // which opened it, and the reader keeps their place as the world moves on.
+    let livingStoryView = null, livingStoryRefreshing = false;
+    function rememberLivingStoryView(render) {
+        livingStoryView = { planet, title: currentExecutive, header: document.querySelector('#actionSubList .panelTitle'), render };
+    }
+    function preserveLivingStoryReading(render) {
+        const list = document.getElementById('actionSubList'), top = list?.scrollTop || 0;
+        const focus = list?.contains(document.activeElement) && document.activeElement.matches('[role="button"],summary') ? {id:document.activeElement.id,text:document.activeElement.textContent} : null;
+        const expanded = new Set(Array.from(list?.querySelectorAll('details[open]') || []).map(d=>d.querySelector('summary')?.textContent));
+        livingStoryRefreshing = true;
+        try { render(); } finally { livingStoryRefreshing = false; }
+        if (list) {
+            list.scrollTop = top;
+            for(const detail of list.querySelectorAll('details'))if(expanded.has(detail.querySelector('summary')?.textContent))detail.open=true;
+            if (focus) Array.from(list.querySelectorAll('[role="button"],summary')).find(b => focus.id ? b.id === focus.id : b.textContent === focus.text)?.focus({preventScroll:true});
+        }
+    }
+    function refreshLivingStoryView() {
+        const view = livingStoryView;
+        if (view?.planet !== planet || view.title !== currentExecutive || !view.header?.isConnected) return false;
+        preserveLivingStoryReading(view.render); return true;
+    }
+    function livingWorkStatus(work, kind, town) {
+        const reason = livingWorkIsActive(work) ? typeof work.delay === 'string' ? work.delay : work.delay?.reason || work.pause : null;
+        if (reason === 'strike') return 'Work has stopped with the strike.';
+        if (reason === 'food') return 'The work waits for food.';
+        if (reason === 'war') return 'Waiting for the fighting to end.';
+        if (reason === 'knowledge') return 'Waiting for local knowledge.';
+        if (reason === 'hands') {
+            const person = findLivingPerson(town,work.person);
+            return politicalLaborStopped(town,person?.role) ? 'Work has stopped with the strike.' : 'Waiting for a worker to return.';
+        }
+        if (livingWorkIsActive(work) && work.pause && typeof work.pause === 'string') return work.pause;
+        if (['waiting','gathering'].includes(work.status)) return 'Gathering materials.';
+        if (work.status === 'working') {
+            const left = kind === 'artifact' ? Math.max(0,(work.due || planet.day)-planet.day) : work.remaining;
+            return Number.isFinite(left) && left > 0 ? `${left} ${left === 1 ? 'day' : 'days'} of work left.` : 'The work is underway.';
+        }
+        return { made:'Finished.', learned:'A discovery made.', failed:'The trial failed.', storing:'Waiting for room in the stores.', abandoned:'Put aside.', withdrawn:'Put aside.', lost:'Contact lost.', outbound:'On the way to the source.', collecting:'Gathering samples.', returning:'Coming home.', arrived:'Samples brought home.', empty:'Returned empty-handed.' }[work.status] || 'An earlier piece of work.';
+    }
+    function livingWorkIsActive(work) { return ['waiting','gathering','working','storing','outbound','collecting','returning'].includes(work.status); }
+    function livingTownWorkEntries(town) {
+        const state = livingWorldState(), entries = [];
+        for (const work of state.inquiries.filter(w=>w.town===town.id)) entries.push({work,kind:'inquiry',title:work.title,open:()=>openLivingInquiry(work)});
+        for (const work of state.materialWork.filter(w=>w.town===town.id)) entries.push({work,kind:'material',title:COMMODITIES[work.type]?.label || 'Workshop work',open:()=>openMaterialWork(work)});
+        for (const work of state.artifactWork.filter(w=>w.town===town.id)) entries.push({work,kind:'artifact',title:LIVING_ARTIFACTS[work.kind]?.name || 'An object',open:()=>openLivingArtifactWork(work)});
+        for (const work of state.sampling.filter(w=>w.town===town.id)) entries.push({work,kind:'survey',title:'Looking for '+(COMMODITIES[work.type]?.label || 'materials'),open:()=>openMaterialSurvey(work)});
+        return entries;
+    }
+    function appendLivingWorkStatus(items, work, kind, town) {
+        const status=kind==='inquiry'&&work.status==='waiting'&&!work.delay?`Gathering ${Object.entries(work.cost || {}).map(([type,count])=>`${count} ${COMMODITIES[type]?.label || type}`).join(', ') || 'people for the work'}.`:livingWorkStatus(work,kind,town);
+        items.push({heading:true,text:livingWorkIsActive(work)?'At work':'The result'},{text:escapeLivingText(status)});
+        if (['waiting','gathering'].includes(work.status)) {
+            const cost=work.cost || work.recipe?.cost || {}, missing=Object.entries(cost).filter(([type,count])=>commodityStock(town,type)<count);
+            if(missing.length)items.push({text:'Still needed: '+commaList(missing.map(([type,count])=>`${count-commodityStock(town,type)} ${COMMODITIES[type]?.label || type}`))+'.'});
+            else if(Object.entries(cost).some(([type,count])=>commodityStock(town,type)<count+commodityClaimedStock(town,type,commodityWorkClaims(town).filter(c=>c.id!==work.id))))items.push({text:'Other work already needs the supplies in store.'});
+            items.push({text:'Materials and workshops',func:()=>openTownMaterials(town)});
+        }
+        if (livingWorkIsActive(work) && (work.delay==='food' || work.delay?.reason==='food' || work.pause==='food')) items.push({text:'Trade and neighbours',func:()=>openCommodityHistory(town)});
+        const person=findLivingPerson(town,work.person);
+        if(livingPersonAvailable(person,town))items.push({text:'Meet '+escapeLivingText(person.name),func:()=>openLivingPerson(town,person)});
+    }
+
+    function appendLivingWorkHistory(items,steps) {
+        const history=steps || [],older=history.length>8?history.slice(0,-6):[],recent=older.length?history.slice(-6):history;
+        if(older.length)items.push({text:'<details class="paultendoWorkHistory"><summary>Earlier days</summary>'+older.map(step=>'<p>Day '+step.day+' · '+escapeLivingText(step.text)+'</p>').join('')+'</details>'});
+        for(const step of recent)items.push({text:'Day '+step.day+' · '+escapeLivingText(step.text)});
+    }
     function openLivingInquiry(work) {
         const town=regGet('town',work.town);if(!livingTownKnown(town))return;
         const items=[{text:'← Back to the town',func:()=>{closeExecutive();openRegBrowser(town,'town');}},{heading:true,text:escapeLivingText(work.name)},{text:escapeLivingText(work.cause.text)}];
-        if(work.status==='waiting')items.push({text:`Gathering ${Object.entries(work.cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`).join(', ') || 'people for the work'}.`});
-        if(work.status==='waiting'&&Object.entries(work.cost).some(([type,count])=>commodityStock(town,type)>=count&&commodityCommittedStock(town,type)>commodityStock(town,type)))items.push({text:'Other work already needs the supplies in store.'});
-        if(work.status==='working')items.push({text:work.delay?{food:'The work waits for food.',war:'The work waits for the fighting to end.',hands:'The work waits for its maker.',knowledge:'The work waits for missing knowledge.'}[work.delay]:`${work.remaining} ${work.remaining===1?'day':'days'} of work left.`});
-        items.push({text:`Work began on Day ${work.day}.`});
-        for(const step of work.steps.slice(1))items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        appendLivingWorkStatus(items,work,'inquiry',town);
+        items.push({heading:true,text:'How it began'},{text:`The question was raised on Day ${work.day}.`});
+        appendLivingWorkHistory(items,work.steps.slice(1));
         if(work.started!=null&&Object.keys(work.cost).length)items.push({text:`Used ${Object.entries(work.cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`).join(', ')}.`});
         const flight=work.cause.evidence?.flight&&skyState().flights.find(f=>f.id===work.cause.evidence.flight);if(flight)items.push({text:'The satellite that brought the reports',func:()=>openSkyStudy(town,flight)});
         for(const id of work.cause.evidence?.exchanges || []) {const exchange=commodityExchangeState().exchanges.find(r=>r.id===id);if(exchange)items.push({text:`Day ${exchange.arrived} · The exchange that raised the question`,func:()=>openCommodityJourney(exchange)});}
@@ -5637,7 +5704,7 @@
         for(const input of work.inputs || []){const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(record)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(record)});}
         const definition=EXTENDED_DISCOVERIES.find(d=>d.event===work.event);
         if(work.status==='learned')items.push({text:'Read the discovery',func:()=>openUnlockDetail(work.key,definition,town.id)});
-        populateExecutive(items,escapeLivingText(work.title));markLivingStoryControls();openExecutive();
+        populateExecutive(items,escapeLivingText(work.title));markLivingStoryControls();rememberLivingStoryView(()=>openLivingInquiry(work));openExecutive();
     }
 
     const LIVING_OUTLOOKS = {
@@ -5947,19 +6014,24 @@
         const items=[{text:'← Back to work and inventions',func:()=>openLivingTownWork(town)},{text:`${escapeLivingText(work.name || workingLivingPerson(town,work.person)?.name || 'A worker')} · ${escapeLivingText(town.name)}`}];
         if(work.cause)items.push({text:escapeLivingText(work.cause.text)});
         const clue=livingWorldState().clues.find(c=>c.id===work.clue);if(clue)items.push({text:'What caught their eye',func:()=>openObservedClue(clue)});
-        items.push({text:work.pause==='war'?'The work waits for peace.':work.pause==='food'?'The work waits until there is enough food.':{gathering:'The idea waits for materials.',working:'Their work is underway.',made:'The object is finished.',abandoned:'The unfinished work has been put aside.'}[work.status]});
+        appendLivingWorkStatus(items,work,'artifact',town);
         if(work.materials)items.push({text:`Used ${commaList(Object.entries(work.materials).map(([type,count])=>`${count} ${COMMODITIES[type].label}`))}.`});
-        if(work.status==='gathering')items.push({text:`They are looking for ${commaList(Object.entries(work.recipe.cost).filter(([type,count])=>commodityStock(town,type)<count).map(([type,count])=>`${count-commodityStock(town,type)} ${COMMODITIES[type].label}`)) || 'a quiet day to begin'}.`});
-        for(const step of work.steps || [])if(step.text!==work.cause?.text)items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
-        if(work.status==='gathering')items.push({text:'Materials and workshops',func:()=>openTownMaterials(town)});
+        appendLivingWorkHistory(items,(work.steps || []).filter(step=>step.text!==work.cause?.text));
         const artifact=livingWorldState().artifacts.find(a=>a.id===work.artifact);
         if(livingArtifactKnown(artifact))items.push({text:`Follow ${escapeLivingText(artifactTitle(artifact))}`,func:()=>openLivingArtifact(artifact)});
-        populateExecutive(items,LIVING_ARTIFACTS[work.kind].name);markLivingStoryControls();openExecutive();
+        populateExecutive(items,LIVING_ARTIFACTS[work.kind].name);markLivingStoryControls();rememberLivingStoryView(()=>openLivingArtifactWork(work));openExecutive();
     }
     function openLivingTownWork(town) {
-        const items=[{text:'← Back to the town',func:()=>{closeExecutive();openRegBrowser(town,'town');}}];
-        for(const work of livingWorldState().artifactWork.filter(w=>w.town===town.id).slice(-12).reverse())items.push({text:`${escapeLivingText(work.name || workingLivingPerson(town,work.person)?.name || 'A worker')} · ${LIVING_ARTIFACTS[work.kind].name}`,func:()=>openLivingArtifactWork(work)});
-        populateExecutive(items,'Work and inventions');markLivingStoryControls();openExecutive();
+        if(!livingTownKnown(town))return;
+        const items=[{text:'← Back to the town',func:()=>{closeExecutive();openRegBrowser(town,'town');}}], entries=livingTownWorkEntries(town);
+        const active=entries.filter(e=>livingWorkIsActive(e.work)).sort((a,b)=>(a.work.day || 0)-(b.work.day || 0));
+        const completed=entries.filter(e=>!livingWorkIsActive(e.work)).sort((a,b)=>(b.work.finished || b.work.day || 0)-(a.work.finished || a.work.day || 0)).slice(0,6);
+        for(const [heading,works] of [['Underway',active],['Earlier work',completed]]){
+            if(!works.length)continue;items.push({heading:true,text:heading});
+            for(const entry of works)items.push({id:`paultendo-work-${entry.kind}-${entry.work.id}`,text:`${escapeLivingText(entry.title)}<span class="paultendoStoryProse">${escapeLivingText(entry.work.name || 'Town workers')} · ${escapeLivingText(livingWorkStatus(entry.work,entry.kind,town))}</span>`,func:entry.open});
+        }
+        if(!entries.length)items.push({text:'No work has begun here yet. People take up ideas as needs, discoveries and supplies give them a reason.'});
+        populateExecutive(items,'Work and inventions');markLivingStoryControls();rememberLivingStoryView(()=>openLivingTownWork(town));openExecutive();
     }
     function nameLivingArtifact(artifact) {
         if(!artifact.origin?.maker||artifact.named||!livingArtifactKnown(artifact)) return;
@@ -6715,7 +6787,7 @@
     }
     function openObservedClue(clue) {
         const town=regGet('town',clue.town);if(!livingTownKnown(town))return;
-        const mark=livingWorldState().surfaceMarks.find(m=>m.id===clue.mark);if(mark){openSurfaceMark(mark);return;}
+        const mark=livingWorldState().surfaceMarks.find(m=>m.id===clue.mark);if(mark){preserveLivingStoryReading(()=>openSurfaceMark(mark));return;}
         const items=[{text:'← Back to the town',func:()=>{closeExecutive();openRegBrowser(town,'town');}},{heading:true,text:inscriptionText(clue.name)},
             {text:`Day ${clue.day} · ${inscriptionText(clue.observation.text)}`}];
         for(const step of clue.study?.steps || [])items.push({text:`Day ${step.day} · ${inscriptionText(step.text)}`});
@@ -7896,11 +7968,12 @@
         const items=[{text:'← Back to materials',func:()=>openTownMaterials(town)},{heading:true,text:escapeLivingText(work.name)},{text:escapeLivingText(work.reason)}];
         const purpose=work.purpose&&{kind:({equipment:'tools'}[work.purpose.kind] || work.purpose.kind),id:['storage','equipment','sky'].includes(work.purpose.kind)?town.id:work.purpose.id};
         if(resolveChronicleStory(purpose))items.push({text:'The work that sent them out',func:()=>resolveChronicleStory(purpose)?.open()});
-        for(const step of work.steps)items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
-        if(['outbound','collecting','returning'].includes(work.status))items.push({text:work.pause?'The survey is held up.':work.status==='collecting'?'Gathering a small sample.':`${work.remaining} ${work.remaining===1?'day':'days'} ${work.status==='returning'?'from home':'to the ground they are seeking'}.`});
+        appendLivingWorkStatus(items,work,'survey',town);
+        if(['outbound','returning'].includes(work.status)&&!work.pause)items.push({text:`${work.remaining} ${work.remaining===1?'day':'days'} ${work.status==='returning'?'from home':'to the ground they are seeking'}.`});
+        appendLivingWorkHistory(items,work.steps);
         const place=livingWorldState().places[work.place];if(livingPlaceKnown(place))items.push({text:`Visit ${escapeLivingText(place.name)}`,func:()=>openLivingPlace(place,town.id)});
         for(const use of work.uses)if(resolveChronicleStory(use))items.push({text:'See what the sample became',func:()=>resolveChronicleStory(use)?.open()});
-        populateExecutive(items,`Looking for ${COMMODITIES[work.type].label}`);markLivingStoryControls();openExecutive();
+        populateExecutive(items,`Looking for ${COMMODITIES[work.type].label}`);markLivingStoryControls();rememberLivingStoryView(()=>openMaterialSurvey(work));openExecutive();
     }
     function materialWorkHasHand(work,id) {return work.person===id||work.apprentice?.person===id&&!work.apprentice.learned;}
     function materialHands(town,type) {
@@ -8164,23 +8237,22 @@
         const town=regGet('town',work.town);if(!livingTownKnown(town))return;
         const items=[{text:'← Back to materials',func:()=>openTownMaterials(town)}];
         items.push({text:`${escapeLivingText(work.name)} · ${escapeLivingText(town.name)}`});
+        appendLivingWorkStatus(items,work,'material',town);
+        items.push({heading:true,text:'At the bench'});
         if(work.started!=null)items.push({text:`Used ${commaList(Object.entries(work.cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`))}.`});
-        for(const step of work.steps)items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        appendLivingWorkHistory(items,work.steps);
         const clue=livingWorldState().clues.find(c=>c.id===work.clue);if(clue)items.push({text:'What caught their eye',func:()=>openObservedClue(clue)});
         for(const input of work.inputs || [])if(input.production?.kind==='survey'&&input.production.world===skyWorldId()&&input.production.passage===travelerState().passage){const survey=livingWorldState().sampling.find(w=>w.id===input.production.work);if(survey)items.push({text:`Where the ${COMMODITIES[input.type].label} came from`,func:()=>openMaterialSurvey(survey)});}
         if(work.apprentice&&!work.apprentice.learned&&['waiting','working'].includes(work.status)){
             const lesson=work.apprentice,filled=Math.min(5,Math.floor(5*lesson.days/lesson.needed));
             items.push({text:`<span aria-hidden="true">${'■'.repeat(filled)}${'□'.repeat(5-filled)}</span> ${escapeLivingText(lesson.name)} is ${lesson.paused?'away from the bench':'learning at the bench'}.`});
         }
-        if(work.pause)items.push({text:work.pause});
-        else if(work.status==='waiting')items.push({text:`Still needed: ${Object.entries(work.cost).filter(([type,count])=>commodityStock(town,type)<count).map(([type,count])=>`${count-commodityStock(town,type)} ${COMMODITIES[type].label}`).join(', ') || 'hands free to work'}.`});
-        else if(work.status==='working')items.push({text:`${work.remaining} ${work.remaining===1?'day':'days'} of work left.`});
-        else if(work.status==='storing')items.push({text:`${work.cargo} ${COMMODITIES[work.type].label} waits for room in the stores.`});
+        if(work.status==='storing')items.push({text:`${work.cargo} ${COMMODITIES[work.type].label} waits for room in the stores.`});
         else if(work.status==='lost')items.push({text:'The workshop was lost with the town.'});
         for(const input of work.inputs || []){const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(record)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(record)});}
         for(const support of work.relief || []){const record=commodityExchangeState().exchanges.find(r=>r.id===support.exchange);if(record)items.push({text:'Remember the food that reached them',func:()=>openCommodityJourney(record)});}
         for(const voyage of livingWorldState().seaVoyages.filter(v=>v.town===town.id&&(v.inputs || []).some(input=>input.production?.work===work.id&&input.production.world===skyWorldId()&&input.production.passage===travelerState().passage)))items.push({text:'Follow the vessel’s crossing',func:()=>openSeaVoyage(voyage)});
-        populateExecutive(items,COMMODITIES[work.type].label[0].toUpperCase()+COMMODITIES[work.type].label.slice(1));markLivingStoryControls();openExecutive();
+        populateExecutive(items,COMMODITIES[work.type].label[0].toUpperCase()+COMMODITIES[work.type].label.slice(1));markLivingStoryControls();rememberLivingStoryView(()=>openMaterialWork(work));openExecutive();
     }
     function openTownMaterials(town) {
         if(!livingTownKnown(town))return;
@@ -8198,11 +8270,12 @@
             if(entry.sources.some(s=>isChunkExplored(s.x,s.y)))items.push({text:`Found in ${MATERIAL_SOURCES[type]?.ground || 'the ground'}.`});
             if(entry.lesson){const origin=entry.lesson.known?entry.lesson.townName:'another settlement';items.push({text:`Visitors from ${escapeLivingText(origin)} showed them a way to make it.`});const exchange=commodityExchangeState().exchanges.find(r=>r.id===entry.lesson.exchange);if(exchange)items.push({text:'Remember their visit',func:()=>openCommodityJourney(exchange)});}
         }
-        const work=livingWorldState().materialWork.filter(w=>w.town===town.id).slice(-8).reverse();
+        const batches=livingWorldState().materialWork.filter(w=>w.town===town.id);
+        const work=[...batches.filter(livingWorkIsActive),...batches.filter(w=>!livingWorkIsActive(w)).slice(-6).reverse()];
         if(work.length)items.push({heading:true,text:'At the workshop'});
         for(const w of work)items.push({text:`${escapeLivingText(w.name)} · ${COMMODITIES[w.type].label}<span class="paultendoStoryProse">${{waiting:'Gathering materials',working:MATERIAL_RECIPES[w.type].workingLabel || (MATERIAL_RECIPES[w.type].method==='assembly'?'Fitting the parts':MATERIAL_RECIPES[w.type].method==='shaping'?'Shaping the tools':MATERIAL_RECIPES[w.type].method==='pulping'?'Working the fibres':'The fire is burning'),made:'Finished',failed:MATERIAL_RECIPES[w.type].failedLabel || (MATERIAL_RECIPES[w.type].method==='assembly'?'The assembly failed':MATERIAL_RECIPES[w.type].method==='shaping'?'The stone or metal split':MATERIAL_RECIPES[w.type].method==='pulping'?'The sheets tore apart':'The firing failed'),storing:'Waiting for room',lost:'Workshop lost',withdrawn:'Work put aside'}[w.status]}</span>`,func:()=>openMaterialWork(w)});
         for(const survey of livingWorldState().sampling.filter(w=>w.town===town.id).slice(-4).reverse())items.push({text:`${escapeLivingText(survey.name)} · Looking for ${COMMODITIES[survey.type].label}<span class="paultendoStoryProse">${{outbound:'On the way',collecting:'At the source',returning:'Coming home',arrived:'Samples brought home',empty:'Returned empty-handed',lost:'Contact lost'}[survey.status]}</span>`,func:()=>openMaterialSurvey(survey)});
-        populateExecutive(items,'Materials and workshops');markLivingStoryControls();openExecutive();
+        populateExecutive(items,'Materials and workshops');markLivingStoryControls();rememberLivingStoryView(()=>openTownMaterials(town));openExecutive();
     }
     function openMaterialHands(town,type) {
         if(!livingTownKnown(town))return;
@@ -9905,8 +9978,11 @@
 
     function markLivingStoryControls() {
         const list=document.getElementById('actionSubList');
-        if(list) list.scrollTop=0;
-        for (const button of document.querySelectorAll('#actionSubList [role="button"]')) button.classList.add('paultendoStoryLink');
+        if(list&&!livingStoryRefreshing) list.scrollTop=0;
+        for (const button of document.querySelectorAll('#actionSubList [role="button"]')) {
+            button.classList.add('paultendoStoryLink');button.tabIndex=0;
+            if(!button._paultendoStoryKeyboard){button._paultendoStoryKeyboard=true;button.addEventListener('keydown',event=>{if(event.target===button&&(event.key==='Enter'||event.key===' ')){event.preventDefault();event.stopPropagation();button.click();}});}
+        }
         for (const line of document.querySelectorAll('#actionSubList .actionItem:not([role="button"])')) line.classList.add(line.style.color==='yellow'?'paultendoStoryHeading':'paultendoStoryProse');
         document.querySelector('#actionSubList .panelTitle')?.classList.add('paultendoStoryTitle');
     }
@@ -10016,7 +10092,7 @@
         if(town._paultendoGrainStore||Object.keys(town._paultendoMaterials || {}).length||livingWorldState().materialWork.some(w=>w.town===town.id)){
             const materials=document.createElement('button');materials.textContent='Materials and workshops';materials.addEventListener('click',()=>{closePopups();openTownMaterials(town);});section.appendChild(materials);
         }
-        if(livingWorldState().artifactWork.some(w=>w.town===town.id)){
+        if(livingTownWorkEntries(town).length){
             const work=document.createElement('button');work.textContent='Work and inventions';work.addEventListener('click',()=>{closePopups();openLivingTownWork(town);});section.appendChild(work);
         }
         if(town._paultendoAccounts) {
@@ -10327,15 +10403,15 @@
         if(typeof refreshExecutive==='function'&&!refreshExecutive._paultendoLivingView) {
             const base=refreshExecutive;
             refreshExecutive=function() {
-                if(refreshPoliticalCouncilView())return;
+                if(refreshLivingStoryView())return;
                 // Native refresh re-clicks the button which opened a panel.
                 // A craft or whisper button must not become another instruction
                 // each time the day changes. Refresh the displayed story instead.
                 const town=livingPersonView?.planet===planet&&regGet('town',livingPersonView.town);
                 const person=town&&findLivingPerson(town,livingPersonView.person);
-                if(person&&currentExecutive===escapeLivingText(person.name).toLowerCase()){refreshLivingPersonView();return;}
+                if(person&&currentExecutive===escapeLivingText(person.name).toLowerCase()){preserveLivingStoryReading(refreshLivingPersonView);return;}
                 const artifact=livingArtifactView?.planet===planet&&livingWorldState().artifacts.find(a=>a.id===livingArtifactView.id);
-                if(artifact&&currentExecutive===escapeLivingText(artifactTitle(artifact)).toLowerCase()){openLivingArtifact(artifact);return;}
+                if(artifact&&currentExecutive===escapeLivingText(artifactTitle(artifact)).toLowerCase()){preserveLivingStoryReading(()=>openLivingArtifact(artifact));return;}
                 const mark=surfaceMarkView?.planet===planet&&livingWorldState().surfaceMarks.find(m=>m.id===surfaceMarkView.id);
                 if(mark&&currentExecutive===surfaceMarkTitle(mark).toLowerCase()){openSurfaceMark(mark);return;}
                 return base.apply(this,arguments);
@@ -10382,7 +10458,11 @@
             .paultendoChronicleStoryLink:hover { color: #fff1a0; }
             .paultendoChronicleStoryLink:focus-visible { outline: 2px solid #fff1a0; outline-offset: 2px; }
             #actionSubList .paultendoStoryProse { font-size: 0.82em; color: #bfc1b3; line-height: 1.35; border-bottom: none; padding-block: 0.2em 0.4em; }
-            #actionSubList .paultendoNewsQuote { margin: 0.65em 0; padding: 0 0 0 0.8em; border-left: 3px solid #6b6b50; }
+            #actionSubList .paultendoWorkHistory summary { cursor: pointer; min-height: 44px; align-content: center; color: #eee4aa; }
+            #actionSubList .paultendoWorkHistory summary:focus-visible { outline: 2px solid #fff1a0; outline-offset: 2px; }
+            #actionSubList .paultendoWorkHistory p { margin-block: 0.6em; }
+            #actionSubList { scrollbar-color: #747b62 #10130f; }
+            #actionSubList .paultendoNewsQuote { margin: 0.65em 0; padding: 0 0 0 0.8em; border-left: 1px solid #6b6b50; }
             #actionSubList .paultendoNewsQuote p { margin: 0 0 0.4em; color: #e2e4d7; }
             #actionSubList .paultendoNewsQuote cite { font-style: normal; font-size: 0.9em; color: #bfc1b3; }
             #actionSubList .paultendoStoryLink .paultendoStoryProse { display: block; padding-block: 0.15em 0; }
@@ -10805,7 +10885,8 @@
             review.addEventListener("click", () => {
                 const decision = findPendingLogDecision();
                 if (!decision) { updateAutoplayUI(); return; }
-                decision.messageEl.scrollIntoView({ block: "center", behavior: "smooth" });
+                closePopups();closeExecutive();
+                decision.messageEl.scrollIntoView({ block: "center", behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? "auto" : "smooth" });
                 const button = decision.buttons[0];
                 if (button) { button.tabIndex = 0; button.focus({ preventScroll: true }); }
             });
@@ -18907,7 +18988,7 @@
         const meals = incoming.filter(e => COMMODITIES[e.type]?.edible).reduce((n, e) => n + e.delivered, 0);
         const trade = Math.min(1, exchanges.length / 6), reliance = Math.min(1, meals / (need * 20));
         const memory = other && town._paultendoPoliticalMemory?.[other.id];
-        return { hunger, oppression, tax, unrest, war, trade, reliance, aid: Math.min(1, aid / (need * 8)), grievance: clampValue((memory?.grievance || 0) / 10, 0, 1),
+        return { hunger, oppression, tax, unrest, war, trade, reliance, aid: Math.min(1, aid / (need * 8)), grievance: clampValue((memory?.grievance || 0) / 10, 0, 1), help: clampValue((memory?.help || 0) / 10, 0, 1),
             relation: other ? clampValue((getRelations(town, other) + getRelations(other, town)) / 40, -1, 1) : 0,
             affinity: other ? politicalBackground(town, other) : 0, justice: (values.justice || 0) / 10, openness: (values.openness || 0) / 10,
             order: (values.order || 0) / 10, wealth: (values.wealth || 0) / 10, tenets };
@@ -18923,7 +19004,7 @@
         const s = politicalSignals(town, other), positions = [];
         for (const cohort of politicalCohorts(town)) {
             const craft = ['miner', 'lumberer', 'smith', 'builder', 'potter'].includes(cohort.role), merchant = cohort.role === 'merchant', soldier = cohort.role === 'soldier', priest = cohort.role === 'priest';
-            let support = .48 + s.relation * .18 + s.affinity * .12 - s.grievance * .25;
+            let support = .48 + s.relation * .18 + s.affinity * .12 + s.help * .12 + s.aid * .1 - s.grievance * .25;
             if (terms.market) support += s.trade * .25 + s.reliance * .2 + s.openness * .09 + (merchant ? .16 : craft ? -.06 * s.wealth : 0);
             if (terms.defense) support += s.war * .22 + s.order * .08 + (soldier ? .12 : 0) - (s.tenets.includes('pacifism') ? .12 : 0);
             if(terms.closedBorders)support+=s.order*.1-s.trade*.25-(merchant?.15:0)+ (s.tenets.includes('insular')?.1:0);
@@ -18939,7 +19020,7 @@
             positions.push({ role: cohort.role, count: cohort.count, support: clampValue(support, 0, 1) });
         }
         const support = positions.reduce((n, c) => n + c.count * c.support, 0) / Math.max(1, town.pop);
-        const reasons = [s.trade > .2 && 'goods exchanged with neighbours', s.reliance > .2 && 'food arriving from outside', s.war && 'fighting nearby', s.tax > .25 && 'heavy taxes', s.oppression > 0 && 'voices being silenced', s.grievance > .2 && 'broken obligations', s.affinity > .2 && 'a shared past'].filter(Boolean);
+        const reasons = [s.trade > .2 && 'goods exchanged with neighbours', s.reliance > .2 && 'food arriving from outside', s.war && 'fighting nearby', s.tax > .25 && 'heavy taxes', s.oppression > 0 && 'voices being silenced', s.grievance > .2 && 'broken obligations', s.help > .1 && 'help remembered from difficult times', s.affinity > .2 && 'a shared past'].filter(Boolean);
         return { support, positions, reasons, signals: s };
     }
     function politicalContact(a, b) {
@@ -18957,7 +19038,8 @@
         if (state.proposals.some(p => !p.resolved && p.type === type && p.form === form && p.members.slice().sort().join(',') === ids.slice().sort().join(','))) return null;
         const terms = { ...charter, form, ...options.terms };
         terms.rate = clampValue(terms.rate, 0, .15); terms.customs = clampValue(terms.customs, 0, .15); terms.autonomy = clampValue(terms.autonomy, .1, 1);
-        const p = { id: politicalId(), type, town: town.id, members: ids, form, terms, group: options.group, day: planet.day, due: planet.day + POLITICAL_PACE.debate, advocacy: {}, votes: {}, history: [], ...options.data };
+        const previous=options.group&&state.groups.find(g=>g.id===options.group)?.terms;
+        const p = { previousTerms:previous?{...previous}:null, id: politicalId(), type, town: town.id, members: ids, form, terms, group: options.group, day: planet.day, due: planet.day + POLITICAL_PACE.debate, advocacy: {}, votes: {}, history: [], ...options.data };
         state.proposals.push(p); politicalNews(p, town.name + ' opens talks on a ' + charter.name.toLowerCase() + '.'); return p;
     }
     function politicalMemberVote(town, p) {
@@ -18973,20 +19055,20 @@
     function politicalRatify(p) {
         if (p.resolved) return;
         const towns = p.members.map(id => regGet('town', id));
-        if (towns.some(t => !t || t.end || t.pop <= 0) || towns.some(a => towns.some(b => a !== b && areAtWar(a, b)))) { p.resolved = planet.day; p.status = 'withdrawn'; return; }
+        if (towns.some(t => !t || t.end || t.pop <= 0) || towns.some(a => towns.some(b => a !== b && areAtWar(a, b)))) { p.resolved = planet.day; p.status = 'withdrawn';p.reason='The talks broke down as the towns changed or fighting began.'; return; }
         p.votes = Object.fromEntries(towns.map(t => [t.id, politicalMemberVote(t, p)]));
         const group = p.group && politicalState().groups.find(g => g.id === p.group && !g.ended);
         const accepted = p.type === 'law' && group ? politicalCouncilConsent(group, p.votes) : towns.every(t => p.votes[t.id].yes);
         p.resolved = planet.day; p.status = accepted ? 'agreed' : 'refused';
-        if (!accepted) { politicalNews(p, 'The talks end without agreement.'); return; }
+        if (!accepted) { p.reason='The towns could not agree on the terms.'; politicalNews(p, 'The talks end without agreement.'); return; }
         if (p.type === 'law') {
             if (!group || !group.terms.law || !p.law || !['happy.speech', 'happy.rights', 'travel', 'education.religion'].includes(p.law)) { p.status = 'withdrawn'; return; }
             group.laws ||= {}; group.laws[p.law] = p.allowed;
             for (const town of towns) { town.legal ||= {}; town.legal[p.law] = p.allowed; }
-            politicalNews(group, group.name + (p.allowed ? ' protects ' : 'restricts ') + p.law.split('.').at(-1) + '.'); return;
+            politicalNews(group, group.name + (p.allowed ? ' protects ' : 'restricts ') + politicalLawName(p.law) + '.'); return;
         }
         if (p.type === 'amend' || p.type === 'admit') {
-            if (p.terms.law && towns.some(t => politicalGroups(t,'law').some(g=>g.id!==p.group) || politicalDependency(t)&&politicalDependency(t).rel.terms?.compact!==p.group)) { p.status='withdrawn';return; }
+            if (p.terms.law && towns.some(t => politicalGroups(t,'law').some(g=>g.id!==p.group) || politicalDependency(t)&&politicalDependency(t).rel.terms?.compact!==p.group)) { p.status='withdrawn';p.reason='An existing government or oath stands in the way.';return; }
             if (p.form==='feudal' && p.form!==group?.form) { p.status='withdrawn';return; }
             if (!group) { p.status = 'withdrawn'; return; }
             if (p.type === 'admit') for (const t of towns) if (!group.members.includes(t.id)) { group.members.push(t.id); group.accounts[t.id] = { paid: 0, received: 0, arrears: 0 }; }
@@ -18995,8 +19077,8 @@
             politicalNews(group, group.name + ' agrees a new charter.'); return;
         }
         // A town can enter several treaties, but cannot owe sovereignty twice.
-        if (p.terms.law && towns.some(t => politicalGroups(t, 'law').length || politicalDependency(t))) { p.status = 'withdrawn'; return; }
-        if (p.form === 'feudal' && towns.slice(1).some(t => politicalDependency(t))) { p.status = 'withdrawn'; return; }
+        if (p.terms.law && towns.some(t => politicalGroups(t, 'law').length || politicalDependency(t))) { p.status = 'withdrawn';p.reason='An existing government or oath stands in the way.'; return; }
+        if (p.form === 'feudal' && towns.slice(1).some(t => politicalDependency(t))) { p.status = 'withdrawn';p.reason='A town already owes allegiance elsewhere.'; return; }
         if(p.form==='feudal')for(const subject of towns.slice(1)){const seen=new Set([subject.id]);let ancestor=towns[0];while(ancestor){if(seen.has(ancestor.id)){p.status='withdrawn';politicalNews(p,'An existing oath prevents the new compact.');return;}seen.add(ancestor.id);ancestor=getTownOverlord(ancestor);}}
         const g = { id: politicalId(), name: towns[0].name + ' ' + (p.form === 'market' ? 'Market League' : p.form === 'pact' ? 'Pact' : p.form === 'crown' ? 'Crown' : p.form === 'republic' ? 'Republic' : p.form === 'feudal' ? 'Compact' : POLITICAL_CHARTERS[p.form].name),
             form: p.form, terms: { ...p.terms }, members: p.members.slice(), founded: planet.day, leader: towns[0].id, treasury: 0, accounts: {}, history: [], sanctions: [], laws: {}, legitimacy: 1 };
@@ -19091,7 +19173,13 @@
             if (last && planet.day - last.resolved < POLITICAL_PACE.recovery) return null;
             m = { id: politicalId(), key, town: town.id, kind, target, day: planet.day, support: .1, momentum: 0, history: [], ...data }; state.movements.push(m);
         }
-        m.reasons = reasons; m.pressure = clampValue(pressure, 0, 1);
+        // Encouragement and coercion affect every gathering, not only colonial
+        // disputes. Their remembered effect fades as people have new experiences.
+        const elapsed=Math.max(0,planet.day-(m.lastUpdated ?? planet.day));
+        m.advocacy=(m.advocacy || 0)*Math.pow(.995,elapsed);
+        m.repression=(m.repression || 0)*Math.pow(.998,elapsed);
+        m.lastUpdated=planet.day;
+        m.reasons = reasons; m.pressure = clampValue(pressure+(m.advocacy || 0)+(m.repression || 0), 0, 1);
         m.support += (m.pressure - m.support) * .14;
         m.momentum = Math.max(0, m.momentum + (m.support >= .55 ? m.support : -.8));
         if (!m.announced && m.support >= .45) { m.announced = planet.day; politicalNews(m, town.name + (kind === 'faith' ? ' debates its old teachings.' : kind === 'regional' ? ' hears calls for a separate town.' : ' hears calls for greater independence.')); }
@@ -19104,7 +19192,7 @@
         if (m.actions?.[kind]!=null && planet.day-m.actions[kind]<POLITICAL_PACE.debate)return false;
         (m.actions ||= {})[kind]=planet.day;
         if (kind === 'silence') {
-            m.repression = (m.repression || 0) + .2; town.legal ||= {}; town.legal['happy.speech'] = false;
+            m.repression = Math.min(.6,(m.repression || 0) + .2); town.legal ||= {}; town.legal['happy.speech'] = false;
             town.unrest = clampValue((town.unrest || 0) + 8, 0, 100); m.momentum = Math.max(0, m.momentum - 2);
             politicalHistory(m, 'silenced'); politicalNews(m, 'Guards break up the gathering in ' + town.name + '.', 'warning'); return true;
         }
@@ -19198,7 +19286,7 @@
             if (!paid) return false; applyTownCashDelta(town, -paid, 'wages'); town.wealth = (town.wealth || 0) + paid;
             (town._paultendoLabor ||= {})[union.role] = { wage: paid / workers, until: planet.day + POLITICAL_PACE.dues };
             union.lastPaid=planet.day; union.grievance = Math.max(0, union.grievance - paid / Math.max(1, due) * .4); politicalHistory(union, 'paid', { paid, due });
-        } else if (action === 'rights') { if(union.recognised===planet.day)return false;union.recognised=planet.day; town.legal ||= {}; town.legal['happy.speech'] = true; union.grievance *= .65; delete union.banned; politicalHistory(union, 'recognised'); }
+        } else if (action === 'rights') { if(union.recognised!=null&&town.legal?.['happy.speech']===true)return false;union.recognised=planet.day; town.legal ||= {}; town.legal['happy.speech'] = true; union.grievance *= .65; delete union.banned; politicalHistory(union, 'recognised'); }
         else if (action === 'ban') { if(union.banned)return false; union.banned = planet.day; union.grievance = Math.min(1, union.grievance + .25); town.legal ||= {}; town.legal['happy.speech'] = false; town.unrest = Math.min(100, (town.unrest || 0) + 5); politicalHistory(union, 'banned'); }
         else return false;
         if (union.grievance < .4) { union.strike = false; union.status = 'bargaining'; }
@@ -19233,7 +19321,7 @@
             const missed = clampValue((dep.rel.resentment || 0) / 10, 0, 1), isolated = dep.distant ? .15 : 0;
             const pressure = s.unrest * .4 + s.oppression * .2 + s.tax * .4 + missed * .5 + (1-dep.autonomy)*.15 + current.grievance * .3 + isolated - current.aid * .3 - current.reliance * .25 - current.affinity * .1;
             const m = politicalMovement(town, 'independence', (dep.distant ? dep.rel.originWorldId + ':' : '') + dep.parent.id, pressure, [s.tax > .2 && 'tribute and taxes', missed > .3 && 'resentment of the ruler', isolated && 'a distant parent town', current.reliance > .2 && 'dependence on imported food'].filter(Boolean));
-            if (m) { m.pressure = clampValue(m.pressure + (m.advocacy || 0) + (m.repression || 0), 0, 1); m.support += (m.pressure - m.support) * .08; politicalResolveIndependence(m, town); }
+            if (m) politicalResolveIndependence(m, town);
         }
         for (const group of politicalGroups(town)) {
             const others = group.members.filter(id => id !== town.id).map(id => regGet('town', id)).filter(t => t && !t.end);
@@ -19251,7 +19339,7 @@
             const remote = center && cells.length ? Math.min(1, cells.reduce((n, c) => n + Math.hypot(c.x - center[0], c.y - center[1]), 0) / cells.length / 12) : 0;
             const pressure = s.unrest * .5 + s.tax * .5 + s.oppression * .25 + remote * .2;
             const m = cells.length >= SECESSION_CONFIG.minSplitSize && politicalMovement(town, 'regional', 'district', pressure, [remote > .3 && 'distance from the town centre', s.tax > .2 && 'taxes collected here', s.oppression > 0 && 'local voices being silenced'].filter(Boolean), { chunks: district.chunks.slice() });
-            if (m) { m.pressure = clampValue(m.pressure + (m.advocacy || 0) + (m.repression || 0), 0, 1); m.support += (m.pressure - m.support) * .08; politicalResolveIndependence(m, town); }
+            if (m) politicalResolveIndependence(m, town);
         }
         const religion = getTownReligion(town), religious = politicalReligiousPressure(town);
         if (religion) { const m = politicalMovement(town, 'faith', religion.id, religious.pressure, religious.reasons, { doctrine: religious.doctrine }); if (m) { m.doctrine = religious.doctrine; politicalSchism(m, town); } }
@@ -19325,14 +19413,8 @@
         }
         return false;
     }
-    let politicalView=null;
     function populatePoliticalExecutive(items,title,render=null){
-        politicalView={planet,title:title.toLowerCase(),render:render || (()=>populatePoliticalExecutive(items,title))};
-        populateExecutive(items,title);markLivingStoryControls();openExecutive();
-    }
-    function refreshPoliticalCouncilView(){
-        if(politicalView?.planet!==planet||politicalView.title!==currentExecutive)return false;
-        politicalView.render();return true;
+        populateExecutive(items,title);markLivingStoryControls();rememberLivingStoryView(render || (()=>populatePoliticalExecutive(items,title)));openExecutive();
     }
     function openPoliticalMovement(m) {
         const town = regGet('town', m.town); if (!town || !livingTownKnown(town)) return;
@@ -19354,7 +19436,7 @@
             ['Open the outer borders',{closedBorders:false}],
             ['Close the outer borders',{closedBorders:true}],
             ['End the common customs levy',{customs:0}]
-        ])items.push({text:label,func:()=>{const p=politicalPetition(town,group.members,group.form,{type:'amend',group:group.id,terms:{...group.terms,...terms}});if(p)openPoliticalProposal(p,town);}});
+        ])if(Object.entries(terms).some(([key,value])=>typeof value==='boolean'?value!==!!group.terms[key]:value!==group.terms[key]))items.push({text:label,func:()=>{const p=politicalPetition(town,group.members,group.form,{type:'amend',group:group.id,terms:{...group.terms,...terms}});if(p)openPoliticalProposal(p,town);}});
         populatePoliticalExecutive(items,'The charter',()=>openPoliticalCharter(group,town));markLivingStoryControls();openExecutive();
     }
     function openPoliticalPast(town) {
@@ -19363,27 +19445,58 @@
         for(const m of (state?.movements || []).filter(m=>m.town===town.id&&m.resolved).slice(-8).reverse())items.push({text:'Day '+m.resolved+' · '+(m.kind==='faith'?'A change of worship':'A gathering remembered'),func:()=>openPoliticalMovement(m)});
         populatePoliticalExecutive(items,'Past gatherings',()=>openPoliticalPast(town));markLivingStoryControls();openExecutive();
     }
+    function politicalLawName(law) { return {'happy.speech':'the right to speak','happy.rights':'residents’ rights',travel:'free travel','education.religion':'freedom of worship'}[law] || 'the town’s laws'; }
+    function politicalProposalTerms(p) {
+        if(p.type==='law')return (p.allowed?'Protect ':'Restrict ')+politicalLawName(p.law)+'.';
+        const lines=[],before=p.previousTerms;
+        if(p.type==='amend'&&before){
+            if(p.terms.rate!==before.rate)lines.push(p.terms.rate<before.rate?'Members would pay less into the common purse.':'Members would pay more into the common purse.');
+            if(p.terms.autonomy!==before.autonomy)lines.push(p.terms.autonomy>before.autonomy?'More decisions would stay with each town.':'More decisions would belong to the wider community.');
+            if(!!p.terms.closedBorders!==!!before.closedBorders)lines.push(p.terms.closedBorders?'The outer borders would close to outsiders.':'The outer borders would reopen to outsiders.');
+            if(p.terms.customs!==before.customs)lines.push(p.terms.customs===0?'The common customs levy would end.':'The customs levy would change.');
+            if(p.terms.form!==before.form)lines.push('The community would become a '+POLITICAL_CHARTERS[p.form].name.toLowerCase()+'.');
+        }
+        if(!lines.length)lines.push(...[p.terms.market&&'Goods can cross the shared market.',p.terms.defense&&'Members promise help if attacked.',p.terms.law&&'The common council can set agreed laws.',p.terms.autonomy<1&&'Some decisions belong to the wider community.'].filter(Boolean));
+        if(p.terms.rate)lines.push(Number((p.terms.rate*100).toFixed(4))+'% of town cash is due every '+POLITICAL_PACE.dues+' days.');
+        if(p.terms.customs)lines.push('Outside trade pays a '+Number((p.terms.customs*100).toFixed(4))+'% customs levy when cash is available.');
+        return lines.join(' ');
+    }
     function openPoliticalProposal(p, town) {
         const items = [{ text: '← Back to the council', func: () => openPoliticalCouncil(town) }];
         items.push({ text: escapeLivingText(p.members.map(id => {const t=regGet('town',id);return livingTownKnown(t)?t.name:'A neighbouring town';}).join(', ')), class: 'paultendoLifeBody' });
-        items.push({ text: escapeLivingText([p.terms.market && 'Goods can cross the shared market', p.terms.defense && 'Members promise help if attacked', p.terms.law && 'The common council can set agreed laws', p.terms.rate && 'Members contribute to a common purse', p.terms.autonomy < 1 && 'Some decisions belong to the wider community'].filter(Boolean).join('. ') + '.'), class: 'paultendoLifeBody' });
+        items.push({ text: escapeLivingText(politicalProposalTerms(p)), class: 'paultendoLifeBody' });
         if (!p.resolved) {
+            items.push({text:'Talks end on Day '+p.due+'.',class:'paultendoLifeBody'});
             for (const id of p.members) { const voter = regGet('town', id); if (!voter || !livingTownKnown(voter)) continue; const vote = politicalMemberVote(voter, p); items.push({ text: escapeLivingText(voter.name + (vote.support >= .55 ? ' leans towards the agreement.' : ' has doubts.') + (vote.reasons.length ? ' People talk about ' + vote.reasons.join(', ') + '.' : '')), class: 'paultendoLifeBody' }); }
-            const other=p.members.map(id=>regGet('town',id)).find(t=>t&&t.id!==town.id);
-            const opinion=politicalSupport(town,p.terms,other);
-            for(const position of opinion.positions)if(position.count>=3)items.push({text:escapeLivingText(titleCase(position.role)+' households '+(position.support>=.55?'mostly favour the agreement.':position.support<.4?'mostly oppose it.':'are divided.')),class:'paultendoLifeBody'});
-            const speaker=(town._paultendoPeople || []).find(person=>livingTeachingPersonAvailable(person,town)&&opinion.positions.some(c=>c.role===person.role));
-            if(speaker){const position=opinion.positions.find(c=>c.role===speaker.role),quote=position.support>=.55?(opinion.signals.reliance>.2?'We depend on what comes down that road.':p.terms.defense?'We should not have to face an attack alone.':'There is something to gain by working together.'):'I want to know what we will have to give up.';items.push({text:escapeLivingText('“'+quote+'” '+speaker.name),class:'paultendoLifeBody'});}
             if (!p.advocacy[town.id]) for (const [label, amount] of [['Speak for the agreement', .12], ['Speak against the agreement', -.12]]) items.push({ text: label, func: () => { if (!p.resolved && !p.advocacy[town.id]) { p.advocacy[town.id] = amount; politicalHistory(p, 'advocacy', { town: town.id, amount }); } openPoliticalProposal(p, town); } });
+            if(p.advocacy[town.id])items.push({text:p.advocacy[town.id]>0?'Your support has been heard.':'Your objections have been heard.',class:'paultendoLifeBody'});
+            const other=p.members.map(id=>regGet('town',id)).find(t=>t&&t.id!==town.id);
+            const opinion=politicalSupport(town,p.terms,other),voices=[];
+            for(const position of opinion.positions)if(position.count>=3)voices.push(escapeLivingText(titleCase(position.role)+' households '+(position.support>=.55?'mostly favour the agreement.':position.support<.4?'mostly oppose it.':'are divided.')));
+            const speaker=(town._paultendoPeople || []).find(person=>livingTeachingPersonAvailable(person,town)&&opinion.positions.some(c=>c.role===person.role));
+            if(speaker){const position=opinion.positions.find(c=>c.role===speaker.role),quote=position.support>=.55?(opinion.signals.reliance>.2?'We depend on what comes down that road.':p.terms.defense?'We should not have to face an attack alone.':'There is something to gain by working together.'):'I want to know what we will have to give up.';voices.push(escapeLivingText('“'+quote+'” '+speaker.name));}
+            if(voices.length)items.push({text:'<details class="paultendoWorkHistory"><summary>Voices in town</summary>'+voices.map(v=>'<p>'+v+'</p>').join('')+'</details>'});
             items.push({ text: 'The towns will decide after the talks.', class: 'paultendoLifeBody' });
-        } else items.push({ text: p.status === 'agreed' ? 'The towns reached an agreement.' : 'The talks have ended.', class: 'paultendoLifeBody' });
+        } else {
+            items.push({text:p.status==='agreed'?'The towns reached an agreement.':'The talks have ended.',class:'paultendoLifeBody'});
+            if(p.reason)items.push({text:escapeLivingText(p.reason),class:'paultendoLifeBody'});
+            for(const [id,vote] of Object.entries(p.votes || {})){const member=regGet('town',Number(id));if(livingTownKnown(member))items.push({text:escapeLivingText(member.name+(vote.yes?' backed the proposal.':' would not agree.')),class:'paultendoLifeBody'});}
+            const community=stateGroupById(p.created || p.group);if(p.status==='agreed'&&community)items.push({text:'Visit '+escapeLivingText(community.name),func:()=>openPoliticalGroup(community,town)});
+        }
         populatePoliticalExecutive(items, POLITICAL_CHARTERS[p.form].name,()=>openPoliticalProposal(p,town)); markLivingStoryControls(); openExecutive();
     }
     function openPoliticalGroup(group, town) {
         const items = [{ text: '← Back to the council', func: () => openPoliticalCouncil(town) }];
         for (const id of group.members) { const member = regGet('town', id); if (livingTownKnown(member)) items.push({ text: escapeLivingText(member.name + (id === group.leader ? ' · Council seat' : '')), func: () => { closeExecutive(); openRegBrowser(member, 'town'); } }); }
         items.push({ text: escapeLivingText(group.terms.name + '. The common purse holds about ' + Math.round(group.treasury / 10) * 10 + ' cash.'), class: 'paultendoLifeBody' });
-        for (const entry of group.history.slice(-6).reverse()) if (entry.kind === 'news') items.push({ text: escapeLivingText(entry.text), class: 'paultendoLifeBody' });
+        for (const entry of group.history.filter(e=>['news','election'].includes(e.kind)||e.kind==='dues'&&e.due>0||['grant','customs'].includes(e.kind)&&e.paid>0).slice(-6).reverse()) {
+            const member=entry.town&&regGet('town',entry.town);let text=entry.text;
+            if(!text&&entry.kind==='grant'&&livingTownKnown(member))text=member.name+' received help from the common purse.';
+            if(!text&&entry.kind==='dues'&&livingTownKnown(member))text=member.name+(entry.paid>0?' paid its contribution.':' could not pay its contribution.');
+            if(!text&&entry.kind==='customs')text='An outside shipment paid the common customs levy.';
+            if(!text&&entry.kind==='election'){const leader=regGet('town',entry.leader);if(livingTownKnown(leader))text=leader.name+' now holds the council seat.';}
+            if(text)items.push({text:'Day '+entry.day+' · '+escapeLivingText(text),class:'paultendoLifeBody'});
+        }
         if (!group.ended && group.members.includes(town.id)) {
             items.push({text:'Discuss the charter',func:()=>openPoliticalCharter(group,town)});
             items.push({ text: 'Ask the town to leave', func: () => { politicalCouncilAction(group, town, 'leave'); openPoliticalCouncil(town); } });
@@ -19400,7 +19513,7 @@
     function openPoliticalUnion(union) {
         const town = regGet('town', union.town); if (!town || !livingTownKnown(town)) return;
         const items = [{ text: '← Back to the council', func: () => openPoliticalCouncil(town) }, { text: union.strike ? 'Work has stopped. The workers want better terms.' : 'Workers meet to press their claims.', class: 'paultendoLifeBody' }];
-        for (const [action, label] of [['pay', 'Pay the workers from the town purse'], ['rights', 'Recognise their right to meet'], ['ban', 'Ban the association']]) if (!union.ended) items.push({ text: label, func: () => { const ok = politicalUnionBargain(union, action); if (!ok) { populatePoliticalExecutive([{ text: 'The town cannot pay what is being asked.' }, { text: '← Back', func: () => openPoliticalUnion(union) }], escapeLivingText(union.name)); openExecutive(); } else openPoliticalUnion(union); } });
+        for (const [action, label] of [['pay', 'Pay the workers from the town purse'], ['rights', 'Recognise their right to meet'], ['ban', 'Ban the association']]) if (!union.ended) items.push({ text: label, func: () => { const ok = politicalUnionBargain(union, action); if (!ok) { populatePoliticalExecutive([{ text: action==='pay'?(union.lastPaid!=null&&planet.day-union.lastPaid<POLITICAL_PACE.dues?'The workers were paid recently.':'There is no spare cash in the town purse.'):action==='rights'?'The workers already have the right to meet.':'The association is already banned.' }, { text: '← Back', func: () => openPoliticalUnion(union) }], escapeLivingText(union.name)); openExecutive(); } else openPoliticalUnion(union); } });
         for (const id of union.allies || []) { const ally = politicalState().unions.find(u => u.id === id), other = ally && regGet('town', ally.town); if (livingTownKnown(other)) items.push({ text: escapeLivingText(other.name + ' has workers with the same concerns.'), class: 'paultendoLifeBody' }); }
         populatePoliticalExecutive(items, escapeLivingText(union.name),()=>openPoliticalUnion(union)); markLivingStoryControls(); openExecutive();
     }

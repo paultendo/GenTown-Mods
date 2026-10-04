@@ -189,3 +189,42 @@ test('trade in other towns cannot inspire an isolated town’s religious debate'
  trade(w,a,b);tick(w,12);assert.ok(!state(w).movements.some(m=>m.town===c.id&&m.kind==='faith'));
  trade(w,a,c);tick(w,12);const movement=state(w).movements.find(m=>m.town===c.id&&m.kind==='faith');assert.ok(movement);assert.ok(movement.reasons.includes('traders learning from outsiders'));assert.equal(movement.doctrine,'trade');clean(g);
 });
+
+test('council proposals state the actual obligations, closing day and law instead of an indistinguishable agreement',async t=>{
+ const {g,w,a,b}=await setup(t);const p=propose(w,a,b);assert.match(panel(w).textContent,/5% of town cash is due every 10 days/);assert.match(panel(w).textContent,/3% customs levy/);assert.match(panel(w).textContent,new RegExp('Talks end on Day '+p.due));assert.ok(panel(w).textContent.indexOf('Speak for the agreement')<panel(w).textContent.indexOf('Voices in town'));assert.ok(panel(w).querySelector('details summary'));
+ const group=ratify(w,p);a.legal['happy.speech']=b.legal['happy.speech']=false;council(w,a);click(w,group.name);click(w,'Protect the right to speak');assert.match(panel(w).textContent,/Protect the right to speak/);clean(g);
+});
+
+test('a charter amendment shows what will change and preserves the old terms through reload',async t=>{
+ const {g,w,a,b}=await setup(t);const group=ratify(w,propose(w,a,b));council(w,a);click(w,group.name);click(w,'Discuss the charter');click(w,'Ask for a lighter contribution');const p=state(w).proposals.at(-1);
+ assert.equal(p.previousTerms.rate,.05);assert.equal(p.terms.rate,.025);assert.match(panel(w).textContent,/pay less into the common purse/);assert.match(panel(w).textContent,/2\.5% of town cash/);
+ const saved=plain(w.generateSave()),restored=await makeGame({save:saved});t.after(restored.close);const rw=restored.window,rp=state(rw).proposals.find(x=>x.id===p.id);assert.equal(rp.previousTerms.rate,.05);assert.equal(rp.terms.rate,.025);council(rw,rw.regGet('town',a.id));click(rw,'Federation · Talks underway');assert.match(panel(rw).textContent,/pay less into the common purse/);assert.deepEqual(restored.errors,[]);clean(g);
+});
+
+test('charter controls omit changes the community has already made',async t=>{
+ const {g,w,a,b}=await setup(t);const group=ratify(w,propose(w,a,b));Object.assign(group.terms,{rate:0,autonomy:1,customs:0,closedBorders:false});council(w,a);click(w,group.name);click(w,'Discuss the charter');
+ assert.ok(!controlText(w,'Ask for a lighter contribution'));assert.ok(!controlText(w,'Keep more decisions in each town'));assert.ok(!controlText(w,'Open the outer borders'));assert.ok(!controlText(w,'End the common customs levy'));assert.ok(controlText(w,'Close the outer borders'));assert.ok(controlText(w,'Raise contributions to the common purse'));clean(g);
+});
+function controlText(w,text){return [...panel(w).querySelectorAll('[role="button"]')].some(b=>b.textContent===text);}
+
+test('completed talks show the recorded refusal and votes without replacing them with today’s opinions',async t=>{
+ const {g,w,a,b}=await setup(t);b.values={justice:-8,openness:-8,order:8};b.jobs={priest:30};a.relations[b.id]=b.relations[a.id]=-12;const p=propose(w,a,b);ratify(w,p);assert.equal(p.status,'refused');assert.ok(p.reason);w.refreshExecutive();assert.match(panel(w).textContent,/would not agree/);assert.ok(panel(w).textContent.includes(p.reason));const before=panel(w).textContent;b.values={justice:10,openness:10,order:0};b.relations[a.id]=20;w.refreshExecutive();assert.equal(panel(w).textContent,before);clean(g);
+});
+
+test('completed successful talks lead back to the actual community without proposing it twice',async t=>{
+ const {g,w,a,b}=await setup(t);const p=propose(w,a,b),group=ratify(w,p);w.refreshExecutive();assert.ok(controlText(w,'Visit '+group.name));click(w,'Visit '+group.name);assert.match(panel(w).textContent,/Council seat/);const count=state(w).proposals.length;w.refreshExecutive();assert.equal(state(w).proposals.length,count);clean(g);
+});
+
+test('encouragement changes a religious gathering’s pressure and fades with later experience through reload',async t=>{
+ const {g,w,a,b,c}=await setup(t,{third:true});w.planet.religions=[{id:1,name:'Old Rite',foundingTown:a.id,founded:1,tenets:['hierarchical'],tenetNames:['Hierarchical'],influences:{crime:-.3},followers:[a.id,b.id,c.id],cohesion:60,extinct:false}];for(const town of[a,b,c])town.religion=1;
+ a.values.justice=c.values.justice=-8;b.values.justice=10;b.legal['happy.speech']=b.legal['happy.rights']=b.legal['education.religion']=false;b.relations[a.id]=a.relations[b.id]=-20;tick(w,5);
+ const m=state(w).movements.find(x=>x.town===b.id&&x.kind==='faith');assert.ok(m);const restored=await makeGame({save:plain(w.generateSave())});t.after(restored.close);const rw=restored.window,rm=state(rw).movements.find(x=>x.id===m.id);
+ council(w,b);click(w,'Debate over the old teachings');click(w,'Encourage their cause');assert.equal(m.advocacy,.12);tick(w);tick(rw);assert.ok(m.pressure>rm.pressure,'The actual daily calculation responds to encouragement');assert.ok(m.support>rm.support);assert.ok(m.advocacy<.12&&m.advocacy>0);
+ const held=plain(m);w.refreshExecutive();w.refreshExecutive();assert.deepEqual(plain(m),held);
+ const resumed=await makeGame({save:plain(w.generateSave())});t.after(resumed.close);assert.equal(state(resumed.window).movements.find(x=>x.id===m.id).advocacy,m.advocacy);tick(resumed.window);assert.ok(state(resumed.window).movements.find(x=>x.id===m.id).advocacy<m.advocacy);assert.deepEqual(restored.errors,[]);assert.deepEqual(resumed.errors,[]);clean(g);
+});
+
+test('recognising workers cannot repeatedly reduce their grievance and a renewed ban gives a new reason to act',async t=>{
+ const {g,w,a}=await setup(t);a.values={justice:-8,order:8};a.jobs={miner:20,farmer:10};a.resources.crop=0;a.wealth=0;a.tax=.8;a.unrest=90;a.legal['happy.speech']=false;tick(w,25);const u=state(w).unions.find(x=>x.town===a.id&&x.role==='miner');
+ council(w,a);click(w,u.name+' · On strike');click(w,'Recognise their right to meet');const held=plain(u);click(w,'Recognise their right to meet');assert.match(panel(w).textContent,/already have the right to meet/);assert.deepEqual(plain(u),held);click(w,'← Back');click(w,'Ban the association');assert.equal(a.legal['happy.speech'],false);const grievance=u.grievance;click(w,'Recognise their right to meet');assert.equal(a.legal['happy.speech'],true);assert.ok(u.grievance<grievance);clean(g);
+});
