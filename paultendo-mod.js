@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.70/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.71/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.70";
+    const MOD_VERSION = "1.6.71";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -7440,6 +7440,7 @@
             case 'barter':return `${seller} sends ${step.count} ${goods} to ${buyer} in exchange for ${step.payment.count} ${payment}. Both supplies travel with the carriers.`;
             case 'seizure':return `Raiders from ${buyer} take ${step.count} ${goods} from ${seller}. The supplies are on the road home. ${seller} remembers the theft.`;
             case 'return':return `The road home opens. The carriers set off again with the captured ${goods}.`;
+            case 'route':return `Carriers keep returning between ${buyer} and ${seller}. A regular route takes shape.`;
             case 'war':return `${buyer} goes to war with ${seller} over the refused food request.`;
             case 'arrive':return record.kind==='seizure'?`${step.count} captured ${goods} reach ${buyer} and enter its stores.`:`${step.count} ${goods} reach ${buyer}.${step.payment?` ${seller} receives ${step.payment.count} ${payment} in return.`:''} The towns remember the exchange.`;
             case 'refuse':return step.reason==='stores'?`${seller} cannot spare ${goods} without leaving its own people or work short.`:step.reason==='rivalry'?`${seller} refuses the request from its rival.`:step.reason==='outsiders'?`${seller} keeps its stores for its own people.`:`${seller} asks for payment, but the towns cannot agree on an exchange.`;
@@ -7462,7 +7463,12 @@
         if(record.steps.length>24) record.steps.splice(1,record.steps.length-24);
         for(const id of [record.buyer,record.seller]) if(livingTownKnown(regGet('town',id))) record.known[id]=true;
         const visibleTown=[record.buyer,record.seller].map(id=>regGet('town',id)).find(livingTownKnown);
-        if(visibleTown) modLog('memory',escapeLivingText(exchangeStepText(record,step)),['threat','war','seizure'].includes(kind)?'warning':null,{town:visibleTown,observedStory:true,story:{kind:'exchange',id:record.id}});
+        if(visibleTown) {
+            const message=kind==='route'
+                ? `New route: ${[record.buyer,record.seller].map(id=>livingTownKnown(regGet('town',id))?townRef(id):'another settlement').join(' and ')}.`
+                : escapeLivingText(exchangeStepText(record,step));
+            modLog('memory',message,['threat','war','seizure'].includes(kind)?'warning':null,{town:visibleTown,observedStory:true,force:kind==='route',highlight:kind==='route',story:{kind:'exchange',id:record.id}});
+        }
     }
     function newCommodityJourney(buyer,seller,path,source='need',type='crop') {
         const state=commodityExchangeState();
@@ -7636,10 +7642,11 @@
                 if(buyer.famine&&!buyer.famine.ended&&mealStock(buyer)>=foodBuffer(buyer))buyer.famine.ended=true;
                 recordTraffic(path,0.2);noteExchangeStep(record,'arrive',{count:record.delivered});continue;
             }
-            improveRelations(buyer,seller,1);improveRelations(seller,buyer,1);
+            // Native AddRelation already updates both towns.
+            improveRelations(buyer,seller,1);
             rememberCommodityExchange(seller,buyer,record.kind==='aid'?'aid':'trade',record.type,record.delivered,record.id);
             if(record.payment&&record.payment.type!=='cash')rememberCommodityExchange(buyer,seller,'trade',record.payment.type,record.paid,record.id);
-            const route=getTradeRouteBetween(buyer,seller);
+            const existingRoute=getTradeRouteBetween(buyer,seller),route=existingRoute || commodityRouteFromArrivals(record,buyer,seller);
             if(route?.active){route.totalGoods=(route.totalGoods || 0)+record.delivered;route.caravans=(route.caravans || 0)+1;route.lastCaravanDay=planet.day;}
             receiveMaterialInstructions(buyer,record.materialLesson,record);receiveMaterialInstructions(seller,record.returnLesson,record);
             receiveLocalKnowledge(buyer,record.knowledgeOffer,record);receiveLocalKnowledge(seller,record.returnKnowledge,record);
@@ -7648,12 +7655,43 @@
             // when it actually provides enough for the recipient's next meal.
             if(buyer.famine&&!buyer.famine.ended&&mealStock(buyer)>=foodBuffer(buyer)) buyer.famine.ended=true;
             noteExchangeStep(record,'arrive',{count:record.delivered,payment:record.payment});
+            if(!existingRoute&&route){record.route=route.id;noteExchangeStep(record,'route');}
         }
+    }
+    // Two recent arrivals can establish a regular route. This uses the native
+    // capability gates and the relationship earned by the actual exchanges.
+    // It creates no stock, money, influence or extra random draw.
+    function commodityRouteFromArrivals(record,buyer,seller) {
+        if(getTradeRouteBetween(buyer,seller)||[buyer,seller].some(town=>townKnowledgeLevel(town,'trade')<20||(town.influences?.trade || 0)<5)
+            ||getRelations(buyer,seller)<2||getRelations(seller,buyer)<2||!commodityPath(buyer,seller))return null;
+        const arrivals=commodityExchangeState().exchanges.filter(r=>r.status==='arrived'&&r.kind!=='seizure'&&r.delivered>0&&r.arrived<=planet.day&&planet.day-r.arrived<=90
+            &&[buyer.id,seller.id].includes(r.buyer)&&[buyer.id,seller.id].includes(r.seller));
+        if(arrivals.length<2)return null;
+        const route=createTradeRoute(buyer,seller);if(!route)return null;
+        route.origin={kind:'exchanges',day:planet.day,arrivals:arrivals.slice(-2).map(r=>({id:r.id,day:r.arrived,type:r.type,count:r.delivered,buyer:r.buyer,seller:r.seller}))};
+        const earlier=arrivals.filter(r=>r.id!==record.id);
+        route.caravans=earlier.length;route.totalGoods=earlier.reduce((sum,r)=>sum+r.delivered,0);
+        return route;
+    }
+    function openCommodityRoute(route) {
+        const towns=[route.town1,route.town2].map(id=>regGet('town',id)),known=towns.find(livingTownKnown);if(!known)return;
+        const items=[{text:'← Back to trade and neighbours',func:()=>openCommodityHistory(known)},
+            {text:'Carriers kept returning with useful supplies. A regular route grew from their journeys.'}];
+        for(const arrival of route.origin?.arrivals || []) {
+            const exchange=commodityExchangeState().exchanges.find(r=>r.id===arrival.id);
+            items.push({text:`Day ${arrival.day} · ${arrival.count} ${COMMODITIES[arrival.type].label} arrived`,...(exchange?{func:()=>openCommodityJourney(exchange)}:{})});
+        }
+        const path=towns.every(t=>t&&!t.end)&&commodityPath(...towns);
+        items.push({heading:true,text:'Today'},{text:!path?'The way between them is closed.':route.active?'Carriers can still use the route.':'The route has fallen quiet.'});
+        for(const town of towns)if(livingTownKnown(town))items.push({text:`Visit ${escapeLivingText(town.name)}`,func:()=>{closeExecutive();openRegBrowser(town,'town');}});
+        populateExecutive(items,'A regular route');markLivingStoryControls();openExecutive();
     }
     function openCommodityJourney(record) {
         const known=[record.buyer,record.seller].map(id=>regGet('town',id)).find(livingTownKnown);if(!known)return;
         const items=[{text:'← Back to trade and neighbours',func:()=>openCommodityHistory(known)}];
         for(const step of record.steps) items.push({text:`Day ${step.day} · ${escapeLivingText(exchangeStepText(record,step))}`});
+        const route=record.route&&planet.tradeRoutes?.find(r=>r.id===record.route);
+        if(route?.origin?.kind==='exchanges')items.push({text:'The route these journeys made',func:()=>openCommodityRoute(route)});
         const cause=record.cause&&commodityExchangeState().exchanges.find(r=>r.id===record.cause);
         if(cause&&[cause.buyer,cause.seller].some(id=>livingTownKnown(regGet('town',id))))items.push({text:'Before the fighting',func:()=>openCommodityJourney(cause)});
         const production=record.manufacture&&livingWorldState().materialWork.find(w=>w.id===record.manufacture.work);
@@ -19701,46 +19739,6 @@
     // Emergent Behaviors - Specializations drive new interactions
     // -------------------------------------------------------------------------
 
-    // Towns with valuable specializations become trade targets
-    modEvent("specializationTradeAttract", {
-        random: true,
-        weight: $c.UNCOMMON,
-        subject: {
-            reg: "town", random: true
-        },
-        target: {
-            reg: "town", random: true
-        },
-        value: (subject, target, args) => {
-            if (subject.id === target.id) return false;
-
-            // Target should have valuable specializations
-            const attractiveness = getTradeAttractiveness(target);
-            if (attractiveness < 3) return false;
-
-            // Subject should have trade capability
-            const subjectTrade = subject.influences.trade || 0;
-            if (subjectTrade < 2) return false;
-
-            // Not already great friends
-            const relation = subject.relations[target.id] || 0;
-            if (relation > 4) return false;
-
-            args.attractiveness = attractiveness;
-            args.targetSpecs = getTownSpecializations(target);
-            return true;
-        },
-        func: (subject, target, args) => {
-            // Improve relations through trade interest
-            happen("AddRelation", subject, target, { amount: 2 });
-            happen("Influence", null, subject, { trade: 0.5 });
-            happen("Influence", null, target, { trade: 0.5 });
-
-            const specNames = args.targetSpecs.slice(0, 2).map(s => s.name).join(" and ");
-            logMessage(`{{regname:town|${subject.id}}} sends merchants to {{regname:town|${target.id}}}, drawn by their {{b:${specNames}}}.`);
-        }
-    });
-
     // Towns with valuable specializations become raid targets
     modEvent("specializationRaidTarget", {
         random: true,
@@ -23876,7 +23874,7 @@
         const defence = farmToolDefence(defender) * defenderRations;
         const power = attackerSoldiers / Math.max(1, attackerSoldiers + defenderSoldiers + defence);
 
-        let chunkCount = (Math.floor((planet.unlocks?.military || 0) / 10) + 2) * power;
+        let chunkCount = (Math.floor(townKnowledgeLevel(attacker,'military') / 10) + 2) * power;
         chunkCount *= (0.6 + (participation || 0.6) * 0.6);
         chunkCount *= attackerRations;
         if (chunkCount < 1 && Math.random() < chunkCount) chunkCount = 1;
@@ -36533,118 +36531,6 @@
             // Small steady food bonus for coastal towns
             if (Math.random() < 0.2) {
                 happen("Influence", null, subject, { farm: 0.1, temp: true });
-            }
-        }
-    });
-
-    // ----------------------------------------
-    // CLIMATE-AWARE RESOURCE DISTRIBUTION
-    // ----------------------------------------
-
-    // Certain goods are only available in certain climates
-    // This affects trade value
-    modEvent("climateTradeGoods", {
-        random: true,
-        weight: $c.COMMON,
-        subject: { reg: "town", random: true },
-        check: (subject) => {
-            const routes = getTownRoutes(subject);
-            return routes.length > 0;
-        },
-        func: (subject) => {
-            const climate = getTownClimate(subject);
-            const routes = getTownRoutes(subject);
-
-            routes.forEach(route => {
-                const partner = getRoutePartner(route, subject);
-                if (!partner) return;
-
-                const partnerClimate = getTownClimate(partner);
-
-                // Different climates = more valuable trade
-                const tempDiff = Math.abs(climate.temp - partnerClimate.temp);
-                const moistDiff = Math.abs(climate.moisture - partnerClimate.moisture);
-                const climateDiff = tempDiff + moistDiff;
-
-                if (climateDiff > 0.3) {
-                    // Significant climate difference = exotic goods trade
-                    if (Math.random() < 0.1) {
-                        happen("Influence", null, subject, { trade: 0.3, happy: 0.1, temp: true });
-                        happen("Influence", null, partner, { trade: 0.3, happy: 0.1, temp: true });
-
-                        // Occasional flavor message
-                        if (Math.random() < 0.2) {
-                            const goods = climate.temp > partnerClimate.temp ?
-                                "spices and exotic fruits" : "furs and preserved meats";
-                            modLog(
-                                "trade",
-                                `Merchants bring ${goods} from {{regname:town|${subject.id}}} to {{regname:town|${partner.id}}}.`,
-                                null,
-                                { town: subject }
-                            );
-                        }
-                    }
-                }
-            });
-        }
-    });
-
-    // Resource advantages drive trade or conflict
-    modEvent("resourceDrivenTensions", {
-        random: true,
-        weight: $c.UNCOMMON,
-        subject: { reg: "town", random: true },
-        value: (subject, target, args) => {
-            if (!subject || subject.end) return false;
-            const tags = getTownResourceTags(subject);
-            if (tags.length === 0) return false;
-
-            const candidates = regFilter("town", t => {
-                if (!t || t.end || t.id === subject.id) return false;
-                const otherTags = getTownResourceTags(t);
-                if (otherTags.length === 0) return false;
-                const shared = tags.filter(tag => otherTags.includes(tag));
-                return shared.length < tags.length;
-            });
-            if (candidates.length === 0) return false;
-
-            args.target = choose(candidates);
-            args.tags = tags;
-            return true;
-        },
-        func: (subject, target, args) => {
-            const other = args.target;
-            if (!other) return;
-            const relation = getRelations(subject, other);
-            const tag = choose(args.tags);
-
-            if (relation > 2) {
-                // Trade synergy
-                const route = createTradeRoute(subject, other);
-                happen("Influence", null, subject, { trade: 0.3, temp: true });
-                happen("Influence", null, other, { trade: 0.3, temp: true });
-                if (Math.random() < 0.3) {
-                    modLog(
-                        "resource",
-                        `Resource exchanges deepen between {{regname:town|${subject.id}}} and {{regname:town|${other.id}}}.`,
-                        null,
-                        { town: subject }
-                    );
-                }
-                if (route && typeof recordBond === "function") {
-                    recordBond(subject, other, "resource_trade", 6);
-                }
-            } else if (relation < -5) {
-                // Competition fuels conflict
-                bumpWarPressure(subject, other, 2);
-                if (Math.random() < 0.25) {
-                    modLog(
-                        "resource",
-                        `Competition for scarce ${tag} resources strains {{regname:town|${subject.id}}} and {{regname:town|${other.id}}}.`,
-                        "warning",
-                        { town: subject }
-                    );
-                }
             }
         }
     });

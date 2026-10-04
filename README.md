@@ -1,16 +1,16 @@
 # paultendo’s GenTown overhaul
 
-Version **1.6.70**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
+Version **1.6.71**, tested against the live **GenTown 1.4 / gt5** engine on 4 October 2026.
 
 ## Install in GenTown
 
 Open [GenTown](https://r74n.com/gentown/), choose **Settings → Add mod**, and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.70/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.71/paultendo-mod.js
 ```
 
-Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.70)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
+Reload the page after adding the URL. The new installation replaces previous paultendo URLs automatically, including when an older startup script tries to restore its own URL. The Chronicle will show `paultendo-mod active (v1.6.71)` after you settle a town and advance a day. Export your existing save from **Saves** before changing mods.
 
 Use the versioned URL above. Raw GitHub URLs serve `text/plain` with `nosniff`, which browsers reject as scripts. GenTown also lowercases entered URLs, so the mixed-case GitHub Pages path `GenTown-Mods` fails. The CDN URL avoids both issues and pins the tested release. This fixes the installation problem reported in [upstream issue #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -59,11 +59,15 @@ Communities can now begin practices without a whisper. Actual repeated harvests 
 
 Grain, livestock, stone, timber and metal now share actual exchange journeys. Meals and unfinished work create demand. Communities may give, bargain, barter or refuse according to their means, values, faith and remembered help. Supplies and payment remain with carriers until arrival, including through blocked routes and reloads. Construction and craft reserve their materials, and stone and timber can substitute in native building work. Imported goods keep records of their actual use in meals, buildings and created instruments. Caravans no longer invent cargo or profit, market purchases no longer buy abstract luxury or tool bonuses, and public cashflow reports actual receipts and spending. Taxes and upkeep move divisible cash between public stores and native private wealth. Sustained hunger and refused supplies can deepen war pressure where rule, soldiers and beliefs permit it. This is a shared commodity foundation. The original basic milestones still use native shared knowledge. New advanced inquiries and their workshop requirements now develop locally. A full settlement-specific conversion of older mechanics remains work ahead.
 
+Two completed deliveries within ninety days can establish a regular route when both towns already have trading knowledge, trading activity and a good relationship. It grows from actual cargo and keeps the founding journeys in its history. The new route appears in Today with the towns’ coloured flags, and its story opens those journeys. A closed road or war can interrupt passage while the route’s history remains. Deliveries now apply the native mutual relationship gain once, fixing a duplicated gain that drove trust to its limit too quickly. Three older climate, terrain and specialization events that invented trade rewards or competition without moving goods have been removed. Actual shortages, work and exchanges already provide those reasons. The visit count and ninety-day window are initial pacing values.
+
 Clay, sand, charcoal, bricks, glass, coal and steel now connect discoveries to actual sources and workshop work. Better tools reveal small samples on owned wetland, desert or coal-bearing ground. Named workers can try new processes when techniques, materials and circumstances permit it. A trial can fail, and hunger, fighting or lost workers can delay it. Bricks replace stone in construction. Glass requires sand, fuel and stone, then feeds actual lens-making. A lens idea can create demand for missing glass, including imports and fuel production. Coal can replace workshop charcoal after controlled fire is known, sparing timber for other work. A waiting workshop can change fuel as supplies arrive. Once work starts, it keeps the recipe it paid for. Clay, sand and coal depletion now survive native save compression.
 
 A harvest that actually overflows the grain stores can give people a reason to fire clay vessels. Actual clay and fuel become vessels over five work days. A first firing can fail. Each vessel installed beside the stores holds eight extra grain from later harvests or deliveries. Food is never awarded by the discovery. The vessels can also come from a neighbour’s practiced workshop through the existing gift, trade or barter system. Materials and workshops links to the grain stores, their maker and the shipment that brought them. The storage quantities and timings are initial balance values.
 
 Repeated actual harvests can give farmers a reason to shape stone handtools. Two stone becomes two tools over four work days after Stonework is known. Actual metal and Metal Tools knowledge enable metal handtools over five work days. Steel and later shaping knowledge enable stronger handtools over six work days. Trials, shared material claims, neighbouring workshops and shipments use the same production and exchange systems. Installed tools help actual harvests and wear through use. Usable stone tools stay in service when steel becomes available. Their makers and journeys remain attached through reloads. Working stone edges that actually wear down can favour eligible research into more durable methods. A real metal sample and unmet fieldwork can favour metal shaping. These reasons neither award discoveries nor stop useful stone production while another technique is unavailable.
+
+A town’s territorial attacks now use its own advanced military knowledge. A distant artillery discovery no longer upgrades every army. Local trials still need soldiers, materials and working time, and incomplete work offers no extra reach. Earlier untracked shared knowledge remains usable. This keeps the existing abstract combat model, rather than adding manufactured artillery or ammunition.
 
 When attacked, farmers can also take up those same tools in defence. Working edges offer less strength than trained soldiers, and fighting damages them faster than fieldwork. Broken tools leave the farms without that help. Tool stores create no army or military discovery, and handtools supply no offensive boost. Strength, wear and harvest gains are initial balance values.
 
