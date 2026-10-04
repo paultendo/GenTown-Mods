@@ -13,11 +13,13 @@ function next(w,n=1){const choose=w.chooseEvent;w.chooseEvent=()=>null;try{for(l
 function batch(w){return w.planet._paultendoLife.materialWork.find(x=>x.type==='paper');}
 function finish(w,work){for(let i=0;i<30&&['waiting','working','storing'].includes(work.status);i++)next(w);assert.equal(work.status,'made',JSON.stringify(work));}
 
-test('missing records create a practical papermaking trial with real timber, a maker and five work days',async t=>{
- const {g,w,town}=await setup(t);next(w);const work=batch(w);assert.ok(work);assert.equal(work.status,'waiting');assert.equal(town._paultendoAccounts.phase,'materials');assert.equal(town.resources.paper,undefined);work.roll=.99;
- next(w);assert.equal(work.status,'working');assert.equal(town.resources.lumber,4);assert.equal(work.remaining,5);assert.ok(town._paultendoPeople.some(p=>p.id===work.person));assert.ok(work.steps.some(s=>s.text.includes('wood fibres')));
+test('wooden records motivate a lighter surface without replacing a paid board before its accounts are finished',async t=>{
+ const {g,w,town}=await setup(t);next(w);const work=batch(w);assert.ok(work);assert.equal(work.status,'waiting');assert.equal(town._paultendoAccounts.phase,'preparing');assert.equal(town._paultendoAccounts.medium,'lumber');assert.equal(town.resources.lumber,4);assert.equal(town.resources.paper,undefined);work.roll=.99;
+ next(w);assert.equal(work.status,'working');assert.equal(town.resources.lumber,3);assert.equal(work.remaining,5);assert.ok(town._paultendoPeople.some(p=>p.id===work.person));assert.ok(work.steps.some(s=>s.text.includes('wood fibres')));
  next(w,4);assert.equal(town.resources.paper,undefined);next(w);assert.equal(work.status,'made');assert.equal(town.resources.paper,4);assert.equal(town._paultendoMaterials.paper.technique.work,work.id);assert.equal(town._paultendoCommodityLots.paper[0].production.person,work.person);
- next(w);assert.equal(town._paultendoAccounts.medium,'paper');assert.equal(town.resources.paper,3);assert.equal(town._paultendoAccounts.inputs[0].production.work,work.id);assert.doesNotMatch(work.steps.map(s=>s.text).join(' '),/firing|opens the fire/);assert.deepEqual(g.errors,[]);
+ next(w);assert.equal(town._paultendoAccounts.medium,'lumber');assert.equal(town.resources.paper,4);
+ for(let i=0;i<12&&town._paultendoAccounts.medium!=='paper';i++)next(w);
+ assert.equal(town._paultendoAccounts.reports[0].medium,'lumber');assert.equal(town._paultendoAccounts.reports[0].form,'wooden tally boards');assert.equal(town._paultendoAccounts.medium,'paper');assert.equal(town.resources.paper,3);assert.equal(town._paultendoAccounts.inputs[0].production.work,work.id);assert.doesNotMatch(work.steps.map(s=>s.text).join(' '),/firing|opens the fire/);assert.deepEqual(g.errors,[]);
 });
 
 test('a papermaking trial cannot borrow Writing from a distant town',async t=>{
@@ -29,7 +31,7 @@ test('a papermaking trial cannot borrow Writing from a distant town',async t=>{
 test('a failed papermaking trial spends timber, produces no sheets and retains its outcome on reload',async t=>{
  const {g,w,town}=await setup(t);next(w);const work=batch(w);work.roll=0;next(w,2);
  const restored=await makeGame({save:plain(w.generateSave())});t.after(restored.close);const rw=restored.window;quiet(rw);const copy=batch(rw),rt=rw.regGet('town',town.id);assert.equal(copy.roll,0);assert.equal(copy.remaining,4);next(rw,4);
- assert.equal(copy.status,'failed');assert.equal(rt.resources.lumber,4);assert.equal(rt.resources.paper,undefined);assert.equal(rt._paultendoMaterials?.paper?.technique,undefined);assert.match(copy.steps.at(-1).text,/sheets tear apart/);assert.doesNotMatch(copy.steps.at(-1).text,/fire/);assert.deepEqual(g.errors,[]);assert.deepEqual(restored.errors,[]);
+ assert.equal(copy.status,'failed');assert.equal(rt.resources.lumber,3);assert.equal(rt.resources.paper,undefined);assert.equal(rt._paultendoMaterials?.paper?.technique,undefined);assert.equal(rt._paultendoAccounts.medium,'lumber');assert.match(copy.steps.at(-1).text,/sheets tear apart/);assert.doesNotMatch(copy.steps.at(-1).text,/fire/);assert.deepEqual(g.errors,[]);assert.deepEqual(restored.errors,[]);
 });
 
 test('new library inquiries need actual sheets and can create demand for paper before it is known',async t=>{

@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.81/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.82/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.81";
+    const MOD_VERSION = "1.6.82";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -5298,7 +5298,7 @@
         unlockRoads:[6,{rock:3}], unlockSailingShips:[10,{lumber:4}], unlockNavigation:[8,{lumber:1}],
         unlockSteamPower:[18,{metal:3,charcoal:2}], unlockRailways:[20,{metal:4,lumber:2}],
         unlockKilns:[6,{clay:2,charcoal:1}], unlockForges:[10,{brick:2,charcoal:2}],
-        unlockGunpowder:[12,{charcoal:2}], unlockEngines:[18,{metal:3,charcoal:3}],
+        unlockGunpowder:[12,{charcoal:2},{charcoal:'cleanCarbon'}], unlockEngines:[18,{metal:3,charcoal:3}],
         unlockSteel:[8,{metal:2,charcoal:2}], unlockArchitecture:[10,{brick:2,lumber:2}],
         unlockMachinery:[14,{metal:3,lumber:2}], unlockPrecisionEngineering:[18,{glass:1,steel:2}],
         unlockBanking:[6,{lumber:1}], unlockContracts:[6,{lumber:1}], unlockMarkets:[8,{lumber:2}],
@@ -6532,21 +6532,21 @@
     const COMMODITIES = {
         crop:{label:'grain',edible:true,role:'farmer'},
         livestock:{label:'livestock',edible:true,role:'farmer'},
-        rock:{label:'stone',role:'miner'},
-        lumber:{label:'timber',role:'lumberer'},
-        metal:{label:'metal',role:'miner'},
-        clay:{label:'clay',role:'miner',description:'Soft earth that holds a shape when wet. Heat can turn it into something harder.'},
-        paper:{label:'paper',role:'lumberer',description:'Wood fibres worked into thin sheets. Writers can carry more words than they could on a clay tablet. Accounts, libraries and printing use up the sheets.'},
-        charcoal:{label:'charcoal',role:'lumberer',description:'Timber burned with little air. A small, dark fuel for a hotter fire.'},
-        brick:{label:'bricks',role:'miner',description:'Clay shaped, dried and fired. The blocks can take the place of stone in a building.'},
+        rock:{label:'stone',role:'miner',form:'stone',properties:{markRetention:1,portability:0.5,loadBearing:2}},
+        lumber:{label:'timber',role:'lumberer',form:'timber',properties:{markRetention:1,portability:2,loadBearing:1,heat:1}},
+        metal:{label:'metal',role:'miner',form:'raw',properties:{}},
+        clay:{label:'clay',role:'miner',form:'softEarth',properties:{markRetention:1,portability:1},description:'Soft earth that holds a shape when wet. Heat can turn it into something harder.'},
+        paper:{label:'paper',role:'lumberer',form:'sheet',properties:{markRetention:1,portability:4,heat:0.5},description:'Wood fibres worked into thin sheets. Writers can carry more words than they could on a clay tablet. Accounts, libraries and printing use up the sheets.'},
+        charcoal:{label:'charcoal',role:'lumberer',form:'preparedFuel',properties:{heat:2,cleanCarbon:1},description:'Timber burned with little air. A small, dark fuel for a hotter fire.'},
+        brick:{label:'bricks',role:'miner',form:'masonry',properties:{markRetention:1,portability:0.5,loadBearing:2},description:'Clay shaped, dried and fired. The blocks can take the place of stone in a building.'},
         sand:{label:'sand',role:'miner',description:'Pale grains gathered from dry ground. The finest samples may change in a fierce enough fire.'},
         glass:{label:'glass',role:'miner',description:'A cooled melt of sand and minerals. It catches the light. A clear piece can be ground into a lens.'},
-        coal:{label:'coal',role:'miner',description:'Dark pieces dug from a seam in the ground. A workshop can use them as fuel, leaving its timber for other work.'},
+        coal:{label:'coal',role:'miner',form:'mineralFuel',properties:{heat:2},description:'Dark pieces dug from a seam in the ground. A workshop can use them as fuel, leaving its timber for other work.'},
         steel:{label:'steel',role:'miner',description:'Metal worked again in a hot fire. A careful maker can use it for a fork with a clearer note.'},
         pottery:{label:'clay vessels',role:'miner',description:'Clay shaped into vessels and fired hard. Set beside the grain stores, each can hold eight more grain.'},
-        stone_tools:{label:'stone handtools',role:'farmer',description:'Stone chipped into hand-sized edges. Farmers can work their fields with them. Repeated use wears the edges away.'},
-        metal_tools:{label:'metal handtools',role:'farmer',description:'Metal worked into small blades and fitted for fieldwork. Their edges serve longer than chipped stone, but still wear with use.'},
-        steel_tools:{label:'steel handtools',role:'farmer',description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'},
+        stone_tools:{label:'stone handtools',role:'farmer',form:'handtool',properties:{workingEdge:1,edgeLife:40,impact:1},description:'Stone chipped into hand-sized edges. Farmers can work their fields with them. Repeated use wears the edges away.'},
+        metal_tools:{label:'metal handtools',role:'farmer',form:'handtool',properties:{workingEdge:2,edgeLife:80,impact:2},description:'Metal worked into small blades and fitted for fieldwork. Their edges serve longer than chipped stone, but still wear with use.'},
+        steel_tools:{label:'steel handtools',role:'farmer',form:'handtool',properties:{workingEdge:3,edgeLife:120,impact:3},description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'},
         coastal_boat:{label:'coastal boats',singular:'coastal boat',role:'lumberer',description:'A timber hull for a crew and a small load. It can cross sheltered stretches of water and returns to its home port after the journey.'},
         sailing_vessel:{label:'sailing vessels',singular:'sailing vessel',role:'lumberer',description:'A larger timber hull with metal fittings. It can carry more cargo across wider water. Navigation learned here helps its crew venture farther.'},
         telescope:{label:'telescopes',role:'scholar',description:'Glass and metal fitted into a steady frame. A scholar can use one to chart the lights above the horizon.'},
@@ -6554,6 +6554,34 @@
         colony_vessel:{label:'passenger vessels',singular:'passenger vessel',role:'miner',description:'A sky vessel rebuilt with living quarters and cargo space for up to twelve settlers. Its cabins come from a real workshop.'},
         cargo_vessel:{label:'cargo vessels',singular:'cargo vessel',role:'miner',description:'A sky vessel rebuilt around a small hold. It carries goods to another world and brings payment home. Each journey needs fuel and leaves this vessel unavailable until it returns.'}
     };
+    // These relative properties and working times are game calibration. A raw
+    // material is not automatically a shaped tool, and a burnable surface is
+    // not automatically a fuel for a hot workshop. Methods describe what people
+    // know how to do with a form; preferences describe the familiar first try.
+    const MATERIAL_ACTIVITIES={
+        records:{property:'markRetention',minimum:1,defaults:['paper','clay','lumber','rock','brick'],methods:{
+            sheet:{name:'paper',preparation:0,encounter:true},softEarth:{name:'clay tablets',preparation:0},
+            timber:{name:'wooden tally boards',preparation:2,needs:{smith:10}},
+            stone:{name:'carved stone',preparation:4,needs:{smith:20}},masonry:{name:'carved bricks',preparation:4,needs:{smith:20}}
+        }},
+        construction:{property:'loadBearing',minimum:1,defaults:['brick','rock','lumber']},
+        workshopHeat:{property:'heat',minimum:2,defaults:['charcoal','coal'],methods:{preparedFuel:{},mineralFuel:{encounter:true,needs:{fire:40}}}},
+        cleanCarbon:{property:'cleanCarbon',minimum:1,defaults:['charcoal']},
+        fieldwork:{property:'workingEdge',minimum:1,forms:['handtool']}
+    };
+    function materialActivityFit(type,activity,town,{allowUnencountered=false}={}) {
+        const good=COMMODITIES[type],use=MATERIAL_ACTIVITIES[activity],value=good?.properties?.[use?.property] || 0;
+        if(!use||value<use.minimum||use.forms&&!use.forms.includes(good.form))return null;
+        const method=use.methods?.[good.form] || {};
+        if(use.methods&&!use.methods[good.form]||Object.entries(method.needs || {}).some(([key,level])=>townKnowledgeLevel(town,key)<level))return null;
+        if(method.encounter&&!allowUnencountered&&!town._paultendoMaterials?.[type]&&commodityStock(town,type)<=0)return null;
+        return {type,value,method,score:activity==='records'?(good.properties.portability || 0)/(1+(method.preparation || 0)):value};
+    }
+    function materialActivityCandidates(town,activity) {
+        const use=MATERIAL_ACTIVITIES[activity],preference=type=>{const i=use.defaults?.indexOf(type);return i>=0?i:Infinity;};
+        return Object.keys(COMMODITIES).map(type=>materialActivityFit(type,activity,town)).filter(Boolean)
+            .sort((a,b)=>preference(a.type)-preference(b.type)||b.score-a.score||a.type.localeCompare(b.type));
+    }
     // Recipe durations, sample sizes and first-trial risks are game calibration.
     // Knowledge is local. Global milestones open possibilities, never award stock.
     const MATERIAL_RECIPES = {
@@ -6633,7 +6661,10 @@
     }
     // Initial game calibration. Wear comes from actual harvest work, not days
     // spent waiting, and improved tools do not replace usable older tools.
-    const FARM_TOOLS={stone_tools:{uses:40,boost:0.2,defence:0.25,combatWear:4},metal_tools:{uses:80,boost:0.3,defence:0.4,combatWear:5},steel_tools:{uses:120,boost:0.35,defence:0.5,combatWear:6}};
+    const FARM_TOOLS=Object.fromEntries(Object.entries(COMMODITIES).filter(([,good])=>good.form==='handtool'&&good.properties?.workingEdge>0).map(([type,good])=>[type,{
+        uses:good.properties.edgeLife,boost:Math.min(0.35,(1+good.properties.workingEdge)/10),
+        defence:Math.min(0.5,(2+3*good.properties.impact)/20),combatWear:3+good.properties.impact
+    }]));
     function farmToolCount(town) {return (town._paultendoFarmTools?.sets || []).reduce((n,set)=>n+Math.min(set.count,Math.max(0,set.uses)),0);}
     function farmToolNeed(town) {
         if(!town||town.end||town.pop<=0||!(town.jobs?.farmer>0)||town.legal?.farm===false)return 0;
@@ -6642,9 +6673,9 @@
         return Math.max(0,town.jobs.farmer-farmToolCount(town));
     }
     function farmToolKind(town) {
-        if(town._paultendoMaterials?.steel_tools||town._paultendoMaterials?.steel&&townKnowledgeLevel(town,'smith')>=50)return 'steel_tools';
-        if(town._paultendoMaterials?.metal_tools||commodityStock(town,'metal')>0&&townKnowledgeLevel(town,'smith')>=40)return 'metal_tools';
-        return 'stone_tools';
+        const tools=materialActivityCandidates(town,'fieldwork');
+        return (tools.find(({type})=>town._paultendoMaterials?.[type]||commodityStock(town,type)>0||materialTechniqueAvailable(type,town)&&
+            (town._paultendoMaterials?.[MATERIAL_RECIPES[type].sample]||commodityStock(town,MATERIAL_RECIPES[type].sample)>0)) || tools.at(-1)).type;
     }
     function farmToolStep(town,text) {
         const store=town._paultendoFarmTools,steps=store.steps ||= [];
@@ -6654,7 +6685,7 @@
     function advanceFarmTools() {
         for(const town of regToArray('town')) {
             let need=farmToolNeed(town);if(!need||hasIssue(town,'war'))continue;
-            for(const type of ['steel_tools','metal_tools','stone_tools']) {
+            for(const {type} of materialActivityCandidates(town,'fieldwork')) {
                 const other=commodityWorkClaims(town).filter(c=>!['equipment','construction'].includes(c.kind)).reduce((n,c)=>n+(c.cost[type] || 0),0);
                 const count=Math.min(need,Math.max(0,commodityStock(town,type)-other));if(!count)continue;
                 const person=livingCommunityPerson(town,'farmer');if(!livingTeachingPersonAvailable(person,town))continue;
@@ -6981,14 +7012,21 @@
         return workshopFuelCost(town,{...MATERIAL_RECIPES[type].cost},work);
     }
     function workshopFuelCost(town,cost,work) {
-        if(!cost.charcoal||townKnowledgeLevel(town,'fire')<40||!town._paultendoMaterials?.coal)return cost;
+        if(!cost.charcoal)return cost;
+        const activity=INQUIRY_RECIPES[work?.event]?.[2]?.charcoal || 'workshopHeat';
+        const fuels=materialActivityCandidates(town,activity);
         const other=commodityWorkClaims(town).filter(c=>c.kind!=='construction'&&c.id!==work?.id);
         const spare=key=>Math.max(0,commodityStock(town,key)-other.reduce((sum,c)=>sum+(c.cost[key] || 0),0));
-        const charcoal=spare('charcoal'),coal=spare('coal');
+        const required=cost.charcoal,preferred=fuels.find(f=>f.type==='charcoal');
+        if(!preferred||spare(preferred.type)>=required)return cost;
+        const inputs=MATERIAL_RECIPES[preferred.type]?.cost || {};
+        const canMake=Object.entries(inputs).every(([type,count])=>spare(type)>=count*required/MATERIAL_RECIPES[preferred.type].output);
+        const alternative=fuels.find(f=>f.type!==preferred.type&&(spare(f.type)>=required||spare(f.type)>spare(preferred.type)||!canMake));
         // A known alternative can meet a shortage, but it does not erase fuel
-        // reserved for someone else's work or create a demand just from a milestone.
-        if(charcoal<cost.charcoal&&(coal>=cost.charcoal||coal>charcoal||spare('lumber')<cost.charcoal*2)) {
-            cost.coal=cost.charcoal;delete cost.charcoal;
+        // reserved for someone else's work. An ingredient requires its own
+        // capability: heat alone does not make another fuel interchangeable.
+        if(alternative) {
+            cost[alternative.type]=(cost[alternative.type] || 0)+required;delete cost.charcoal;
         }
         return cost;
     }
@@ -7016,7 +7054,7 @@
         let promised=commodityWorkClaims(town).filter(c=>['accounts','voyage','inquiry','craft','storage','equipment','sky','flight','charter','courier'].includes(c.kind)).reduce((sum,c)=>sum+(c.cost[type] || 0),0);
         // Actual recordkeeping can give a town a reason to try a lighter
         // writing surface before it has learned to make one successfully.
-        if(type==='paper'&&townAccountsWritingNeed(town))promised=Math.max(promised,1);
+        if(townAccountsMaterialImprovement(town,type))promised=Math.max(promised,1);
         if(type==='brick')return Math.ceil(materialConstructionNeed(town)/2)+Math.max(0,promised-commodityStock(town,type));
         return Math.max(0,promised-commodityStock(town,type));
     }
@@ -7300,9 +7338,8 @@
         const flow=foodFlow(town),runway=available/Math.max(1,flow.consumption);
         return Math.max(0.1,flow.consumption/Math.max(1,available)+demand/Math.max(1,available)+travelDays/Math.max(1,runway));
     }
-    function commodityWorkClaims(town,excludeExchange) {
+    function commodityWorkClaims(town,excludeExchange,{skipAccounts=false}={}) {
         const claims=[];
-        if(townAccountsWritingNeed(town))claims.push({kind:'accounts',id:`accounts:${town.id}`,cost:{[townAccountsMedium(town)]:1}});
         const storage=grainStorageNeed(town);if(storage)claims.push({kind:'storage',id:`storage:${town.id}`,cost:{pottery:storage}});
         const tools=farmToolNeed(town);if(tools)claims.push({kind:'equipment',id:`tools:${town.id}`,cost:{[farmToolKind(town)]:tools}});
         if(skyInstrumentWanted(town))claims.push({kind:'sky',id:`sky:${town.id}`,cost:{telescope:1}});
@@ -7327,13 +7364,17 @@
             // its inputs while waiting and pays for them when work begins.
             if(work&&['made','storing'].includes(work.status))claims.push({kind:'order',id:request.id,cost:{[request.type]:Math.min(request.manufacture.count,work.output-(work.cargo || 0))}});
         }
+        if(!skipAccounts&&townAccountsWritingNeed(town)) {
+            const plan=townAccountsMaterialPlan(town,claims);
+            if(plan)claims.push({kind:'accounts',id:`accounts:${town.id}`,cost:{[plan.type]:1}});
+        }
         return claims;
     }
-    const BUILDING_MATERIALS = {rock:2,lumber:1,brick:2};
-    function commodityCommittedStock(town,type,excludeExchange) {
+    const BUILDING_MATERIALS = Object.fromEntries(Object.entries(COMMODITIES).filter(([,good])=>good.properties?.loadBearing>0).map(([type,good])=>[type,good.properties.loadBearing]));
+    function commodityClaimedStock(town,type,claims) {
         const craft=Object.fromEntries(Object.keys(COMMODITIES).map(key=>[key,0]));
         let construction=0;
-        for(const claim of commodityWorkClaims(town,excludeExchange)) {
+        for(const claim of claims) {
             if(claim.kind==='construction')construction+=claim.cost;
             else for(const [key,count] of Object.entries(claim.cost))craft[key]=(craft[key] || 0)+count;
         }
@@ -7342,6 +7383,9 @@
             return (craft[type] || 0)+Math.ceil(Math.max(0,construction-alternatives)/BUILDING_MATERIALS[type]);
         }
         return craft[type] || 0;
+    }
+    function commodityCommittedStock(town,type,excludeExchange) {
+        return commodityClaimedStock(town,type,commodityWorkClaims(town,excludeExchange));
     }
     function commodityWorkDemand(town) {
         return Object.fromEntries(Object.keys(COMMODITIES).filter(type=>!COMMODITIES[type].edible&&(type!=='brick'||town._paultendoMaterials?.brick)).map(type=>[type,Math.max(0,commodityCommittedStock(town,type)-commodityStock(town,type))]).filter(([,need])=>need>0));
@@ -7357,7 +7401,7 @@
     function commodityUnitValue(town,type,available,demand,path) {
         if(COMMODITIES[type]?.edible)return foodCommodityValue(town,available,demand,commodityTravelDays(path));
         const claims=commodityCommittedStock(town,type);
-        const productivity=type==='rock'&&commodityWorkClaims(town).some(c=>c.kind==='construction')?2:1;
+        const productivity=BUILDING_MATERIALS[type]&&commodityWorkClaims(town).some(c=>c.kind==='construction')?BUILDING_MATERIALS[type]:1;
         return Math.max(0.1,(claims+demand)*productivity/Math.max(1,available)+commodityTravelDays(path)/Math.max(1,available));
     }
     function addCommodityLot(town,type,count,record,from,cargoLots) {
@@ -9175,13 +9219,15 @@
                 const stocks=constructionStocks(town);
                 if(!Object.values(stocks).some(n=>n>0)) {constructionStep(subject,'supplies','The builders are waiting for stone, timber or bricks.');return;}
                 const budget=Math.min(subject.cost,randRange(1,Math.max(1,Math.ceil(subject.total*0.5))));
-                const brick=Math.min(stocks.brick,Math.ceil(budget/2));
-                const rock=Math.min(stocks.rock,Math.ceil(Math.max(0,budget-brick*2)/2));
-                const lumber=Math.min(stocks.lumber,Math.max(0,budget-brick*2-rock*2));
-                const progress=brick*2+rock*2+lumber, work=constructionHistory(subject);
+                const supplies={};let progress=0;
+                for(const {type,value} of materialActivityCandidates(town,'construction')) {
+                    const count=Math.min(stocks[type],Math.ceil(Math.max(0,budget-progress)/value));
+                    if(count){supplies[type]=count;progress+=count*value;}
+                }
+                const work=constructionHistory(subject);
                 if(!progress) {constructionStep(subject,'supplies','The builders are waiting for stone, timber or bricks.');return;}
                 constructionStep(subject,'working',Object.values(work.inputs).some(n=>n>0)?'The builders get back to work.':'The builders set to work.');
-                for(const [type,count] of Object.entries({brick,rock,lumber})) {
+                for(const [type,count] of Object.entries(supplies)) {
                     if(!count)continue;
                     const before=commodityStock(town,type);happen('RemoveResource',null,town,{type,count});
                     work.inputs[type]=(work.inputs[type] || 0)+before-commodityStock(town,type);
@@ -15394,7 +15440,7 @@
 
     function constructionStocks(town) {
         const other=commodityWorkClaims(town).filter(c=>c.kind!=='construction');
-        return Object.fromEntries(['rock','lumber','brick'].map(type=>[type,Math.max(0,commodityStock(town,type)-other.reduce((n,c)=>n+(c.cost[type] || 0),0))]));
+        return Object.fromEntries(materialActivityCandidates(town,'construction').map(({type})=>[type,Math.max(0,commodityStock(town,type)-other.reduce((n,c)=>n+(c.cost[type] || 0),0))]));
     }
 
     function constructionHistory(process) {
@@ -18892,8 +18938,20 @@
     function townAccountsWritingNeed(town) {
         return townAccountsWanted(town)&&!town._paultendoAccounts?.paid&&mealStock(town)>=nativeMealNeed(town)&&!!townAccountsRole(town)?1:0;
     }
-    function townAccountsMedium(town) {
-        return town._paultendoMaterials?.paper||commodityStock(town,'paper')>0?'paper':'clay';
+    function townAccountsMaterialPlan(town,claims=commodityWorkClaims(town,undefined,{skipAccounts:true})) {
+        const candidates=materialActivityCandidates(town,'records');
+        return candidates.find(({type})=>commodityStock(town,type)-commodityClaimedStock(town,type,claims)>=1) || candidates[0];
+    }
+    function townAccountsMaterialImprovement(town,type) {
+        if(!townAccountsWanted(town)||!townAccountsRole(town)||mealStock(town)<nativeMealNeed(town)||!MATERIAL_RECIPES[type])return false;
+        const candidate=materialActivityFit(type,'records',town,{allowUnencountered:true});
+        if(!candidate||!materialTechniqueAvailable(type,town))return false;
+        const book=town._paultendoAccounts;
+        const current=book?.paid?materialActivityFit(book.medium,'records',town):townAccountsMaterialPlan(town);
+        // A lighter surface can be worth trying while the old books are still
+        // in use. This is a need for the next record, never a free replacement
+        // for the material already paid for or the accounts already written.
+        return !!current&&candidate.score>current.score;
     }
     function townAccountsPublication(town) {
         const values=town.values || {},government=town.gov || town.governmentType || 'tribal';
@@ -18938,20 +18996,28 @@
         // rather than to supply a voice for an article. This is an evening
         // routine and cannot use someone away on a journey or ongoing work.
         if(!book.paid) {
-            const preferred=townAccountsMedium(town),claims=commodityWorkClaims(town).filter(c=>c.kind!=='accounts');
-            const spare=type=>commodityStock(town,type)-claims.reduce((n,c)=>n+(c.cost?.[type] || 0),0);
-            const medium=spare(preferred)>=1?preferred:preferred==='paper'&&spare('clay')>=1?'clay':null;
-            if(!medium){book.phase='materials';book.wanted=preferred;return;}
+            const claims=commodityWorkClaims(town,undefined,{skipAccounts:true}),plan=townAccountsMaterialPlan(town,claims);
+            if(!plan||commodityStock(town,plan.type)-commodityClaimedStock(town,plan.type,claims)<1){book.phase='materials';return;}
+            const medium=plan.type;
             book.inputs=[];book.work=`accounts-work:${livingWorldState().nextId++}`;
             const before=commodityStock(town,medium);
             withCommodityUse({kind:'accounts',id:book.work,name:'town accounts',inputs:book.inputs},()=>happen('RemoveResource',null,town,{type:medium,count:1}));
             if(before-commodityStock(town,medium)!==1){book.phase='materials';return;}
-            book.paid=true;book.medium=medium;
+            book.paid=true;book.medium=medium;book.form=plan.method.name;book.preparation=plan.method.preparation || 0;
+            book.preparing=book.preparation;delete book.preparationStarted;
+            if(book.preparing>0){book.entries=[];book.opening=null;}
             for(const input of book.inputs)rememberCommodityUse(town,input,{kind:'accounts',id:book.work,name:'town accounts'});
         }
         const person=livingCommunityPerson(town,role);
         const keeper={person:person.id,name:person.name,role,label:livingPersonLabel(person)};
         book.keeper=keeper;
+        if(book.preparing>0) {
+            // The first evening pays and begins the work. Only actual evenings
+            // with a fed, free clerk count, including after a reload or pause.
+            if(book.preparationStarted===undefined)book.preparationStarted=planet.day;
+            else book.preparing--;
+            if(book.preparing>0){book.phase='preparing';return;}
+        }
         // Private records may be released after a change of rule or values.
         // Their period and amounts stay unchanged, and issue dates remain real.
         const flow=town._paultendoCashFlow?.day===planet.day?town._paultendoCashFlow:{received:0,spent:0,kinds:{}};
@@ -18973,10 +19039,10 @@
         }
         const report={id:`accounts:${livingWorldState().nextId++}`,town:town.id,townName:town.name,from:book.opening.day+1,until:planet.day,
             opening:book.opening.cash,closing:cash,received:book.entries.reduce((n,e)=>n+e.received,0),spent:book.entries.reduce((n,e)=>n+e.spent,0),kinds,
-            keepers:[...new Map(book.entries.map(e=>[e.keeper.person,e.keeper])).values()],medium:book.medium,inputs:structuredClone(book.inputs),published:null,publication:townAccountsPublication(town)};
+            keepers:[...new Map(book.entries.map(e=>[e.keeper.person,e.keeper])).values()],medium:book.medium,form:book.form,preparation:book.preparation || 0,inputs:structuredClone(book.inputs),published:null,publication:townAccountsPublication(town)};
         book.reports.push(report);if(book.reports.length>TOWN_ACCOUNTS_PACE.history)book.reports.shift();
         publishTownAccounts(town,report);
-        book.entries=[];book.opening={day:planet.day,cash};book.paid=false;book.phase=report.published==null?'withheld':'ready';
+        book.entries=[];book.opening={day:planet.day,cash};book.paid=false;delete book.preparationStarted;book.phase=report.published==null?'withheld':'ready';
     }
     function openTownAccountsReport(report) {
         const town=regGet('town',report.town);
@@ -18989,13 +19055,13 @@
         const names={tax:'Taxes',trade:'Trade',upkeep:'Upkeep',wages:'Wages',loan:'Loans',other:'Other entries'};
         for(const [kind,totals] of Object.entries(report.kinds))if(totals.received||totals.spent)
             items.push({text:`${escapeLivingText(names[kind] || 'Other entries')}: ${amount(totals.received)} received, ${amount(totals.spent)} paid.`});
-        items.push({text:`Written on ${report.medium==='paper'?'paper':'clay tablets'}. Kept by ${escapeLivingText(commaList(report.keepers.map(p=>`${p.name}, ${p.label.toLowerCase()}`)))}.`});
+        items.push({text:`Written on ${escapeLivingText(report.form || MATERIAL_ACTIVITIES.records.methods[COMMODITIES[report.medium]?.form]?.name || 'clay tablets')}. Kept by ${escapeLivingText(commaList(report.keepers.map(p=>`${p.name}, ${p.label.toLowerCase()}`)))}.`});
         for(const input of report.inputs || []) {
             const exchange=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);
             if(exchange)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(exchange)});
             if(input.production?.world===skyWorldId()&&input.production.passage===travelerState().passage) {
                 const work=livingWorldState().materialWork.find(w=>w.id===input.production.work);
-                if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'The workshop that made the paper',func:()=>openMaterialWork(work)});
+                if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:'Visit the maker’s workshop',func:()=>openMaterialWork(work)});
             }
         }
         for(const keeper of report.keepers){const person=findLivingPerson(town,keeper.person);if(person&&livingPersonAvailable(person,town))items.push({text:`Meet ${escapeLivingText(person.name)}`,func:()=>openLivingPerson(town,person)});}
@@ -19004,7 +19070,7 @@
     function openTownAccounts(town) {
         if(!livingTownKnown(town)||!town._paultendoAccounts)return;
         const book=town._paultendoAccounts,items=[{text:'← Back to settlement',func:()=>{closeExecutive();openRegBrowser(town,'town');}}];
-        const descriptions={materials:`The clerk needs ${book.wanted==='paper'?'paper or clay':'clay'} for the next set of records.`,hands:'Nobody is free to keep the books.',food:'Short meals have interrupted the books.',gap:'There are missing entries. The clerk has begun a fresh account.',writing:'The next accounts are being written.',withheld:'The rulers kept the latest accounts to themselves.',ready:'The latest accounts have been issued.'};
+        const descriptions={materials:'The clerk is waiting for a surface to write on.',preparing:`The clerk is preparing ${escapeLivingText(book.form || 'a writing surface')}.`,hands:'Nobody is free to keep the books.',food:'Short meals have interrupted the books.',gap:'There are missing entries. The clerk has begun a fresh account.',writing:'The next accounts are being written.',withheld:'The rulers kept the latest accounts to themselves.',ready:'The latest accounts have been issued.'};
         items.push({text:descriptions[book.phase] || 'The books are being kept.'});
         const reports=book.reports.filter(r=>r.published!=null&&r.published<=planet.day).slice().reverse();
         for(const report of reports)items.push({text:`Days ${report.from}–${report.until} · Issued on Day ${report.published}`,func:()=>openTownAccountsReport(report)});
