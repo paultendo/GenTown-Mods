@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.86/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.87/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.86";
+    const MOD_VERSION = "1.6.87";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -6568,7 +6568,7 @@
             if((prior.lastObserved ?? prior.day)!==planet.day){prior.lastObserved=planet.day;prior.observedDays=(prior.observedDays || 1)+1;}
             return prior;
         }
-        const discovery=EXTENDED_DISCOVERIES.find(d=>subject.needs?.[d.key]===d.level&&!localDiscoveryKnown(town,d));
+        const discovery=!observation.explanationOnly&&EXTENDED_DISCOVERIES.find(d=>subject.needs?.[d.key]===d.level&&!localDiscoveryKnown(town,d));
         const clue={id:`clue:${state.nextId++}`,town:town.id,person:person.id,name:person.name,day:planet.day,lastObserved:planet.day,observedDays:1,due:planet.day+LIVING_PACE.reply,attempts:{},status:'remembered',
             observation:{...structuredClone(observation),subject:structuredClone(subject),title:observation.title || titleCase(subject.label),event:discovery?.event,day:planet.day}};
         state.clues.push(clue);
@@ -6579,6 +6579,7 @@
         const mind=livingPersonMind(person),faith=person.role==='priest'&&(getTownReligion(town)||(town.influences.faith || 0)>0);
         if(mind.outlook==='curious'||faith)return true;
         const effect=clue.observation?.effect;
+        if(effect?.harm&&effect.need)return ['generous','guarded'].includes(mind.outlook)||mind.outlook==='steadfast'&&(clue.observedDays || 1)>=3;
         if(!effect?.benefit)return false;
         return mind.outlook==='generous'&&effect.need
             ||mind.outlook==='steadfast'&&(clue.observedDays || 1)>=3
@@ -6586,13 +6587,17 @@
     }
     function observedInterpretation(observation,person,meaning,prepared) {
         const label=observedSubject(observation)?.label || 'what they saw';
-        if(meaning==='belief')return `${person.name} takes what they saw as a sign of favour.`;
+        if(meaning==='belief')return observation.effect?.harm?`${person.name} takes what happened as a warning.`:`${person.name} takes what they saw as a sign of favour.`;
         if(meaning==='song')return `${person.name} puts what they saw into a song.`;
+        if(observation.effect?.harm)return `${person.name} wants to understand why the ${label} failed.${prepared?' They want to find a safer way to keep the grain.':' They still cannot explain what went wrong.'}`;
         return `${person.name} wants to understand ${label}.${prepared?' They think they could try the work here.':' They still cannot explain how it works.'}`;
     }
     function advanceClueIntrigue() {
         const state=livingWorldState();
-        for(const clue of state.clues) {
+        // A witnessed failure with an unmet need gets the next free study slot.
+        // Work already underway still holds its worker until it finishes.
+        const urgent=clue=>Number(!!(clue.observation?.effect?.harm&&clue.observation.effect.need));
+        for(const clue of [...state.clues].sort((a,b)=>urgent(b)-urgent(a))) {
             if(clue.due>planet.day||clue.inquiry&&!clue.study||clue.study?.lastDay===planet.day||['finished','left'].includes(clue.study?.status))continue;
             const town=regGet('town',clue.town),person=town&&workingLivingPerson(town,clue.person),mark=state.surfaceMarks.find(m=>m.id===clue.mark),source=mark?.source || clue.observation;
             if(!livingTeachingPersonAvailable(person,town)||!source){if(clue.study)clue.study.status='left';continue;}
@@ -6862,7 +6867,7 @@
             const interpretation=record.cause?.type==='clue'&&record.cause.meaning;
             const meaning=['belief','song','drills'].includes(interpretation)?interpretation:person.role==='soldier'?'drills':person.role==='priest'?'belief':person.role==='musician'?'song':'learning';
             const observation=record.cause?.observation;
-            const words=record.cause?.type==='clue'?{drills:'Look for lessons in the unfamiliar.',belief:observation?'Give thanks for the things we cannot explain.':'Someone left these signs for us.',song:observation?'Remember what we saw in a song.':'Remember the shapes in a song.',learning:'Try to understand the things no one can explain.'}[meaning]:{drills:'Teach people what the veterans know.',belief:'Pass on your beliefs.',song:'Put what you know into a song.',learning:'Teach your neighbours what you know.'}[meaning];
+            const words=record.cause?.type==='clue'?{drills:'Look for lessons in the unfamiliar.',belief:observation?.effect?.harm?'What happened should be a warning to us.':observation?'Give thanks for the things we cannot explain.':'Someone left these signs for us.',song:observation?.effect?.harm?'Remember what we lost in a song.':observation?'Remember what we saw in a song.':'Remember the shapes in a song.',learning:'Try to understand the things no one can explain.'}[meaning]:{drills:'Teach people what the veterans know.',belief:'Pass on your beliefs.',song:'Put what you know into a song.',learning:'Teach your neighbours what you know.'}[meaning];
             return {topic:'learn',meaning,words};
         }
         if(record.topic==='care') {
@@ -6912,7 +6917,8 @@
         const current=state.teachings.find(t=>t.town===town.id&&t.active&&livingTeachingSlot(t)===livingTeachingSlot(voice));
         // Established practices resist replacement. A new pressure can challenge
         // them later, but the same daily work cannot continually renew a bonus.
-        if(current&&(current.meaning===voice.meaning||planet.day-current.adoptedDay<30)) return;
+        const warning=cause.type==='clue'&&cause.observation?.effect?.harm&&current?.words!==voice.words;
+        if(current&&!warning&&(current.meaning===voice.meaning||planet.day-current.adoptedDay<30)) return;
         record.words=voice.words;
         if(topic==='learn'&&townKnowledgeLevel(town,'education')<10) return;
         const action=actOnLivingWhisper(town,person,record);
@@ -6977,9 +6983,9 @@
         glass:{label:'glass',role:'miner',description:'A cooled melt of sand and minerals. It catches the light. A clear piece can be ground into a lens.'},
         coal:{label:'coal',role:'miner',form:'mineralFuel',properties:{heat:2},description:'Dark pieces dug from a seam in the ground. A workshop can use them as fuel, leaving its timber for other work.'},
         steel:{label:'steel',role:'miner',description:'Metal worked again in a hot fire. A careful maker can use it for a fork with a clearer note.'},
-        pottery:{label:'clay vessels',singular:'clay vessel',role:'miner',form:'container',properties:{grainCapacity:8},description:'Clay shaped into vessels and fired hard. Set beside the grain stores, each can hold eight more grain.'},
-        timber_bins:{label:'wooden grain bins',singular:'wooden grain bin',role:'lumberer',form:'container',properties:{grainCapacity:12},description:'Joined timber with a fitted lid. A bin keeps loose grain together and gives the stores room for twelve more grain.'},
-        glass_vessels:{label:'glass vessels',singular:'glass vessel',role:'miner',form:'container',properties:{grainCapacity:6},description:'Glass shaped around a hollow centre. Each vessel can hold six grain. A clear wall lets its contents be seen.'},
+        pottery:{label:'clay vessels',singular:'clay vessel',role:'miner',form:'container',properties:{grainCapacity:8,fireLoss:0,shockLoss:0.5},description:'Clay shaped into vessels and fired hard. Set beside the grain stores, each can hold eight more grain. They do not burn, but shaking can crack them.'},
+        timber_bins:{label:'wooden grain bins',singular:'wooden grain bin',role:'lumberer',form:'container',properties:{grainCapacity:12,fireLoss:1,shockLoss:0.25},description:'Joined timber with a fitted lid. A bin keeps loose grain together and gives the stores room for twelve more grain. The wood can burn.'},
+        glass_vessels:{label:'glass vessels',singular:'glass vessel',role:'miner',form:'container',properties:{grainCapacity:6,fireLoss:0,shockLoss:1},description:'Glass shaped around a hollow centre. Each vessel can hold six grain. A clear wall lets its contents be seen, but can shatter under a shock.'},
         stone_tools:{label:'stone handtools',role:'farmer',form:'handtool',properties:{workingEdge:1,edgeLife:40,impact:1},description:'Stone chipped into hand-sized edges. Farmers can work their fields with them. Repeated use wears the edges away.'},
         metal_tools:{label:'metal handtools',role:'farmer',form:'handtool',properties:{workingEdge:2,edgeLife:80,impact:2},description:'Metal worked into small blades and fitted for fieldwork. Their edges serve longer than chipped stone, but still wear with use.'},
         steel_tools:{label:'steel handtools',role:'farmer',form:'handtool',properties:{workingEdge:3,edgeLife:120,impact:3},description:'Steel shaped into small working blades. Farmers can use them longer than chipped stone, leaving stone useful where steel is scarce.'},
@@ -7045,8 +7051,58 @@
     // Capacity is a property of a finished form, not a bonus on receiving a
     // raw material. The installed capacity stays with its actual paid fixture.
     const GRAIN_STORAGE = {memoryDays:30};
+    // Relative exposure and loss rates are game calibration. Grain is a native
+    // town-wide stock, so the current town centre represents its storage site.
+    // Other stock, buildings and loose containers are not modelled here yet.
+    const STORAGE_HAZARDS={wildfire:{property:'fireLoss',exposure:1,verb:'burns',past:'burned'},earthquake:{property:'shockLoss',exposure:1,verb:'breaks',past:'broken'},hurricane:{property:'shockLoss',exposure:0.25,verb:'breaks',past:'broken'}};
     function grainFixtureType(vessel) {return vessel.type || 'pottery';}
     function grainFixtureCapacity(vessel) {return vessel.count*(vessel.capacity ?? COMMODITIES[grainFixtureType(vessel)]?.properties?.grainCapacity ?? 0);}
+    function grainStorageRisk(town,type) {
+        const evidence=(town._paultendoGrainStore?.hazards || []).filter(h=>h.person&&planet.day-h.day<=GRAIN_STORAGE.memoryDays);
+        if(!evidence.length)return 0;
+        const seen=evidence.flatMap(h=>h.fixtures).filter(v=>v.type===type),tested=seen.reduce((n,v)=>n+v.before,0);
+        return tested?seen.reduce((n,v)=>n+v.lost,0)/tested:0.5;
+    }
+    function damageGrainStores(disaster,sites,chunks) {
+        const hazard=STORAGE_HAZARDS[disaster.subtype];if(!hazard||!Array.isArray(chunks))return;
+        const footprint=new Set(chunks.map(c=>c.join(',')));
+        for(const {town,site,baseCapacity} of sites) {
+            if(!footprint.has(site))continue;
+            const store=town._paultendoGrainStore,grain=commodityStock(town,'crop'),fixtures=[];
+            let lower=baseCapacity,lostGrain=0;
+            for(const vessel of store.vessels) {
+                if(!(vessel.count>0))continue;
+                const type=grainFixtureType(vessel),capacity=vessel.capacity ?? COMMODITIES[type]?.properties?.grainCapacity ?? 0,before=vessel.count;
+                const rate=COMMODITIES[type]?.properties?.[hazard.property] || 0;
+                const wear=vessel.damage ||= {};
+                const strain=(wear[hazard.property] || 0)+before*rate*hazard.exposure;
+                const lost=Math.min(before,Math.floor(strain+1e-9));wear[hazard.property]=Math.max(0,strain-lost);
+                const spilled=Math.max(0,Math.min(grain,lower+before*capacity)-(lower+(before-lost)*capacity));
+                fixtures.push({id:vessel.id,type,before,lost,grain:spilled,inputs:structuredClone(vessel.inputs || [])});
+                lower+=before*capacity;vessel.count-=lost;lostGrain+=spilled;
+            }
+            if(!fixtures.some(v=>v.lost>0))continue;
+            const inputs=[];
+            if(lostGrain)withCommodityUse({kind:'disaster',id:disaster.id,name:disaster.subtype,inputs},()=>happen('RemoveResource',disaster,town,{type:'crop',count:lostGrain}));
+            const actualLoss=grain-commodityStock(town,'crop');
+            for(const input of inputs)rememberCommodityUse(town,input,{kind:'disaster',id:disaster.id,name:disaster.subtype});
+            const person=fixtures.map(v=>workingLivingPerson(town,store.vessels.find(f=>f.id===v.id).person)).find(p=>livingTeachingPersonAvailable(p,town));
+            const record={day:planet.day,disaster:disaster.id,subtype:disaster.subtype,site,property:hazard.property,fixtures,grain:actualLoss,...(person?{person:person.id,name:person.name}:{})};
+            const history=store.hazards ||= [];history.push(record);if(history.length>12)history.shift();
+            const old=store.pressure;
+            if(actualLoss>0||old&&planet.day-old.day<=GRAIN_STORAGE.memoryDays)store.pressure={day:planet.day,target:Math.max(grain,old&&planet.day-old.day<=GRAIN_STORAGE.memoryDays?old.target:0)};
+            const broken=fixtures.filter(v=>v.lost).map(v=>`${v.lost} ${v.lost===1?COMMODITIES[v.type].singular:COMMODITIES[v.type].label}`);
+            grainStorageStep(town,`The ${disaster.subtype} ${hazard.verb} ${commaList(broken)} at the grain stores.${actualLoss?` ${actualLoss} grain is lost.`:' No grain was held in the lost containers.'}`,true);
+            if(person)for(const fixture of fixtures.filter(v=>v.lost)) {
+                const good=COMMODITIES[fixture.type];
+                rememberObservedEffect(town,person,{kind:'storageDamage',type:fixture.type,disaster:disaster.id,explanationOnly:true,reported:true,
+                    subject:{kind:'hazard',key:`${hazard.property}:${fixture.type}`,label:good.label,needs:MATERIAL_RECIPES[fixture.type]?.needs || {},effort:4},
+                    title:titleCase(`${hazard.past} ${good.label}`),effect:{harm:true,need:actualLoss>0||grainStorageShortfall(town)>0,property:hazard.property,activity:'storage',lost:fixture.lost,grain:fixture.grain},
+                    fixtures:structuredClone(fixtures),inputs:fixture.inputs,visit:{kind:'storage',id:town.id,label:'Visit the grain stores'},
+                    text:`${person.name} sees ${fixture.lost} ${fixture.lost===1?good.singular:good.label} ${hazard.past} in the ${disaster.subtype}.${fixture.grain?` ${fixture.grain} grain was lost with them.`:''}`});
+            }
+        }
+    }
     function commodityCapacity(town,type) {
         const extra=type==='crop'?(town._paultendoGrainStore?.vessels || []).reduce((n,v)=>n+grainFixtureCapacity(v),0):0;
         return $c.maxResource(town)+extra;
@@ -7065,7 +7121,7 @@
         const stocked=candidates.filter(fit=>spare(fit.type)>0);
         while(room&&stocked.length) {
             const amount=fit=>Math.min(Math.ceil(room/fit.value),spare(fit.type)),coverage=fit=>amount(fit)*fit.value;
-            stocked.sort((a,b)=>Number(coverage(b)>=room)-Number(coverage(a)>=room)
+            stocked.sort((a,b)=>grainStorageRisk(town,a.type)-grainStorageRisk(town,b.type)||Number(coverage(b)>=room)-Number(coverage(a)>=room)
                 ||(coverage(a)>=room?amount(a)-amount(b)||coverage(a)-coverage(b):coverage(b)-coverage(a)));
             const fit=stocked.shift(),count=amount(fit);
             cost[fit.type]=count;room=Math.max(0,room-count*fit.value);
@@ -7079,15 +7135,15 @@
                 const underway=pending&&(pending.purpose?.type || pending.type)===fit.type;
                 const tier=underway?0:supplied?1:known&&able?2:sampled?3:known?4:fit.type===MATERIAL_ACTIVITIES.grainStorage.defaults[0]?5:Infinity;
                 return {...fit,tier,effort:recipe?recipe.days/(recipe.output*fit.value):Infinity};
-            }).filter(fit=>Number.isFinite(fit.tier)).sort((a,b)=>a.tier-b.tier||a.effort-b.effort);
+            }).filter(fit=>Number.isFinite(fit.tier)).sort((a,b)=>a.tier-b.tier||grainStorageRisk(town,a.type)-grainStorageRisk(town,b.type)||a.effort-b.effort);
             const choice=plans[0];if(choice)cost[choice.type]=(cost[choice.type] || 0)+Math.ceil(room/choice.value);
         }
         return Object.keys(cost).length?{cost,room:grainStorageShortfall(town)}:null;
     }
-    function grainStorageStep(town,text) {
+    function grainStorageStep(town,text,highlight=false) {
         const store=town._paultendoGrainStore,steps=store.steps ||= [];
         steps.push({day:planet.day,text});if(steps.length>24)steps.shift();
-        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'storage',id:town.id}});
+        if(livingTownKnown(town))logMessage(`${highlight?`${townRef(town.id)}: `:''}${escapeLivingText(text)}`,highlight?'warning':null,{_paultendoStory:{kind:'storage',id:town.id},...(highlight?{_paultendoHighlight:true}:{})});
     }
     function observeGrainOverflow(town,before,count,after) {
         if(!Number.isFinite(count)||count<=0||before>commodityCapacity(town,'crop'))return;
@@ -7121,13 +7177,17 @@
         if(!livingTownKnown(town))return;
         const store=town._paultendoGrainStore,items=[{text:'← Back to materials',func:()=>openTownMaterials(town)}];
         items.push({heading:true,text:`${commodityStock(town,'crop')} grain · Room for ${commodityCapacity(town,'crop')}`});
-        const fixtures=store?.vessels || [],types=[...new Set(fixtures.map(grainFixtureType))];
+        const fixtures=store?.vessels || [],types=[...new Set(fixtures.filter(v=>v.count>0).map(grainFixtureType))];
         if(!fixtures.length)items.push({text:'The last harvest filled the stores. The town needs more room to keep its grain.'});
         for(const type of types) {
             const matching=fixtures.filter(v=>grainFixtureType(v)===type),count=matching.reduce((n,v)=>n+v.count,0),room=matching.reduce((n,v)=>n+grainFixtureCapacity(v),0),good=COMMODITIES[type];
             items.push({text:`${count} ${count===1?good.singular:good.label} · Room for ${room} more grain.`});
         }
         for(const step of store?.steps || [])items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
+        for(const loss of store?.hazards || []) {
+            const disaster=regGet('process',loss.disaster);
+            if(disaster)items.push({text:`Day ${loss.day} · The ${escapeLivingText(loss.subtype)}`,func:()=>{closeExecutive();openRegBrowser(disaster,'process');}});
+        }
         const plan=grainStoragePlan(town,commodityWorkClaims(town,null,{skipStorage:true}));if(plan)items.push({text:`The stores still need room for ${plan.room} grain. They are looking for ${commaList(Object.entries(plan.cost).map(([type,n])=>`${n} ${n===1?COMMODITIES[type].singular:COMMODITIES[type].label}`))}.`});
         for(const input of fixtures.flatMap(v=>v.inputs || [])) {
             const work=input.production&&getUniverse().currentWorldId===input.production.world&&travelerState().passage===input.production.passage&&livingWorldState().materialWork.find(w=>w.id===input.production.work);
@@ -7963,6 +8023,7 @@
     }
     function exchangeUseText(record,use) {
         const town=exchangeTownLabel(record,use.town),goods=COMMODITIES[use.type].label;
+        if(use.kind==='disaster')return `${goods[0].toUpperCase()+goods.slice(1)} from this shipment is lost in the ${use.name || 'disaster'}${use.known||record.known?.[use.town]||livingTownKnown(regGet('town',use.town))?` at ${town}`:''}.`;
         if(record.kind==='seizure') {
             if(!use.known&&!record.known?.[use.town]&&!livingTownKnown(regGet('town',use.town)))return `${town} puts the captured ${goods} to use.`;
             if(use.kind==='meals')return `Captured ${goods} feeds people in ${town}.`;
@@ -8775,7 +8836,7 @@
                 effects = {faith:0.6,education:0.15}; record.reshaped = true;
                 record.steps.push({day:planet.day,text:interpretation==='belief'?`${person.name} tells the town what they believe happened.`:`${person.name} heard a call to pass on the town’s beliefs. Lessons became sermons.`});
             } else if (person.role === 'musician') {
-                effects = {happy:0.5,education:0.2}; record.reshaped = true;
+                effects = record.cause?.observation?.effect?.harm?{education:0.2}:{happy:0.5,education:0.2}; record.reshaped = true;
                 record.steps.push({day:planet.day,text:`${person.name} put what they knew into song. The lessons travelled with the tune.`});
             } else {
                 effects = {education:0.6,trade:-0.1};
@@ -9708,6 +9769,23 @@
                 return result;
             };
             meal.func._paultendoCommunity=true;
+        }
+        const disaster=metaEvents?.processDisaster || gameEvents.processDisaster;
+        if(disaster?.func&&!disaster.func._paultendoStorage) {
+            const base=disaster.func;
+            disaster.func=function(subject) {
+                const active=subject?.type==='disaster'&&!subject.done&&!subject.end&&STORAGE_HAZARDS[subject.subtype]&&subject._paultendoStorageDay!==planet.day;
+                const sites=active?regToArray('town').filter(t=>!t.end&&t.pop>0&&t._paultendoGrainStore?.vessels?.some(v=>v.count>0)&&Array.isArray(t.center)&&chunkAt(...t.center)?.v.s===t.id)
+                    .map(town=>({town,site:town.center.join(','),baseCapacity:$c.maxResource(town)})):[];
+                // Native spread and movement mutate this array in place, then
+                // Finish deletes the property. Keep the final tick's footprint.
+                const chunks=subject?.chunks;
+                if(active)subject._paultendoStorageDay=planet.day;
+                const result=base.apply(this,arguments);
+                if(active)damageGrainStores(subject,sites,Array.isArray(subject.chunks)?subject.chunks:chunks);
+                return result;
+            };
+            disaster.func._paultendoStorage=true;
         }
         const project=metaEvents?.processProject || gameEvents.processProject;
         if(project?.func&&!project.func._paultendoCommodity) {
