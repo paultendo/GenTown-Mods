@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.68/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.69/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.68";
+    const MOD_VERSION = "1.6.69";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -2784,6 +2784,7 @@
         })();
 
         const resolveDecisionTowns = (townSpec, subject, target, args) => {
+            if(args?._paultendoInquiry)return [regGet("town",args._paultendoInquiry.town)].filter(t=>t&&!t.end);
             let spec = townSpec;
             if (typeof spec === "function") {
                 spec = spec(subject, target, args);
@@ -4190,6 +4191,7 @@
     });
 
     function resolveDecisionTownsFromMapSpec(townSpec, subject, target, args) {
+        if(args?._paultendoInquiry)return [regGet("town",args._paultendoInquiry.town)].filter(t=>t&&!t.end);
         let spec = townSpec;
         if (typeof spec === "function") {
             spec = spec(subject, target, args);
@@ -4982,6 +4984,9 @@
         const towns = regToArray('town').filter(livingTownKnown).filter(town => !townId || town.id === townId);
         for (const town of towns.slice(0, 3)) {
             items.push({ heading: true, text: `In ${town.name}` });
+            const local=town._paultendoLocalDiscoveries?.[`${type}:${levelData.level}`];
+            if(local){items.push({text:`${local.name}'s work brought ${levelData.name.toLowerCase()} here on Day ${local.day}.`});const work=livingWorldState().inquiries.find(w=>w.id===local.inquiry);if(work)items.push({text:'Follow the work here',func:()=>openLivingInquiry(work)});}
+            else if(planet._paultendoLocalKnowledge?.[`${type}:${levelData.level}`])items.push({text:'This town has not learned this way yet.'});
             const facts = livingTownLines(town, type);
             for (const text of facts) items.push({ text });
             if (type === 'farm' && !town.jobs?.farmer) items.push({ text: 'No farmers have taken up the work here yet.' });
@@ -5300,6 +5305,90 @@
     };
     const INQUIRY_ROLES = {farm:['farmer'],travel:['sailor','lumberer','miner'],fire:['miner'],smith:['miner','craftsman'],trade:['merchant'],government:['resident'],education:['scholar'],military:['soldier'],faith:['priest','resident']};
     const inquiryCompletions = new Map();
+    // The world ledger remembers that a discovery exists. New work belongs to
+    // the town that did it. Untagged knowledge remains shared for older saves.
+    function townKnowledgeLevel(town,key) {
+        let level=planet.unlocks?.[key] || 0;
+        for(const [id,advance] of Object.entries(planet._paultendoLocalKnowledge || {})) {
+            if(advance.key===key&&!town?._paultendoLocalDiscoveries?.[id])level=Math.min(level,advance.before);
+        }
+        return level;
+    }
+    function townKnowledgeLevels(town) {return Object.fromEntries(Object.keys(planet.unlocks || {}).map(key=>[key,townKnowledgeLevel(town,key)]));}
+    function localDiscoveryKnown(town,discovery) {
+        const id=`${discovery.key}:${discovery.level}`;
+        return !!town?._paultendoLocalDiscoveries?.[id]||!planet._paultendoLocalKnowledge?.[id]&&(planet.unlocks?.[discovery.key] || 0)>=discovery.level;
+    }
+    function localInquiryEligible(town,discovery) {
+        return !localDiscoveryKnown(town,discovery)&&Object.entries(discovery.needsUnlock).every(([key,level])=>townKnowledgeLevel(town,key)>=level)
+            &&!livingWorldState().inquiries.some(w=>w.town===town.id&&w.event===discovery.event&&['waiting','working'].includes(w.status));
+    }
+    function beginLocalInquiry(town,discovery,cause,guidance=null) {
+        if(!localInquiryEligible(town,discovery))return null;
+        const person=livingCommunityPerson(town,cause.role),recipe=INQUIRY_RECIPES[discovery.event];if(!person||!recipe)return null;
+        const days=Math.max(2,recipe[0]-(guidance?2:0));
+        const work={id:`inquiry:${livingWorldState().nextId++}`,event:discovery.event,key:discovery.key,level:discovery.level,title:discovery.name,town:town.id,person:person.id,name:person.name,role:person.role,cause:structuredClone(cause),day:planet.day,lastDay:planet.day,days,remaining:days,prototypeCost:{...recipe[1]},cost:{...recipe[1]},status:'waiting',inputs:[],steps:[],...(guidance?{guidance:structuredClone(guidance)}:{})};
+        livingWorldState().inquiries.push(work);work.cost=workshopFuelCost(town,{...work.prototypeCost},work);
+        inquiryStep(work,`${person.name} begins work on ${discovery.name.toLowerCase()}. ${cause.text}`);
+        if(guidance)inquiryStep(work,`${person.name} has ${localKnowledgeAccount(guidance)} to learn from. They still need to try it here.`);
+        return work;
+    }
+    function completeLocalInquiry(town,work,discovery) {
+        const key=`${work.key}:${work.level}`,records=town._paultendoLocalDiscoveries ||= {};
+        if(records[key])return;
+        const first=(planet.unlocks[work.key] || 0)<work.level;
+        if(first) {
+            (planet._paultendoLocalKnowledge ||= {})[key]={key:work.key,level:work.level,before:planet.unlocks[work.key] || 0};
+            // Keep the native milestone and its true first maker, while the
+            // benefits apply only to the community whose work completed it.
+            const baseHappen=happen;
+            try {
+                happen=(action,subject,target,args,...rest)=>baseHappen(action,subject,action==='Influence'&&!subject&&!target?town:target,args,...rest);
+                inquiryCompletions.get(work.event)(regGet('player',1),town,{_paultendoInquiry:work});
+            } finally {happen=baseHappen;}
+        } else {
+            happen('Influence',null,town,{...discovery.influences});
+            applyDecisionValuesFromMap(work.event,'yes',regGet('player',1),town,{_paultendoInquiry:work});
+        }
+        records[key]={day:planet.day,inquiry:work.id,person:work.person,name:work.name,...(work.guidance?{guidance:structuredClone(work.guidance)}:{})};
+        const record=livingWorldState().discoveries[key];
+        if(record){if(first)Object.assign(record,{inquiry:work.id,person:work.person,reason:work.cause.text,need:structuredClone(work.cause.evidence)});record.towns[town.id] ||= {jobs:{...town.jobs},reported:false,produceReported:false};}
+    }
+    function localKnowledgeOffer(from,to,exchange) {
+        const options=[];
+        for(const discovery of EXTENDED_DISCOVERIES) {
+            const local=from._paultendoLocalDiscoveries?.[`${discovery.key}:${discovery.level}`];
+            if(!local||localDiscoveryKnown(to,discovery)||Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(to,key)<level))continue;
+            const source=livingWorldState().inquiries.find(w=>w.id===local.inquiry),teacher=source&&workingLivingPerson(from,source.person);
+            if(!source||source.status!=='learned'||!livingTeachingPersonAvailable(teacher,from))continue;
+            const pending=livingWorldState().inquiries.find(w=>w.town===to.id&&w.event===discovery.event&&['waiting','working'].includes(w.status));
+            if(pending?.status==='working'||pending?.guidance)continue;
+            const cause=inquiryCause(to,discovery);if(!cause)continue;
+            const faith=getTownReligion(from),insular=(from.influences.faith || 0)>4&&faith?.tenets?.includes('insular')&&from.religion!==to.religion;
+            const shares=livingWorldState().teachings.some(t=>t.town===from.id&&t.active&&t.meaning==='learning');
+            options.push({from:from.id,to:to.id,event:discovery.event,title:discovery.name,person:teacher.id,name:teacher.name,known:livingTownKnown(from),source:source.id,exchange,day:planet.day,withheld:insular||!shares&&(teacher.outlook==='guarded'||(from.values?.openness || 0)<=-3),waiting:!!pending});
+        }
+        options.sort((a,b)=>Number(b.waiting)-Number(a.waiting));
+        return options[0] || null;
+    }
+    function localKnowledgeAccount(offer) {return offer.known||livingTownKnown(regGet('town',offer.from))?`${offer.name}'s account of the work`:'an account of the work brought by visitors';}
+    function receiveLocalKnowledge(town,offer,record) {
+        if(!offer||offer.withheld||record.knowledgeReception?.[town.id])return;
+        const discovery=EXTENDED_DISCOVERIES.find(d=>d.event===offer.event),cause=discovery&&inquiryCause(town,discovery);
+        const reception=(record.knowledgeReception ||= {})[town.id]={day:planet.day,status:'passed'};
+        if(!cause||localDiscoveryKnown(town,discovery)||Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(town,key)<level))return;
+        const person=livingCommunityPerson(town,cause.role),outlook=livingPersonMind(person).outlook;
+        const chance=clampChance(.6+(outlook==='curious'?.2:outlook==='guarded'?-.25:0)+clampValue(getRelations(town,regGet('town',offer.from)),-5,5)*.04,.05,.95);
+        const roll=mulberry32(fnv1a32(`${planet.config?.seed}:${record.id}:${town.id}:${offer.event}:discovery-visit`))();
+        if(roll>=chance){reception.status='refused';noteExchangeStep(record,'knowledgeDeclined',{town:town.id,title:offer.title});return;}
+        let work=livingWorldState().inquiries.find(w=>w.town===town.id&&w.event===offer.event&&['waiting','working'].includes(w.status));
+        if(work&&(work.status!=='waiting'||work.guidance))return;
+        if(work){work.guidance=structuredClone(offer);work.days=Math.max(2,work.days-2);work.remaining=work.days;inquiryStep(work,`${work.name} has ${localKnowledgeAccount(offer)} to learn from. They still need to try it here.`);}
+        else work=beginLocalInquiry(town,discovery,cause,offer);
+        if(!work)return;
+        reception.status='heard';reception.inquiry=work.id;
+        noteExchangeStep(record,'knowledge',{town:town.id,title:offer.title,person:person.name});
+    }
     function inquiryWorkerBusy(town,person) {
         return livingWorldState().inquiries.some(work=>work.town===town.id&&work.person===person.id&&work.status==='working');
     }
@@ -5381,9 +5470,7 @@
         return role?{role,text,evidence}:null;
     }
     function inquiryCandidates(discovery) {
-        if((planet.unlocks[discovery.key] || 0)>=discovery.level||Object.entries(discovery.needsUnlock).some(([key,level])=>(planet.unlocks[key] || 0)<level))return [];
-        if(livingWorldState().inquiries.some(w=>w.event===discovery.event&&['waiting','working'].includes(w.status)))return [];
-        return regToArray('town').flatMap(town=>{const cause=inquiryCause(town,discovery);return cause?[{town:town.id,cause}]:[];});
+        return regToArray('town').flatMap(town=>{if(!localInquiryEligible(town,discovery))return [];const cause=inquiryCause(town,discovery);return cause?[{town:town.id,cause}]:[];});
     }
     function inquiryStep(work,text,type=null) {
         work.steps.push({day:planet.day,text});
@@ -5400,15 +5487,11 @@
             info._paultendoRequirementsCheck=baseCheck;
             info._paultendoInquiry={days:recipe[0],cost:{...recipe[1]}};
             info.value=()=>{const options=inquiryCandidates(discovery);return options.length?choose(options):false;};
-            info.check=(subject,target,args)=>!!baseCheck(subject,target,args)&&inquiryCandidates(discovery).some(c=>!args?.value||c.town===args.value.town);
+            info.check=(subject,target,args)=>inquiryCandidates(discovery).some(c=>!args?.value||c.town===args.value.town);
             info.message=()=>null;
             info.func=(subject,target,args)=>{
                 const option=inquiryCandidates(discovery).find(c=>c.town===args?.value?.town);if(!option)return;
-                const town=regGet('town',option.town),person=livingCommunityPerson(town,option.cause.role);if(!person)return;
-                const work={id:`inquiry:${livingWorldState().nextId++}`,event:discovery.event,key:discovery.key,level:discovery.level,title:discovery.name,town:town.id,person:person.id,name:person.name,role:person.role,cause:structuredClone(option.cause),day:planet.day,lastDay:planet.day,days:recipe[0],remaining:recipe[0],prototypeCost:{...recipe[1]},cost:{...recipe[1]},status:'waiting',inputs:[],steps:[]};
-                livingWorldState().inquiries.push(work);
-                work.cost=workshopFuelCost(town,{...work.prototypeCost},work);
-                inquiryStep(work,`${person.name} begins work on ${discovery.name.toLowerCase()}. ${option.cause.text}`);
+                beginLocalInquiry(regGet('town',option.town),discovery,option.cause);
             };
         }
     }
@@ -5418,13 +5501,13 @@
             if(work.lastDay===planet.day)continue;work.lastDay=planet.day;
             const town=regGet('town',work.town),person=town&&workingLivingPerson(town,work.person);
             if(!town||town.end||town.pop<=0){work.status='lost';work.finished=planet.day;work.steps.push({day:planet.day,text:'The work was lost with the town.'});continue;}
-            if((planet.unlocks[work.key] || 0)>=work.level){work.status='superseded';work.finished=planet.day;inquiryStep(work,`${work.name} puts the work aside. The answer has reached the town from elsewhere.`);continue;}
             const discovery=EXTENDED_DISCOVERIES.find(d=>d.event===work.event);
+            if(localDiscoveryKnown(town,discovery)){work.status='superseded';work.finished=planet.day;inquiryStep(work,`${work.name} puts the work aside. The town already knows this way.`);continue;}
             if(work.status==='waiting')work.cost=workshopFuelCost(town,{...(work.prototypeCost || work.cost)},work);
             if(work.status==='waiting'&&!inquiryCause(town,discovery,person)){work.status='abandoned';work.finished=planet.day;inquiryStep(work,`${work.name} leaves the question for another time. The town has other concerns now.`);continue;}
             const occupied=state.materialWork.some(w=>w.town===town.id&&materialWorkHasHand(w,work.person)&&['waiting','working'].includes(w.status))||state.artifactWork.some(w=>w.town===town.id&&w.person===work.person&&['gathering','working'].includes(w.status))||state.inquiries.some(w=>w.id!==work.id&&w.town===town.id&&w.person===work.person&&w.status==='working');
             const surveying=state.sampling.some(w=>w.town===town.id&&w.person===work.person&&['outbound','collecting','returning'].includes(w.status));
-            const blocked=!livingTeachingPersonAvailable(person,town)||occupied||surveying?'hands':Object.entries(discovery.needsUnlock).some(([key,level])=>(planet.unlocks[key] || 0)<level)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            const blocked=!livingTeachingPersonAvailable(person,town)||occupied||surveying?'hands':Object.entries(discovery.needsUnlock).some(([key,level])=>townKnowledgeLevel(town,key)<level)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
             if(blocked) {
                 if(work.delay!==blocked){work.delay=blocked;inquiryStep(work,{hands:`${work.name} is no longer free to tend the work.`,knowledge:'The work needs knowledge the town no longer has.',war:`Fighting pulls ${work.name} away from the work.`,food:`${work.name} puts the work aside. There is not enough food.`}[blocked]);}
                 continue;
@@ -5443,16 +5526,14 @@
                 inquiryStep(work,['trade','government','faith'].includes(work.key)?`${work.name} gathers people to work on ${work.title.toLowerCase()}.`:`${work.name} begins the trials for ${work.title.toLowerCase()}.`);continue;
             }
             if(--work.remaining>0)continue;
-            const args={_paultendoInquiry:work};
             const baseLog=logMessage;
             try {
                 // The old event also emits a generic milestone. Report the
                 // actual maker once, with a link to their work, instead.
                 logMessage=(text,type,...rest)=>text===discovery.messageDone?undefined:baseLog(text,type,...rest);
-                inquiryCompletions.get(work.event)(regGet('player',1),town,args);
+                completeLocalInquiry(town,work,discovery);
             } finally {logMessage=baseLog;}
             work.status='learned';work.finished=planet.day;
-            const record=state.discoveries[`${work.key}:${work.level}`];if(record)Object.assign(record,{inquiry:work.id,person:work.person,reason:work.cause.text,need:structuredClone(work.cause.evidence)});
             inquiryStep(work,`${work.name}'s work leads to ${work.title.toLowerCase()}. ${discovery.messageDone}`,'milestone');
         }
         // Keep active work and every discovery's source. Only prune abandoned histories.
@@ -5468,6 +5549,7 @@
         items.push({text:`Work began on Day ${work.day}.`});
         for(const step of work.steps.slice(1))items.push({text:`Day ${step.day} · ${escapeLivingText(step.text)}`});
         if(work.started!=null&&Object.keys(work.cost).length)items.push({text:`Used ${Object.entries(work.cost).map(([type,count])=>`${count} ${COMMODITIES[type].label}`).join(', ')}.`});
+        if(work.guidance){const journey=commodityExchangeState().exchanges.find(r=>r.id===work.guidance.exchange),source=livingWorldState().inquiries.find(w=>w.id===work.guidance.source);if(journey)items.push({text:'The visitors who brought the idea',func:()=>openCommodityJourney(journey)});if(source&&livingTownKnown(regGet('town',source.town)))items.push({text:'The work they learned from',func:()=>openLivingInquiry(source)});}
         for(const input of work.inputs || []){const record=commodityExchangeState().exchanges.find(r=>r.id===input.exchange);if(record)items.push({text:`Follow the ${COMMODITIES[input.type].label}`,func:()=>openCommodityJourney(record)});}
         const definition=EXTENDED_DISCOVERIES.find(d=>d.event===work.event);
         if(work.status==='learned')items.push({text:'Read the discovery',func:()=>openUnlockDetail(work.key,definition,town.id)});
@@ -5550,7 +5632,7 @@
     function artifactDescription(artifact) { return artifact.description || LIVING_ARTIFACTS[artifact.kind].description; }
     function artifactPhrase(artifact) { return artifact.title || `the ${LIVING_ARTIFACTS[artifact.kind].name.toLowerCase()}`; }
     function livingArtifactRecipe(town,person,kind,material) {
-        const u=planet.unlocks || {};
+        const u=townKnowledgeLevels(town);
         if(!livingTeachingPersonAvailable(person,town)) return null;
         if(material==='steel') {
             if(kind!=='fork'||!['musician','scholar','miner'].includes(person.role)||u.smith<50||!town._paultendoMaterials?.steel)return null;
@@ -5586,7 +5668,7 @@
         const missing=Object.entries(recipe.cost).filter(([k,n])=>(town.resources[k]||0)<n);
         if(missing.some(([k])=>!MATERIAL_RECIPES[k])) return {acted:false,reason:'They cannot spare the materials.'};
         const practiced=livingWorldState().artifactWork.some(w=>w.status==='made'&&w.person===person.id&&w.kind===kind);
-        const days=Math.max(3,LIVING_PACE.work[kind]-(practiced?2:0)-(planet.unlocks.smith>=80?2:0));
+        const days=Math.max(3,LIVING_PACE.work[kind]-(practiced?2:0)-(townKnowledgeLevel(town,'smith')>=80?2:0));
         const work={id:`work:${livingWorldState().nextId++}`,town:town.id,person:person.id,name:person.name,kind,parent:artifact?.id,whisper:record?.id,cause:cause&&structuredClone(cause),autonomous:!!cause,day:planet.day,started:missing.length?null:planet.day,due:missing.length?null:planet.day+days,days,status:missing.length?'gathering':'working',recipe:structuredClone(recipe),steps:[]};
         livingWorldState().artifactWork.push(work);if(record)record.work=work.id;
         const text=artifact?`${person.name} begins making an object of their own, working from ${artifactTitle(artifact)}.`:`${person.name} begins working on a ${LIVING_ARTIFACTS[kind].name.toLowerCase()} of their own.`;
@@ -5606,7 +5688,7 @@
     }
     function artifactWorkRecipe(town,person,work) {
         const current=livingArtifactRecipe(town,person,work.kind);if(!current)return null;
-        if(Object.entries(work.recipe?.needs || {}).some(([key,level])=>(planet.unlocks[key] || 0)<level))return null;
+        if(Object.entries(work.recipe?.needs || {}).some(([key,level])=>townKnowledgeLevel(town,key)<level))return null;
         // Existing unfinished lenses keep the recipe promised in their save.
         return work.recipe || (work.kind==='lens'?{...current,cost:{rock:3,metal:2}}:current);
     }
@@ -5713,7 +5795,7 @@
                     const mind=livingPersonMind(person),practiced=state.artifactWork.some(w=>w.town===town.id&&w.person===person.id&&w.kind===cause.kind&&w.status==='made');
                     if(!practiced&&mind.outlook!=='curious'&&!(cause.key==='illness'&&mind.outlook==='generous')&&!(cause.key==='drills'&&(town.values?.order || 0)>=4))continue;
                     if(state.whispers.some(w=>w.person===person.id&&!w.resolved))continue;
-                    const material=cause.kind==='fork'&&planet.unlocks.smith>=50&&town._paultendoMaterials?.steel&&commodityStock(town,'steel')-commodityCommittedStock(town,'steel')>=3?'steel':undefined;
+                    const material=cause.kind==='fork'&&townKnowledgeLevel(town,'smith')>=50&&town._paultendoMaterials?.steel&&commodityStock(town,'steel')-commodityCommittedStock(town,'steel')>=3?'steel':undefined;
                     const recipe=livingArtifactRecipe(town,person,cause.kind,material);if(!recipe)continue;
                     // Respect work already promised. Missing glass may create a
                     // demand, but scarce metal cannot fund two competing crafts.
@@ -5986,7 +6068,7 @@
         }
     }
     function livingArtifactUse(artifact,town,person) {
-        const mind=livingPersonMind(person),u=planet.unlocks || {};
+        const mind=livingPersonMind(person),u=townKnowledgeLevels(town);
         if(person.figure?.type==='RULER'||person.figure?.type==='TYRANT'||mind.outlook==='guarded') return {meaning:'hoarded',text:`${person.name} keeps the object out of sight. Nobody else is allowed to handle it.`};
         if(person.role==='priest'&&town.religion) return {meaning:'revered',effects:{faith:0.5,education:-0.15},text:`${person.name} calls the object a sign. People gather to honour it, and questions about its workings fall quiet.`};
         if(person.role==='soldier'&&u.military>=10&&(artifact.kind==='fork'||u.smith>=30&&(artifact.kind==='lens'||u.travel>=20))) return {meaning:'drills',effects:{military:0.45,travel:0.1,crime:0.05,happy:-0.15},text:artifact.kind==='fork'?`${person.name} uses its note to set the pace of drills. The soldiers learn to move together.`:artifact.kind==='lens'?`${person.name} takes the glass to the soldiers. They inspect the flaws in their weapons and armour.`:`${person.name} takes the needle to the soldiers. They practise keeping their bearings on unfamiliar ground.`};
@@ -6566,7 +6648,7 @@
     function collectLocalMaterial(town,chunk,gained) {
         if(gained<1||!(town.jobs?.miner>0)||chunk?.v?.s!==town.id||town.end)return;
         for(const [type,source] of Object.entries(MATERIAL_SOURCES)) {
-            if(!source.biomes.includes(chunk.b)||Object.entries(source.needs).some(([key,level])=>(planet.unlocks[key] || 0)<level))continue;
+            if(!source.biomes.includes(chunk.b)||Object.entries(source.needs).some(([key,level])=>townKnowledgeLevel(town,key)<level))continue;
             const desired=Math.max(source.sample,commodityCommittedStock(town,type),type==='clay'?Math.ceil(materialConstructionNeed(town)/2):0);
             if(commodityStock(town,type)>=desired||commodityStock(town,type)>=$c.maxResource(town))continue;
             const deposits=planet._paultendoDeposits ||= {},key=`${chunk.x},${chunk.y}`;
@@ -6584,7 +6666,7 @@
         if(!town||town.end||town.pop<=0||!(town.jobs?.miner>0))return [];
         const claims=commodityWorkClaims(town),needs=[];
         for(const [type,source] of Object.entries(MATERIAL_SOURCES)) {
-            if(Object.entries(source.needs).some(([key,level])=>(planet.unlocks[key] || 0)<level))continue;
+            if(Object.entries(source.needs).some(([key,level])=>townKnowledgeLevel(town,key)<level))continue;
             let required=0,purpose=null;
             for(const claim of claims) {
                 if(claim.kind==='construction')continue;
@@ -6696,7 +6778,7 @@
                 const source=MATERIAL_SOURCES[work.type];
                 const deposits=planet._paultendoDeposits ||= {},key=`${work.x},${work.y}`,local=deposits[key] ||= target._paultendoDeposits || {};target._paultendoDeposits=local;
                 const deposit=local[work.type] ||= {remaining:source.quantity};
-                const accessible=source.biomes.includes(target.b)&&(!target.v?.s||target.v.s===town.id)&&Object.entries(source.needs).every(([key,level])=>(planet.unlocks[key] || 0)>=level);
+                const accessible=source.biomes.includes(target.b)&&(!target.v?.s||target.v.s===town.id)&&Object.entries(source.needs).every(([key,level])=>townKnowledgeLevel(town,key)>=level);
                 if(accessible&&deposit.remaining>0&&work.cargo<work.count){deposit.remaining--;work.cargo++;if(work.cargo<work.count)continue;}
                 work.status='returning';work.remaining=commodityTravelDays(path);
                 materialSurveyStep(work,work.cargo?`${work.name} heads home carrying ${work.cargo} ${COMMODITIES[work.type].label}.`:`${work.name} heads home empty-handed. ${target.v?.s&&target.v.s!==town.id?'Others now hold the ground.':'There is no usable sample to bring back.'}`);continue;
@@ -6785,12 +6867,12 @@
         if(lesson.paused){delete lesson.paused;materialStep(work,`${lesson.name} returns to the bench beside ${work.name}.`);}
         lesson.days++;lesson.lastDay=planet.day;
     }
-    function materialTechniqueAvailable(type) {return Object.entries(MATERIAL_RECIPES[type].needs).every(([key,level])=>(planet.unlocks[key] || 0)>=level);}
+    function materialTechniqueAvailable(type,town) {return Object.entries(MATERIAL_RECIPES[type].needs).every(([key,level])=>townKnowledgeLevel(town,key)>=level);}
     function materialBatchCost(town,type,work) {
         return workshopFuelCost(town,{...MATERIAL_RECIPES[type].cost},work);
     }
     function workshopFuelCost(town,cost,work) {
-        if(!cost.charcoal||(planet.unlocks.fire || 0)<40||!town._paultendoMaterials?.coal)return cost;
+        if(!cost.charcoal||townKnowledgeLevel(town,'fire')<40||!town._paultendoMaterials?.coal)return cost;
         const other=commodityWorkClaims(town).filter(c=>c.kind!=='construction'&&c.id!==work?.id);
         const spare=key=>Math.max(0,commodityStock(town,key)-other.reduce((sum,c)=>sum+(c.cost[key] || 0),0));
         const charcoal=spare('charcoal'),coal=spare('coal');
@@ -6808,7 +6890,7 @@
     }
     function startMaterialBatch(town,type,practical=false) {
         const recipe=MATERIAL_RECIPES[type],person=materialWorker(town,recipe,type);
-        if(!person||!materialTechniqueAvailable(type)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town))return null;
+        if(!person||!materialTechniqueAvailable(type,town)||hasIssue(town,'war')||mealStock(town)<nativeMealNeed(town))return null;
         const practiced=materialMasteredBy(town,type,person),lesson=materialLessonFor(town,type,person);
         if(!practiced&&person.outlook!=='curious'&&!materialConstructionNeed(town)&&!practical?.allowed)return null;
         const state=livingWorldState(),work={id:`material:${state.nextId++}`,town:town.id,type,person:person.id,name:person.name,day:planet.day,status:'waiting',cost:materialBatchCost(town,type),remaining:Math.max(2,recipe.days-(lesson?2:0)),output:recipe.output,trial:!practiced,purpose:practical || null,lesson:lesson?structuredClone(lesson):null,steps:[],inputs:[]};
@@ -6827,14 +6909,14 @@
         return Math.max(0,promised-commodityStock(town,type));
     }
     function materialIntent(town,type) {
-        const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type))return null;
+        const recipe=MATERIAL_RECIPES[type];if(!materialTechniqueAvailable(type,town))return null;
         const actual=materialDirectNeed(town,type)>0;
         if((type==='pottery'||FARM_TOOLS[type]||type==='telescope'||type==='sky_vessel'||type==='colony_vessel'||type==='cargo_vessel')&&!actual)return null;
         const practiced=town._paultendoMaterials?.[type]?.technique;
         if(type==='steel'&&!actual&&livingResearchPriority(town.research)!=='education'&&!(livingResearchPriority(town.research)==='military'&&town.jobs?.soldier>0))return null;
         const sample=commodityStock(town,recipe.sample)>0||town._paultendoMaterials?.[recipe.sample];
         if(!actual&&(practiced||!sample))return null;
-        const established=Object.entries(recipe.established).every(([key,level])=>(planet.unlocks[key] || 0)>=level);
+        const established=Object.entries(recipe.established).every(([key,level])=>townKnowledgeLevel(town,key)>=level);
         return {type,actual,allowed:actual||established||!!town._paultendoMaterials?.[type]?.lesson};
     }
     function materialPurposeWanted(town,work) {
@@ -6853,7 +6935,7 @@
         if(recent&&planet.day-(recent.finished || recent.day)<EXCHANGE_PACE.retryDays)return;
         const intents=Object.keys(MATERIAL_RECIPES).map(type=>materialIntent(town,type)).filter(Boolean).sort((a,b)=>Number(b.actual)-Number(a.actual));
         const prerequisite=(type,seen=new Set())=>{
-            if(seen.has(type)||!materialTechniqueAvailable(type))return null;seen.add(type);
+            if(seen.has(type)||!materialTechniqueAvailable(type,town))return null;seen.add(type);
             for(const [input,count] of Object.entries(materialBatchCost(town,type)))if(commodityStock(town,input)<count&&MATERIAL_RECIPES[input]) {
                 const next=prerequisite(input,seen);if(next)return next;
             }
@@ -6907,7 +6989,7 @@
             }
             if(work.status==='waiting'&&work.purpose?.exchange&&!materialPurposeWanted(town,work)){work.status='withdrawn';work.finished=planet.day;materialStep(work,`${work.name} puts the work aside. It is no longer needed.`);continue;}
             const surveying=state.sampling.some(w=>w.town===town.id&&w.person===work.person&&['outbound','collecting','returning'].includes(w.status));
-            const blocked=!livingTeachingPersonAvailable(person,town)||surveying?'hands':!materialTechniqueAvailable(work.type)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
+            const blocked=!livingTeachingPersonAvailable(person,town)||surveying?'hands':!materialTechniqueAvailable(work.type,town)?'knowledge':hasIssue(town,'war')?'war':mealStock(town)<nativeMealNeed(town)?'food':null;
             if(blocked){
                 const pause={hands:`${work.name} cannot tend the work. It waits for them.`,knowledge:`The workshop cannot keep working this way.`,war:`Fighting pulls ${work.name} away from the work.`,food:`${work.name} puts the work aside. There is not enough food in ${town.name}.`}[blocked];
                 if(work.delay?.reason!==blocked){work.delay={reason:blocked,day:planet.day};materialStep(work,pause);}
@@ -6946,7 +7028,7 @@
             }
             advanceMaterialApprentice(town,work,person);
             if(--work.remaining>0)continue;
-            const risk=(work.type==='brick'&&planet.unlocks.fire>=40?0.08:recipe.risk)*(work.lesson?0.4:1);
+            const risk=(work.type==='brick'&&townKnowledgeLevel(town,'fire')>=40?0.08:recipe.risk)*(work.lesson?0.4:1);
             if(work.trial&&work.roll<risk){work.status='failed';work.finished=planet.day;materialStep(work,`${recipe.method==='assembly'?`${work.name} tests the finished parts.`:recipe.method==='shaping'?`${work.name} puts the pieces aside.`:`${work.name} opens the fire.`} ${recipe.failure}`);continue;}
             const entry=encounterMaterial(town,work.type);entry.technique ||= {day:planet.day,work:work.id,person:work.person};
             materialHands(town,work.type)[work.person] ||= {day:planet.day,work:work.id,...(work.lesson?{visit:work.lesson.exchange,teacher:work.lesson.person,from:work.lesson.from}:{})};
@@ -7295,7 +7377,7 @@
     }
     function materialOffer(town,type) {
         const recipe=MATERIAL_RECIPES[type];
-        if(!recipe||!town._paultendoMaterials?.[type]?.technique||!materialTechniqueAvailable(type)||hasIssue(town,'war')||mealStock(town)<foodBuffer(town))return null;
+        if(!recipe||!town._paultendoMaterials?.[type]?.technique||!materialTechniqueAvailable(type,town)||hasIssue(town,'war')||mealStock(town)<foodBuffer(town))return null;
         const state=livingWorldState();
         if(state.materialWork.some(w=>w.town===town.id&&['waiting','working','storing'].includes(w.status))||commodityExchangeState().exchanges.some(r=>r.seller===town.id&&r.status==='making'&&!r.resolved))return null;
         const recent=state.materialWork.filter(w=>w.town===town.id&&w.status!=='withdrawn').at(-1);
@@ -7362,6 +7444,9 @@
             case 'withheld':return `${exchangeTownLabel(record,step.town)} keeps its way of making ${COMMODITIES[step.type].label} to itself.`;
             case 'lesson':return `${step.person} hears how visitors from ${step.origin} make ${COMMODITIES[step.type].label}. They will still need to try it with their own hands.`;
             case 'lessonDeclined':return `${exchangeTownLabel(record,step.town)} keeps the goods, but lets the visitors’ lessons pass.`;
+            case 'knowledgeWithheld':return `${exchangeTownLabel(record,step.town)} keeps its work on ${step.title.toLowerCase()} to itself.`;
+            case 'knowledgeDeclined':return `${exchangeTownLabel(record,step.town)} keeps the goods, but does not take up the visitors' account of ${step.title.toLowerCase()}.`;
+            case 'knowledge':return `${step.person} hears the visitors' account of ${step.title.toLowerCase()}. Work to try it here begins in ${exchangeTownLabel(record,step.town)}.`;
         }
         return '';
     }
@@ -7440,10 +7525,14 @@
         record.paymentLots=terms.payment?commodityCargoLots(terms.payment.count,paymentInputs):[];
         record.materialLesson=materialInstructions(seller,buyer,record.type,record.id);
         record.returnLesson=terms.payment&&materialInstructions(buyer,seller,terms.payment.type,record.id);
+        record.knowledgeOffer=localKnowledgeOffer(seller,buyer,record.id);
+        record.returnKnowledge=localKnowledgeOffer(buyer,seller,record.id);
         record.cargo=removed;record.payment=terms.payment;record.quote=terms.quote;record.previousHelp=terms.previousHelp;record.kind=terms.kind;record.status='carrying';record.due=planet.day+commodityTravelDays(path);
         recordTraffic(path,0.35);noteExchangeStep(record,terms.kind,{count:removed,payment:terms.payment,reason:terms.reason});
         if(record.materialLesson?.withheld)noteExchangeStep(record,'withheld',{type:record.type,town:seller.id});
         if(record.returnLesson?.withheld)noteExchangeStep(record,'withheld',{type:terms.payment.type,town:buyer.id});
+        if(record.knowledgeOffer?.withheld)noteExchangeStep(record,'knowledgeWithheld',{town:seller.id,title:record.knowledgeOffer.title});
+        if(record.returnKnowledge?.withheld)noteExchangeStep(record,'knowledgeWithheld',{town:buyer.id,title:record.returnKnowledge.title});
         return true;
     }
     function foodRefusalCanBecomeThreat(record,buyer,seller) {
@@ -7546,6 +7635,7 @@
             const route=getTradeRouteBetween(buyer,seller);
             if(route?.active){route.totalGoods=(route.totalGoods || 0)+record.delivered;route.caravans=(route.caravans || 0)+1;route.lastCaravanDay=planet.day;}
             receiveMaterialInstructions(buyer,record.materialLesson,record);receiveMaterialInstructions(seller,record.returnLesson,record);
+            receiveLocalKnowledge(buyer,record.knowledgeOffer,record);receiveLocalKnowledge(seller,record.returnKnowledge,record);
             recordTraffic(path,0.5);noteLivingExchange(seller,buyer,path,{type:record.kind==='aid'?'gift':'caravan',route:route?.id,goods:record.type});
             // Only real meals can calm hunger. A delivered supply can end a famine
             // when it actually provides enough for the recipient's next meal.
@@ -7561,6 +7651,7 @@
         if(cause&&[cause.buyer,cause.seller].some(id=>livingTownKnown(regGet('town',id))))items.push({text:'Before the fighting',func:()=>openCommodityJourney(cause)});
         const production=record.manufacture&&livingWorldState().materialWork.find(w=>w.id===record.manufacture.work);
         if(production&&livingTownKnown(regGet('town',record.seller)))items.push({text:'Visit the workshop',func:()=>openMaterialWork(production)});
+        for(const result of Object.values(record.knowledgeReception || {})){const work=livingWorldState().inquiries.find(w=>w.id===result.inquiry);if(work&&livingTownKnown(regGet('town',work.town)))items.push({text:`${work.title} · The work begun here`,func:()=>openLivingInquiry(work)});}
         if(livingTownKnown(regGet('town',record.buyer)))for(const claim of record.purposes || []) {
             if(claim.kind==='construction'){
                 const project=regGet('process',claim.id),marker=project?.marker&&regGet('marker',project.marker);
@@ -8272,6 +8363,7 @@
                 if (!state.discoveries[id]) state.discoveries[id] = { key, level: level.level, name: level.name, day: null, origin: null, towns: {} };
                 const discovery = state.discoveries[id];
                 for (const town of regToArray('town').filter(t => !t.end)) {
+                    if(!localDiscoveryKnown(town,{key,level:level.level}))continue;
                     if (!discovery.towns[town.id]) {
                         const jobs = Object.entries(jobNeedsUnlock).filter(([, gate]) => gate[0] === key && gate[1] === level.level).map(([job]) => job);
                         discovery.towns[town.id] = { jobs: {...town.jobs}, reported: jobs.some(job => town.jobs?.[job] > 0), produceReported: discovery.day == null };
@@ -8291,7 +8383,7 @@
         const id = `${key}:${level.level}`;
         if (state.discoveries[id]?.day != null) return;
         state.discoveries[id] = { key, level: level.level, name: level.name, day: planet.day, origin: subject?._reg === 'town' ? subject.id : null, towns: {} };
-        for (const town of regToArray('town').filter(t => !t.end)) state.discoveries[id].towns[town.id] = { jobs: {...town.jobs}, reported: false, produceReported: false };
+        for (const town of regToArray('town').filter(t => !t.end&&(t.id===subject?.id||localDiscoveryKnown(t, {key,level:level.level})))) state.discoveries[id].towns[town.id] = { jobs: {...town.jobs}, reported: false, produceReported: false };
         const metadata = initTechUnlockMap();
         metadata[key] ||= {};
         metadata[key][level.level] ||= { name: level.name, day: planet.day, originTownId: state.discoveries[id].origin };
@@ -8588,7 +8680,7 @@
         for (const text of livingTownLines(town).slice(0, 6)) { const line = document.createElement('p'); line.textContent = text; section.appendChild(line); }
         const links = document.createElement('div'); links.className = 'paultendoLifeDiscoveries';
         for (const [key, branch] of Object.entries(livingDiscoveryBranches())) {
-            const levels = branch.levels.filter(l => (planet.unlocks?.[key] || 0) >= l.level);
+            const levels = branch.levels.filter(l => townKnowledgeLevel(town,key) >= l.level);
             if (!levels.length) continue;
             const level = levels[levels.length - 1];
             const button = document.createElement('button'); button.textContent = level.name;
@@ -13140,7 +13232,7 @@
             &&getUniverseDay()-(registry?.worldLastColony?.[world.id] ?? -999)>=FRONTIER_CHARTER_CONFIG.worldCooldownDays);
     }
     function frontierTownReady(town,registry=getColonizationRegistry()) {
-        return !!town&&!town.end&&town.pop>=FRONTIER_CHARTER_CONFIG.minTownPop&&skyFlightKnowledge()
+        return !!town&&!town.end&&town.pop>=FRONTIER_CHARTER_CONFIG.minTownPop&&skyFlightKnowledge(town)
             &&registry&&registry.charters.length<FRONTIER_CHARTER_CONFIG.maxActive
             &&getUniverseDay()-(town._paultendoCharterDay ?? -999)>=FRONTIER_CHARTER_CONFIG.townCooldownDays
             &&!registry.charters.some(c=>c.originWorldId===skyWorldId()&&c.originTownId===town.id)
@@ -13314,7 +13406,7 @@
             withWorldState(world,()=>{
                 prepareFrontierSupplies(charter,town);
                 const costs=frontierCargoCost(charter,town),other=commodityWorkClaims(town).filter(c=>c.id!==`charter:${charter.id}`&&c.kind!=='construction');
-                const blocked=!target.reached||target.habitable===false?'destination':!skyFlightKnowledge()?'knowledge':town.pop<FRONTIER_CHARTER_CONFIG.minTownPop?'people':hasIssue(town,'war')?'war':!(town.jobs?.miner>0||town.jobs?.scholar>0)?'hands':mealStock(town)-(costs.crop || 0)-(costs.livestock || 0)<foodBuffer(town)?'food':Object.entries(costs).some(([type,n])=>commodityStock(town,type)-other.reduce((sum,c)=>sum+(c.cost[type] || 0),0)<n)?'supplies':null;
+                const blocked=!target.reached||target.habitable===false?'destination':!skyFlightKnowledge(town)?'knowledge':town.pop<FRONTIER_CHARTER_CONFIG.minTownPop?'people':hasIssue(town,'war')?'war':!(town.jobs?.miner>0||town.jobs?.scholar>0)?'hands':mealStock(town)-(costs.crop || 0)-(costs.livestock || 0)<foodBuffer(town)?'food':Object.entries(costs).some(([type,n])=>commodityStock(town,type)-other.reduce((sum,c)=>sum+(c.cost[type] || 0),0)<n)?'supplies':null;
                 if(blocked) {
                     if(charter.pause!==blocked)frontierStep(charter,{destination:'The settlers wait for reports of a place they can reach.',knowledge:'The workshop needs more knowledge before it can prepare this journey.',people:'Too few people remain to send a colony.',war:'Fighting draws people away from the colony preparations.',hands:'The colony preparations wait for workshop hands.',food:'The town cannot spare enough food for the journey yet.',supplies:'The settlers are gathering a passenger vessel, tools and building supplies.'}[blocked]);
                     charter.pause=blocked;return;
@@ -13335,7 +13427,7 @@
                     if(job==='miner')domains.add('fire');
                     if(job==='scholar'){domains.add('education');domains.add('astronomy');}
                 }
-                charter.knowledge=Object.fromEntries([...domains].filter(key=>planet.unlocks[key]>0).map(key=>[key,planet.unlocks[key]]));
+                charter.knowledge=Object.fromEntries([...domains].filter(key=>townKnowledgeLevel(town,key)>0).map(key=>[key,townKnowledgeLevel(town,key)]));
                 const creed=getTownReligion(town);if(creed)charter.creed={origin:creed._paultendoOrigin || `${world.id}:${town.religion}`,data:structuredClone(creed)};
                 charter.packed={...costs};delete charter.packed.colony_vessel;charter.cargo={...charter.packed};
                 for(const [type,count] of Object.entries(charter.cargo))charter.cargoLots[type]=commodityCargoLots(count,charter.inputs.filter(i=>i.type===type));
@@ -13380,7 +13472,7 @@
         subject: { reg: "town", random: true },
         value: (subject) => {
             const day=getUniverseDay();
-            if (!skyFlightKnowledge() || !skyState().flights.some(f=>f.status==='arrived')) return false;
+            if (!skyFlightKnowledge(subject) || !skyState().flights.some(f=>f.status==='arrived')) return false;
             if ((subject.influences?.education || 0) < 3 && (subject.influences?.trade || 0) < 3) return false;
             if (subject._paultendoStarLookDay && (day - subject._paultendoStarLookDay) < 80) return false;
             return true;
@@ -13763,14 +13855,14 @@
         }
         return null;
     }
-    function skyFlightKnowledge() {return Object.entries(MATERIAL_RECIPES.sky_vessel.needs).every(([key,level])=>(planet.unlocks[key] || 0)>=level);}
+    function skyFlightKnowledge(town) {return Object.entries(MATERIAL_RECIPES.sky_vessel.needs).every(([key,level])=>townKnowledgeLevel(town,key)>=level);}
     function skyFlightTargets() {
         const universe=getUniverse(false);if(!universe)return [];
         if(!skyState().orbitalSurvey)return [{id:null,name:'the home sky',orbitIndex:0}];
         return getWorldOrder().filter(w=>w.id!==skyWorldId()&&w.discovered&&!w.reached);
     }
     function planSkyFlight(town,targetId=null,requested=false) {
-        if(!town||town.end||town.pop<=0||!skyFlightKnowledge()||hasIssue(town,'war')||mealStock(town)<foodBuffer(town))return null;
+        if(!town||town.end||town.pop<=0||!skyFlightKnowledge(town)||hasIssue(town,'war')||mealStock(town)<foodBuffer(town))return null;
         const person=skyScholar(town);if(!person||!livingTeachingPersonAvailable(person,town))return null;
         if(!requested&&person.outlook!=='curious'&&livingResearchPriority(town.research)!=='education')return null;
         const state=skyState(),target=skyFlightTargets().find(w=>w.id===targetId);
@@ -13810,7 +13902,7 @@
             if(background)continue;
             if(!town||town.end||town.pop<=0){flight.status='lost';flight.finished=planet.day;continue;}
             const person=(town._paultendoPeople || []).find(p=>p.id===flight.person);
-            const blocked=!skyFlightKnowledge()?'knowledge':!livingTeachingPersonAvailable(person,town)?'hands':hasIssue(town,'war')?'war':mealStock(town)<foodBuffer(town)?'food':null;
+            const blocked=!skyFlightKnowledge(town)?'knowledge':!livingTeachingPersonAvailable(person,town)?'hands':hasIssue(town,'war')?'war':mealStock(town)<foodBuffer(town)?'food':null;
             if(blocked) {
                 if(flight.pause!==blocked)skyStep(town,{knowledge:'The workshop needs more knowledge before this vessel can fly.',hands:`The flight waits for ${flight.scholar} to return to the work.`,war:'Fighting draws people away from the flight preparations.',food:'The flight waits. Feeding the town comes first.'}[blocked],flight);
                 flight.pause=blocked;continue;
@@ -13972,11 +14064,10 @@
         return `${escapeLivingText(world.name || world.label)}<span class="paultendoStoryProse">${status}</span>`;
     }
     function skyFlightItems(targetId) {
-        if(!skyFlightKnowledge())return [];
         const active=skyState().flights.find(f=>['preparing','enroute'].includes(f.status));
         if(active)return [{text:'Another flight is already underway.'}];
-        const towns=regToArray('town').filter(livingTownKnown).filter(t=>skyScholar(t)&&!t.end&&t.pop>0);
-        if(!towns.length)return [{text:'An available scholar must lead the flight.'}];
+        const towns=regToArray('town').filter(livingTownKnown).filter(t=>skyScholar(t)&&skyFlightKnowledge(t)&&!t.end&&t.pop>0);
+        if(!towns.length)return [{text:'A town needs the knowledge and an available scholar to prepare the flight.'}];
         return towns.map(town=>{
             if(hasIssue(town,'war'))return {text:`${escapeLivingText(town.name)} is fighting. Its flight preparations must wait.`};
             if(mealStock(town)<foodBuffer(town))return {text:`${escapeLivingText(town.name)} needs enough food for its people before preparing a flight.`};
@@ -14034,11 +14125,11 @@
             if(livingTownKnown(town))items.push({text:escapeLivingText(flight.name),func:()=>openSkyStudy(town,flight)});
         }
         if(!active&&!state.orbitalSurvey)items.push(...skyFlightItems(null));
-        if(!skyFlightKnowledge()) {
+        if(!regToArray('town').filter(livingTownKnown).some(skyFlightKnowledge)) {
             const missing=Object.entries(MATERIAL_RECIPES.sky_vessel.needs).filter(([key,level])=>(planet.unlocks[key] || 0)<level);
             const branches=livingDiscoveryBranches();
             const names=missing.map(([key,level])=>branches[key]?.levels.find(item=>item.level===level)?.name || titleCase(key));
-            items.push({text:`A powered survey vessel needs ${commaList(names)}. Its workshop must also have steel, glass and fuel.`});
+            items.push({text:names.length?`A powered survey vessel needs ${commaList(names)}. Its workshop must also have steel, glass and fuel.`:'The knowledge must reach a town before its workshop can prepare a powered vessel.'});
         }
         const charters=[...(getColonizationRegistry()?.charters || []),...(getColonizationRegistry()?.history || [])].filter(frontierKnown).slice(-4).reverse();
         if(charters.length) {
@@ -14201,7 +14292,7 @@
             // A busy workshop still needs its cargo vessel. Actual batches
             // allocate free hands separately, without erasing the route's need.
             const staffed=MATERIAL_RECIPES.cargo_vessel.roles.some(role=>town.jobs?.[role]>0);
-            return {town,stocks,demands,spares,room,values,cash:commodityStock(town,'cash'),trade:planet.unlocks.trade || 0,knowledge:materialTechniqueAvailable('cargo_vessel'),staffed,war:hasIssue(town,'war'),fed:mealStock(town)>=foodBuffer(town),person,religion,faithKey:religion?(religion._paultendoOrigin || `${ref.worldId}:${religion.id}`):null,practice:livingWorldState().teachings.some(t=>t.town===town.id&&t.active&&['care','food'].includes(t.meaning))};
+            return {town,stocks,demands,spares,room,values,cash:commodityStock(town,'cash'),trade:townKnowledgeLevel(town,'trade'),knowledge:materialTechniqueAvailable('cargo_vessel',town),staffed,war:hasIssue(town,'war'),fed:mealStock(town)>=foodBuffer(town),person,religion,faithKey:religion?(religion._paultendoOrigin || `${ref.worldId}:${religion.id}`):null,practice:livingWorldState().teachings.some(t=>t.town===town.id&&t.active&&['care','food'].includes(t.meaning))};
         },{silent:true});
     }
     function spaceCommodityTerms(route,buyer,seller,type,buyerRef,sellerRef) {
@@ -20502,7 +20593,7 @@
             if(town._paultendoMaterials?.[type]?.technique&&!actual)continue;
             if(!recipe.roles.some(role=>town.jobs?.[role]>0)||commodityStock(town,recipe.sample)<=0)continue;
             const curious=(town._paultendoPeople || []).some(person=>recipe.roles.includes(person.role)&&person.outlook==='curious'&&livingTeachingPersonAvailable(person,town));
-            const established=Object.entries(recipe.established).every(([key,level])=>(planet.unlocks[key] || 0)>=level);
+            const established=Object.entries(recipe.established).every(([key,level])=>townKnowledgeLevel(town,key)>=level);
             if(!actual&&!curious&&!established&&!(type==='steel'&&study==='education'))continue;
             interests.push({type,sample:recipe.sample,actual,needs:recipe.needs});
         }
