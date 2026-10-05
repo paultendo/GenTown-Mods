@@ -1,5 +1,5 @@
 Repository layout
-4 October 2026
+5 October 2026
 
 Player installation
 
@@ -22,6 +22,11 @@ package.json and package-lock.json describe the development dependencies.
 docs/release-1.6.92.txt and docs/qa/ preserve the evidence for the published
 v1.6.92 release. They describe that release, not later untested changes.
 docs/release-1.6.93.txt records the subsequent headline alignment correction.
+docs/release-1.6.94.txt records the controls, dependency views, routine
+update folding, map repairs and performance work. Its QA record retains
+the passing suite, campaign summaries, benchmark and browser checks.
+docs/mod-comparison-2026-10-05.txt and its QA record describe the other
+mods inspected before this work, with exact source hashes and limits.
 docs/screenshots/ contains genuine game captures used in the README, with
 their source campaign and capture details in captures.txt.
 

@@ -130,10 +130,12 @@ test('a scholar’s real work can travel by successful caravan, change meaning a
   const save=JSON.parse(JSON.stringify(w.generateSave()));
   const restored=await makeGame({save});t.after(restored.close);const rw=restored.window;
   const record=ideas(rw).find(r=>r.id===heard.id),rt=rw.regGet('town',target.id);
+  const drift=rw.gameEvents.guidanceTrustDrift.func,drifts=[];
+  rw.gameEvents.guidanceTrustDrift.func=function(subject,...args){const before=subject.guidanceTrust;const result=drift.call(this,subject,...args);if(subject.id===target.id)drifts.push(subject.guidanceTrust-before);return result;};
   rw.planet.day=record.due-1;next(rw);
   assert.equal(record.status,'adopted');assert.equal(record.meaning,'drills');
   assert.ok(record.changes.military>0 && record.changes.education>0);
-  assert.ok(rt.guidanceTrust<=trust,'Ordinary drift can reduce trust, but foreign ideas earn no whisper reward');
+  assert.ok(Math.abs(rt.guidanceTrust-trust-drifts.reduce((sum,delta)=>sum+delta,0))<1e-9,'Trust follows its actual drift, with no reward for hearing a foreign idea');
   assert.notEqual(rt._paultendoGuidanceReason,'whisper:heard');
   assert.equal(record.origin.id,root.id);assert.equal(record.origin.kind,'community');
   assert.equal(record.chain[0].words,root.words);assert.equal(record.strength,root.strength*0.65);

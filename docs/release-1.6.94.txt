@@ -1,0 +1,105 @@
+V1.6.94 RELEASE VERIFICATION
+5 October 2026
+
+Controls and attention
+
+The main day control becomes Decisions when actual proposals are waiting.
+It opens their original questions and delegates Yes, No and Act to the
+native live controls. Answering does not advance time. Let the day pass
+explicitly uses GenTown's varied lapse rules. Urgent letters cannot be
+bypassed. Play and speed remain secondary controls.
+
+The Executive groups town life, world, records and time. Projects brings
+active research, making, surveys and native construction into one view.
+Missing supplies link to actual ingredients, committed stock and local
+discoveries. Opening these views consumes no goods, time or random draws.
+A maker waiting for unavailable ingredients no longer blocks the research
+that could supply them. Such research still requires its materials and work.
+
+Routine sunset totals, repeated tool updates and ordinary mastered batches
+fold into Town updates. Their original records remain. New methods,
+apprentices, setbacks and live decisions stay visible. Named diagnostics
+record repeated failures once, with counts in Info / Game health, alongside
+GenTown's original Info entries.
+
+Map and performance
+
+Fog rebuilds retain every town's view instead of clearing earlier towns.
+Daily visibility no longer vanishes on unchanged towns. Claimed territory
+caches live outside saves, and legacy copies are removed on import/save.
+The native compressed map encoding is unchanged. The native serializer
+avoids cloning map tiles that it immediately discards. Unchanged Chronicle
+serialization is cached. Path searches skip stale queue entries; route
+caches account for moved anchors and changed ground, remain bounded and
+only cache an unreachable route for that day.
+
+The audit's Day 751 input contained 19 legacy territory caches with 230,264
+serialized UTF-8 bytes of duplicate tile data. That is a field total, not
+a promised percentage reduction for every save.
+
+Same-input, 30-turn harness timing (CPU-profiled, seed 42, mixed choices):
+                    v1.6.93      final v1.6.94
+Median nextDay        344.7 ms        305.2 ms
+95th percentile       504.6 ms        393.9 ms
+Longest call          628.6 ms        623.4 ms
+
+The final median fell 11.5%, with the 95th percentile down 21.9%. Earlier
+candidate runs measured 256/257 ms medians. Host load and small samples
+vary. These measure native simulation calls in jsdom, not browser FPS.
+
+A real browser turn at Day 756 to 757 also completed with fourfold CPU
+throttling: 2.62 seconds of script time, 0.19 seconds of layout and 0.12
+seconds of style work. No errors or warnings, and the map remained visible.
+The observation includes UI inspection overhead. Slower hardware can still
+pause noticeably. This was simulated CPU slowdown, not a physical-device
+or network test.
+
+Checks
+
+npm run check passed.
+The final full suite passed all 685 tests, with no failures, skips or
+cancellations. Eight added regressions cover the decision flow, native
+lapse, save encoding, multiple towns' visibility, shortage explanations,
+routine-history recovery, real caught failures and research prerequisites.
+
+Three campaigns completed 750 actual turns with no runtime failures,
+console errors, warnings or proposals missing controls:
+- Seed 42, Yes: 300 turns, Day 1 to 301, 27 discovery thresholds.
+- Seed 123, mixed: 300 turns, Day 1 to 301, 15 discovery thresholds.
+- Continued seed 42, mixed: 150 turns, Day 751 to 901, nine living towns.
+
+These campaigns used the v1.6.94 simulation build before final choice-button
+styling and Info-menu integration corrections. Final release bytes passed
+the full suite and real browser checks. Their exact source and input hashes
+are retained separately. Work still waiting is retained in the QA record.
+The later campaign has six jobs unchanged for at least 30 days. Missing
+methods, scarce supplies and unavailable workers remain real constraints.
+No artificial completion was inserted to make a campaign look successful.
+
+Browser checks at 1280x720 and 390x844 used an actual imported Day 751 save,
+reloads and real interface actions. The map remained visible through Day
+757. Act opened its original prompt. A keyboard Yes answered its original
+proposal without advancing. The phone Chronicle and work/decision panels
+have no horizontal overflow, with 44px touch controls. The native desktop
+document retains a 3px width excess; its decision panel fits.
+
+The README has two new genuine captures alongside its earlier story tour.
+Capture provenance and image hashes are recorded. No runtime or development
+dependencies were added. The independently installable classic script is
+still the delivery artifact. The vendor engine, icons and font assets are
+unchanged. The earlier other-mod audit remains dated evidence, with a
+follow-up describing the implemented repairs.
+
+Human feedback is still needed for pacing, comprehensibility and enjoyment.
+These checks cannot certify every save, device or mod combination.
+
+Mod SHA-256
+6110cf3a02cb28ad1e6d06a541a3ac29eedd5c16235850e9bf019a256d448e8b
+
+Install
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.94/paultendo-mod.js
+
+Source hashes, test output hash, campaign summaries, unfinished work,
+timings, browser checks and publication readback are recorded in
+docs/qa/release-1.6.94.json. The publication field distinguishes prepared
+local results from verified remote bytes.

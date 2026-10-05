@@ -2,7 +2,7 @@
 
 Follow a tool from the workshop to the fields, a crew from shore to shore, or a rumour into a discovery. Towns keep their own needs, knowledge and grudges. You can help them, leave an object behind, or give someone a dangerous idea.
 
-Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.93**. Based on **GenTown 1.4 / gt5**, checked on 4 October 2026.
+Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.94**. Based on **GenTown 1.4 / gt5**, checked on 5 October 2026.
 
 [![Towns, fields, roads and today’s news on Ujoris e](docs/screenshots/world.jpg)](docs/screenshots/world.jpg)
 
@@ -13,12 +13,20 @@ Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.93**. B
 Export your existing save from **Saves** first. In GenTown, choose **Settings → Add mod** and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.93/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.94/paultendo-mod.js
 ```
 
-Reload after adding it. This replaces older paultendo mod URLs automatically. The Chronicle shows `paultendo-mod active (v1.6.93)` after settling a town and advancing a day. Use the versioned CDN URL. Raw GitHub script URLs and the mixed-case GitHub Pages path do not install reliably through GenTown’s loader. Avoid combining this with other large overhaul mods.
+Reload after adding it. This replaces older paultendo mod URLs automatically. The Chronicle shows `paultendo-mod active (v1.6.94)` after settling a town and advancing a day. Use the versioned CDN URL. Raw GitHub script URLs and the mixed-case GitHub Pages path do not install reliably through GenTown’s loader. Avoid combining this with other large overhaul mods.
 
 This addresses the installation issue reported in [GenTown-Mods #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
+
+## When something needs your attention
+
+The day button becomes **Decisions** when a proposal is waiting. Open it to answer the actual question. **Projects** brings unfinished work together, with links through its missing supplies and local discoveries. Routine town updates fold away in the Chronicle, leaving room for choices and changes.
+
+<a href="docs/screenshots/material-dependencies.png"><img src="docs/screenshots/material-dependencies.png" width="640" alt="Wayfarer 597 needs glass for telescopes. The panel follows the missing local forge discovery, sand, charcoal and timber."></a> <a href="docs/screenshots/decisions-mobile.png"><img src="docs/screenshots/decisions-mobile.png" width="195" alt="A live choice about shared learning, with coloured town flags, Yes and No, and a quieter option to let the day pass."></a>
+
+*Ujoris e, Day 756. Glass is holding up a telescope. In the same world, Wayfarer 597 asks about learning with Peahaven.*
 
 ## A few stories from one world
 
@@ -58,7 +66,7 @@ The same world also has creeds, rivalries, celebrations, wars and places marked 
 <summary>Open the full feature comparison</summary>
 
 
-This comparison is against the [current official game](https://r74n.com/gentown/), **GenTown 1.4 / gt5**, checked on **4 October 2026**. Its scripts match the [vendored source snapshot](vendor/gentown/upstream.json). GenTown already has procedural worlds, town building, discoveries, occupations, taxes, governments, colonies, diplomacy, war and disasters. This mod keeps that foundation and extends how those systems interact.
+This comparison is against the [current official game](https://r74n.com/gentown/), **GenTown 1.4 / gt5**, checked on **5 October 2026**. Its scripts match the [vendored source snapshot](vendor/gentown/upstream.json). GenTown already has procedural worlds, town building, discoveries, occupations, taxes, governments, colonies, diplomacy, war and disasters. This mod keeps that foundation and extends how those systems interact.
 
 | Area | Base GenTown 1.4 | What this mod adds or changes |
 | --- | --- | --- |
@@ -102,8 +110,9 @@ The detailed [implementation notes](docs/mod-notes.txt) describe the mechanics a
 
 - **Start a town** on habitable ground. Advance a day at a time while getting to know it.
 - **Follow Today’s news** for recent changes. Open a headline for the full story. The Chronicle keeps the history and actual choices.
-- **Answer the choices you care about.** Yes, No and Act belong to live entries. Old proposals fade into the record. Next Day follows GenTown’s normal lapse and fallback behaviour, which varies by event. It is not always a Yes or a No. Autoplay pauses for an unanswered live choice by default. **Review decision** takes you to it, even from another panel.
-- **Visit a town** to meet its people, inspect materials and follow **Work and inventions**. A current job shows what holds it up, who is doing it and where its supplies came from. Looking at work never advances it.
+- **Answer the choices you care about.** The main day button becomes **Decisions** and opens the live Yes, No or Act controls. Old proposals fade into the record. **Let the day pass** leaves ordinary proposals to GenTown’s usual course, which varies by event. It does not always mean Yes or No. Urgent letters still need to be opened. Autoplay pauses for an unanswered live choice by default.
+- **Open Projects** for current research, workshop work and journeys. Follow a shortage to see the ingredients, available supplies and discoveries needed here. **Visit a town** to meet its people and inspect **Work and inventions**. Looking at work never advances it.
+- **Expand Town updates** when you want the routine batches and daily totals. Those entries stay in the Chronicle. New methods, apprentices, setbacks and live choices remain visible.
 - **Explore through actual journeys.** Newly found places and useful samples can lead to later work, trade and settlement. Unknown ground stays hidden.
 - **Visit the Council** once communities have reasons to deal with one another. Check the proposed obligations before speaking for or against an agreement. The towns retain their own opinions and decide after the talks.
 - **Meet the Traveler** when you want to influence someone directly. An object or a whispered idea can meet curiosity, resistance or a different purpose. People also act without you.
@@ -117,7 +126,9 @@ Objects keep their makers and histories. A rare object finished during war can g
 
 Try a new town as well as an existing save. Follow one shortage through its work, exchanges and eventual result. Speak for or against a council proposal, then return when the talks end. Reload while something is underway and check that its progress, map and history survive.
 
-Version **1.6.93** adds this screenshot tour and fixes the alignment of the news links. Its [release checks](docs/release-1.6.93.txt) cover the current version and the desktop and phone layouts.
+Version **1.6.94** brings decisions into the main day control, exposes missing materials and local methods, and folds routine updates. It also repairs fog visibility between towns and days, removes duplicate map caches from saves and reduces repeated route and save work. The [release checks](docs/release-1.6.94.txt) record **685 passing tests**, **750 campaign turns** and desktop and phone checks. The final harness measurement reduced median turn time from **345 ms to 305 ms** on the same later-game save. Earlier measurements were faster, so expect some variation. These are simulation timings, not browser frame rates.
+
+If something stops working, **Info → Game health** keeps a short report of failed mod tasks. Include that report and an exported save with your feedback. It avoids repeating the same warning every turn.
 
 Useful feedback includes the mod version, day, what you expected, what happened and an exported save where possible. Quiet stretches, repeated interruptions and advances that arrive too easily matter as much as crashes. Longer campaign balance still needs human playtesting.
 

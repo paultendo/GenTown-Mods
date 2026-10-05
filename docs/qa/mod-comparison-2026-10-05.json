@@ -1,0 +1,618 @@
+{
+  "date": "2026-10-05",
+  "modVersion": "1.6.93",
+  "modCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+  "upstream": {
+    "commit": "575f5f8a4bb4b07815ab348a7818485c403b9397",
+    "files": [
+      {
+        "file": "3d.js",
+        "bytes": 29570,
+        "sha256": "7232cb79e07f82e34dffbbdb2b26b982220630396f0f7c0a0c75040020c6802a",
+        "gitBlob": "eb31d9c6d2fe48ee28a63b5d4c4bdc3a38b0367a"
+      },
+      {
+        "file": "admin.js",
+        "bytes": 6273,
+        "sha256": "caaded28091abc9a03f9974a23124971b21c95f5bb173347f98fa4af5aa451c6",
+        "gitBlob": "0e8456cca3e754f0095c2bb731efc866bffd7240"
+      },
+      {
+        "file": "better-prompts.js",
+        "bytes": 4034,
+        "sha256": "ac21f6c7454e73e11e702cb85bd0775e877fc53c82b709134dc94960efa87b98",
+        "gitBlob": "764fe2cfc64a18a63651f555d8608418f3d5e721"
+      },
+      {
+        "file": "better_mod_loader.mjs",
+        "bytes": 7491,
+        "sha256": "9bc890da45c4977c64b84e6264ffcac22b7e1b6510729b230ceb41175f8be79c",
+        "gitBlob": "17e013affdd0b880c35c3b22a5fc37cac68cb7f9"
+      },
+      {
+        "file": "choices.js",
+        "bytes": 665,
+        "sha256": "29ee0fc0f438da4d755eff4a37cb55d81c224fb42c35690a28e850e4c5db420e",
+        "gitBlob": "012f206dfd3d0f330354e21071b4c2e1bd93d44e"
+      },
+      {
+        "file": "disasters.js",
+        "bytes": 77823,
+        "sha256": "de39b64c5c9fc7ce60c816e625158f06dc6a3ea75dce341bf66052825dff5d6a",
+        "gitBlob": "1a9e0315833bc065fffac7d04964e3664bfff3c3"
+      },
+      {
+        "file": "example_mod.js",
+        "bytes": 1217,
+        "sha256": "abf7b7dafda14d200ede6adc36831fd360cf7d4be2799ae1b1c1be653e29dc8a",
+        "gitBlob": "76787e5d776a6f2c0c296f5516ed42715542be69"
+      },
+      {
+        "file": "living-planet.js",
+        "bytes": 16125,
+        "sha256": "8a2c90ea9b85c61a0bd91a8988715ecb8a33f11dbcc96ea5658c4f0477ada812",
+        "gitBlob": "11df2aff3b055e3f8244aca51a35e5be67d65631"
+      },
+      {
+        "file": "map-draw.js",
+        "bytes": 13748,
+        "sha256": "5f4d17c345c25689c1b424bf7c6b89feb2285648e75f604052cfba3d078efc63",
+        "gitBlob": "af7a7a5b86bbf171da59b0a4c438e2e4fd841627"
+      },
+      {
+        "file": "mods.json",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "gitBlob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+      },
+      {
+        "file": "news-politics.js",
+        "bytes": 70678,
+        "sha256": "ddbf8d63a069d8bf09a15e89f6a409fe0df6c773bc7d1fd3cdec05f4b0fac027",
+        "gitBlob": "12baa7bd471eef6afa9c58a83c7cfe1913401f31"
+      },
+      {
+        "file": "skip.js",
+        "bytes": 4704,
+        "sha256": "1f77488ab522984302f18d1320a70e880c61479cf1c9e0e4e27a859cecb49ba1",
+        "gitBlob": "e1688b48cc98b511458be72cc12c3555289885aa"
+      },
+      {
+        "file": "spacetravel.js",
+        "bytes": 45473,
+        "sha256": "680e0df5edf1e5d2289f979d4cbc71fc1dd1bfbb9783ff2bb1766b6ba236740e",
+        "gitBlob": "ab12ea5c2560c423bf3f77a0eac7ace575d416af"
+      },
+      {
+        "file": "whirl-load.js",
+        "bytes": 4424,
+        "sha256": "32a476058d84d00b7d1f6cf7b458ce0aae5459cd2c5bdb494bd58b2d024d4fea",
+        "gitBlob": "f87e0555f687027935ffa0ec01ca962a7d3bce1c"
+      },
+      {
+        "file": "world-configurator.js",
+        "bytes": 6134,
+        "sha256": "47072cd2a4dc544754781d58ff4ce3c9908ce5be95aca7a538fffda36ec73470",
+        "gitBlob": "ab53a9d52169a181b5b7ffce004c2e319dcf88de"
+      }
+    ]
+  },
+  "syntax": [
+    {
+      "file": "3d.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "admin.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "better-prompts.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "better_mod_loader.mjs",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "choices.js",
+      "syntaxOK": false,
+      "problem": [
+        "/private/tmp/gentown-other-mods/choices.js:2",
+        "    messageDone: (subject, target, args) => `{{regname:town|${target.id}}} are weird.`,",
+        "               ^",
+        "",
+        "SyntaxError: Unexpected token ':'",
+        "    at wrapSafe (node:internal/modules/cjs/loader:1762:18)",
+        "    at checkSyntax (node:internal/main/check_syntax:76:3)"
+      ]
+    },
+    {
+      "file": "disasters.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "example_mod.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "living-planet.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "map-draw.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "news-politics.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "skip.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "spacetravel.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "whirl-load.js",
+      "syntaxOK": true,
+      "problem": []
+    },
+    {
+      "file": "world-configurator.js",
+      "syntaxOK": true,
+      "problem": []
+    }
+  ],
+  "nativeLoaderChecks": {
+    "native": {
+      "events": "undefined",
+      "gameEvents": "object",
+      "showPrompt": "undefined",
+      "doPrompt": "function"
+    },
+    "results": [
+      {
+        "file": "3d.js",
+        "classicScript": true
+      },
+      {
+        "file": "admin.js",
+        "classicScript": true,
+        "lateStartup": {
+          "queuedCallbacks": 1,
+          "executed": false
+        }
+      },
+      {
+        "file": "better-prompts.js",
+        "classicScript": false,
+        "error": "Cannot use import statement outside a module"
+      },
+      {
+        "file": "better_mod_loader.mjs",
+        "classicScript": false,
+        "error": "await is only valid in async functions and the top level bodies of modules"
+      },
+      {
+        "file": "choices.js",
+        "classicScript": false,
+        "error": "Unexpected token ':'"
+      },
+      {
+        "file": "disasters.js",
+        "classicScript": true
+      },
+      {
+        "file": "example_mod.js",
+        "classicScript": true
+      },
+      {
+        "file": "living-planet.js",
+        "classicScript": true,
+        "lateStartup": {
+          "queuedCallbacks": 1,
+          "executed": false
+        }
+      },
+      {
+        "file": "map-draw.js",
+        "classicScript": true,
+        "lateStartup": {
+          "queuedCallbacks": 1,
+          "executed": false
+        }
+      },
+      {
+        "file": "news-politics.js",
+        "classicScript": true
+      },
+      {
+        "file": "skip.js",
+        "classicScript": true
+      },
+      {
+        "file": "spacetravel.js",
+        "classicScript": true,
+        "lateStartup": {
+          "queuedCallbacks": 1,
+          "executed": false
+        }
+      },
+      {
+        "file": "whirl-load.js",
+        "classicScript": true
+      },
+      {
+        "file": "world-configurator.js",
+        "classicScript": true
+      }
+    ]
+  },
+  "freshCampaigns": [
+    {
+      "name": "base",
+      "status": "passed",
+      "turns": 300,
+      "errors": [],
+      "warnings": [],
+      "unavailableChoices": 0,
+      "elapsedMs": 6912,
+      "daysPerSecond": 43.4,
+      "choiceCounts": {
+        "act": 40,
+        "yes": 118
+      },
+      "discoveryRhythm": {
+        "first30Turns": 2,
+        "turns31To150": 11,
+        "after150Turns": 13
+      },
+      "longestQuietStretch": 17,
+      "completedWork": 0,
+      "stalledWork": 0,
+      "news": 406,
+      "population": 4279
+    },
+    {
+      "name": "news-politics",
+      "status": "passed",
+      "turns": 300,
+      "errors": [],
+      "warnings": [],
+      "unavailableChoices": 0,
+      "elapsedMs": 7296,
+      "daysPerSecond": 41.1,
+      "choiceCounts": {
+        "yes": 99,
+        "act": 51
+      },
+      "discoveryRhythm": {
+        "first30Turns": 4,
+        "turns31To150": 7,
+        "after150Turns": 11
+      },
+      "longestQuietStretch": 21,
+      "completedWork": 0,
+      "stalledWork": 0,
+      "news": 583,
+      "population": 24665
+    },
+    {
+      "name": "space-travel",
+      "status": "passed",
+      "turns": 300,
+      "errors": [],
+      "warnings": [],
+      "unavailableChoices": 0,
+      "elapsedMs": 6030,
+      "daysPerSecond": 49.8,
+      "choiceCounts": {
+        "act": 46,
+        "yes": 121
+      },
+      "discoveryRhythm": {
+        "first30Turns": 6,
+        "turns31To150": 10,
+        "after150Turns": 8
+      },
+      "longestQuietStretch": 23,
+      "completedWork": 0,
+      "stalledWork": 0,
+      "news": 415,
+      "population": 9049
+    },
+    {
+      "name": "disasters",
+      "status": "issues",
+      "turns": 300,
+      "errors": [],
+      "warnings": [],
+      "unavailableChoices": 25,
+      "elapsedMs": 7057,
+      "daysPerSecond": 42.5,
+      "choiceCounts": {
+        "act": 42,
+        "yes": 101
+      },
+      "discoveryRhythm": {
+        "first30Turns": 5,
+        "turns31To150": 12,
+        "after150Turns": 5
+      },
+      "longestQuietStretch": 28,
+      "completedWork": 0,
+      "stalledWork": 0,
+      "news": 366,
+      "population": 28371
+    },
+    {
+      "name": "paultendo",
+      "status": "passed",
+      "turns": 300,
+      "errors": [],
+      "warnings": [],
+      "unavailableChoices": 0,
+      "elapsedMs": 36078,
+      "daysPerSecond": 8.3,
+      "choiceCounts": {
+        "act": 33,
+        "yes": 114,
+        "choice": 1
+      },
+      "discoveryRhythm": {
+        "first30Turns": 5,
+        "turns31To150": 12,
+        "after150Turns": 11
+      },
+      "longestQuietStretch": 12,
+      "completedWork": 43,
+      "stalledWork": 1,
+      "news": 742,
+      "population": 96
+    }
+  ],
+  "laterCampaign": {
+    "seed": 42,
+    "policy": "mixed",
+    "turns": 150,
+    "startDay": 601,
+    "status": "passed",
+    "errors": [],
+    "warnings": [],
+    "elapsedMs": 75146,
+    "longestQuietStretch": 2,
+    "discoveryRhythm": {
+      "first30Turns": 0,
+      "turns31To150": 0,
+      "after150Turns": 0
+    }
+  },
+  "laterCampaignDetails": {
+    "endDay": 751,
+    "unavailableChoices": 0,
+    "newlyClosedWorkRecords": 42,
+    "stalledWork": [
+      {
+        "kind": "materialWork",
+        "name": "Pitein",
+        "age": 549,
+        "daysWithoutProgress": 150
+      },
+      {
+        "kind": "materialWork",
+        "name": "V\u00e9jamin",
+        "age": 167,
+        "daysWithoutProgress": 150
+      }
+    ]
+  },
+  "restoredStoryLinks": {
+    "checked": 59,
+    "noEffect": [],
+    "errors": [],
+    "warnings": []
+  },
+  "regressionTests": {
+    "focused": {
+      "pass": 57,
+      "fail": 0,
+      "files": [
+        "chronicle-stories",
+        "workshop-prerequisites",
+        "workshop-orders",
+        "glass-workshops",
+        "campaign-harness"
+      ]
+    },
+    "runtimePattern": {
+      "pass": 9,
+      "fail": 0,
+      "pattern": "installing after|loaded|restor|reload|map|autoplay"
+    },
+    "fullSuiteRerun": false
+  },
+  "browser": {
+    "origin": "http://127.0.0.1:4175/",
+    "save": "seed-42-yes Day 601 from release 1.6.92 actual campaign",
+    "checked": [
+      "native file import",
+      "restored crossing story",
+      "advance to Day 602",
+      "refresh",
+      "advance to Day 603",
+      "visible terrain after refresh and turn",
+      "390x844 layout"
+    ],
+    "warnings": [],
+    "errors": [],
+    "mobile": {
+      "viewport": 390,
+      "bodyScrollWidth": 390,
+      "chronicleWidth": 356,
+      "chronicleScrollWidth": 356
+    },
+    "screenshots": [
+      "/private/tmp/gentown-comparison-desktop.png",
+      "/private/tmp/gentown-comparison-mobile.png"
+    ]
+  },
+  "limitations": [
+    "One seed and automatic Yes policy for comparisons. Different mod event streams produce different towns and populations.",
+    "The harness stubs canvas drawing. Its throughput is not browser FPS or mobile responsiveness.",
+    "Late stress campaign ran alongside focused tests. Its elapsed time is not a controlled performance benchmark.",
+    "Space-travel campaign tested ordinary advancement with that mod installed, not a completed interplanetary journey.",
+    "3D WebGL rendering was source-reviewed only.",
+    "Caught exceptions can remain silent. No errors observed does not establish absence of every feature failure.",
+    "Passing campaigns and numeric invariants do not establish enjoyable human play."
+  ],
+  "productionCodeChanged": false,
+  "pullRequestCreated": false,
+  "artifactDirectory": "/private/tmp/gentown-comparison-2026-10-05",
+  "isolatedLateTurnTiming": {
+    "status": "passed",
+    "turns": 30,
+    "startDay": 751,
+    "endDay": 781,
+    "elapsedMs": 13059,
+    "perNextDayMs": {
+      "median": 344.69399999999996,
+      "p95": 504.62554199999977,
+      "max": 628.5875830000004
+    },
+    "errors": [],
+    "warnings": [],
+    "unavailableChoices": 0
+  },
+  "totalCampaignTurns": 1680,
+  "paultendoCampaignTurns": 480,
+  "cpuProfile": {
+    "path": "/private/tmp/gentown-turns.cpuprofile",
+    "scope": "Startup, import, 30 late nextDay calls, timers and harness checks. Self samples include harness overhead.",
+    "topSelfSamples": [
+      {
+        "function": "generateSave",
+        "file": "gentown.js",
+        "line": 6167,
+        "percent": 9.8
+      },
+      {
+        "function": "findPath",
+        "file": "paultendo-mod.js",
+        "line": 39391,
+        "percent": 6.3
+      },
+      {
+        "function": "regFilter",
+        "file": "gentown.js",
+        "line": 796,
+        "percent": 5.0
+      },
+      {
+        "function": "chunkAt",
+        "file": "gentown.js",
+        "line": 544,
+        "percent": 4.0
+      },
+      {
+        "function": "syncLogToPlanet",
+        "file": "paultendo-mod.js",
+        "line": 15298,
+        "percent": 3.9
+      },
+      {
+        "function": "filterChunks",
+        "file": "gentown.js",
+        "line": 1954,
+        "percent": 3.5
+      },
+      {
+        "function": "updateFogVisibilityForTown",
+        "file": "paultendo-mod.js",
+        "line": 12431,
+        "percent": 3.2
+      },
+      {
+        "function": "autosave",
+        "file": "gentown.js",
+        "line": 5973,
+        "percent": 3.1
+      },
+      {
+        "function": "commodityClaimedStock",
+        "file": "paultendo-mod.js",
+        "line": 8542,
+        "percent": 2.8
+      },
+      {
+        "function": "(garbage collector)",
+        "file": "",
+        "line": 0,
+        "percent": 2.4
+      },
+      {
+        "function": "nextDay",
+        "file": "gentown.js",
+        "line": 4528,
+        "percent": 1.6
+      },
+      {
+        "function": "getCachedPath",
+        "file": "paultendo-mod.js",
+        "line": 39470,
+        "percent": 1.6
+      }
+    ]
+  },
+  "liveEngineVerification": [
+    {
+      "file": "gentown.js",
+      "url": "https://r74n.com/gentown/gentown.js",
+      "sha256": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+      "matchesVendored": true
+    },
+    {
+      "file": "gentown-data.js",
+      "url": "https://r74n.com/gentown/gentown-data.js",
+      "sha256": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+      "matchesVendored": true
+    },
+    {
+      "file": "gentown-mass.js",
+      "url": "https://r74n.com/gentown/gentown-mass.js",
+      "sha256": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+      "matchesVendored": true
+    },
+    {
+      "file": "perlin.js",
+      "url": "https://r74n.com/gentown/perlin.js",
+      "sha256": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+      "matchesVendored": true
+    },
+    {
+      "file": "standalone.js",
+      "url": "https://r74n.com/textviewer/standalone.js",
+      "sha256": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+      "matchesVendored": true
+    },
+    {
+      "file": "load.js",
+      "url": "https://r74n.com/load.js",
+      "sha256": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+      "matchesVendored": true
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+GenTown mod comparison — 5 October 2026
+
+Current paultendo release: 1.6.93, commit 056c32d6b0ec367cad57725dcefad12c601011d5.
+Upstream snapshot reviewed: 575f5f8a4bb4b07815ab348a7818485c403b9397.
+All 15 root files downloaded at that pinned commit. The six native engine
+scripts were fetched again from R74n and match the vendored bytes. SHA-256 hashes, results and
+limits are in docs/qa/mod-comparison-2026-10-05.json. No other author's code was
+copied into the mod. This audit made no gameplay changes or upstream PR.
+
+What is worth learning from the other mods
+
+1. better_mod_loader.mjs reports the exact failing mod and missing dependencies.
+   This is a useful principle for our subsystems. Numerous catch blocks in our
+   mod suppress errors, so a passing campaign cannot prove every feature worked.
+   Use bounded, named diagnostics without flooding the Chronicle or stopping
+   unrelated game systems. Do not adopt the experimental module loader itself.
+
+2. world-configurator.js has an explicit redraw sequence after changing map
+   dimensions: resize, terrain, highlight, cursor, statistics, composed canvas.
+   Keep our fog and epidemic overlays in that lifecycle too. Our current import,
+   refresh and next-day browser checks retained the map.
+
+3. skip.js yields between turns and presents simple progress controls. Our
+   autoplay already yields, pauses for genuine decisions and avoids answering
+   unrelated confirmation dialogs. Keep deliberate player control. The skip mod
+   attempts to click popup Yes/OK and default answers for any active prompt.
+
+4. living-planet.js has a strong, consistent theme through its biome names and
+   palette. This is a useful narrative lesson, not a reliability improvement.
+   Our traveller, local makers and recorded consequences should supply that
+   consistency without adding more independent narration systems.
+
+Compatibility and rough edges found in the reviewed snapshot
+
+- choices.js does not parse as JavaScript (Unexpected token ':').
+- better-prompts.js imports a module. GenTown's standard loader inserts a classic
+  script, which rejects that import. Its events/showPrompt targets also do not
+  exist in the current native engine, which uses gameEvents/doPrompt. The custom
+  loader is a separate integration requirement, not a drop-in improvement.
+- Several mods use native Mod.afterLoad alone. Loading them after the game has
+  started queues initialization until a later load. Our late-install regression
+  passes, including the necessary map redraw.
+- disasters.js ran 300 turns without uncaught errors but generated 25 events
+  marked as needing input without a message or live controls. The precise event names are recorded.
+- map-draw.js edits live chunks while the editor is open. Cancel hides the editor
+  without restoring those changes. Its import validates width but not the whole
+  map shape. It reports Save & Apply errors, which is a useful UX principle.
+- 3d.js fetches external Three.js and controls scripts. Its animation frame loop
+  continues to schedule while the feature is disabled. WebGL was not benchmarked.
+- spacetravel.js holds additional worlds in a window cache. No save hooks for
+  that cache were found in this file. Cross-world persistence needs a dedicated
+  test before calling it safer. The campaign below did not complete a space trip.
+
+Fresh campaigns on current native GenTown (seed 42, fertile start, Yes policy)
+
+Case             Turns  Uncaught errors  Missing choices  Harness elapsed
+Base GenTown       300         0                 0              6.9s
+News/Politics      300         0                 0              7.3s
+Space Travel       300         0                 0              6.0s
+Disasters          300         0                25              7.1s
+paultendo 1.6.93   300         0                 0             36.1s
+
+No warnings in these runs. Our run closed 43 work records and crossed 28 real
+technology thresholds. Its longest stretch without a tracked milestone was
+12 turns, versus 17 in base. These measurements do not establish fun: different
+mods change the random event stream and produce different populations. A tiny
+work-status change counts as a milestone. Ordinary news does not.
+
+Our 300-turn run logged 742 non-sunrise/sunset entries, versus 406 in base and
+583 in News/Politics. More news is not necessarily better. Keep first discoveries,
+changed obstacles and consequential outcomes prominent. Routine repetition
+needs restraint so players can notice the rare, joyful or alarming events.
+
+Later-game and reload checks
+
+- Imported the actual seed-42 Yes campaign save from Day 601. All 59 visible
+  restored story links opened a panel. No exceptions or warnings. The previously
+  unresponsive crossing was not reproduced, so no speculative fix was made.
+- Continued that save for 150 mixed-choice turns through Day 751. No missing
+  controls, invariant failures, warnings or runtime errors. 42 additional work
+  records reached an outcome. Two telescope projects remained waiting.
+- These waits had a real dependency: missing glass and insufficient local heat
+  technology to make it. The town needs hotter workshop methods or an actual
+  supply route. They are not proved crashed jobs. Their persistent, generic
+  'Gathering materials' status does not explain that chain well enough.
+- Ran another 30 turns through Day 781 separately with CPU profiling. Passed.
+  Median native nextDay call in jsdom: 345ms. P95: 505ms. Maximum: 629ms.
+  Self-sample hotspots include save serialization, pathfinding and fog visibility.
+  This is a profiling lead, not a measurement of browser frame rate or touch lag.
+- 57 focused regressions passed for stories, workshop prerequisites, orders,
+  glass and the campaign harness. Another 9 runtime tests passed for late loading,
+  map/save restoration and autoplay-related cases. No full-suite rerun claimed.
+- Real browser at an isolated origin: imported the save, opened the crossing,
+  advanced to Day 602, refreshed, advanced to Day 603. Terrain remained visible.
+  No captured console warnings or errors. User's existing game was untouched.
+- 390x844 phone check: body width 390, Chronicle width and scroll width both 356.
+  No horizontal clipping. Screenshots are in /private/tmp/gentown-comparison-*.png.
+
+Release judgement
+
+The reviewed mods do not provide convincing evidence of greater reliability.
+Our current checks cover more recovery paths, but the mod carries much more
+simulation and UI work. Before submitting the upstream PR, prioritise:
+
+1. Show the actual chain behind blocked work, including knowledge, resources,
+   committed supplies and available makers. Do not invent free completion.
+2. Report caught subsystem failures with bounded diagnostics so a partial failure
+   cannot quietly masquerade as a healthy game.
+3. Profile actual browser turns on later saves and a slower device. Reduce repeated
+   save, fog and route work before increasing speed or adding more simulation.
+4. Run a short human playtest for quiet stretches, routine news volume and whether
+   players understand what their choices changed. Automation cannot certify this.
+
+Evidence is scoped to 1,680 campaign turns, including 480 on our mod. The 3D
+renderer, every configuration, all policies and all possible mod combinations
+were not tested. Extra protections are not a guarantee of crash-free play.
+
+Follow-up: v1.6.94
+
+The dependency views, named diagnostics, routine-update folding and
+performance repairs prompted by this audit are now implemented. Decisions
+use the main day control, with actual native answers in one focused panel.
+A real browser turn also completed under fourfold CPU throttling. This
+simulates slower processing, not a complete physical phone or network test.
+The release checks and remaining pacing limits are in docs/release-1.6.94.txt.
+The numbers and findings above retain their original v1.6.93 audit scope.
+
+Pinned source links
+https://github.com/R74nCom/GenTown-Mods/tree/575f5f8a4bb4b07815ab348a7818485c403b9397
+https://github.com/R74nCom/GenTown-Mods/blob/575f5f8a4bb4b07815ab348a7818485c403b9397/better_mod_loader.mjs
+https://github.com/R74nCom/GenTown-Mods/blob/575f5f8a4bb4b07815ab348a7818485c403b9397/world-configurator.js
+https://github.com/R74nCom/GenTown-Mods/blob/575f5f8a4bb4b07815ab348a7818485c403b9397/skip.js
+https://github.com/R74nCom/GenTown-Mods/blob/575f5f8a4bb4b07815ab348a7818485c403b9397/disasters.js
+https://github.com/R74nCom/GenTown-Mods/blob/575f5f8a4bb4b07815ab348a7818485c403b9397/map-draw.js

@@ -18,7 +18,7 @@
 // - UI/UX: discovery & system indicators, divine guidance cooldowns.
 //
 // Install: GenTown -> Settings -> Add mod ->
-// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.93/paultendo-mod.js
+// https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.94/paultendo-mod.js
 // Dev: Use a full URL while iterating.
 //
 // Compatibility: Tested on GenTown 1.4 / gt5; avoid stacking with other large overhaul mods.
@@ -49,7 +49,7 @@
 (function() {
     "use strict";
 
-    const MOD_VERSION = "1.6.93";
+    const MOD_VERSION = "1.6.94";
     // Native startup can resize before its saved planet has been parsed.
     // Install this in the distributable mod, including duplicate-load races.
     if (typeof window !== "undefined" && !window._paultendoStartupResizeGuard) {
@@ -112,6 +112,21 @@
     PAULTENDO_GLOBAL._paultendoEventStack = PAULTENDO_EVENT_STACK;
     // Runtime entity references belong outside the serialized planet/save data.
     const dailyCaches = new WeakMap();
+    const claimedChunkCaches = new WeakMap();
+
+    function reportModFailure(task, error) {
+        const failures = PAULTENDO_STATE.failures || (PAULTENDO_STATE.failures = []);
+        const message = String(error?.message || error).slice(0, 500);
+        const existing = failures.find(f => f.task === task && f.message === message);
+        if (existing) { existing.count++; existing.lastDay = planet?.day; return; }
+        failures.push({task, message, count: 1, day: planet?.day, lastDay: planet?.day, version: MOD_VERSION});
+        if (failures.length > 32) failures.shift();
+        console.warn(`[paultendo-mod] ${task} failed:`, error);
+    }
+
+    function runModTask(task, fn) {
+        try { return fn(); } catch (error) { reportModFailure(task, error); }
+    }
     // GenTown 1.2+ keeps dimensions on each planet rather than in globals.
     const usesPlanetConfig = typeof defaultPlanet === "function" && !!defaultPlanet().config;
     const worldConfig = {};
@@ -142,7 +157,7 @@
         state[`${key}Pending`] = true;
         const tick = () => {
             state[`${key}Pending`] = false;
-            try { fn(); } catch {}
+            runModTask(`Initialize ${key}`, fn);
         };
         if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
             window.setTimeout(tick, delay + count * 25);
@@ -1947,7 +1962,10 @@
             #logMessages .logMessage.faded { opacity: 0.66; }
             #logMessages .logMessage[done="true"] .logAct:not(:has([selected="true"])) { display: none; }
             #logMessages .logAct [role="button"]:focus-visible { outline: 2px solid white; outline-offset: 2px; }
-            .logMessage.chronicleDayStart::before {
+            .logMessage.paultendoRoutineHidden { display: none !important; }
+            .paultendoRoutineToggle { display: block; font: inherit; font-size: .85em; color: #b9c3b0; background: transparent; border: 0; min-height: 44px; padding: 6px 0; text-align: left; cursor: pointer; }
+            .paultendoRoutineToggle:focus-visible { outline: 2px solid yellow; outline-offset: 2px; }
+            .chronicleDayStart::before {
                 content: attr(data-chronicle-day-label);
                 display: block;
                 margin: 0.45em 0 0.2em 0;
@@ -2017,13 +2035,15 @@
         if (typeof document === "undefined") return;
         const container = document.getElementById("logMessages");
         if (!container) return;
-        const entries = Array.from(container.children).filter(el => el.classList && el.classList.contains("logMessage"));
+        updateChronicleRoutineGroups(container);
+        const entries = Array.from(container.children).filter(el => el.classList && (el.classList.contains("logMessage") || el.classList.contains('paultendoRoutineToggle')));
         const seen = new Set();
         entries.forEach(entry => {
             entry.classList.remove("chronicleDayStart");
             entry.removeAttribute("data-chronicle-day-label");
+            if(entry.classList.contains('paultendoRoutineHidden'))return;
             const dayElem = entry.querySelector(".logDay");
-            const dayValue = dayElem ? dayElem.getAttribute("data-day") : "";
+            const dayValue = dayElem ? dayElem.getAttribute("data-day") : entry.dataset.routineDay;
             if (!dayValue) return;
             if (!seen.has(dayValue)) {
                 seen.add(dayValue);
@@ -2031,6 +2051,33 @@
                 entry.setAttribute("data-chronicle-day-label", buildChronicleDayLabel(dayValue));
             }
         });
+    }
+
+    const chronicleRoutineViews = new WeakMap();
+    function updateChronicleRoutineGroups(container) {
+        let view=chronicleRoutineViews.get(planet);
+        if(!view){view={expanded:new Set()};chronicleRoutineViews.set(planet,view);}
+        const groups=new Map();
+        for(const entry of container.querySelectorAll('.logMessage')) {
+            entry.classList.remove('paultendoRoutineHidden');
+            if(entry.classList.contains('logSunset'))entry.dataset.chronicleRoutine='true';
+            if(entry.dataset.chronicleRoutine!=='true'||entry.querySelector('.logAct')&&!entry.hasAttribute('done'))continue;
+            const day=entry.querySelector('.logDay')?.dataset.day;if(!day)continue;
+            if(!groups.has(day))groups.set(day,[]);groups.get(day).push(entry);
+        }
+        for(const old of container.querySelectorAll('.paultendoRoutineToggle'))if(!groups.has(old.dataset.routineDay))old.remove();
+        for(const [day,entries] of groups) {
+            let toggle=container.querySelector(`.paultendoRoutineToggle[data-routine-day="${day}"]`);
+            if(!toggle){toggle=document.createElement('button');toggle.type='button';toggle.className='paultendoRoutineToggle';toggle.dataset.routineDay=day;
+                toggle.addEventListener('click',()=>{view.expanded.has(day)?view.expanded.delete(day):view.expanded.add(day);updateChronicleDayMarkers();});}
+            if(toggle.nextElementSibling!==entries[0])container.insertBefore(toggle,entries[0]);
+            const expanded=view.expanded.has(day);
+            toggle.textContent=`${expanded?'▾':'▸'} Town updates (${entries.length})`;
+            toggle.setAttribute('aria-expanded',String(expanded));
+            toggle.setAttribute('aria-controls',entries.map(entry=>entry.id).filter(Boolean).join(' '));
+            for(const entry of entries)entry.classList.toggle('paultendoRoutineHidden',!expanded);
+        }
+        for(const day of view.expanded)if(!groups.has(day))view.expanded.delete(day);
     }
 
     function getChroniclePriority(type, text) {
@@ -2557,6 +2604,7 @@
                             scheduleChronicleDayMarkers(dayValue);
                         }
                         if (elem) {
+                            if (!args?.buttons && (args?._paultendoRoutine || type === 'sunset')) elem.dataset.chronicleRoutine = 'true';
                             if (story) rememberChronicleStory(elem, story, type);
                             if (args?._paultendoHighlight) elem.dataset.chronicleHighlight = "true";
                             if (tradeoffSummary) {
@@ -3311,6 +3359,7 @@
             return;
         }
         if (!town || typeof town !== "object") return;
+        delete town._paultendoClaimedCache;
         if (!town.influences || typeof town.influences !== "object") {
             town.influences = {};
         }
@@ -5488,7 +5537,7 @@
         return livingTeachingPersonAvailable(person,town)&&!inquiryWorkerBusy(town,person)
             &&!seaCrewBusy(town,person.id)
             &&!state.sampling.some(w=>w.town===town.id&&w.person===person.id&&['outbound','collecting','returning'].includes(w.status))
-            &&!state.materialWork.some(w=>w.town===town.id&&materialWorkHasHand(w,person.id)&&['waiting','working'].includes(w.status))
+            &&!state.materialWork.some(w=>w.town===town.id&&materialWorkHoldsHand(w,town,person.id)&&['waiting','working'].includes(w.status))
             &&!state.artifactWork.some(w=>w.town===town.id&&w.person===person.id&&['gathering','working'].includes(w.status));
     }
     function inquiryCause(town,discovery,workingPerson=null) {
@@ -5515,7 +5564,7 @@
             const military=event==='unlockGunpowder'&&(hasIssue(town,'war')||livingResearchPriority(town.research)==='military');
             if(!interest&&!trial&&!military&&(!priority||!samples.length&&!practice.length))return null;
             if(event==='unlockSteel'&&!commodityStock(town,'metal')&&!practice.some(w=>w.type==='steel'))return null;
-            if(event==='unlockKilns'&&!commodityStock(town,'clay')&&!practice.some(w=>['brick','pottery'].includes(w.type)))return null;
+            if(event==='unlockKilns'&&!commodityStock(town,'clay')&&!practice.some(w=>['brick','pottery'].includes(w.type))&&!interest?.actual)return null;
             if(event==='unlockPrecisionEngineering'&&!commodityStock(town,'glass')&&!practice.some(w=>['telescope','glass'].includes(w.type)))return null;
             evidence.practice=practice.slice(-4).map(w=>({id:w.id,type:w.type,day:w.finished}));evidence.samples=samples;
             if(interest)evidence.question={type:interest.type,sample:interest.sample};
@@ -5682,7 +5731,10 @@
             return politicalLaborStopped(town,person?.role) ? 'Work has stopped with the strike.' : 'Waiting for a worker to return.';
         }
         if (livingWorkIsActive(work) && work.pause && typeof work.pause === 'string') return work.pause;
-        if (['waiting','gathering'].includes(work.status)) return 'Gathering materials.';
+        if (['waiting','gathering'].includes(work.status)) {
+            const missing = Object.entries(work.cost || work.recipe?.cost || {}).filter(([type,count]) => commodityStock(town,type) < count);
+            return missing.length ? 'Waiting for '+commaList(missing.map(([type])=>COMMODITIES[type]?.label || type))+'.' : 'Gathering materials.';
+        }
         if (work.status === 'working') {
             const left = kind === 'artifact' ? Math.max(0,(work.due || planet.day)-planet.day) : work.remaining;
             return Number.isFinite(left) && left > 0 ? `${left} ${left === 1 ? 'day' : 'days'} of work left.` : 'The work is underway.';
@@ -5703,13 +5755,54 @@
         items.push({heading:true,text:livingWorkIsActive(work)?'At work':'The result'},{text:escapeLivingText(status)});
         if (['waiting','gathering'].includes(work.status)) {
             const cost=work.cost || work.recipe?.cost || {}, missing=Object.entries(cost).filter(([type,count])=>commodityStock(town,type)<count);
-            if(missing.length)items.push({text:'Still needed: '+commaList(missing.map(([type,count])=>`${count-commodityStock(town,type)} ${COMMODITIES[type]?.label || type}`))+'.'});
+            if(missing.length) {
+                items.push({text:'Still needed: '+commaList(missing.map(([type,count])=>`${count-commodityStock(town,type)} ${COMMODITIES[type]?.label || type}`))+'.'});
+                for (const [type,count] of missing) items.push({text: 'Finding '+(COMMODITIES[type]?.label || type), func:()=>openMaterialNeed(town,type,count,work.id)});
+            }
             else if(Object.entries(cost).some(([type,count])=>commodityStock(town,type)<count+commodityClaimedStock(town,type,commodityWorkClaims(town).filter(c=>c.id!==work.id))))items.push({text:'Other work already needs the supplies in store.'});
             items.push({text:'Materials and workshops',func:()=>openTownMaterials(town)});
         }
         if (livingWorkIsActive(work) && (work.delay==='food' || work.delay?.reason==='food' || work.pause==='food')) items.push({text:'Trade and neighbours',func:()=>openCommodityHistory(town)});
         const person=findLivingPerson(town,work.person);
         if(livingPersonAvailable(person,town))items.push({text:'Meet '+escapeLivingText(person.name),func:()=>openLivingPerson(town,person)});
+    }
+
+    function appendMaterialNeed(items, town, type, count, workId, seen = new Set(), depth = 0) {
+        const label = COMMODITIES[type]?.label || type;
+        const stock = commodityStock(town,type), claims = commodityWorkClaims(town).filter(c=>c.id!==workId);
+        const spare = Math.max(0,stock-commodityClaimedStock(town,type,claims));
+        items.push({heading:true,text:escapeLivingText(label)}, {text: `${spare} available of ${count} needed.${stock>spare?' Other work needs the rest.':''}`});
+        if (spare >= count || depth >= 4 || seen.has(type)) return;
+        const nextSeen = new Set(seen); nextSeen.add(type);
+        const active = livingWorldState().materialWork.find(w=>w.town===town.id&&w.type===type&&livingWorkIsActive(w));
+        if (active) items.push({text:escapeLivingText(active.name)+' · '+escapeLivingText(livingWorkStatus(active,'material',town)),func:()=>openMaterialWork(active)});
+        const recipe = MATERIAL_RECIPES[type];
+        if (!recipe) {
+            const survey = livingWorldState().sampling.find(w=>w.town===town.id&&w.type===type&&livingWorkIsActive(w));
+            if (survey) items.push({text:'Follow the search',func:()=>openMaterialSurvey(survey)});
+            else items.push({text:'The town needs a source or a neighbour with some to spare.'});
+            return;
+        }
+        for (const [key,level] of Object.entries(recipe.needs)) {
+            if (townKnowledgeLevel(town,key) >= level) continue;
+            const discovery = livingDiscoveryBranches()[key]?.levels.find(d=>d.level>=level);
+            items.push({text: `Still to discover here: ${escapeLivingText(discovery?.name || titleCase(key))}.`});
+            if (discovery) items.push({text:'Read about '+escapeLivingText(discovery.name),func:()=>openUnlockDetail(key,discovery,town.id)});
+        }
+        const batches = Math.ceil((count-spare)/recipe.output), cost = active?.cost || materialBatchCost(town,type);
+        items.push({text: `${batches} ${batches===1?'batch':'batches'} would take ${Object.entries(cost).map(([input,amount])=>`${amount*batches} ${COMMODITIES[input]?.label || input}`).join(', ')}.`});
+        for (const [input,amount] of Object.entries(cost)) {
+            if (commodityStock(town,input) < amount*batches) appendMaterialNeed(items,town,input,amount*batches,active?.id || workId,nextSeen,depth+1);
+        }
+    }
+
+    function openMaterialNeed(town, type, count, workId) {
+        if (!livingTownKnown(town)) return;
+        const items=[{text:'← Back to the town',func:()=>{closeExecutive();openRegBrowser(town,'town');}}];
+        appendMaterialNeed(items,town,type,count,workId);
+        items.push({text:'Materials and workshops',func:()=>openTownMaterials(town)},{text:'Trade and neighbours',func:()=>openCommodityHistory(town)});
+        populateExecutive(items,'Finding '+(COMMODITIES[type]?.label || type));markLivingStoryControls();
+        rememberLivingStoryView(()=>openMaterialNeed(town,type,count,workId));openExecutive();
     }
 
     function appendLivingWorkHistory(items,steps) {
@@ -7732,7 +7825,8 @@
     function farmToolStep(town,text) {
         const store=town._paultendoFarmTools,steps=store.steps ||= [];
         steps.push({day:planet.day,text});if(steps.length>32)steps.shift();
-        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'tools',id:town.id},_paultendoHighlight:!store.steps.slice(0,-1).some(s=>s.text===text)});
+        const repeated=store.steps.slice(0,-1).some(s=>s.text===text);
+        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'tools',id:town.id},_paultendoHighlight:!repeated,_paultendoRoutine:repeated});
     }
     function advanceFarmTools() {
         for(const town of regToArray('town')) {
@@ -7925,7 +8019,7 @@
         const {chunk,survey}=choice;if(chunk.v.s!==town.id)return;
         const source=chunkAt(survey.x,survey.y),place=livingWorldState().places[survey.place];
         const claims=survey.claims ||= [];claims.push({day:planet.day,x:chunk.x,y:chunk.y});if(claims.length>64)claims.shift();
-        town._paultendoClaimedCache=null;
+        claimedChunkCaches.delete(town);
         if(source?.v.s===town.id&&!survey.claimed) {
             survey.claimed=planet.day;
             materialSurveyStep(survey,`${town.name} now holds ${place?.name || 'the surveyed ground'}. Its miners can work the ${COMMODITIES[survey.type].label} there.`,true);
@@ -8092,7 +8186,8 @@
     function materialStep(work,text) {
         work.steps.push({day:planet.day,text});
         const town=regGet('town',work.town);
-        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'material',id:work.id},_paultendoHighlight:['made','failed'].includes(work.status)});
+        const routine=!work.trial&&!work.apprentice&&!work.purpose?.exchange&&work.status!=='failed';
+        if(livingTownKnown(town))logMessage(escapeLivingText(text),null,{_paultendoStory:{kind:'material',id:work.id},_paultendoHighlight:!routine&&['made','failed'].includes(work.status),_paultendoRoutine:routine});
     }
     function materialClue(town,type,person=null) {
         return livingWorldState().clues.find(c=>c.town===town.id&&c.observation?.type===type&&c.study?.status==='finished'
@@ -10958,12 +11053,24 @@
             }
             .paultendoAutoplayButton:disabled { opacity: 0.5; cursor: default; }
             .paultendoAutoplayButton:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+            #paultendoAutoplayControls, #paultendoAutoplayControlsMobile { gap: 8px; }
+            .paultendoAutoplayButton { border-color: #62665a; color: #c7cbbd; min-height: 44px; }
+            #paultendoAutoplaySpeed, #paultendoAutoplaySpeedMobile { border: 0; color: #aeb3a5; }
+            .paultendoMenuGroup { display: block; color: #aeb3a5; font-size: .75em; margin: .9em 0 .25em; }
+            .paultendoDecisionChoices { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0 16px; }
+            .paultendoDecisionChoices button { font: inherit; background: transparent; color: inherit; border: 1px solid #8d927e; min-height: 44px; padding: 4px 12px; cursor: pointer; }
+            .paultendoDecisionChoices button[type=yes] { color: #7dff6b; }
+            .paultendoDecisionChoices button[type=no] { color: #ff779e; }
+            .paultendoDecisionChoices button:focus-visible { outline: 2px solid yellow; outline-offset: 3px; }
+            #actionSubList .paultendoDecisionQuestion { color: white; font-size: 1em; }
+            #actionSubList #actionItem-decision-pass-day { color: #b9c3b0; background: transparent; font-size: .85em; min-height: 44px; }
+            #actionItem-decision-pass-day:focus-visible { outline: 2px solid yellow; outline-offset: 2px; }
             @media (max-width: 599px) {
                 #gameHalf1-2 { display: flex; flex-direction: column; }
                 #mobileControlBar { height: auto; min-height: 44px; flex: 0 0 auto; flex-wrap: wrap; padding: 0 6px; }
                 #mobileControlBar > div { height: 44px; }
                 #paultendoAutoplayControlsMobile { height: auto; flex-grow: 0; margin: 0 6px; }
-                #paultendoAutoplayControlsMobile button { min-height: 36px; }
+                #paultendoAutoplayControlsMobile button { min-height: 44px; }
                 #paultendoAutoplayStatusMobile { padding-bottom: 4px; }
                 #logPanel { height: auto; flex: 1; min-height: 0; }
                 #mobileBelowBar { height: 44px; flex: 0 0 auto; }
@@ -11013,18 +11120,6 @@
             const speed = buildAutoplayButton(`paultendoAutoplaySpeed${suffix}`, "1x", "Change autoplay speed");
             speed.addEventListener("click", cycleAutoplaySpeed);
             group.append(toggle, speed);
-            const review = buildAutoplayButton(`paultendoAutoplayReview${suffix}`, "Review decision", "Go to the decision waiting in the Chronicle");
-            review.hidden = true;
-            review.addEventListener("click", () => {
-                const decision = findPendingLogDecision();
-                if (!decision) { updateAutoplayUI(); return; }
-                closePopups();closeExecutive();
-                decision.messageEl.scrollIntoView({ block: "center", behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? "auto" : "smooth" });
-                const button = decision.buttons[0];
-                if (button) { button.tabIndex = 0; button.focus({ preventScroll: true }); }
-            });
-            group.appendChild(review);
-            review.style.display = "none";
             parent.appendChild(group);
             const status = document.createElement("span");
             status.id = `paultendoAutoplayStatus${suffix}`;
@@ -11048,7 +11143,7 @@
     function updateAutoplayUI() {
         if (typeof document === "undefined") return;
         const state = getAutoplayState();
-        const pendingDecision = findPendingLogDecision();
+        const pendingDecisions = pendingLogDecisions(), pendingDecision = pendingDecisions[0];
         if (state.lastStopReason === "prompt" && !isPromptOpen() && !pendingDecision) state.lastStopReason = "manual";
         const speed = getAutoplaySpeed();
         const autoSeconds = getAutoDecisionSeconds();
@@ -11069,14 +11164,15 @@
             toggleMobile.disabled = !!planet?.dead || !planet?.settled;
         }
         const reasons = { prompt: "Waiting for your decision", manual: "Paused", hidden: "Paused while away", error: "Paused after a simulation error", ended: "This world has ended" };
-        const statusText = !planet?.settled ? "Choose a place on the map to begin" : planet.dead ? "This world has ended" : state.active ? `Playing at ${speed.label}` : reasons[state.lastStopReason] || (state.lastStopReason ? `Paused: ${state.lastStopReason}` : "Ready to play");
+        const statusText = !planet?.settled ? "Choose a place on the map to begin" : planet.dead ? "This world has ended" : pendingDecision && !state.active ? reasons.prompt : state.active ? `Playing at ${speed.label}` : reasons[state.lastStopReason] || (state.lastStopReason ? `Paused: ${state.lastStopReason}` : "Ready to play");
         for (const suffix of ["", "Mobile"]) {
             const status = document.getElementById(`paultendoAutoplayStatus${suffix}`);
             if (status && status.textContent !== statusText) status.textContent = statusText;
-            const review = document.getElementById(`paultendoAutoplayReview${suffix}`);
-            if (review) {
-                review.hidden = !pendingDecision;
-                review.style.display = pendingDecision ? "" : "none";
+            const primary = document.getElementById(`nextDay${suffix}`);
+            if (primary) {
+                const label = pendingDecision ? `Decisions (${pendingDecisions.length})` : 'Next Day ▶';
+                if (primary.textContent !== label) primary.textContent = label;
+                primary.setAttribute('aria-label', pendingDecision ? `Review ${pendingDecisions.length} pending ${pendingDecisions.length === 1 ? 'decision' : 'decisions'}` : 'Next day');
             }
         }
 
@@ -11116,6 +11212,7 @@
     function toggleAutoplay() {
         const state = getAutoplayState();
         if (state.active) stopAutoplay("manual");
+        else if (findPendingLogDecision() && !getAutoDecisionSeconds()) { stopAutoplay('prompt'); openDecisionPanel(); }
         else startAutoplay();
     }
 
@@ -11237,20 +11334,57 @@
         }, Math.max(2000, delaySeconds * 1000));
     }
 
-    function findPendingLogDecision() {
-        if (typeof document === "undefined") return null;
+    function pendingLogDecisions() {
+        if (typeof document === "undefined") return [];
         const logMessages = document.getElementById("logMessages");
-        if (!logMessages) return null;
-        const logAct = Array.from(logMessages.querySelectorAll(".logMessage:not([done]) .logAct")).find(act => {
+        if (!logMessages) return [];
+        return Array.from(logMessages.querySelectorAll(".logMessage:not([done]) .logAct")).filter(act => {
             const eventId = act.closest(".logMessage")?.getAttribute("data-eventid");
             const event = typeof currentEvents !== "undefined" && currentEvents[eventId];
             return event && event.needsInput && !event.done;
-        });
-        if (!logAct) return null;
-        const messageEl = logAct.closest(".logMessage");
-        const buttons = logAct.querySelectorAll("span[role='button']");
-        if (!buttons || buttons.length === 0) return null;
-        return { messageEl, logAct, buttons };
+        }).map(logAct => ({messageEl: logAct.closest('.logMessage'), logAct, buttons: logAct.querySelectorAll("span[role='button']")})).filter(d => d.buttons.length);
+    }
+
+    function findPendingLogDecision() { return pendingLogDecisions()[0] || null; }
+
+    function openDecisionPanel(focus = true) {
+        closePopups();
+        const decisions = pendingLogDecisions(), items = [], world=planet, day=planet.day;
+        for (const [index, decision] of decisions.entries()) {
+            // Copy the already-rendered question, delegate each choice to its
+            // original live control. Never manufacture or reroll an answer.
+            items.push({text: decision.messageEl.querySelector('.logText')?.innerHTML || '', id: `decision-question-${index}`});
+            items.push({text: `<div class="paultendoDecisionChoices" data-decision-index="${index}"></div>`});
+        }
+        if (!decisions.length) items.push({text: 'Nothing waiting today.'});
+        if (decisions.length && !planet.locked && !planet.letter) items.push({text: 'Let the day pass', id: 'decision-pass-day', tip: 'Leave these proposals to their usual course.', func: () => {
+            if(planet!==world||planet.day!==day||planet.locked||planet.letter||isPromptOpen())return;
+            stopAutoplay('manual'); closeExecutive(); nextDay(); updateAutoplayUI();
+        }});
+        populateExecutive(items, 'Decisions');
+        const list = document.getElementById('actionSubList');
+        for (const [index, decision] of decisions.entries()) {
+            list.querySelector(`#actionItem-decision-question-${index}`)?.classList.add('paultendoDecisionQuestion');
+            const choices = list.querySelector(`[data-decision-index="${index}"]`);
+            for (const source of decision.buttons) {
+                const button = document.createElement('button');
+                button.type = 'button'; button.textContent = source.textContent;
+                const choice = source.getAttribute('type');
+                if (choice) button.setAttribute('data-choice', choice);
+                button.style.color = choice === 'yes' ? '#7dff6b' : choice === 'no' ? '#ff779e' : '';
+                button.addEventListener('click', () => {
+                    if (!pendingLogDecisions().some(d => d.messageEl === decision.messageEl)) { openDecisionPanel(); return; }
+                    source.click(); updateAutoplayUI();
+                    if (!isPromptOpen()) openDecisionPanel();
+                });
+                choices.appendChild(button);
+            }
+        }
+        markLivingStoryControls();
+        for(const choices of list.querySelectorAll('.paultendoDecisionChoices'))choices.closest('.actionItem')?.classList.remove('paultendoStoryProse');
+        rememberLivingStoryView(() => openDecisionPanel(false));
+        openExecutive();
+        if (focus) list.querySelector('.paultendoDecisionChoices button')?.focus({preventScroll: true});
     }
 
     function getLogMessageText(messageEl) {
@@ -11881,7 +12015,7 @@
             text: state.active ? "Pause Autoplay" : "Start Autoplay",
             func: () => {
                 toggleAutoplay();
-                openAutoplayPanel();
+                if(currentExecutive!=='decisions')openAutoplayPanel();
             }
         });
         populateExecutive(items, "Autoplay");
@@ -12293,9 +12427,10 @@
 
     function getTownClaimedChunks(town) {
         if (!town) return [];
-        const cache = town._paultendoClaimedCache;
+        delete town._paultendoClaimedCache;
+        const cache = claimedChunkCaches.get(town);
         const centerKey = town.center ? `${town.center[0]},${town.center[1]}` : "";
-        if (cache && cache.day === planet.day && cache.size === town.size && cache.centerKey === centerKey && Array.isArray(cache.chunks)) {
+        if (cache && cache.world === planet && cache.map === planet.chunks && cache.day === planet.day && cache.size === town.size && cache.centerKey === centerKey && Array.isArray(cache.chunks)) {
             return cache.chunks;
         }
         if (typeof chunkAt === "function" && town.center) {
@@ -12320,18 +12455,18 @@
                 if (town.size && chunks.length < Math.max(1, Math.floor((town.size || 1) * 0.6)) && typeof filterChunks === "function") {
                     const full = filterChunks((c) => c && c.v && c.v.s === town.id);
                     if (Array.isArray(full) && full.length) {
-                        town._paultendoClaimedCache = { day: planet.day, size: town.size, centerKey, chunks: full };
+                        claimedChunkCaches.set(town, { world: planet, map: planet.chunks, day: planet.day, size: town.size, centerKey, chunks: full });
                         return full;
                     }
                 }
-                town._paultendoClaimedCache = { day: planet.day, size: town.size, centerKey, chunks };
+                claimedChunkCaches.set(town, { world: planet, map: planet.chunks, day: planet.day, size: town.size, centerKey, chunks });
                 return chunks;
             }
         }
         if (typeof filterChunks === "function") {
             const chunks = filterChunks((c) => c && c.v && c.v.s === town.id);
             if (Array.isArray(chunks)) {
-                town._paultendoClaimedCache = { day: planet.day, size: town.size, centerKey, chunks };
+                claimedChunkCaches.set(town, { world: planet, map: planet.chunks, day: planet.day, size: town.size, centerKey, chunks });
             }
             return chunks;
         }
@@ -12439,11 +12574,11 @@
         if (!width || !height) return false;
         const radius = computeTownSightRadius(town);
         const centerKey = `${town.center[0]},${town.center[1]}`;
-        if (!opts.forceReset) {
+        if (!opts.forceReset && !opts.forceUpdate) {
             const lastDay = town._paultendoFogDay || -999;
             const lastRadius = town._paultendoFogRadius || 0;
             const lastCenter = town._paultendoFogCenterKey || "";
-            if ((planet.day - lastDay) < 2 &&
+            if (planet._paultendoFog?.visibilityDay === planet.day && lastDay === planet.day &&
                 town._paultendoFogSize === (town.size || 0) &&
                 lastCenter === centerKey &&
                 Math.abs(radius - lastRadius) < 0.25) {
@@ -12451,6 +12586,13 @@
             }
         }
         if (!resetFogVisibilityForDay(!!opts.forceReset)) return false;
+        const fog=planet._paultendoFog;
+        // One day is already initialized. Avoid revalidating and dirtying the
+        // whole fog state for every overlapping sight ray.
+        const reveal=(x,y,value)=>{
+            const key=getChunkKey(x,y);
+            if(value>(fog.visible[key] || 0))fog.visible[key]=value;
+        };
 
         const claimed = getTownClaimedChunks(town);
         const explored = [];
@@ -12459,7 +12601,7 @@
             const c = claimed[i];
             if (!c) continue;
             claimedSet.add(getChunkKey(c.x, c.y));
-            setChunkVisibility(c.x, c.y, 1); // 100% visibility inside town territory
+            reveal(c.x, c.y, 1); // 100% visibility inside town territory
         }
 
         const adjacency = (typeof adjacentCoords !== "undefined" && Array.isArray(adjacentCoords) && adjacentCoords.length)
@@ -12505,7 +12647,7 @@
                     if (claimedSet.has(getChunkKey(x, y))) continue;
                     const chunk = chunkAt(x, y);
                     if (!chunk) continue;
-                    setChunkVisibility(x, y, 1);
+                    reveal(x, y, 1);
                     revealChunks.push(chunk);
                 }
             }
@@ -12531,7 +12673,7 @@
                 const visibility = computeVisibilityStrength(offset.dist, radius, observerElev, targetElev);
                 if (visibility <= 0) continue;
 
-                setChunkVisibility(x, y, visibility);
+                reveal(x, y, visibility);
                 if (visibility >= FOG_CONFIG.exploreThreshold) explored.push(chunk);
             }
         }
@@ -12551,6 +12693,7 @@
         town._paultendoFogDay = planet.day;
         town._paultendoFogRadius = radius;
         town._paultendoFogCenterKey = centerKey;
+        markFogDirty();
         if (!opts.deferRefresh) scheduleFogRefresh();
         return true;
     }
@@ -12560,7 +12703,7 @@
         resetFogVisibilityForDay(true);
         const towns = getActiveTowns();
         for (let i = 0; i < towns.length; i++) {
-            updateFogVisibilityForTown(towns[i], { deferRefresh: true, forceReset: true });
+            updateFogVisibilityForTown(towns[i], { deferRefresh: true, forceUpdate: true });
         }
         scheduleFogRefresh();
         return true;
@@ -15295,12 +15438,24 @@
         }
     });
 
+    const chronicleSaveCaches = new WeakMap();
     function syncLogToPlanet() {
         if (!planet || typeof document === "undefined") return;
         const logDiv = document.getElementById("logMessages");
         // GenTown replaces angle brackets throughout imported JSON. Store the
         // Chronicle as encoded text, then sanitize it before restoring any DOM.
-        if (logDiv) planet._paultendoLogHTML = "uri:" + encodeURIComponent(logDiv.innerHTML);
+        if (logDiv) {
+            let cache=chronicleSaveCaches.get(logDiv);
+            if(!cache) {
+                cache={dirty:true,encoded:null};
+                cache.observer=new MutationObserver(()=>{cache.dirty=true;});
+                cache.observer.observe(logDiv,{subtree:true,childList:true,attributes:true,characterData:true});
+                chronicleSaveCaches.set(logDiv,cache);
+            }
+            if(cache.observer.takeRecords().length)cache.dirty=true;
+            if(cache.dirty){cache.encoded='uri:'+encodeURIComponent(logDiv.innerHTML);cache.dirty=false;}
+            planet._paultendoLogHTML=cache.encoded;
+        }
     }
 
     function retireRepeatedLoadGreetings(logDiv) {
@@ -15959,6 +16114,7 @@
                 if (userSettings.notify !== false) button.classList.add("notify");
             }
         }
+        organizeExecutiveControls();
     }
 
     function initSpaceRoutes() {
@@ -17241,7 +17397,7 @@
         for (const world of Object.values(universe.worlds)) {
             if (!world?.state || world.id === universe.currentWorldId) continue;
             try { simulateInactiveWorld(world); }
-            catch (error) { console.warn("[paultendo-mod] Background world failed:", world.id, error); }
+            catch (error) { reportModFailure(`Background world ${world.id}`,error); }
         }
     }
 
@@ -17256,8 +17412,7 @@
             ["Teachings", advanceLivingTeachings], ["Places", observeLivingPlaces],
             ["Settlement", observeLivingWorld]
         ]) {
-            try { step(); }
-            catch (error) { console.warn(`[paultendo-mod] ${name} follow-up failed:`, error); }
+            runModTask(name, step);
         }
     }
 
@@ -17266,8 +17421,8 @@
             const baseInitExecutive = initExecutive;
             initExecutive = function(...args) {
                 const result = baseInitExecutive.apply(this, args);
-                try { addSolarButton(); } catch {}
-                try { updateProgressMenus(); } catch {}
+                runModTask('Star system controls', addSolarButton);
+                runModTask('Progress controls', updateProgressMenus);
                 return result;
             };
             initExecutive._paultendoSolar = true;
@@ -17281,7 +17436,7 @@
                     if (typeof window === "undefined" || !window._paultendoSuppressLogSync) {
                         syncLogToPlanet();
                     }
-                } catch {}
+                } catch (error) { reportModFailure('Chronicle persistence', error); }
                 return result;
             };
             logMessage._paultendoLogSync = true;
@@ -17306,6 +17461,7 @@
             if (PAULTENDO_STATE.advancingDay) return;
             const control = args[0]?.currentTarget;
             if (control && (control.id === "nextDay" || control.id === "nextDayMobile")) {
+                if (findPendingLogDecision()) { stopAutoplay('prompt'); openDecisionPanel(); return; }
                 stopAutoplay("manual");
                 args[0] = { target: control };
             }
@@ -17316,21 +17472,22 @@
             let completed = false;
             PAULTENDO_STATE.advancingDay = true;
             try {
-                try { observeNativeResearchNeeds(); restoreTechBias = applyTechWeightBias(); } catch {}
+                try { observeNativeResearchNeeds(); restoreTechBias = applyTechWeightBias(); }
+                catch(error){reportModFailure('Research attention',error);}
                 const result = baseNextDay.apply(this, args);
                 const dayAfter = (typeof planet !== "undefined") ? planet.day : undefined;
                 if (dayBefore !== dayAfter) {
                     planet._paultendoRecentEvents = recentEvents.slice(-3);
                     try { advanceWorldLife(); refreshLivingArtifactView(); } catch (error) { console.warn("[paultendo-mod] World follow-up failed:", error); }
-                    try { renderLivingFields(); updateCanvas(); } catch {}
-                    try { syncLogToPlanet(); } catch {}
+                    runModTask('Field map', () => { renderLivingFields(); updateCanvas(); });
+                    runModTask('Chronicle persistence', syncLogToPlanet);
                     try { updateSpaceDiscovery(); advanceSkyFlights(); updateSpaceTech(); } catch(error) { console.warn('[paultendo-mod] Sky flight failed:',error); }
-                    try { maybeCreateSpaceRoute(); } catch {}
-                    try { maybeStartSpaceWar(); } catch {}
+                    runModTask('New space routes', maybeCreateSpaceRoute);
+                    runModTask('New space conflicts', maybeStartSpaceWar);
                     try { tickInactiveWorlds(); } catch (error) { console.warn("[paultendo-mod] Background world failed:", error); }
                     try { processSpaceRoutes(); } catch(error) {console.warn('[paultendo-mod] Cargo journey failed:',error);}
-                    try { processSpaceWars(); } catch {}
-                    try { processFrontierCharters(); } catch {}
+                    runModTask('Space conflicts', processSpaceWars);
+                    runModTask('Frontier charters', processFrontierCharters);
                     if (isFastAdvanceActive() && typeof window !== "undefined") {
                         window.setTimeout(() => {
                             try { maybeReleaseNextDay(); } catch {}
@@ -17384,12 +17541,29 @@
                     restoreLogFromPlanet({ merge: true });
                     syncLogToPlanet();
                 }
-                try { rebuildFogVisibility(); } catch {}
-                try { renderTravelerOpening(); } catch {}
-            } catch {}
+                runModTask('Rebuild map visibility', rebuildFogVisibility);
+                runModTask('Traveler opening', renderTravelerOpening);
+            } catch (error) { reportModFailure('Restore world', error); }
             return result;
         };
         initGame._paultendoUniverse = true;
+    }
+
+    function generateNativeWorldSave(base, receiver, args = []) {
+        for (const town of Object.values(planet?.reg?.town || {})) {
+            if (town && typeof town === 'object') delete town._paultendoClaimedCache;
+        }
+        // The native serializer copies the whole planet, discards that copied
+        // map, then encodes the live map separately. Omit only the discarded
+        // copy. Keep the live chunks and any other mod's serializer intact.
+        const world = planet;
+        if (!world || !Object.isExtensible(world) || 'toJSON' in world) return base.apply(receiver, args);
+        Object.defineProperty(world, 'toJSON', {configurable: true, value() {
+            const {chunks, ...metadata} = this;
+            return metadata;
+        }});
+        try { return base.apply(receiver, args); }
+        finally { delete world.toJSON; }
     }
 
     function wrapSaveLoadForUniverse() {
@@ -17418,10 +17592,10 @@
                 if (universe) {
                     syncCurrentWorldState(universe);
                 }
-                const save = baseGenerateSave.apply(this, args);
+                const save = generateNativeWorldSave(baseGenerateSave, this, args);
                 try {
                     save.paultendoUniverse = serializeUniverse(universe, baseGenerateSave);
-                } catch {}
+                } catch (error) { reportModFailure('Save other worlds', error); throw error; }
                 return save;
             };
             generateSave._paultendoUniverse = true;
@@ -17432,7 +17606,8 @@
             parseSave = function(json) {
                 stopAutoplay("manual");
                 baseParseSave(json);
-                try { deserializeUniverse(json, baseParseSave); } catch {}
+                try { deserializeUniverse(json, baseParseSave); }
+                catch (error) { reportModFailure('Load other worlds', error); throw error; }
                 ensurePlanetState();
                 const logDiv=document.getElementById('logMessages');
                 // Native parseSave emits its greeting after initGame restores
@@ -17500,7 +17675,7 @@
                 if (!world || !world.state) continue;
                 if (world.id === universe.currentWorldId) continue;
                 const state = world.state;
-                const worldSave = withWorldState(state, () => {saveGroundPrecision();return baseGenerateSave();});
+                const worldSave = withWorldState(state, () => {saveGroundPrecision();return generateNativeWorldSave(baseGenerateSave, null);});
                 if (worldSave) data.worldSaves[world.id] = worldSave;
             }
         }
@@ -21124,8 +21299,8 @@
             }
         });
 
-        buyer._paultendoClaimedCache = null;
-        seller._paultendoClaimedCache = null;
+        claimedChunkCaches.delete(buyer);
+        claimedChunkCaches.delete(seller);
         try { happen("UpdateCenter", null, buyer); } catch {}
         try { happen("UpdateCenter", null, seller); } catch {}
         try { markTownExplored(buyer); } catch {}
@@ -35314,6 +35489,47 @@
         list.appendChild(button);
     }
 
+    function openWorkPanel() {
+        const items=[];
+        for (const town of regToArray('town').filter(livingTownKnown)) {
+            const entries=livingTownWorkEntries(town).filter(({work})=>livingWorkIsActive(work));
+            const projects=regFilter('process',p=>p.type==='project'&&!p.done&&p.town===town.id);
+            if (!entries.length&&!projects.length) continue;
+            items.push({heading:true,text:formatTownLabel(town)});
+            for (const entry of entries) items.push({text:escapeLivingText(entry.title)+' · '+escapeLivingText(livingWorkStatus(entry.work,entry.kind,town)),func:entry.open});
+            for (const project of projects) items.push({text:`{{regname:process|${project.id}|-}}`,func:()=>regBrowse('process',project.id)});
+        }
+        if (!items.length) items.push({text:'No work underway today.'});
+        populateExecutive(items,'Projects');markLivingStoryControls();rememberLivingStoryView(openWorkPanel);openExecutive();
+    }
+
+    function organizeExecutiveControls() {
+        const list=document.getElementById('actionMainList');if(!list)return;
+        const groups=[['Town life',['towns','projects','unlocks','economy','stance','festivals']],['World',['world','solar']],['Records',['chronicle','annals','almanac','timeline','stats']],['Time',['autoplay']]];
+        const ordered=[];
+        for (const [label, ids] of groups) {
+            const key=label.toLowerCase().replace(/ /g,'-');
+            let header=list.querySelector(`[data-menu-group="${key}"]`);
+            if(!header){header=document.createElement('span');header.className='paultendoMenuGroup';header.dataset.menuGroup=key;header.textContent=label;list.appendChild(header);}
+            const buttons=ids.map(id=>document.getElementById('actionItem-'+id)).filter(Boolean);
+            ordered.push(header,...buttons);
+            header.hidden=!buttons.some(button=>!button.hidden&&button.style.display!=='none');
+        }
+        const grouped=new Set(ordered),existing=Array.from(list.children).filter(node=>grouped.has(node));
+        // Preserve focus and scroll during regular stat updates.
+        if(existing.some((node,i)=>node!==ordered[i]))for(const node of ordered)list.appendChild(node);
+        const projects=document.getElementById('actionItem-projects');
+        if(projects&&!projects._paultendoWorkPanel){projects.addEventListener('click',event=>{event.stopImmediatePropagation();openWorkPanel();},true);projects._paultendoWorkPanel=true;}
+        if(projects&&regToArray('town').filter(livingTownKnown).some(town=>livingTownWorkEntries(town).some(({work})=>livingWorkIsActive(work))))projects.style.display='';
+    }
+
+    function openGameHealth() {
+        const failures=PAULTENDO_STATE.failures || [];
+        const items=[{text:`paultendo ${MOD_VERSION}`},{text:failures.length?'Some parts of the simulation encountered a problem. Save a copy of your world before reloading.':'No problems recorded in this session.'}];
+        for(const failure of failures)items.push({heading:true,text:escapeLivingText(failure.task)},{text:`Day ${failure.lastDay ?? '?'} · ${failure.count} ${failure.count===1?'occurrence':'occurrences'}`},{text:escapeLivingText(failure.message)});
+        populateExecutive(items,'Game health');markLivingStoryControls();openExecutive();
+    }
+
     function initExecutiveOverrides() {
         if (typeof initExecutive !== "function") {
             scheduleInitRetry("executiveOverrides", initExecutiveOverrides, 120);
@@ -35323,13 +35539,22 @@
             for (const add of [addAnnalsButton, addWorldStatusButton, addChronicleButton,
                 addFestivalsButton, addAutoplayButton, addDivineStanceButton, addEconomyButton,
                 overrideUnlocksPanel, initAutoplaySettings, ensureAutoplayControls, wrapPromptHandlersForAutoplay]) {
-                try { add(); } catch (error) { console.warn("[paultendo-mod] Control initialization failed:", error); }
+                runModTask(`Controls: ${add.name}`, add);
             }
             if (typeof gameLoaded !== "undefined" && gameLoaded) {
                 try { updateSeasonState(); } catch {}
                 try { ensureGreatWorkForEra(planet.currentEra); } catch {}
             }
             try { updateProgressMenus(); } catch {}
+            const info=document.getElementById('actionInfo');
+            // Browsers can run microtasks between click listeners. Wait for the
+            // whole native dispatch before adding to the finished Info menu.
+            if(info&&!info._paultendoHealth){info.addEventListener('click',()=>window.setTimeout(()=>{
+                if(document.getElementById('actionItem-game-health')||!document.querySelector('#actionSubList .panelTitle')?.textContent.startsWith('GenTown v'))return;
+                const health=document.createElement('button');health.type='button';health.className='actionItem item';health.id='actionItem-game-health';health.textContent='Game health';
+                health.addEventListener('click',openGameHealth);document.getElementById('actionSubList').appendChild(health);
+                markLivingStoryControls();
+            },0));info._paultendoHealth=true;}
         };
         if (!initExecutive._paultendoExecutive) {
             const baseInitExecutive = initExecutive;
@@ -35345,9 +35570,9 @@
             const baseUpdateStats = updateStats;
             updateStats = function(...args) {
                 const result = baseUpdateStats.apply(this, args);
-                try { finishLivingDecisions(); seedLivingDiscoveries(); observeLivingSpeciesEncounters(); updateLivingDecisionPreviews(); renderTravelerOpening(); } catch (error) { console.warn("[paultendo-mod] Settlement update failed:", error); }
+                for (const step of [finishLivingDecisions, seedLivingDiscoveries, observeLivingSpeciesEncounters, updateLivingDecisionPreviews, renderTravelerOpening]) runModTask(step.name, step);
                 updateAutoplayUI();
-                updateProgressMenus();
+                runModTask('Progress controls', updateProgressMenus);
                 return result;
             };
             updateStats._paultendoAutoplay = true;
@@ -39405,13 +39630,14 @@
 
         gScore[startKey] = 0;
         fScore[startKey] = heuristicCost(startChunk, endChunk);
-        openSet.enqueue(startChunk, fScore[startKey]);
+        openSet.enqueue({chunk: startChunk, cost: 0}, fScore[startKey]);
 
         let iterations = 0;
         while (!openSet.isEmpty() && iterations < maxIterations) {
             iterations++;
-            const current = openSet.dequeue();
+            const queued = openSet.dequeue(), current = queued.chunk;
             const currentKey = getChunkKey(current.x, current.y);
+            if (queued.cost !== gScore[currentKey]) continue;
             if (currentKey === endKey) {
                 const path = [];
                 let key = currentKey;
@@ -39437,7 +39663,7 @@
                     cameFrom[neighborKey] = currentKey;
                     gScore[neighborKey] = tentativeG;
                     fScore[neighborKey] = tentativeG + heuristicCost(neighbor, endChunk);
-                    openSet.enqueue(neighbor, fScore[neighborKey]);
+                    openSet.enqueue({chunk: neighbor, cost: tentativeG}, fScore[neighborKey]);
                 }
             }
         }
@@ -39472,28 +39698,29 @@
         initRoadRegistry();
         const fromKey = getPathAnchorKey(from);
         const toKey = getPathAnchorKey(to);
-        const cacheKey = `${fromKey}->${toKey}`;
-        const cache=roadPathCaches.get(planet),cached=cache.get(cacheKey);
-        if (cached && (planet.day - cached.day) <= maxAge && cached.version === planet._paultendoRoadVersion) {
-            return cached.path;
-        }
-
         const startChunk = getAnchorChunk(from);
         const endChunk = getAnchorChunk(to);
         if (!startChunk || !endChunk) return null;
+        const fromPosition = `${startChunk.x},${startChunk.y}`, toPosition = `${endChunk.x},${endChunk.y}`;
+        const cacheKey = `${fromKey}@${fromPosition}->${toKey}@${toPosition}`;
+        const cache=roadPathCaches.get(planet),cached=cache.get(cacheKey);
+        const groundVersion = planet._paultendoWater?.revision || 0;
+        if (cached && (planet.day - cached.day) <= (cached.path ? maxAge : 0) && cached.version === planet._paultendoRoadVersion && cached.groundVersion === groundVersion) {
+            return cached.path;
+        }
 
         const path = findPath(startChunk, endChunk);
-        if (path && path.length) {
+        {
             cache.set(cacheKey,{
                 path,
                 day: planet.day,
-                version: planet._paultendoRoadVersion
+                version: planet._paultendoRoadVersion, groundVersion
             });
-            const reverseKey = `${toKey}->${fromKey}`;
-            cache.set(reverseKey,{
+            const reverseKey = `${toKey}@${toPosition}->${fromKey}@${fromPosition}`;
+            if (path?.length) cache.set(reverseKey,{
                 path: [...path].reverse(),
                 day: planet.day,
-                version: planet._paultendoRoadVersion
+                version: planet._paultendoRoadVersion, groundVersion
             });
             // Both directions are disposable. Keep memory bounded as new
             // settlements, quarries and landmarks change the route network.
@@ -40141,14 +40368,7 @@
         const force = !!opts.force;
         if (!force && PAULTENDO_STATE.initVersion === MOD_VERSION) return;
         PAULTENDO_STATE.initVersion = MOD_VERSION;
-        try { initRegnameOverrides(); } catch {}
-        try { initLogOverrides(); } catch {}
-        try { initAttentionHooks(); } catch {}
-        try { initHistoryOverrides(); } catch {}
-        try { initMapHooks(); } catch {}
-        try { initEpidemicRenderOverride(); } catch {}
-        try { initExecutiveOverrides(); } catch {}
-        try { initMultiWorldHooks(); } catch {}
+        for (const step of [initRegnameOverrides, initLogOverrides, initAttentionHooks, initHistoryOverrides, initMapHooks, initEpidemicRenderOverride, initExecutiveOverrides, initMultiWorldHooks]) runModTask(step.name, step);
     }
 
     initPaultendoHooks();

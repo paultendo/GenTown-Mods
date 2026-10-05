@@ -1,0 +1,1460 @@
+{
+  "version": "1.6.94",
+  "date": "2026-10-05",
+  "base": "GenTown 1.4 / gt5",
+  "sourceHashes": {
+    "index.html": "19eccde1a476ad46e0a2b88fb8888bef334e3506f8d42f3f7a99198f10a08159",
+    "paultendo-mod.js": "6110cf3a02cb28ad1e6d06a541a3ac29eedd5c16235850e9bf019a256d448e8b",
+    "vendor/gentown/load.js": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+    "vendor/gentown/perlin.js": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+    "vendor/gentown/standalone.js": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+    "vendor/gentown/gentown.js": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+    "vendor/gentown/gentown-data.js": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+    "vendor/gentown/gentown-mass.js": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+    "app/boot.js": "db769df1d0f01c9e11bf64c333f167ccb842c0ef80bd84842140b4b71540953d",
+    "app/ready.js": "52c4b776993e06f053f82cb56e9e012d962077753f1d106d2dab8a333a331a78",
+    "scripts/lib/game.mjs": "2db8895e37c4ed6ed7a7b011e53556c4a2b73d33ecccf43ba470bb33dc069b94",
+    "scripts/lib/campaign.mjs": "712261bf607f99354f95f948c13e0ce56c6cb8e74031c4bd731af69530c2acbb",
+    "scripts/simulate.mjs": "175021ff19fb9accf8e924dfc51263214ff23eb9fc46f28a9930076b8ac944de",
+    "package.json": "2d629e469fc41c1872926616deb178ed133ffbc67514e16edec58a29d4d093b2",
+    "package-lock.json": "0408e20d403076deef551771415d2ef86e47a80dc3dc6d8dcbe33d8ce77c86e3",
+    "tests/release-polish.test.mjs": "7d24d60d3b77dbece9d2fdcb6afc7ed53171452dc2b8fed057c9aecac71ed489",
+    "tests/runtime.test.mjs": "1637c9adca9cd6ecc7c6113aaf72c2f69ef702bfa84083de7a5ef588ad5e0de6",
+    "tests/community-ideas.test.mjs": "8213a45d57ae8a213de92968dd5352df1fb00e8246e86dd29a2262fd946b3ed4"
+  },
+  "automatedChecks": {
+    "command": "npm test",
+    "total": 685,
+    "passed": 685,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "durationMs": 227054.273458,
+    "outputSha256": "dfb71b5a4b13e821cf238732bd2c3c6ee1f69cce8557ad073c85148e0124dc34",
+    "syntaxCheck": "npm run check passed",
+    "newPolishTests": 8,
+    "uiCraftDetectorFindings": 0
+  },
+  "campaigns": {
+    "turns": 750,
+    "scope": "Two fresh campaigns and a continued Day 751 save. Campaign source predates the final choice-button styling and Info-menu integration corrections. Final release bytes passed the entire suite and real browser checks.",
+    "cases": [
+      {
+        "version": "1.6.94",
+        "seed": 42,
+        "policy": "yes",
+        "days": 300,
+        "turns": 300,
+        "startDay": 1,
+        "status": "passed",
+        "imported": false,
+        "inputHash": null,
+        "elapsedMs": 37116,
+        "firstExtinction": {},
+        "longestQuietStretch": 6,
+        "quietStretchDefinition": "Days without a discovery, change of work status or obstacle, town count, artifact, place, encounter, clue or process count. Population changes and ordinary news do not reset it.",
+        "choiceCounts": {
+          "act": 32,
+          "yes": 123,
+          "choice": 1
+        },
+        "discoveryRhythm": {
+          "first30Turns": 5,
+          "turns31To150": 12,
+          "after150Turns": 10
+        },
+        "waitingWork": [
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:186",
+            "town": 6,
+            "name": "Fammed",
+            "status": "waiting",
+            "started": 224,
+            "remaining": 8,
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "Fammed returns to the work.",
+            "lastChange": 235,
+            "active": true,
+            "age": 77,
+            "daysSinceStoryChange": 66,
+            "daysWithoutProgress": 77
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:265",
+            "town": 2,
+            "name": "Ricas",
+            "status": "working",
+            "started": 301,
+            "remaining": 5,
+            "resolved": false,
+            "cost": {
+              "metal": 2
+            },
+            "latestStep": "Ricas begins the shaping in Wayfarer 183.",
+            "lastChange": 301,
+            "active": true,
+            "age": 0,
+            "daysSinceStoryChange": 0,
+            "daysWithoutProgress": 0
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:267",
+            "town": 6,
+            "name": "Fazah",
+            "status": "waiting",
+            "started": 301,
+            "remaining": 5,
+            "resolved": false,
+            "cost": {
+              "metal": 2
+            },
+            "latestStep": "Fazah wants to try making metal handtools in Montefizi.",
+            "lastChange": 301,
+            "active": true,
+            "age": 0,
+            "daysSinceStoryChange": 0,
+            "daysWithoutProgress": 0
+          }
+        ],
+        "stalledWork": [
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:186",
+            "town": 6,
+            "name": "Fammed",
+            "status": "waiting",
+            "started": 224,
+            "remaining": 8,
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "Fammed returns to the work.",
+            "lastChange": 235,
+            "active": true,
+            "age": 77,
+            "daysSinceStoryChange": 66,
+            "daysWithoutProgress": 77
+          }
+        ],
+        "errors": [],
+        "warnings": [],
+        "unavailableChoices": [],
+        "summary": "Seed 42, yes: PASSED\n300/300 turns, day 1 to 301, 37.12s (8.1 days/s)\nWorld 1: 3 living towns, 4140 people, 78 work records, 1 artifacts, 14 species encounters\nDiscoveries: smith 10 on day 3, travel 10 on day 13, fire 10 on day 18, astronomy 10 on day 23, farm 10 on day 26, smith 20 on day 35, smith 30 on day 44, smith 40 on day 49, government 10 on day 55, military 10 on day 61, military 20 on day 71, education 10 on day 76, military 30 on day 98, education 20 on day 102, trade 10 on day 107, travel 20 on day 111, astronomy 20 on day 139, travel 30 on day 155, farm 20 on day 158, military 40 on day 178, travel 40 on day 186, fire 20 on day 224, military 50 on day 235, farm 30 on day 256, farm 40 on day 261, trade 20 on day 271, fire 30 on day 298\nChoices: act 32, yes 123, choice 1\nFirst extinction: none\nLongest stretch without a tracked milestone: 6 days\nUnfinished work: 3\nWork unchanged for at least 30 days: 1\nProposals without usable controls: 0\n  materialWork Fammed: waiting, age 77 days, remaining 8\n  materialWork Ricas: working, age 0 days, remaining 5\n  materialWork Fazah: waiting, age 0 days, remaining 5\nRuntime failures: 0. Console errors: 0. Warnings: 0.\nThis checks simulation behaviour. It does not judge whether a campaign is enjoyable.",
+        "finalWorlds": [
+          {
+            "id": 1,
+            "name": "Ujoris e",
+            "day": 301,
+            "dead": false,
+            "locked": false,
+            "population": 4140,
+            "livingTowns": 3,
+            "sharedUnlocks": {
+              "space": 0,
+              "smith": 40,
+              "travel": 50,
+              "fire": 30,
+              "astronomy": 20,
+              "farm": 41.200000000000045,
+              "faith": 30,
+              "government": 11.219999999999974,
+              "military": 50,
+              "education": 20,
+              "trade": 20
+            },
+            "processTypes": {
+              "project": 5,
+              "war": 7
+            },
+            "artifacts": 1,
+            "discoveredPlaces": 3,
+            "speciesEncounters": 14,
+            "clues": 0,
+            "workRecords": 78
+          }
+        ],
+        "sourceHashes": {
+          "index.html": "19eccde1a476ad46e0a2b88fb8888bef334e3506f8d42f3f7a99198f10a08159",
+          "paultendo-mod.js": "1e4f04fa11bc7aa723dade2b6bed00ddd8585e67bb85d2cf8d8a571919a02f90",
+          "vendor/gentown/load.js": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+          "vendor/gentown/perlin.js": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+          "vendor/gentown/standalone.js": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+          "vendor/gentown/gentown.js": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+          "vendor/gentown/gentown-data.js": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+          "vendor/gentown/gentown-mass.js": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+          "app/boot.js": "db769df1d0f01c9e11bf64c333f167ccb842c0ef80bd84842140b4b71540953d",
+          "app/ready.js": "52c4b776993e06f053f82cb56e9e012d962077753f1d106d2dab8a333a331a78",
+          "scripts/lib/game.mjs": "2db8895e37c4ed6ed7a7b011e53556c4a2b73d33ecccf43ba470bb33dc069b94",
+          "scripts/lib/campaign.mjs": "712261bf607f99354f95f948c13e0ce56c6cb8e74031c4bd731af69530c2acbb",
+          "scripts/simulate.mjs": "175021ff19fb9accf8e924dfc51263214ff23eb9fc46f28a9930076b8ac944de"
+        },
+        "completedWorkCount": 75,
+        "reportSha256": "d579995e558d6c35635683e5cfdf507b74255e25bfb7f81f8e1056bed35dcbf6",
+        "finalSaveSha256": "760c71c9d9e2d598ec7d06e0e6a92cfc62c85f71b91b87ed0e19f1c7c77eefb3"
+      },
+      {
+        "version": "1.6.94",
+        "seed": 123,
+        "policy": "mixed",
+        "days": 300,
+        "turns": 300,
+        "startDay": 1,
+        "status": "passed",
+        "imported": false,
+        "inputHash": null,
+        "elapsedMs": 29149,
+        "firstExtinction": {},
+        "longestQuietStretch": 9,
+        "quietStretchDefinition": "Days without a discovery, change of work status or obstacle, town count, artifact, place, encounter, clue or process count. Population changes and ordinary news do not reset it.",
+        "choiceCounts": {
+          "act": 31,
+          "no": 70,
+          "yes": 63
+        },
+        "discoveryRhythm": {
+          "first30Turns": 1,
+          "turns31To150": 6,
+          "after150Turns": 8
+        },
+        "waitingWork": [
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:253",
+            "town": 1,
+            "name": "Puverie",
+            "status": "waiting",
+            "started": 300,
+            "remaining": 8,
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "Puverie wants to try making telescopes in Wayfarer 54.",
+            "lastChange": 300,
+            "active": true,
+            "age": 1,
+            "daysSinceStoryChange": 1,
+            "daysWithoutProgress": 1
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:255",
+            "town": 1,
+            "name": "Feford",
+            "status": "waiting",
+            "started": 301,
+            "remaining": 5,
+            "resolved": false,
+            "cost": {
+              "metal": 2
+            },
+            "latestStep": "Feford wants to try making metal handtools in Wayfarer 54.",
+            "lastChange": 301,
+            "active": true,
+            "age": 0,
+            "daysSinceStoryChange": 0,
+            "daysWithoutProgress": 0
+          },
+          {
+            "world": 1,
+            "kind": "exchanges",
+            "id": "exchange:254",
+            "town": 1,
+            "name": "metal_tools",
+            "status": "asking",
+            "started": 300,
+            "resolved": false,
+            "lastChange": 300,
+            "active": true,
+            "age": 1,
+            "daysSinceStoryChange": 1,
+            "daysWithoutProgress": 1
+          },
+          {
+            "world": 1,
+            "kind": "teachings",
+            "id": "teaching:251",
+            "town": 1,
+            "name": "Feeding the neighbours",
+            "started": 300,
+            "resolved": false,
+            "latestStep": "Along with the metal handtools, words from Ouside reach Loborne in Wayfarer 54.",
+            "lastChange": 300,
+            "active": true,
+            "age": 1,
+            "daysSinceStoryChange": 1,
+            "daysWithoutProgress": 1
+          }
+        ],
+        "stalledWork": [],
+        "errors": [],
+        "warnings": [],
+        "unavailableChoices": [],
+        "summary": "Seed 123, mixed: PASSED\n300/300 turns, day 1 to 301, 29.15s (10.3 days/s)\nWorld 1: 3 living towns, 848 people, 56 work records, 1 artifacts, 18 species encounters\nDiscoveries: travel 10 on day 14, smith 10 on day 44, farm 10 on day 58, education 10 on day 72, smith 20 on day 124, military 10 on day 128, trade 10 on day 141, fire 10 on day 155, smith 30 on day 162, smith 40 on day 165, astronomy 10 on day 208, education 20 on day 249, military 20 on day 255, military 30 on day 263, astronomy 20 on day 292\nChoices: act 31, no 70, yes 63\nFirst extinction: none\nLongest stretch without a tracked milestone: 9 days\nUnfinished work: 4\nWork unchanged for at least 30 days: 0\nProposals without usable controls: 0\n  materialWork Puverie: waiting, age 1 days, remaining 8\n  materialWork Feford: waiting, age 0 days, remaining 5\n  exchanges metal_tools: asking, age 1 days, remaining ?\n  teachings Feeding the neighbours: underway, age 1 days, remaining ?\nRuntime failures: 0. Console errors: 0. Warnings: 0.\nThis checks simulation behaviour. It does not judge whether a campaign is enjoyable.",
+        "finalWorlds": [
+          {
+            "id": 1,
+            "name": "Gnus c",
+            "day": 301,
+            "dead": false,
+            "locked": false,
+            "population": 848,
+            "livingTowns": 3,
+            "sharedUnlocks": {
+              "space": 0,
+              "travel": 10,
+              "smith": 40,
+              "farm": 10,
+              "faith": 30,
+              "education": 30,
+              "military": 30,
+              "trade": 10,
+              "fire": 10,
+              "astronomy": 20
+            },
+            "processTypes": {
+              "project": 4,
+              "war": 5
+            },
+            "artifacts": 1,
+            "discoveredPlaces": 1,
+            "speciesEncounters": 18,
+            "clues": 0,
+            "workRecords": 56
+          }
+        ],
+        "sourceHashes": {
+          "index.html": "19eccde1a476ad46e0a2b88fb8888bef334e3506f8d42f3f7a99198f10a08159",
+          "paultendo-mod.js": "1e4f04fa11bc7aa723dade2b6bed00ddd8585e67bb85d2cf8d8a571919a02f90",
+          "vendor/gentown/load.js": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+          "vendor/gentown/perlin.js": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+          "vendor/gentown/standalone.js": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+          "vendor/gentown/gentown.js": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+          "vendor/gentown/gentown-data.js": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+          "vendor/gentown/gentown-mass.js": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+          "app/boot.js": "db769df1d0f01c9e11bf64c333f167ccb842c0ef80bd84842140b4b71540953d",
+          "app/ready.js": "52c4b776993e06f053f82cb56e9e012d962077753f1d106d2dab8a333a331a78",
+          "scripts/lib/game.mjs": "2db8895e37c4ed6ed7a7b011e53556c4a2b73d33ecccf43ba470bb33dc069b94",
+          "scripts/lib/campaign.mjs": "712261bf607f99354f95f948c13e0ce56c6cb8e74031c4bd731af69530c2acbb",
+          "scripts/simulate.mjs": "175021ff19fb9accf8e924dfc51263214ff23eb9fc46f28a9930076b8ac944de"
+        },
+        "completedWorkCount": 52,
+        "reportSha256": "22b1a200bb8d25d9f771d62d8d835ed03f6868e7e13c910404d03ee2c3729df8",
+        "finalSaveSha256": "65e4b775d5b1b3f62801ac89bb82ead1b26435b7c6429329cf700704f2ed591a"
+      },
+      {
+        "version": "1.6.94",
+        "seed": 42,
+        "policy": "mixed",
+        "days": 150,
+        "turns": 150,
+        "startDay": 751,
+        "status": "passed",
+        "imported": true,
+        "inputHash": "f0ec1b3a882b8b6199320ad8413ddfed3132741c3a42e197d3b66a35cb24f8f0",
+        "elapsedMs": 47556,
+        "firstExtinction": {},
+        "longestQuietStretch": 1,
+        "quietStretchDefinition": "Days without a discovery, change of work status or obstacle, town count, artifact, place, encounter, clue or process count. Population changes and ordinary news do not reset it.",
+        "choiceCounts": {
+          "act": 13,
+          "yes": 19,
+          "no": 32
+        },
+        "discoveryRhythm": {
+          "first30Turns": 0,
+          "turns31To150": 0,
+          "after150Turns": 0
+        },
+        "waitingWork": [
+          {
+            "world": 1,
+            "kind": "inquiries",
+            "id": "inquiry:1028",
+            "town": 18,
+            "name": "Kilns",
+            "status": "waiting",
+            "started": 861,
+            "remaining": 6,
+            "pause": "hands",
+            "resolved": false,
+            "cost": {
+              "clay": 2,
+              "charcoal": 1
+            },
+            "cause": {
+              "role": "miner",
+              "text": "They have sand to experiment with.",
+              "evidence": {
+                "priority": 0,
+                "practice": [
+                  {
+                    "id": "material:968",
+                    "type": "timber_bins",
+                    "day": 843
+                  },
+                  {
+                    "id": "material:980",
+                    "type": "timber_bins",
+                    "day": 848
+                  },
+                  {
+                    "id": "material:993",
+                    "type": "timber_bins",
+                    "day": 853
+                  },
+                  {
+                    "id": "material:1007",
+                    "type": "timber_bins",
+                    "day": 858
+                  }
+                ],
+                "samples": [
+                  "metal_tools",
+                  "sand",
+                  "clay",
+                  "coal"
+                ],
+                "question": {
+                  "type": "glass",
+                  "sample": "sand"
+                }
+              }
+            },
+            "latestStep": "Kugore is no longer free to tend the work.",
+            "lastChange": 893,
+            "active": true,
+            "age": 40,
+            "daysSinceStoryChange": 8,
+            "daysWithoutProgress": 40
+          },
+          {
+            "world": 1,
+            "kind": "inquiries",
+            "id": "inquiry:1031",
+            "town": 18,
+            "name": "Writing",
+            "status": "waiting",
+            "started": 863,
+            "remaining": 6,
+            "resolved": false,
+            "cost": {
+              "clay": 1
+            },
+            "cause": {
+              "role": "scholar",
+              "text": "The town has made learning a priority. Its scholars want to preserve and share what they know.",
+              "evidence": {
+                "priority": 10,
+                "practice": [
+                  {
+                    "id": "material:968",
+                    "type": "timber_bins",
+                    "day": 843
+                  },
+                  {
+                    "id": "material:980",
+                    "type": "timber_bins",
+                    "day": 848
+                  },
+                  {
+                    "id": "material:993",
+                    "type": "timber_bins",
+                    "day": 853
+                  },
+                  {
+                    "id": "material:1007",
+                    "type": "timber_bins",
+                    "day": 858
+                  }
+                ],
+                "observations": []
+              }
+            },
+            "latestStep": "Pitok begins work on writing. The town has made learning a priority. Its scholars want to preserve and share what they know.",
+            "lastChange": 863,
+            "active": true,
+            "age": 38,
+            "daysSinceStoryChange": 38,
+            "daysWithoutProgress": 38
+          },
+          {
+            "world": 1,
+            "kind": "inquiries",
+            "id": "inquiry:1100",
+            "town": 17,
+            "name": "Libraries",
+            "status": "waiting",
+            "started": 890,
+            "remaining": 10,
+            "pause": "hands",
+            "resolved": false,
+            "cost": {
+              "lumber": 2,
+              "paper": 2
+            },
+            "cause": {
+              "role": "scholar",
+              "text": "The exchanges continue. The scholars want a place to keep what they are learning.",
+              "evidence": {
+                "priority": 0,
+                "practice": [
+                  {
+                    "id": "material:943",
+                    "type": "timber_bins",
+                    "day": 832
+                  },
+                  {
+                    "id": "material:1005",
+                    "type": "timber_bins",
+                    "day": 860
+                  },
+                  {
+                    "id": "material:1046",
+                    "type": "metal_tools",
+                    "day": 874
+                  },
+                  {
+                    "id": "material:1081",
+                    "type": "timber_bins",
+                    "day": 887
+                  }
+                ],
+                "observations": [],
+                "exchanges": [
+                  "exchange:954",
+                  "exchange:1087"
+                ]
+              }
+            },
+            "latestStep": "Pixy is no longer free to tend the work.",
+            "lastChange": 896,
+            "active": true,
+            "age": 11,
+            "daysSinceStoryChange": 5,
+            "daysWithoutProgress": 11
+          },
+          {
+            "world": 1,
+            "kind": "inquiries",
+            "id": "inquiry:1115",
+            "town": 18,
+            "name": "Priesthood",
+            "status": "working",
+            "started": 897,
+            "remaining": 4,
+            "resolved": false,
+            "cost": {},
+            "cause": {
+              "role": "priest",
+              "text": "Shared beliefs have become part of town life. People want a lasting place for them.",
+              "evidence": {
+                "priority": 0,
+                "religion": 10,
+                "faith": 10
+              }
+            },
+            "latestStep": "D\u00e9nry gathers people to work on priesthood.",
+            "lastChange": 897,
+            "active": true,
+            "age": 4,
+            "daysSinceStoryChange": 4,
+            "daysWithoutProgress": 0
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:165",
+            "town": 2,
+            "name": "Pitein",
+            "status": "waiting",
+            "started": 202,
+            "remaining": 8,
+            "pause": "Pitein cannot tend the work. It waits for them.",
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "Pitein cannot tend the work. It waits for them.",
+            "lastChange": 900,
+            "active": true,
+            "age": 699,
+            "daysSinceStoryChange": 1,
+            "daysWithoutProgress": 150
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:502",
+            "town": 14,
+            "name": "V\u00e9jamin",
+            "status": "waiting",
+            "started": 584,
+            "remaining": 8,
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "V\u00e9jamin returns to the work.",
+            "lastChange": 857,
+            "active": true,
+            "age": 317,
+            "daysSinceStoryChange": 44,
+            "daysWithoutProgress": 150
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:806",
+            "town": 18,
+            "name": "Pitok",
+            "status": "waiting",
+            "started": 768,
+            "remaining": 8,
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "Pitok wants to try making telescopes in Deland.",
+            "lastChange": 768,
+            "active": true,
+            "age": 133,
+            "daysSinceStoryChange": 133,
+            "daysWithoutProgress": 133
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:1054",
+            "town": 23,
+            "name": "Huvan",
+            "status": "waiting",
+            "started": 871,
+            "remaining": 8,
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "Huvan returns to the work. The town has food again.",
+            "lastChange": 901,
+            "active": true,
+            "age": 30,
+            "daysSinceStoryChange": 0,
+            "daysWithoutProgress": 30
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:1106",
+            "town": 23,
+            "name": "Bugore",
+            "status": "working",
+            "started": 894,
+            "remaining": 3,
+            "resolved": false,
+            "cost": {
+              "metal": 2
+            },
+            "latestStep": "Bugore returns to the work. The town has food again.",
+            "lastChange": 901,
+            "active": true,
+            "age": 7,
+            "daysSinceStoryChange": 0,
+            "daysWithoutProgress": 0
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:1118",
+            "town": 2,
+            "name": "Pitein",
+            "status": "working",
+            "started": 899,
+            "remaining": 2,
+            "resolved": false,
+            "cost": {
+              "lumber": 2
+            },
+            "latestStep": "Pitein begins fitting the parts together in Wayfarer 597.",
+            "lastChange": 899,
+            "active": true,
+            "age": 2,
+            "daysSinceStoryChange": 2,
+            "daysWithoutProgress": 0
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:1119",
+            "town": 18,
+            "name": "Kugore",
+            "status": "working",
+            "started": 899,
+            "remaining": 3,
+            "resolved": false,
+            "cost": {
+              "metal": 2
+            },
+            "latestStep": "Kugore begins the shaping in Deland.",
+            "lastChange": 899,
+            "active": true,
+            "age": 2,
+            "daysSinceStoryChange": 2,
+            "daysWithoutProgress": 0
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:1125",
+            "town": 14,
+            "name": "S\u00e9mena",
+            "status": "working",
+            "started": 901,
+            "remaining": 4,
+            "resolved": false,
+            "cost": {
+              "lumber": 2
+            },
+            "latestStep": "S\u00e9mena begins fitting the parts together in Wayfarer 759.",
+            "lastChange": 901,
+            "active": true,
+            "age": 0,
+            "daysSinceStoryChange": 0,
+            "daysWithoutProgress": 0
+          }
+        ],
+        "stalledWork": [
+          {
+            "world": 1,
+            "kind": "inquiries",
+            "id": "inquiry:1028",
+            "town": 18,
+            "name": "Kilns",
+            "status": "waiting",
+            "started": 861,
+            "remaining": 6,
+            "pause": "hands",
+            "resolved": false,
+            "cost": {
+              "clay": 2,
+              "charcoal": 1
+            },
+            "cause": {
+              "role": "miner",
+              "text": "They have sand to experiment with.",
+              "evidence": {
+                "priority": 0,
+                "practice": [
+                  {
+                    "id": "material:968",
+                    "type": "timber_bins",
+                    "day": 843
+                  },
+                  {
+                    "id": "material:980",
+                    "type": "timber_bins",
+                    "day": 848
+                  },
+                  {
+                    "id": "material:993",
+                    "type": "timber_bins",
+                    "day": 853
+                  },
+                  {
+                    "id": "material:1007",
+                    "type": "timber_bins",
+                    "day": 858
+                  }
+                ],
+                "samples": [
+                  "metal_tools",
+                  "sand",
+                  "clay",
+                  "coal"
+                ],
+                "question": {
+                  "type": "glass",
+                  "sample": "sand"
+                }
+              }
+            },
+            "latestStep": "Kugore is no longer free to tend the work.",
+            "lastChange": 893,
+            "active": true,
+            "age": 40,
+            "daysSinceStoryChange": 8,
+            "daysWithoutProgress": 40
+          },
+          {
+            "world": 1,
+            "kind": "inquiries",
+            "id": "inquiry:1031",
+            "town": 18,
+            "name": "Writing",
+            "status": "waiting",
+            "started": 863,
+            "remaining": 6,
+            "resolved": false,
+            "cost": {
+              "clay": 1
+            },
+            "cause": {
+              "role": "scholar",
+              "text": "The town has made learning a priority. Its scholars want to preserve and share what they know.",
+              "evidence": {
+                "priority": 10,
+                "practice": [
+                  {
+                    "id": "material:968",
+                    "type": "timber_bins",
+                    "day": 843
+                  },
+                  {
+                    "id": "material:980",
+                    "type": "timber_bins",
+                    "day": 848
+                  },
+                  {
+                    "id": "material:993",
+                    "type": "timber_bins",
+                    "day": 853
+                  },
+                  {
+                    "id": "material:1007",
+                    "type": "timber_bins",
+                    "day": 858
+                  }
+                ],
+                "observations": []
+              }
+            },
+            "latestStep": "Pitok begins work on writing. The town has made learning a priority. Its scholars want to preserve and share what they know.",
+            "lastChange": 863,
+            "active": true,
+            "age": 38,
+            "daysSinceStoryChange": 38,
+            "daysWithoutProgress": 38
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:165",
+            "town": 2,
+            "name": "Pitein",
+            "status": "waiting",
+            "started": 202,
+            "remaining": 8,
+            "pause": "Pitein cannot tend the work. It waits for them.",
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "Pitein cannot tend the work. It waits for them.",
+            "lastChange": 900,
+            "active": true,
+            "age": 699,
+            "daysSinceStoryChange": 1,
+            "daysWithoutProgress": 150
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:502",
+            "town": 14,
+            "name": "V\u00e9jamin",
+            "status": "waiting",
+            "started": 584,
+            "remaining": 8,
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "V\u00e9jamin returns to the work.",
+            "lastChange": 857,
+            "active": true,
+            "age": 317,
+            "daysSinceStoryChange": 44,
+            "daysWithoutProgress": 150
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:806",
+            "town": 18,
+            "name": "Pitok",
+            "status": "waiting",
+            "started": 768,
+            "remaining": 8,
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "Pitok wants to try making telescopes in Deland.",
+            "lastChange": 768,
+            "active": true,
+            "age": 133,
+            "daysSinceStoryChange": 133,
+            "daysWithoutProgress": 133
+          },
+          {
+            "world": 1,
+            "kind": "materialWork",
+            "id": "material:1054",
+            "town": 23,
+            "name": "Huvan",
+            "status": "waiting",
+            "started": 871,
+            "remaining": 8,
+            "resolved": false,
+            "cost": {
+              "glass": 2,
+              "metal": 2,
+              "lumber": 1
+            },
+            "latestStep": "Huvan returns to the work. The town has food again.",
+            "lastChange": 901,
+            "active": true,
+            "age": 30,
+            "daysSinceStoryChange": 0,
+            "daysWithoutProgress": 30
+          }
+        ],
+        "errors": [],
+        "warnings": [],
+        "unavailableChoices": [],
+        "summary": "Seed 42, mixed: PASSED\n150/150 turns, day 751 to 901, 47.56s (3.2 days/s)\nWorld 1: 9 living towns, 88346 people, 278 work records, 1 artifacts, 19 species encounters\nDiscoveries: none\nChoices: act 13, yes 19, no 32\nFirst extinction: none\nLongest stretch without a tracked milestone: 1 days\nUnfinished work: 12\nWork unchanged for at least 30 days: 6\nProposals without usable controls: 0\n  inquiries Kilns: waiting (hands), age 40 days, remaining 6\n  inquiries Writing: waiting, age 38 days, remaining 6\n  inquiries Libraries: waiting (hands), age 11 days, remaining 10\n  inquiries Priesthood: working, age 4 days, remaining 4\n  materialWork Pitein: waiting (Pitein cannot tend the work. It waits for them.), age 699 days, remaining 8\n  materialWork V\u00e9jamin: waiting, age 317 days, remaining 8\n  materialWork Pitok: waiting, age 133 days, remaining 8\n  materialWork Huvan: waiting, age 30 days, remaining 8\n  materialWork Bugore: working, age 7 days, remaining 3\n  materialWork Pitein: working, age 2 days, remaining 2\n  materialWork Kugore: working, age 2 days, remaining 3\n  materialWork S\u00e9mena: working, age 0 days, remaining 4\nRuntime failures: 0. Console errors: 0. Warnings: 0.\nThis checks simulation behaviour. It does not judge whether a campaign is enjoyable.",
+        "finalWorlds": [
+          {
+            "id": 1,
+            "name": "Ujoris e",
+            "day": 901,
+            "dead": false,
+            "locked": false,
+            "population": 88346,
+            "livingTowns": 9,
+            "sharedUnlocks": {
+              "space": 0,
+              "smith": 40,
+              "travel": 79.34999999999947,
+              "fire": 40,
+              "astronomy": 20,
+              "farm": 62.220000000000084,
+              "faith": 50,
+              "government": 16.299999999999866,
+              "military": 50,
+              "education": 68.7599999999996,
+              "trade": 46.71999999999986
+            },
+            "processTypes": {
+              "project": 20,
+              "war": 28,
+              "crisis": 1,
+              "disaster": 1
+            },
+            "artifacts": 1,
+            "discoveredPlaces": 14,
+            "speciesEncounters": 19,
+            "clues": 3,
+            "workRecords": 278
+          }
+        ],
+        "sourceHashes": {
+          "index.html": "19eccde1a476ad46e0a2b88fb8888bef334e3506f8d42f3f7a99198f10a08159",
+          "paultendo-mod.js": "1e4f04fa11bc7aa723dade2b6bed00ddd8585e67bb85d2cf8d8a571919a02f90",
+          "vendor/gentown/load.js": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+          "vendor/gentown/perlin.js": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+          "vendor/gentown/standalone.js": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+          "vendor/gentown/gentown.js": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+          "vendor/gentown/gentown-data.js": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+          "vendor/gentown/gentown-mass.js": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+          "app/boot.js": "db769df1d0f01c9e11bf64c333f167ccb842c0ef80bd84842140b4b71540953d",
+          "app/ready.js": "52c4b776993e06f053f82cb56e9e012d962077753f1d106d2dab8a333a331a78",
+          "scripts/lib/game.mjs": "2db8895e37c4ed6ed7a7b011e53556c4a2b73d33ecccf43ba470bb33dc069b94",
+          "scripts/lib/campaign.mjs": "712261bf607f99354f95f948c13e0ce56c6cb8e74031c4bd731af69530c2acbb",
+          "scripts/simulate.mjs": "175021ff19fb9accf8e924dfc51263214ff23eb9fc46f28a9930076b8ac944de"
+        },
+        "completedWorkCount": 266,
+        "reportSha256": "3be6dfe48deb51357948a16576e525737d057cb743d4eb4d435bfdf7802d5efa",
+        "finalSaveSha256": "86e565a3c00bec4a6566e74acdd1e9944426fdd6b2786fdbf319fcbb1738e2fe"
+      }
+    ]
+  },
+  "performance": {
+    "method": "30 actual native nextDay calls, identical Day 751 input, seed 42, mixed policy, VM clock, jsdom. Each comparison ran separately. Includes the base engine and mod, not browser rendering. CPU-profiled final release run.",
+    "inputSha256": "f0ec1b3a882b8b6199320ad8413ddfed3132741c3a42e197d3b66a35cb24f8f0",
+    "baselineVersion": "1.6.93",
+    "baselineModSha256": "311e4cb2efa6eb0f126b8fca6975764a518117a42d9dc7d8d979249282d5aa69",
+    "baseline": {
+      "status": "passed",
+      "turns": 30,
+      "startDay": 751,
+      "endDay": 781,
+      "elapsedMs": 13059,
+      "perNextDayMs": {
+        "median": 344.69399999999996,
+        "p95": 504.62554199999977,
+        "max": 628.5875830000004
+      },
+      "errors": [],
+      "warnings": [],
+      "unavailableChoices": 0
+    },
+    "final": {
+      "status": "passed",
+      "turns": 30,
+      "startDay": 751,
+      "endDay": 781,
+      "elapsedMs": 12261,
+      "perNextDayMs": {
+        "median": 305.19487499999923,
+        "p95": 393.89950000000135,
+        "max": 623.4259170000005
+      },
+      "errors": [],
+      "warnings": [],
+      "unavailableChoices": 0
+    },
+    "earlierCandidate": {
+      "status": "passed",
+      "turns": 30,
+      "startDay": 751,
+      "endDay": 781,
+      "elapsedMs": 9795,
+      "perNextDayMs": {
+        "median": 256.11299999999983,
+        "p95": 330.3125,
+        "max": 396.6180000000004
+      },
+      "errors": [],
+      "warnings": [],
+      "unavailableChoices": 0
+    },
+    "medianReductionPercent": 11.459185538477822,
+    "p95ReductionPercent": 21.94221908806956,
+    "limits": "Small observational samples on one host with varying load. Earlier v1.6.94 runs measured median 256/257 ms; final run 305 ms. These are not FPS, input latency or guaranteed savings.",
+    "oldSaveTerritoryCopies": {
+      "townCaches": 19,
+      "serializedDuplicateBytesUtf8": 230264,
+      "scope": "Compressed input keys decoded using its codes table. This field total is not a claim about the whole new save size."
+    },
+    "browserCpuThrottle": {
+      "fromDay": 756,
+      "toDay": 757,
+      "cpuRate": 4,
+      "viewport": [
+        390,
+        844
+      ],
+      "before": {
+        "metrics": [
+          {
+            "name": "Timestamp",
+            "value": 2182167.813191
+          },
+          {
+            "name": "AudioHandlers",
+            "value": 0
+          },
+          {
+            "name": "AudioWorkletProcessors",
+            "value": 0
+          },
+          {
+            "name": "Documents",
+            "value": 2
+          },
+          {
+            "name": "Frames",
+            "value": 1
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 652
+          },
+          {
+            "name": "LayoutObjects",
+            "value": 1413
+          },
+          {
+            "name": "MediaKeySessions",
+            "value": 0
+          },
+          {
+            "name": "MediaKeys",
+            "value": 0
+          },
+          {
+            "name": "Nodes",
+            "value": 6116
+          },
+          {
+            "name": "Resources",
+            "value": 24
+          },
+          {
+            "name": "ContextLifecycleStateObservers",
+            "value": 31
+          },
+          {
+            "name": "V8PerContextDatas",
+            "value": 6
+          },
+          {
+            "name": "WorkerGlobalScopes",
+            "value": 0
+          },
+          {
+            "name": "UACSSResources",
+            "value": 0
+          },
+          {
+            "name": "RTCPeerConnections",
+            "value": 0
+          },
+          {
+            "name": "ResourceFetchers",
+            "value": 2
+          },
+          {
+            "name": "AdSubframes",
+            "value": 0
+          },
+          {
+            "name": "DetachedScriptStates",
+            "value": 0
+          },
+          {
+            "name": "ArrayBufferContents",
+            "value": 0
+          },
+          {
+            "name": "LayoutCount",
+            "value": 0
+          },
+          {
+            "name": "RecalcStyleCount",
+            "value": 0
+          },
+          {
+            "name": "LayoutDuration",
+            "value": 0
+          },
+          {
+            "name": "RecalcStyleDuration",
+            "value": 0
+          },
+          {
+            "name": "DevToolsCommandDuration",
+            "value": 0.008289
+          },
+          {
+            "name": "ScriptDuration",
+            "value": 0
+          },
+          {
+            "name": "V8CompileDuration",
+            "value": 0
+          },
+          {
+            "name": "TaskDuration",
+            "value": 0.008701
+          },
+          {
+            "name": "TaskOtherDuration",
+            "value": 0.000412
+          },
+          {
+            "name": "ThreadTime",
+            "value": 0.063082
+          },
+          {
+            "name": "ProcessTime",
+            "value": 15.653905
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 15799588
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 16662528
+          },
+          {
+            "name": "FirstMeaningfulPaint",
+            "value": 2181638.916531
+          },
+          {
+            "name": "DomContentLoaded",
+            "value": 2181638.430647
+          },
+          {
+            "name": "NavigationStart",
+            "value": 2181638.05278
+          }
+        ]
+      },
+      "after": {
+        "metrics": [
+          {
+            "name": "Timestamp",
+            "value": 2182171.858322
+          },
+          {
+            "name": "AudioHandlers",
+            "value": 0
+          },
+          {
+            "name": "AudioWorkletProcessors",
+            "value": 0
+          },
+          {
+            "name": "Documents",
+            "value": 2
+          },
+          {
+            "name": "Frames",
+            "value": 1
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 690
+          },
+          {
+            "name": "LayoutObjects",
+            "value": 1345
+          },
+          {
+            "name": "MediaKeySessions",
+            "value": 0
+          },
+          {
+            "name": "MediaKeys",
+            "value": 0
+          },
+          {
+            "name": "Nodes",
+            "value": 5798
+          },
+          {
+            "name": "Resources",
+            "value": 24
+          },
+          {
+            "name": "ContextLifecycleStateObservers",
+            "value": 31
+          },
+          {
+            "name": "V8PerContextDatas",
+            "value": 6
+          },
+          {
+            "name": "WorkerGlobalScopes",
+            "value": 0
+          },
+          {
+            "name": "UACSSResources",
+            "value": 0
+          },
+          {
+            "name": "RTCPeerConnections",
+            "value": 0
+          },
+          {
+            "name": "ResourceFetchers",
+            "value": 2
+          },
+          {
+            "name": "AdSubframes",
+            "value": 0
+          },
+          {
+            "name": "DetachedScriptStates",
+            "value": 0
+          },
+          {
+            "name": "ArrayBufferContents",
+            "value": 0
+          },
+          {
+            "name": "LayoutCount",
+            "value": 66
+          },
+          {
+            "name": "RecalcStyleCount",
+            "value": 82
+          },
+          {
+            "name": "LayoutDuration",
+            "value": 0.190614
+          },
+          {
+            "name": "RecalcStyleDuration",
+            "value": 0.118694
+          },
+          {
+            "name": "DevToolsCommandDuration",
+            "value": 0.521054
+          },
+          {
+            "name": "ScriptDuration",
+            "value": 2.620192
+          },
+          {
+            "name": "V8CompileDuration",
+            "value": 0
+          },
+          {
+            "name": "TaskDuration",
+            "value": 3.9703
+          },
+          {
+            "name": "TaskOtherDuration",
+            "value": 0.519746
+          },
+          {
+            "name": "ThreadTime",
+            "value": 3.612143
+          },
+          {
+            "name": "ProcessTime",
+            "value": 19.608873
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 15831656
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 33177600
+          },
+          {
+            "name": "FirstMeaningfulPaint",
+            "value": 2181638.916531
+          },
+          {
+            "name": "DomContentLoaded",
+            "value": 2181638.430647
+          },
+          {
+            "name": "NavigationStart",
+            "value": 2181638.05278
+          }
+        ]
+      },
+      "limits": "One real browser turn with simulated CPU throttling. Includes UI inspection overhead. No physical slow device or browser FPS claim.",
+      "deltas": {
+        "Timestamp": 4.045131000224501,
+        "ScriptDuration": 2.620192,
+        "TaskDuration": 3.961599,
+        "LayoutDuration": 0.190614,
+        "RecalcStyleDuration": 0.118694,
+        "JSHeapUsedSize": 32068,
+        "Nodes": -318,
+        "Resources": 0
+      }
+    }
+  },
+  "browserChecks": {
+    "origin": "http://127.0.0.1:4175/",
+    "isolatedFromUserGame": true,
+    "importedDay": 751,
+    "lastDay": 757,
+    "mapRetainedAcrossReloadAndDailyAdvancement": true,
+    "realActOpensNativePrompt": true,
+    "keyboardYesDelegatesOriginalChoice": true,
+    "answerDoesNotAdvanceDay": true,
+    "explicitPassUsesNativeLapse": true,
+    "nativeInfoEntriesRetained": true,
+    "healthReportVisible": true,
+    "consoleErrors": 0,
+    "consoleWarnings": 0,
+    "desktop": {
+      "viewport": [
+        1280,
+        720
+      ],
+      "panelWidth": 288,
+      "panelScrollWidth": 288,
+      "documentWidth": 1280,
+      "documentScrollWidth": 1283,
+      "primaryHeight": 50,
+      "secondaryHeight": 44,
+      "note": "Native desktop page retains a 3px document-width excess. The decision panel fits."
+    },
+    "phone": {
+      "viewport": [
+        390,
+        844
+      ],
+      "documentWidth": 390,
+      "documentScrollWidth": 390,
+      "chronicleWidth": 356,
+      "chronicleScrollWidth": 356,
+      "panelWidth": 338,
+      "panelScrollWidth": 338,
+      "primaryHeight": 44,
+      "secondaryHeight": 44,
+      "choiceHeight": 44
+    }
+  },
+  "screenshots": {
+    "docs/screenshots/decisions-mobile.png": "44f2ab833f22c99a3989c479f4bf0e11333d6632024043170f458e28c3bdd220",
+    "docs/screenshots/decisions-desktop.png": "a7b3b248a52eabbe5a227497cbbbf6d2abb15558b74021e71d895f6d2c945bf1",
+    "docs/screenshots/material-dependencies.png": "92270095f9f446b28785b4ab0f8a651453a07fc988f4deca0317beab0f5c01a4"
+  },
+  "documentation": {
+    "readmeImages": 11,
+    "allLocalImageReferencesExist": true,
+    "captureProvenance": "docs/screenshots/captures.txt",
+    "liveReadmeRendering": "Not yet checked for this release."
+  },
+  "dependencies": {
+    "newRuntimeDependencies": 0,
+    "newDevelopmentDependencies": 0,
+    "runtimeDelivery": "One independently installable classic script. Existing engine assets supply icons and fonts. jsdom remains development-only."
+  },
+  "remainingLimits": [
+    "Human pacing and enjoyment still need playtesting.",
+    "Real shortages, missing local methods or unavailable workers can leave long-running work unfinished. No free completion was inserted.",
+    "The CPU-throttled browser check is one simulated slow-CPU turn, not a physical low-end-device matrix.",
+    "Existing native proposals still use their event-specific lapse rules and do not retain executable choice callbacks across page reload."
+  ],
+  "publication": {
+    "installUrl": "https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.94/paultendo-mod.js",
+    "modSha256": "6110cf3a02cb28ad1e6d06a541a3ac29eedd5c16235850e9bf019a256d448e8b",
+    "status": "Prepared and locally verified. CDN readback pending."
+  }
+}

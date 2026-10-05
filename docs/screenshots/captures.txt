@@ -28,6 +28,25 @@ Some histories continue below the panel and can be scrolled in the game.
 No story text, names, outcomes or interface elements were composited.
 No decisions were made to stage these captures.
 
+V1.6.94 captures, 5 October 2026
+
+decisions-mobile.png: Day 756, 390x844. A live proposal about shared
+learning between Wayfarer 597 and Peahaven, with the actual native
+Yes/No controls and the explicit option to let ordinary proposals lapse.
+decisions-desktop.png: the same pending proposal at 1280x720, retained
+as layout evidence. The native interface was dimmed in this capture.
+material-dependencies.png: Day 756, 1280x720. Wayfarer 597's unfinished
+telescope requires glass. The panel shows the local Forges discovery,
+batch ingredients and the charcoal-to-timber dependency.
+
+These are full, unmodified browser screenshots of v1.6.94. They use the
+seed-42 yes-policy audit campaign's exported Day 751 save, then actual
+interface actions through Day 756. A native naming prompt was opened
+and dismissed, one ordinary proposal was explicitly left unanswered,
+and the learning proposal was answered after its capture. Nothing was
+inserted into application state to fabricate a choice or a shortage.
+The earlier story captures above retain their original release versions.
+
 The images include original GenTown assets and paultendo additions.
 See README.md, LICENSE.md and THIRD_PARTY_NOTICES.txt for their authorship
 and applicable terms. These screenshots do not change those terms.
