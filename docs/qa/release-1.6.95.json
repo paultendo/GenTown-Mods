@@ -871,6 +871,32 @@
     "Campaign checks are not a judgement of enjoyment or every possible mod combination"
   ],
   "publication": {
-    "status": "prepared locally"
+    "status": "verified",
+    "releaseCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+    "tag": "v1.6.95",
+    "destination": "origin/main",
+    "cdn": {
+      "url": "https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.95/paultendo-mod.js",
+      "status": 200,
+      "bytes": 2245985,
+      "sha256": "1fcd5ee9aecb9cfe2cdc176ff8b45817f68b2fd3a068ff16a239644b65d3c248",
+      "expected": "1fcd5ee9aecb9cfe2cdc176ff8b45817f68b2fd3a068ff16a239644b65d3c248",
+      "contentType": "application/javascript; charset=utf-8",
+      "verifiedAt": "2026-10-05T19:33:43.432Z",
+      "matches": true
+    },
+    "readme": {
+      "url": "https://github.com/paultendo/GenTown-Mods",
+      "version": "1.6.95",
+      "images": 14,
+      "loadedImages": 14,
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "horizontalOverflow": false,
+      "screenshot": "docs/qa/readme-1.6.95-mobile.png",
+      "sha256": "22376af35a906839f187c8ccc8bee6130c2c56abf5abcf8e431ea4bd26cefa31"
+    }
   }
 }

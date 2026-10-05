@@ -71,3 +71,8 @@ Install
 https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.95/paultendo-mod.js
 
 Publication status is recorded separately in the QA JSON.
+
+Publication confirmed: v1.6.95 points to release commit
+1ad0be382978e685b4d475564e90ffdf6fea0b8f. The versioned jsDelivr script matches
+the tested file byte for byte. GitHub's published README loads all 14
+images and fits a 390px phone viewport without horizontal overflow.
