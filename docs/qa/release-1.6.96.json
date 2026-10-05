@@ -237,6 +237,31 @@
     ]
   },
   "publication": {
-    "status": "pending"
+    "status": "verified",
+    "releaseCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+    "tag": "v1.6.96",
+    "cdn": {
+      "url": "https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.96/paultendo-mod.js",
+      "status": 200,
+      "bytes": 2289537,
+      "sha256": "ef201b9d78c4453e3aa956bb5589364af03011fa008c5348304fc422a818de1d",
+      "expected": "ef201b9d78c4453e3aa956bb5589364af03011fa008c5348304fc422a818de1d",
+      "matches": true,
+      "contentType": "application/javascript; charset=utf-8",
+      "verifiedAt": "2026-10-05T20:45:08.726Z"
+    },
+    "readme": {
+      "url": "https://github.com/paultendo/GenTown-Mods",
+      "version": "1.6.96",
+      "images": 16,
+      "loadedImages": 16,
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "horizontalOverflow": false,
+      "screenshot": "docs/qa/readme-1.6.96-mobile.png",
+      "sha256": "4656a7ed26d784a278996200830db7a3d615b409ba54c12a5980997cdd64fd26"
+    }
   }
 }

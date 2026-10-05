@@ -50,3 +50,8 @@ ef201b9d78c4453e3aa956bb5589364af03011fa008c5348304fc422a818de1d
 
 Install
 https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.96/paultendo-mod.js
+
+Publication confirmed: v1.6.96 points to release commit
+af9640f741437e2f78bd4dc7cbaed6f9f988acf8. The versioned jsDelivr script
+matches the final tested file byte for byte. GitHub’s published README loads
+all 16 images and fits a 390px viewport without horizontal overflow.
