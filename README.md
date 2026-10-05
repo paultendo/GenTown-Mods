@@ -2,7 +2,7 @@
 
 Follow a tool from the workshop to the fields, a crew from shore to shore, or a rumour into a discovery. Towns keep their own needs, knowledge and grudges. You can help them, leave an object behind, or give someone a dangerous idea.
 
-Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.95**. Based on **GenTown 1.4 / gt5**, checked on 5 October 2026.
+Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.96**. Based on **GenTown 1.4 / gt5**, checked on 5 October 2026.
 
 [![Towns, fields, roads and today’s news on Ujoris e](docs/screenshots/world.jpg)](docs/screenshots/world.jpg)
 
@@ -13,10 +13,10 @@ Built on **[GenTown by R74n](https://r74n.com/gentown/)**. Version **1.6.95**. B
 Export your existing save from **Saves** first. In GenTown, choose **Settings → Add mod** and paste:
 
 ```text
-https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.95/paultendo-mod.js
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.96/paultendo-mod.js
 ```
 
-Reload after adding it. This replaces older paultendo mod URLs automatically. The Chronicle shows `paultendo-mod active (v1.6.95)` after settling a town and advancing a day. Use the versioned CDN URL. Raw GitHub script URLs and the mixed-case GitHub Pages path do not install reliably through GenTown’s loader. Avoid combining this with other large overhaul mods.
+Reload after adding it. This replaces older paultendo mod URLs automatically. The Chronicle shows `paultendo-mod active (v1.6.96)` after settling a town and advancing a day. Use the versioned CDN URL. Raw GitHub script URLs and the mixed-case GitHub Pages path do not install reliably through GenTown’s loader. Avoid combining this with other large overhaul mods.
 
 This addresses the installation issue reported in [GenTown-Mods #19](https://github.com/R74nCom/GenTown-Mods/issues/19).
 
@@ -62,7 +62,7 @@ The same world also has creeds, rivalries, celebrations, wars and places marked 
 
 ## Tools and objects
 
-Twenty new 32×32 sprites accompany the added materials, tools, boats, telescope and Traveler objects. Inventory counts and names stay beside them. Crafted objects keep colours derived from their materials and lineage, even when their owner changes or they return in another passage. Used tools show wear from their remaining working life.
+Thirty-five new 32×32 sprites accompany materials, tools, boats, Traveler objects, places, town affairs, events and work. Inventory counts and names stay beside them. Crafted objects keep colours derived from their materials and lineage, even when their owner changes or they return in another passage. Used tools show wear from their remaining working life.
 
 <a href="docs/screenshots/sprites/materials-desktop.png"><img src="docs/screenshots/sprites/materials-desktop.png" width="640" alt="Materials and workshops with distinct sprites for clay, paper, charcoal, bricks and sand"></a> <a href="docs/screenshots/sprites/object-mobile.png"><img src="docs/screenshots/sprites/object-mobile.png" width="195" alt="A steel compass in a phone-sized object story, with its maker and new keeper"></a>
 
@@ -76,6 +76,12 @@ Twenty new 32×32 sprites accompany the added materials, tools, boats, telescope
 Seven material palettes and six decoration palettes affect assigned regions. Wear, cracks and repair bindings stay inside each object's shape. Reflections, dial markings and outlines remain intact. The repair overlay is available to appearance records. This release adds no repair action.
 
 The [sprite guide](artwork/paultendo-sprites/USAGE.txt) covers adding artwork, palettes and overlay positions. With the local server running, open `/app/sprites/lab.html` to compare actual-size and enlarged versions on dark and light backgrounds. Art and renderer are embedded in the installable JavaScript, with no extra game downloads.
+
+Pacts, petitions, embargoes and faith debates have distinct symbols. Work shows missing supplies, delays, investigation and finished results. Floods and eruptions follow observed events and their remembered history. Conflict uses GenTown’s existing sword icon. Text and choices stay beside the artwork.
+
+<a href="docs/screenshots/concepts/preview.png"><img src="docs/screenshots/concepts/preview.png" width="640" alt="Pixel sprites for workshops, ruins, shrines, remembered places, political ties, disasters and work states"></a> <a href="docs/screenshots/concepts/council-mobile.png"><img src="docs/screenshots/concepts/council-mobile.png" width="195" alt="A federation proposal with its pact symbol, actual terms and choices to speak for or against the agreement"></a>
+
+*The gallery includes enlarged and actual-size sprites. The council screenshot uses a prepared layout fixture, separate from the campaign stories above.*
 
 </details>
 
@@ -144,6 +150,8 @@ Objects keep their makers and histories. A rare object finished during war can g
 ## Playtesting
 
 Try a new town as well as an existing save. Follow one shortage through its work, exchanges and eventual result. Speak for or against a council proposal, then return when the talks end. Reload while something is underway and check that its progress, map and history survive.
+
+Version **1.6.96** adds 15 sprites for places, town affairs, events and work. Symbols follow known records, including floods from the water simulation, completed jobs and remembered marks on lost buildings. Its [release checks](docs/release-1.6.96.txt) cover rendering, state changes, save/reload, campaigns and desktop and phone inspection.
 
 Version **1.6.95** adds the sprites, persistent object colours and condition overlays. Its [release checks](docs/release-1.6.95.txt) record palette and clipping tests, save/reload checks, longer campaigns and desktop and phone inspection.
 

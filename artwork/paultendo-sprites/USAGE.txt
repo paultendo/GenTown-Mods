@@ -65,3 +65,25 @@ this art change does not add a repair action or simulate a new repair system.
 
 The original R74n icons stay in icons/ and use their existing licence. New art,
 its source artwork, renderer, build scripts and provenance stay separate.
+
+Places, town affairs, events and work
+
+The manifest category field groups these symbols in the comparison page.
+Their colours are fixed: water stays blue, lava stays orange, and the meaning
+of a status symbol does not change with a material or condition palette.
+Material/accent/condition controls still apply to objects with authored regions.
+
+Use symbols beside text describing actual known records, not guessed headline
+keywords. Work distinguishes missing goods, other delays, research and completed
+results. Finished or failed work ignores old delay fields. Survey crews on the
+move do not acquire a waiting symbol. A faith debate can use the shrine symbol
+without creating a physical shrine. Independence is not necessarily armed war.
+Only a remembered mark on a lost structure uses ruins, not a lost natural rock.
+Flood histories can come from the routed water model rather than a registry
+disaster process. Known flood/lava history kinds remain recognisable after reload.
+Conflict reuses R74n's existing icons/sword.png and its existing licence.
+
+Headline symbols are reconstructed from validated story references. Arbitrary
+images from saved messages are still excluded by the Chronicle sanitizer.
+The 35 sprites and 3 overlays remain embedded in the mod, with no extra player
+downloads, packages, timers, canvas work or random draws for rendering.

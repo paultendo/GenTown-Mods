@@ -1,0 +1,242 @@
+{
+  "version": "1.6.96",
+  "date": "2026-10-05",
+  "base": "GenTown 1.4 / gt5",
+  "sourceHashes": {
+    "paultendo-mod.js": "ef201b9d78c4453e3aa956bb5589364af03011fa008c5348304fc422a818de1d",
+    "app/sprites/renderer.js": "773ccfcb88c3c6644e2eab99293d9723be0f29dd44029dffdf893c8aa141a1ea",
+    "app/sprites/data.js": "cd4630b4045dec5ecf7970f572da8984c6d6cce94accbd2f3bd6fc39655b8982",
+    "app/sprites/lab.html": "2b97ccf3fe1a7789ca9e262ed88688339dc76b70393b6cfd8f9375aaea98de66",
+    "scripts/build-sprites.mjs": "a3c6c52afd315221e7c884bec4cdf3055d403159011c9f3ef4e5545ad087a490",
+    "tests/sprites.test.mjs": "9596894343eb69ef7486783f143b85fa9b7aab91bed8e2519edcf167fbb73d11",
+    "tests/concept-sprites.test.mjs": "b75990417be44db2a35eef36772bd0f7fa2ca4c45cfae5214dd35d16eabe1a04",
+    "tests/ground-water.test.mjs": "e53820e4894567e8d08327d46c88d71beb6b9c8d5a9fe68b9b31862674bfdbc5",
+    "tests/surface-marks.test.mjs": "860b4be12e228c5c45f2b2afefd34213013e8526384e2c48c02374879f975d52",
+    "package.json": "6504e8eb2dd1f228b2c56d67114ade98774ea8254b66fefbe750a9d3447d493d",
+    "package-lock.json": "44dc000bea88d79e43debe12715a0f3e0d25906cd33cae3d4d107943826a5c20"
+  },
+  "sprites": {
+    "count": 35,
+    "added": 15,
+    "overlays": 3,
+    "size": 32,
+    "atlas": {
+      "file": "../../app/sprites/atlas.png",
+      "width": 1120,
+      "height": 32,
+      "order": [
+        "clay",
+        "charcoal",
+        "bricks",
+        "glass",
+        "paper",
+        "compass",
+        "clear-lens",
+        "tuning-fork",
+        "sand",
+        "coal",
+        "steel",
+        "pottery",
+        "timber-bins",
+        "glass-vessels",
+        "stone-tools",
+        "metal-tools",
+        "steel-tools",
+        "coastal-boat",
+        "sailing-vessel",
+        "telescope",
+        "workshop",
+        "ruins",
+        "shrine",
+        "waystone",
+        "alliance",
+        "embargo",
+        "dependency",
+        "rebellion",
+        "flood",
+        "volcano",
+        "festival",
+        "research",
+        "shortage",
+        "waiting",
+        "finished"
+      ],
+      "sha256": "950fa835a464e8c1d5c5289adc33a918e691cf216a6fe1bcabc5a212976c3cc5",
+      "bytes": 6560
+    },
+    "categories": {
+      "places": 4,
+      "relationships": 4,
+      "events": 3,
+      "work": 4
+    },
+    "nativeConflictIcon": "icons/sword.png",
+    "cacheLimit": 128,
+    "indexedDataBytes": 97390,
+    "modBytes": 2289537,
+    "modByteIncrease": 43552,
+    "runtimeFilesAdded": 0,
+    "provenance": "artwork/paultendo-sprites/manifest.json",
+    "conceptColours": "Fixed semantic colours. Existing object palettes and overlays retain their authored regions."
+  },
+  "automatedChecks": {
+    "status": "passed",
+    "command": "node --test --test-concurrency=4 tests/*.test.mjs",
+    "newConceptTests": 4,
+    "expandedAssertions": [
+      "Routed flood history and its Chronicle symbol",
+      "Ruins for lost building marks, waystones for lost natural rock",
+      "Fixed concept colours preserve water, lava and status meanings"
+    ],
+    "syntaxCheck": "npm run check passed",
+    "uiCraftDetector": {
+      "findings": 0,
+      "degraded": true,
+      "scope": "Regex fallback only. Optional parser modules unavailable, so computed contrast and selector matching were not evaluated. Run before the final close-button margin correction."
+    },
+    "initialFullRun": {
+      "passed": 696,
+      "failed": 0,
+      "durationMs": 221309.76
+    },
+    "finalRunReason": "Confirm the complete final source after correcting the native close button\u2019s 3px overflow when returning from a phone viewport.",
+    "total": 696,
+    "passed": 696,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "durationMs": 228807.424583,
+    "outputSha256": "13eab784632f07af7acc57bd2180e0f18fe4a6231458471b8fe71c7788dcae83",
+    "reproducibleBuild": true
+  },
+  "campaigns": {
+    "turns": 750,
+    "command": "npm run simulate -- --days 250 --seeds 7,42,123 --policy mixed --checkpoint 125",
+    "scope": "These campaigns use the final sprite data and game integration. They precede a presentation-only correction to the native close-button margin.",
+    "cases": [
+      {
+        "seed": 7,
+        "policy": "mixed",
+        "status": "passed",
+        "turns": 250,
+        "elapsedMs": 37445,
+        "discoveries": 6,
+        "firstExtinction": {},
+        "longestQuietStretch": 21,
+        "unfinishedWork": 0,
+        "stalledWork": 0,
+        "population": 125,
+        "report": "seed-7-mixed/report.json"
+      },
+      {
+        "seed": 42,
+        "policy": "mixed",
+        "status": "passed",
+        "turns": 250,
+        "elapsedMs": 36644,
+        "discoveries": 12,
+        "firstExtinction": {},
+        "longestQuietStretch": 8,
+        "unfinishedWork": 3,
+        "stalledWork": 1,
+        "population": 811,
+        "report": "seed-42-mixed/report.json"
+      },
+      {
+        "seed": 123,
+        "policy": "mixed",
+        "status": "passed",
+        "turns": 250,
+        "elapsedMs": 29977,
+        "discoveries": 12,
+        "firstExtinction": {},
+        "longestQuietStretch": 9,
+        "unfinishedWork": 0,
+        "stalledWork": 0,
+        "population": 220,
+        "report": "seed-123-mixed/report.json"
+      }
+    ],
+    "unfinishedNote": "Seed 42 ends with three unfinished records, including one carried stone-tool shipment blocked since Day 137. The carriers retain their real cargo. No forced completion was used.",
+    "runtimeFailures": 0,
+    "unavailableChoices": 0,
+    "consoleErrors": 0,
+    "warnings": 0,
+    "outputSha256": "a1f9f929f08bc8d06168a8aeab719ec1b8d07c87341739c3958fbe57d4c8373f"
+  },
+  "browserChecks": {
+    "desktop": {
+      "width": 1280,
+      "height": 720
+    },
+    "phone": {
+      "width": 390,
+      "height": 844,
+      "physicalDevice": false
+    },
+    "galleryImages": 90,
+    "galleryImagesLoaded": 90,
+    "backgrounds": [
+      "dark",
+      "light"
+    ],
+    "horizontalOverflow": false,
+    "closeButtonRightEdgeAfterViewportTransition": 1280,
+    "states": [
+      "Council consent controls remain usable",
+      "Work shortage is paired with its actual missing clay and supply link",
+      "Known research decorates its Chronicle highlight",
+      "Day advance produces a native proposal with No and Yes",
+      "Answering clears waiting status",
+      "Reload retains Day 31, the visible map and the recorded answer"
+    ],
+    "consoleErrors": 0,
+    "warnings": 0,
+    "fixture": {
+      "description": "Prepared jobs, local knowledge and supplies. An actual discovery event creates the inquiry and native council controls create the federation talks. Clay is deliberately set to zero to inspect shortage presentation. These screenshots are layout fixtures, separate from the organic campaign story tour.",
+      "sha256": "66abf122f270de091af292aa76bb133b84ffba6c634924bde887dfb93536c7c1",
+      "day": 30
+    },
+    "screenshots": [
+      {
+        "path": "docs/screenshots/concepts/council-desktop.png",
+        "sha256": "ba7d4cc79fc5d03d756741abb9c3b9951075f57adf34d5f68807f7be73b6e2cf"
+      },
+      {
+        "path": "docs/screenshots/concepts/council-mobile.png",
+        "sha256": "48b8355702eee6507ea5e50a1938c9f699c0721ee3942121a7fe8dd8435c02f9"
+      },
+      {
+        "path": "docs/screenshots/concepts/gallery-desktop.png",
+        "sha256": "fd828b67ac51bf836872fa9e49b1895a0fbf22f6787a91ecfc7720ff11b990c7"
+      },
+      {
+        "path": "docs/screenshots/concepts/gallery-mobile-light.png",
+        "sha256": "6c57d4723a305b29bb216befeb577a7eca322e1b61eb195e79878e4986b56f98"
+      },
+      {
+        "path": "docs/screenshots/concepts/highlights-desktop.png",
+        "sha256": "9ebf44012927d95a4d3cb5e8d87d08f54cc267bd6fbfe0952c35fd47de78da16"
+      },
+      {
+        "path": "docs/screenshots/concepts/preview.png",
+        "sha256": "3c63ed8a19a2c5feda5de57a18427dacd1e5a8fa1f401c0cd02b65f32567206c"
+      },
+      {
+        "path": "docs/screenshots/concepts/reload-desktop.png",
+        "sha256": "54722a1f171957065ed72a47c0f4f604626cd86d7d0be014c073df8ed363b8d5"
+      },
+      {
+        "path": "docs/screenshots/concepts/work-desktop.png",
+        "sha256": "2b7a1ed91e298fed01a3a9312c48498f5789a551f42273cacdb75253dd01c785"
+      },
+      {
+        "path": "docs/screenshots/concepts/work-mobile.png",
+        "sha256": "30d29166ccb0106000c9dc618dda3bc4f434d63db9164486a340790b13e3fc45"
+      }
+    ]
+  },
+  "publication": {
+    "status": "pending"
+  }
+}

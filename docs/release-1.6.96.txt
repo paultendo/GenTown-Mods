@@ -1,0 +1,52 @@
+Paultendo v1.6.96
+
+Fifteen additional 32x32 sprites cover places, town affairs, events and work.
+The complete set has 35 sprites and 3 clipped condition overlays. GenTown’s
+existing sword icon continues to represent conflict. Concept colours retain
+their meaning, while object materials, decoration and wear keep their existing
+palette system. The atlas, source artwork, prompts and authoring guide are
+separate from R74n’s original assets.
+
+Work symbols follow actual missing supplies, other delays, investigation and
+completed results. Completed or failed jobs ignore stale delay fields. Surveys
+on the move do not acquire a waiting symbol. Council symbols stay beside real
+terms and consent controls. Faith and independence records do not create a
+physical shrine or an armed war. Lost marks on a building can use ruins, while
+lost natural rock stays distinct.
+
+Floods from the water model have known history even without a registry disaster
+process. Their symbols survive in that history. Chronicle artwork is rebuilt
+from validated story references, rather than words in headlines or saved images.
+Hidden records do not gain visible symbols. Reading does not consume randomness,
+create residents, change stocks or advance time.
+
+Rendering adds no runtime files or packages. The indexed data, palettes and
+renderer stay inside the installable JavaScript. The cache remains bounded at
+128 variants. The mod grows by 43,552 bytes compared with v1.6.95.
+
+Desktop and phone inspection covered dark/light sprites, actual/enlarged sizes,
+all 90 gallery images, supply and council drawers, highlights, native choices,
+a day advance and reload. The visible map survived, answering cleared the waiting
+state, and no browser errors or warnings were observed. A native close button’s
+3px overflow after returning from mobile was corrected and checked at 1280px.
+Phone inspection uses a 390px viewport, not a physical device.
+
+750 campaign turns across seeds 7, 42 and 123 completed without runtime failures
+or proposals lacking usable controls. Seed 42 has three unfinished records at
+the endpoint. One shipment remains blocked with its real cargo. No forced
+completion was used. These campaigns precede only the close-button margin fix.
+
+Both full runs passed all 696 tests. The final run checks the complete release
+source, including the close-button correction. The sprite build reproduces its
+four outputs exactly. The QA JSON records source hashes, screenshots, campaigns
+and publication readback. Human playtesting remains necessary to assess enjoyment and arbitrary
+mod combinations.
+
+The craft detector reported no regex findings but ran in degraded mode because
+its optional parsers were unavailable. It did not evaluate computed contrast.
+
+Mod SHA-256
+ef201b9d78c4453e3aa956bb5589364af03011fa008c5348304fc422a818de1d
+
+Install
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.96/paultendo-mod.js

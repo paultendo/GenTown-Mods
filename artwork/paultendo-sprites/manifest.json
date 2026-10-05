@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "assetSet": "paultendo-materials-tools-vessels-and-traveler",
+  "assetSet": "paultendo-materials-objects-places-town-affairs-events-and-work",
   "createdAt": "2026-10-05",
   "generator": "OpenAI built-in image_gen",
-  "mode": "New asset generation with three existing GenTown icons supplied only as style references",
+  "mode": "New assets created with GenTown icons and the first paultendo sprite preview supplied only as style references",
   "notes": [
     "These are new sprites created for paultendo's overhaul. They are separate from R74n's original icons.",
     "R74n's reference images remain unchanged in icons/. Their source and licence are recorded in vendor/gentown/upstream.json and vendor/gentown/LICENSE.txt.",
@@ -14,7 +14,8 @@
   "styleReferences": [
     "icons/metal.png",
     "icons/rock.png",
-    "icons/crop.png"
+    "icons/crop.png",
+    "artwork/paultendo-sprites/preview.png"
   ],
   "export": {
     "width": 32,
@@ -27,7 +28,7 @@
   },
   "atlas": {
     "file": "../../app/sprites/atlas.png",
-    "width": 640,
+    "width": 1120,
     "height": 32,
     "order": [
       "clay",
@@ -49,10 +50,25 @@
       "steel-tools",
       "coastal-boat",
       "sailing-vessel",
-      "telescope"
+      "telescope",
+      "workshop",
+      "ruins",
+      "shrine",
+      "waystone",
+      "alliance",
+      "embargo",
+      "dependency",
+      "rebellion",
+      "flood",
+      "volcano",
+      "festival",
+      "research",
+      "shortage",
+      "waiting",
+      "finished"
     ],
-    "sha256": "5e070689b31e55b7a2ebb795dcd55da7d8fac8373d360a8fa13c0bec89f0e657",
-    "bytes": 3334
+    "sha256": "950fa835a464e8c1d5c5289adc33a918e691cf216a6fe1bcabc5a212976c3cc5",
+    "bytes": 6560
   },
   "assets": [
     {
@@ -570,6 +586,528 @@
       "sourceSha256": "03d58504c599f293b5acbebbcf8cf1cdfa876c4a8965a1e6067a6d6b0dce4633",
       "colours": 5,
       "bytes": 150
+    },
+    {
+      "id": "workshop",
+      "label": "Workshop",
+      "category": "places",
+      "source": "source/workshop.png",
+      "file": "../../app/sprites/workshop.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: A tiny open timber workshop with a brown pitched roof, a visible charcoal-gray anvil and a warm clay workbench. A readable simple building silhouette, no people.",
+      "roles": {
+        "#311c16": {
+          "role": "fixed"
+        },
+        "#60402e": {
+          "role": "fixed"
+        },
+        "#9e5b3f": {
+          "role": "fixed"
+        },
+        "#aeabad": {
+          "role": "fixed"
+        },
+        "#cb9464": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "92bd9fdb05a7935f8fe3461a3c9710d867e7f39fdb06e0f2df1bffa2d82713ce",
+      "sourceSha256": "e0653dfb5fbed474dbae442b51ba4905a4883a3f5bee7c7b073a793f276232a6",
+      "colours": 6,
+      "bytes": 258,
+      "atlasRect": {
+        "x": 640,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "ruins",
+      "label": "Ruins",
+      "category": "places",
+      "source": "source/ruins.png",
+      "file": "../../app/sprites/ruins.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: Two broken pale gray stone pillars and a fallen lintel, with two muted moss-green patches. Clearly old ruined masonry. No intact temple.",
+      "roles": {
+        "#504131": {
+          "role": "fixed"
+        },
+        "#857b70": {
+          "role": "fixed"
+        },
+        "#8e8655": {
+          "role": "fixed"
+        },
+        "#a79c90": {
+          "role": "fixed"
+        },
+        "#d7caba": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "c1a0f377a58a70d07e90f5ef0026b00ef83ecfa2c8ffb75d8e6ab8e586e5f3eb",
+      "sourceSha256": "20c525c9b4700c727750c4cbf9dc2b90c9050cc7556d283003509aa39c246d8e",
+      "colours": 6,
+      "bytes": 241,
+      "atlasRect": {
+        "x": 672,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "shrine",
+      "label": "Shrine",
+      "category": "places",
+      "source": "source/shrine.png",
+      "file": "../../app/sprites/shrine.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: A small stone wayside shrine with a niche holding one tiny warm amber light, two low steps and a rough timber roof. No religious emblem, deity or text.",
+      "roles": {
+        "#322119": {
+          "role": "fixed"
+        },
+        "#5b4430": {
+          "role": "fixed"
+        },
+        "#9b6d49": {
+          "role": "fixed"
+        },
+        "#9c8e70": {
+          "role": "fixed"
+        },
+        "#d3c4a5": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "a82f0c72832313c86308ea7c89e6cc22f80520b0a05388a946db3f3bb4a3abde",
+      "sourceSha256": "81b869e5dfd0bb357e949b65364a06ab7a643b7a5562a7251753f6230c51e432",
+      "colours": 6,
+      "bytes": 251,
+      "atlasRect": {
+        "x": 704,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "waystone",
+      "label": "Waystone",
+      "category": "places",
+      "source": "source/waystone.png",
+      "file": "../../app/sprites/waystone.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: An upright weathered stone beside a forked ochre footpath. Three simple pale carved strokes on the stone, no legible lettering, no question mark. A remembered or unfamiliar place.",
+      "roles": {
+        "#3b2217": {
+          "role": "fixed"
+        },
+        "#625543": {
+          "role": "fixed"
+        },
+        "#b08c51": {
+          "role": "fixed"
+        },
+        "#c5b191": {
+          "role": "fixed"
+        },
+        "#d2a960": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "21fcf40ec0dcac09956d115d75edaf900d78e8c12775d721cc7f5155658e1e21",
+      "sourceSha256": "aa693b500b012b2db3fa64befb9d754ddd520acf4fd7c93f8335db3b98d6146e",
+      "colours": 6,
+      "bytes": 246,
+      "atlasRect": {
+        "x": 736,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "alliance",
+      "label": "Alliance",
+      "category": "relationships",
+      "source": "source/alliance.png",
+      "file": "../../app/sprites/alliance.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: Two small differently coloured pennants on short staffs crossed over one small brass joining ring. Sea green and muted berry flags. A pact between separate communities, not war.",
+      "roles": {
+        "#30211a": {
+          "role": "fixed"
+        },
+        "#664b45": {
+          "role": "fixed"
+        },
+        "#699085": {
+          "role": "fixed"
+        },
+        "#a15b50": {
+          "role": "fixed"
+        },
+        "#ceba88": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "7a06c73565cb4168cbf1b9590139eee5924a021e1e6046138afdb89d2b6c4533",
+      "sourceSha256": "21e030be355c6e0a1991216e8497f5e236916b146cc432ed842b0dc82798d59d",
+      "colours": 6,
+      "bytes": 220,
+      "atlasRect": {
+        "x": 768,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "embargo",
+      "label": "Embargo",
+      "category": "relationships",
+      "source": "source/embargo.png",
+      "file": "../../app/sprites/embargo.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: A closed wooden portcullis gate with a horizontal iron locking bar. Behind it one small ochre crate. A clear blocked passage, no red cross or text.",
+      "roles": {
+        "#2f1a11": {
+          "role": "fixed"
+        },
+        "#694c3f": {
+          "role": "fixed"
+        },
+        "#97694e": {
+          "role": "fixed"
+        },
+        "#b59977": {
+          "role": "fixed"
+        },
+        "#c2ae93": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "71e2223daba434006af59014d399205eeff5da6f3647d7e9f5d8715fb716105a",
+      "sourceSha256": "6f7b25c277632e3b891953945b69215dc83f10f015406ae157235eee218d2603",
+      "colours": 6,
+      "bytes": 273,
+      "atlasRect": {
+        "x": 800,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "dependency",
+      "label": "Dependency",
+      "category": "relationships",
+      "source": "source/dependency.png",
+      "file": "../../app/sprites/dependency.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: Two linked bronze chain links, one larger and one smaller, diagonally arranged. A clear simple unequal bond. No handcuffs, no people.",
+      "roles": {
+        "#44241a": {
+          "role": "fixed"
+        },
+        "#92503a": {
+          "role": "fixed"
+        },
+        "#a96b47": {
+          "role": "fixed"
+        },
+        "#d88f5a": {
+          "role": "fixed"
+        },
+        "#f9d8a2": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "5b9abde673b0c2055ec4dd91d6305a331a56f5a8806cc44041444a3d8fdcf6b7",
+      "sourceSha256": "78a2808c35d47be151183c27d63166cd226afd937213ebbf51b958ce04d1518f",
+      "colours": 6,
+      "bytes": 221,
+      "atlasRect": {
+        "x": 832,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "rebellion",
+      "label": "Rebellion",
+      "category": "relationships",
+      "source": "source/rebellion.png",
+      "file": "../../app/sprites/rebellion.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: A jagged muted ember-red pennant on a dark wooden pole, breaking away from one short bronze chain at the foot. No sword, no raised fist, no lettering.",
+      "roles": {
+        "#2c130e": {
+          "role": "fixed"
+        },
+        "#6b3024": {
+          "role": "fixed"
+        },
+        "#b24536": {
+          "role": "fixed"
+        },
+        "#bd563e": {
+          "role": "fixed"
+        },
+        "#e4c274": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "27d76f7ae6ca7b72556dd4dc19c7e233dce6726f56481457193f3bc714406b87",
+      "sourceSha256": "435d746199eb0e759205c6dcae51fef60feb81a7f10c2c193d38bbb3afcd8654",
+      "colours": 6,
+      "bytes": 270,
+      "atlasRect": {
+        "x": 864,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "flood",
+      "label": "Flood",
+      "category": "events",
+      "source": "source/flood.png",
+      "file": "../../app/sprites/flood.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: Three chunky blue-gray rising water waves surrounding the base of a small brown wooden fence post. Simple rising water, not an ocean voyage or tsunami.",
+      "roles": {
+        "#393335": {
+          "role": "fixed"
+        },
+        "#59839e": {
+          "role": "fixed"
+        },
+        "#a16546": {
+          "role": "fixed"
+        },
+        "#b4cbcd": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "8fa74c60dbfb69c91b3b563a8d10fc7cf068ebc8bd975eb1adc1d6346fd97410",
+      "sourceSha256": "db0bf5d6d1680abaca119bacdfe9095f8f5305e702ae6dc37e18517f23855de1",
+      "colours": 5,
+      "bytes": 209,
+      "atlasRect": {
+        "x": 896,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "volcano",
+      "label": "Volcano",
+      "category": "events",
+      "source": "source/volcano.png",
+      "file": "../../app/sprites/volcano.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: A compact dark stone volcano cone with a tiny orange molten opening, one orange flow down its face and three chunky gray smoke pixels above. No landscape background.",
+      "roles": {
+        "#382a23": {
+          "role": "fixed"
+        },
+        "#4b3e37": {
+          "role": "fixed"
+        },
+        "#5a504e": {
+          "role": "fixed"
+        },
+        "#baa087": {
+          "role": "fixed"
+        },
+        "#e45825": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "552dbe9881bead104751779e0da013809c09fb6c9d8e7a5f2975e4c5886b5d3d",
+      "sourceSha256": "2fd780006ffbb8808a5a243b8cdac3832fed714b2d2ea91a107dd9038aab31a5",
+      "colours": 6,
+      "bytes": 210,
+      "atlasRect": {
+        "x": 928,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "festival",
+      "label": "Festival",
+      "category": "events",
+      "source": "source/festival.png",
+      "file": "../../app/sprites/festival.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: Three little ochre, sea-green and berry pennants on a curved rope over a tiny warm amber lantern. Clearly a modest town celebration. No confetti, no people, no writing.",
+      "roles": {
+        "#341f13": {
+          "role": "fixed"
+        },
+        "#5c4d35": {
+          "role": "fixed"
+        },
+        "#a76344": {
+          "role": "fixed"
+        },
+        "#c4b194": {
+          "role": "fixed"
+        },
+        "#e5a346": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "d3de8fa1cf5d01d6f59155b131d4f8ee1d008f1b7269ee692f00c6b3a362900a",
+      "sourceSha256": "b805130cb17be62eed7ecbb1eb192dd2363de713ba0cdce9915df99cfe347a8f",
+      "colours": 6,
+      "bytes": 217,
+      "atlasRect": {
+        "x": 960,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "research",
+      "label": "Research",
+      "category": "work",
+      "source": "source/research.png",
+      "file": "../../app/sprites/research.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: A folded cream diagram with three simple dark lines and an amber magnifying glass resting over its corner. Readable investigation silhouette, no letters or numbers.",
+      "roles": {
+        "#513928": {
+          "role": "fixed"
+        },
+        "#956735": {
+          "role": "fixed"
+        },
+        "#c39e58": {
+          "role": "fixed"
+        },
+        "#c8c1aa": {
+          "role": "fixed"
+        },
+        "#f2e5c9": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "5bfa8d6c8d4efc82944b6bb8b8e20cdbade36078fe0f2910bc75067bd1c60fe3",
+      "sourceSha256": "ac104faf9774e7791b0db60b5c54da078b135d59825f76a4caf16796cfc149d2",
+      "colours": 6,
+      "bytes": 260,
+      "atlasRect": {
+        "x": 992,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "shortage",
+      "label": "Shortage",
+      "category": "work",
+      "source": "source/shortage.png",
+      "file": "../../app/sprites/shortage.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: An empty timber supply crate with a clearly visible dark hollow interior and one small pale loose nail beside it. No food, no warning triangle, no text.",
+      "roles": {
+        "#291611": {
+          "role": "fixed"
+        },
+        "#673a27": {
+          "role": "fixed"
+        },
+        "#b46e41": {
+          "role": "fixed"
+        },
+        "#efbd7f": {
+          "role": "fixed"
+        },
+        "#f7cc91": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "01a020e4bac51dcedde9a9b5a67c6314e546dab7a109fefb0310d2832f23887f",
+      "sourceSha256": "cb14a524f3c7ea24d369cef08877bc21527d6b70e420e3fda47a13f5e327dbad",
+      "colours": 6,
+      "bytes": 252,
+      "atlasRect": {
+        "x": 1024,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "waiting",
+      "label": "Waiting",
+      "category": "work",
+      "source": "source/waiting.png",
+      "file": "../../app/sprites/waiting.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: A small timber-framed hourglass with pale ochre sand and a visible narrow neck. Thick simple readable silhouette. No clock numbers.",
+      "roles": {
+        "#321c16": {
+          "role": "fixed"
+        },
+        "#6b3a28": {
+          "role": "fixed"
+        },
+        "#b26744": {
+          "role": "fixed"
+        },
+        "#cfa76c": {
+          "role": "fixed"
+        },
+        "#dfd7c9": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "21042bc1eba3401349fd6a12b4b56042b975e5ace610f42cb03e5a2566b03c57",
+      "sourceSha256": "75c88f2f20ede2c8abc0cbe8a3fba2daa1c922f57c4372f7b3003ee79e80a235",
+      "colours": 6,
+      "bytes": 219,
+      "atlasRect": {
+        "x": 1056,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "finished",
+      "label": "Finished",
+      "category": "work",
+      "source": "source/finished.png",
+      "file": "../../app/sprites/finished.png",
+      "prompt": "Use case: stylized-concept. Asset type: original 32x32 production sprite for the paultendo GenTown overhaul. Input image is a STYLE REFERENCE ONLY, not an edit target. Match its restrained earthy 1990s strategy-game pixel art. Draw EXACTLY ONE requested sprite on a 32 by 32 logical pixel grid, rendered as a crisp nearest-neighbour enlargement. Use 4 logical pixels of transparent padding on every side, one-logical-pixel dark brown outline, 5 to 7 flat palette colours, upper-left highlight. Sharp chunky stepped pixels; no antialiasing, smooth gradients, blurry shadows, microscopic details, labels, badges or extra decorative objects. Actual transparent RGBA background. Must remain recognisable at 32 pixels on black and pale cream interfaces. Subject: A tightly rolled cream plan tied with a sea-green ribbon, beside a small brass seal bearing a simple bright tick. One clear finished-work symbol, no text.",
+      "roles": {
+        "#2e281f": {
+          "role": "fixed"
+        },
+        "#504d37": {
+          "role": "fixed"
+        },
+        "#739682": {
+          "role": "fixed"
+        },
+        "#c29656": {
+          "role": "fixed"
+        },
+        "#e8d5b2": {
+          "role": "fixed"
+        }
+      },
+      "sha256": "37a8ba58d8d078034a6b03fcf1fb024dc7a14ca1ad7bf276a681d4ff82985364",
+      "sourceSha256": "e44b8903f0a6615c2c6567c2fc1a47734acae2a8ffe5907bca1fb39050e0ac68",
+      "colours": 6,
+      "bytes": 212,
+      "atlasRect": {
+        "x": 1088,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
     }
   ]
 }

@@ -47,13 +47,13 @@ test('an actual maker can sketch a learned technique but a world milestone does 
 });
 
 test('marks remain at their physical sites and loss of the rock preserves the remembered history',async t=>{
- const {g,w,town,at,warnings}=await setup(t),mark=request(w,town);finish(w,mark);const before=plain(mark.surface);at.b='grassland';next(w);assert.equal(mark.status,'lost');assert.deepEqual(plain(mark.surface),before);openMarks(w,town);click(w,'A sign');assert.match(panel(w).textContent,/surface is gone/);check(g,warnings);
+ const {g,w,town,at,warnings}=await setup(t),mark=request(w,town);finish(w,mark);const before=plain(mark.surface);at.b='grassland';next(w);assert.equal(mark.status,'lost');assert.deepEqual(plain(mark.surface),before);openMarks(w,town);click(w,'A sign');assert.match(panel(w).textContent,/surface is gone/);assert.ok(panel(w).querySelector('[data-sprite="waystone"]'));assert.equal(panel(w).querySelector('[data-sprite="ruins"]'),null);check(g,warnings);
 });
 
 test('a completed building can inspire an autonomous maker’s sign using only its actual construction material',async t=>{
  const {g,w,town,warnings}=await setup(t);town._paultendoPeople.find(p=>p.role==='miner').outlook='steadfast';town.resources.rock=100;town.resources.cash=500;
  const p=w.happen('Create',town,null,{type:'project',subtype:'school',town:town.id,cost:8},'process'),site=w.filterChunks(c=>c.v.s===town.id&&!c.v.m)[0];assert.ok(site);p.x=site.x;p.y=site.y;
- for(let i=0;i<12&&!p.done;i++)w.metaEvents.processProject.func(p);assert.ok(p.done);assert.ok(p._paultendoBuilding.inputs.rock>0);assert.ok(p.marker);next(w);const mark=life(w).surfaceMarks.find(m=>m.source?.marker===p.marker);assert.ok(mark);assert.equal(mark.autonomous,true);assert.equal(mark.surface.material,'rock');assert.equal(mark.surface.marker,p.marker);finish(w,mark);next(w,4);assert.equal(life(w).surfaceMarks.filter(m=>m.source?.marker===p.marker).length,1);check(g,warnings);
+ for(let i=0;i<12&&!p.done;i++)w.metaEvents.processProject.func(p);assert.ok(p.done);assert.ok(p._paultendoBuilding.inputs.rock>0);assert.ok(p.marker);next(w);const mark=life(w).surfaceMarks.find(m=>m.source?.marker===p.marker);assert.ok(mark);assert.equal(mark.autonomous,true);assert.equal(mark.surface.material,'rock');assert.equal(mark.surface.marker,p.marker);finish(w,mark);next(w,4);assert.equal(life(w).surfaceMarks.filter(m=>m.source?.marker===p.marker).length,1);w.regGet('marker',p.marker).end=w.planet.day;mark.status='lost';openMarks(w,town);click(w,'A sign');assert.ok(panel(w).querySelector('[data-sprite="ruins"]'));assert.match(panel(w).textContent,/surface is gone/);check(g,warnings);
 });
 
 test('a shared belief can become a physical inscription, and a real worker encounter carries its words onward once',async t=>{

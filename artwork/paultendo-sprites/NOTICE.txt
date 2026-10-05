@@ -1,12 +1,12 @@
-Paultendo materials and Traveler sprites
+Paultendo sprites
 
-Twenty sprites and three overlays for the paultendo GenTown overhaul, created using OpenAI's
+Thirty-five sprites and three overlays for the paultendo GenTown overhaul, created using OpenAI's
 built-in image generator. These are separate from R74n's original game icons.
 The original icons were used as style references and have not been changed.
 See manifest.json for every prompt and the export settings.
 
 Runtime exports: app/sprites/*.png (32x32, transparent backgrounds).
-Packed atlas: app/sprites/atlas.png (640x32, twenty adjacent 32x32 cells).
+Packed atlas: app/sprites/atlas.png (1120x32, thirty-five adjacent 32x32 cells).
 Interactive comparison: app/sprites/lab.html.
 Original first-batch preview: artwork/paultendo-sprites/preview.png.
 Source artwork: artwork/paultendo-sprites/source/*.png.

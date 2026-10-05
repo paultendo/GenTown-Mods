@@ -14,7 +14,7 @@ test('indexed art has complete 32x32 grids, valid semantic regions and transpare
     const distributable=readFileSync(new URL('../paultendo-mod.js',import.meta.url),'utf8');
     assert.ok(distributable.includes(factory),'The tested renderer must be embedded in the distributable');
     assert.ok(distributable.includes('const SPRITE_DATA = '+JSON.stringify(data)+';'),'The tested art must be embedded in the distributable');
-    assert.equal(Object.keys(data.sprites).length,20);
+    assert.equal(Object.keys(data.sprites).length,35);
     assert.deepEqual(Object.keys(data.overlays).sort(),['cracked','repaired','worn']);
     for(const [id,sprite] of Object.entries({...data.sprites,...data.overlays})){
         assert.equal(sprite.rows.length,32,id);assert.equal(sprite.regions.length,32,id);
@@ -66,6 +66,7 @@ test('all overlays visibly affect each object while preserving padding, outlines
 
 test('renderer is deterministic, rejects unsafe options and bounds its variant cache',()=>{
     const renderer=create();
+    for(const [id,sprite] of Object.entries(data.sprites))if(sprite.category)assert.deepEqual(renderer.pixels(id,{material:'steel',accent:'ember',overlays:['worn','cracked','repaired']}),renderer.pixels(id),id+' concept colours should keep their meaning');
     for(const id of ['unknown','__proto__','constructor'])for(const method of ['render','svg','pixels'])assert.equal(renderer[method](id),null);
     assert.equal(renderer.render('compass',{material:'<script>',accent:'red" onload="evil',overlays:['bad']}),renderer.render('compass'));
     const same=renderer.render('compass',{material:'steel',accent:'sea',overlays:['cracked','worn']});
@@ -79,7 +80,7 @@ test('renderer is deterministic, rejects unsafe options and bounds its variant c
 
 test('single-file mod renders new icons with labels and leaves native resource icons intact',async t=>{
     const g=await makeGame();t.after(g.close);const w=g.window;
-    assert.equal(w.PaultendoSprites.ids.length,20);
+    assert.equal(w.PaultendoSprites.ids.length,35);
     for(const type of ['clay','brick','paper','steel','stone_tools','coastal_boat']){
         const line=w.document.createElement('div');line.innerHTML=w.parseText(`{{icon:${type}|Material}}`);
         const img=line.querySelector('img');assert.ok(img,type);assert.equal(img.alt,'Material');

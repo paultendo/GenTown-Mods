@@ -51,8 +51,8 @@ test('a basin holds rain before overflowing and releases stored snow when it war
 });
 
 test('a real flood ruins grain at its inundated centre and makes that ground less farmable',async t=>{
- const {g,w,town,chunk}=await basin(t);flat(chunk,.55);chunk.b='grass';storm(w);const before=w.happen('Fertility',town,chunk,null,'chunk');next(w);
- const p=w.planet._paultendoLand[key(chunk)];assert.ok(p?.flood>.1);assert.ok(town.resources.crop<100);assert.ok(w.happen('Fertility',town,chunk,null,'chunk')<before*.6);const held=town.resources.crop;next(w);assert.equal(town.resources.crop,held,'the same lingering flood does not charge another entry loss');assert.deepEqual(g.errors,[]);
+ const {g,w,town,chunk}=await basin(t);w.planet._paultendoFog.explored[key(chunk)]=true;w.planet._paultendoFog.visible[key(chunk)]=1;flat(chunk,.55);chunk.b='grass';storm(w);const before=w.happen('Fertility',town,chunk,null,'chunk');next(w);
+ const p=w.planet._paultendoLand[key(chunk)];assert.ok(p?.flood>.1);assert.ok(town.resources.crop<100);assert.ok(w.happen('Fertility',town,chunk,null,'chunk')<before*.6);const link=w.document.querySelector(`[data-story-kind="land"][data-story-id="${key(chunk)}"] .paultendoChronicleStoryLink`);assert.ok(link);link.click();assert.ok(w.document.querySelector('#actionSubList [data-sprite="flood"]'));assert.ok(w.document.querySelector('#paultendoChronicleHeadlines [data-sprite="flood"]'));const held=town.resources.crop;next(w);assert.equal(town.resources.crop,held,'the same lingering flood does not charge another entry loss');assert.deepEqual(g.errors,[]);
 });
 
 test('water, plate conditions and precise drainage ground survive reload and have the same next day',async t=>{

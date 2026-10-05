@@ -47,6 +47,7 @@ for (const asset of manifest.assets) {
         for(const [name,offset] of Object.entries(asset.overlayOffsets))if(!['worn','cracked','repaired'].includes(name)||!['x','y'].every(axis=>Number.isInteger(offset[axis])&&Math.abs(offset[axis])<32))throw new Error(asset.id+' has an invalid overlay position');
         sprite.overlayOffsets=asset.overlayOffsets;
     }
+    if(asset.category)sprite.category=asset.category;
     if(asset.id.startsWith('overlay-'))data.overlays[asset.id.slice(8)]=sprite;
     else data.sprites[asset.id]=sprite;
     asset.sha256=createHash('sha256').update(readFileSync(input)).digest('hex');
