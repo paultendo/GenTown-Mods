@@ -24,13 +24,13 @@ This addresses the installation issue reported in [GenTown-Mods #19](https://git
 
 The day button becomes **Decisions** when a proposal is waiting. Open it to answer the actual question. **Projects** brings unfinished work together, with links through its missing supplies and local discoveries. Routine town updates fold away in the Chronicle, leaving room for choices and changes.
 
-<a href="docs/screenshots/material-dependencies.png"><img src="docs/screenshots/material-dependencies.png" width="640" alt="Wayfarer 597 needs glass for telescopes. The panel follows the missing local forge discovery, sand, charcoal and timber."></a> <a href="docs/screenshots/decisions-mobile.png"><img src="docs/screenshots/decisions-mobile.png" width="195" alt="A live choice about shared learning, with coloured town flags, Yes and No, and a quieter option to let the day pass."></a>
+<a href="docs/screenshots/material-dependencies.jpg"><img src="docs/screenshots/material-dependencies.jpg" width="640" alt="North Montezumad needs glass for telescopes. The panel follows the missing local forge discovery, sand, charcoal and timber."></a> <a href="docs/screenshots/decisions-mobile.png"><img src="docs/screenshots/decisions-mobile.png" width="195" alt="A live choice about shared learning, with coloured town flags, Yes and No, and a quieter option to let the day pass."></a>
 
-*Ujoris e, Day 756. Glass is holding up a telescope. In the same world, Wayfarer 597 asks about learning with Peahaven.*
+*The glass shortage on Day 601, shown with v1.6.96. The phone capture shows a live learning proposal on Day 756, taken with v1.6.94.*
 
 ## A few stories from one world
 
-These are real game screens from a release-test campaign. The people, work, journeys and agreements are recorded in its save. Click any image to see it at full size.
+These are real game screens from a release-test campaign, refreshed with v1.6.96 and my own pixel art. The people, work, journeys and agreements are recorded in its save. Click any image to see it at full size.
 
 ### At the bench
 
@@ -52,9 +52,9 @@ Howin made a tuning fork when the town’s musicians wanted a note they could si
 
 ### Neighbours with terms
 
-New Montezumad needed stone for a stadium. The exchange records the request, shipment, arrival and eventual use. Elsewhere, two towns agreed to a common market with an outside customs levy. Council talks keep the obligations and the towns’ votes.
+North Montezumad needs metal handtools for work already underway. Its request travels by sea to Wayfarer 597. You can follow the vessel and crew, and visit the fields and workshop that need the tools. Elsewhere, two towns agreed to a common market with an outside customs levy. Council talks keep the obligations and the towns’ votes.
 
-<a href="docs/screenshots/trade.jpg"><img src="docs/screenshots/trade.jpg" width="320" alt="211 stone travelling from Montezumad to New Montezumad and being used to build a stadium"></a> <a href="docs/screenshots/council.jpg"><img src="docs/screenshots/council.jpg" width="320" alt="A common market agreed by Wayfarer 597 and Montezumad, with a five percent outside customs levy"></a>
+<a href="docs/screenshots/trade.jpg"><img src="docs/screenshots/trade.jpg" width="320" alt="A request for metal handtools travelling by sea from North Montezumad to Wayfarer 597"></a> <a href="docs/screenshots/council.jpg"><img src="docs/screenshots/council.jpg" width="320" alt="A common market agreed by Wayfarer 597 and Montezumad, with a five percent outside customs levy"></a>
 
 The same world also has creeds, rivalries, celebrations, wars and places marked by earlier inhabitants. Weather and disasters can leave lasting changes to the land. Much later, local advances and constructed vessels can open journeys to other worlds. The comparison below explains those systems and how far they go.
 
@@ -201,7 +201,7 @@ The runner uses actual game turns and decisions. It writes campaign reports, a t
 
 **The fonts have their own authors and terms.** VT323 is by the VT323 Project Authors, including Peter Hull, under the [SIL Open Font License 1.1](vendor/gentown/fonts/VT323-LICENSE.txt). Public Pixel is by GGBotNet, released under [CC0 1.0 Universal](vendor/gentown/fonts/PublicPixel-LICENSE.txt).
 
-**The additional sprites are supplied with this overhaul.** They are separate from R74n's original icons. Their [source records and full prompts](artwork/paultendo-sprites/manifest.json) accompany the exports. The original renderer, build tools and integration code are paultendo's work.
+**The additional sprites are my own pixel art, supplied with this overhaul.** They are separate from R74n's original icons. Their [source records and full prompts](artwork/paultendo-sprites/manifest.json) accompany the exports. The original renderer, build tools and integration code are paultendo's work.
 
 **Adapted files contain work from both sources.** [index.html](index.html) adapts R74n’s original game page for local loading. Its upstream portions retain their original attribution and applicable terms. The original additions by paultendo remain paultendo’s work. Any third-party components retain their own notices and licences.
 

@@ -50,3 +50,30 @@ The earlier story captures above retain their original release versions.
 The images include original GenTown assets and paultendo additions.
 See README.md, LICENSE.md and THIRD_PARTY_NOTICES.txt for their authorship
 and applicable terms. These screenshots do not change those terms.
+
+V1.6.96 campaign refresh, 5 October 2026
+
+The following files replace their earlier captures:
+world.jpg, workshop.jpg, work.jpg, voyage.jpg, discovery.jpg, object.jpg,
+whisper.jpg, trade.jpg and council.jpg. material-dependencies.jpg is a new
+current capture, while the earlier material-dependencies.png is retained
+as historical v1.6.94 QA evidence.
+
+All refreshed images show v1.6.96 and the current pixel art in the actual
+seed-42 yes-policy campaign at Day 601. The original recorded save was
+imported through native Saves > Load from file in an isolated browser
+origin on port 4176, then reloaded. No days were advanced, choices answered,
+residents inserted, supplies changed or outcomes staged.
+
+work.jpg remains North Montezumad, with Dapeng, Tihine and Dolius.
+trade.jpg now shows North Montezumad's Day 599 request for metal handtools
+from Wayfarer 597. Its sea journey is still underway. The README text
+and alt text describe this current record. council.jpg shows the same
+Day 497 common-market agreement with its pact symbol and real votes.
+material-dependencies.jpg shows North Montezumad's missing glass, Forges,
+sand and charcoal, with their current pixel art.
+
+The right-hand story images are direct browser screenshot crops of the
+actual panel at the default 1280x720 viewport. Browser screenshots are
+JPEG. world.jpg and material-dependencies.jpg retain the full viewport.
+The phone decision capture remains its documented v1.6.94 capture.
