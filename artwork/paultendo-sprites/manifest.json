@@ -1,0 +1,575 @@
+{
+  "schemaVersion": 1,
+  "assetSet": "paultendo-materials-tools-vessels-and-traveler",
+  "createdAt": "2026-10-05",
+  "generator": "OpenAI built-in image_gen",
+  "mode": "New asset generation with three existing GenTown icons supplied only as style references",
+  "notes": [
+    "These are new sprites created for paultendo's overhaul. They are separate from R74n's original icons.",
+    "R74n's reference images remain unchanged in icons/. Their source and licence are recorded in vendor/gentown/upstream.json and vendor/gentown/LICENSE.txt.",
+    "Source artwork are preserved in source/. Each final sprite was exported at 32x32 using nearest-neighbour sampling and palette reduction without dithering.",
+    "The preview uses the existing VT323 font. Its authors and SIL Open Font License are recorded in vendor/gentown/fonts/VT323-LICENSE.txt.",
+    "Indexed colour regions, palettes and clipped overlays are embedded in the single-file mod. The original PNGs remain separately editable source exports."
+  ],
+  "styleReferences": [
+    "icons/metal.png",
+    "icons/rock.png",
+    "icons/crop.png"
+  ],
+  "export": {
+    "width": 32,
+    "height": 32,
+    "resampling": "nearest-neighbour",
+    "dithering": false,
+    "maxColours": 8,
+    "compassMaxColours": 12,
+    "transparentPaddingToSquare": true
+  },
+  "atlas": {
+    "file": "../../app/sprites/atlas.png",
+    "width": 640,
+    "height": 32,
+    "order": [
+      "clay",
+      "charcoal",
+      "bricks",
+      "glass",
+      "paper",
+      "compass",
+      "clear-lens",
+      "tuning-fork",
+      "sand",
+      "coal",
+      "steel",
+      "pottery",
+      "timber-bins",
+      "glass-vessels",
+      "stone-tools",
+      "metal-tools",
+      "steel-tools",
+      "coastal-boat",
+      "sailing-vessel",
+      "telescope"
+    ],
+    "sha256": "5e070689b31e55b7a2ebb795dcd55da7d8fac8373d360a8fa13c0bec89f0e657",
+    "bytes": 3334
+  },
+  "assets": [
+    {
+      "id": "clay",
+      "label": "Clay",
+      "source": "source/clay.png",
+      "file": "../../app/sprites/clay.png",
+      "atlasRect": {
+        "x": 0,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "prompt": "Use case: stylized-concept. Asset type: production game inventory icon, an original sprite for paultendo's GenTown mod.\nThe three supplied images are STYLE REFERENCES ONLY: GenTown's 32 by 32 metal, stone, and crop icons. Do not edit or reproduce those icons. Create one new subject.\nA single isolated sprite, truly pixel art conceived on an EXACT 32 by 32 logical pixel grid. Every feature is an integer cluster of those 32x32 pixels. Render as a perfectly sharp nearest-neighbour enlargement of that logical grid, square canvas, no antialiasing, no soft edges or gradients. Real transparent background (RGBA), not a painted checkerboard.\nMatch the references' modest chunky silhouettes, 1-pixel very dark brown outline, restrained earthy palette with 4 to 7 flat shades, one simple highlight on the upper left, simplified 1990s strategy-game resource sprite. Fill roughly 24 by 24 logical pixels with 4 logical pixels of transparent padding on all sides. Readable both on a dark game interface and in a tiny inventory. No text, frame, badge, glow, floor shadow, multiple objects or tiny decorative details. No smooth illustration masquerading as pixel art.\nSubject: Clay as a raw commodity: one squat irregular lump of terracotta earth, with a rounded top and one thumb-sized notch. Warm ochre, muted salmon and burnt sienna planes. No vessel, no tile, no soil landscape.",
+      "sha256": "98a448d746870c8f386bd84c96a913f59946c3cbf08431a8bc2becf9a9f30830",
+      "sourceSha256": "1027c6f2d793fd5f54993d06190cb48f1de8e82789c774a1ef14212c5163db7e",
+      "colours": 6,
+      "bytes": 471
+    },
+    {
+      "id": "charcoal",
+      "label": "Charcoal",
+      "source": "source/charcoal.png",
+      "file": "../../app/sprites/charcoal.png",
+      "atlasRect": {
+        "x": 32,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "prompt": "Use case: stylized-concept. Asset type: production game inventory icon, an original sprite for paultendo's GenTown mod.\nThe three supplied images are STYLE REFERENCES ONLY: GenTown's 32 by 32 metal, stone, and crop icons. Do not edit or reproduce those icons. Create one new subject.\nA single isolated sprite, truly pixel art conceived on an EXACT 32 by 32 logical pixel grid. Every feature is an integer cluster of those 32x32 pixels. Render as a perfectly sharp nearest-neighbour enlargement of that logical grid, square canvas, no antialiasing, no soft edges or gradients. Real transparent background (RGBA), not a painted checkerboard.\nMatch the references' modest chunky silhouettes, 1-pixel very dark brown outline, restrained earthy palette with 4 to 7 flat shades, one simple highlight on the upper left, simplified 1990s strategy-game resource sprite. Fill roughly 24 by 24 logical pixels with 4 logical pixels of transparent padding on all sides. Readable both on a dark game interface and in a tiny inventory. No text, frame, badge, glow, floor shadow, multiple objects or tiny decorative details. No smooth illustration masquerading as pixel art.\nSubject: Charcoal as a prepared fuel commodity: one squat block of burned timber, black-brown edges with broad slate-gray cut faces and a tiny warm gray highlight. Three blocky grain cracks convey burned wood. No flames or glowing embers; clearly distinct from a stone or coal gemstone.",
+      "sha256": "90afbf1f2ba4c76f0b295d5377d01b86daab7d33d36107a04debf2bc3f15a3f0",
+      "sourceSha256": "15af4c0fb12e3dd0b73cde07b74b7dc21369ae593d558ceb4df522121e7cd496",
+      "colours": 6,
+      "bytes": 471
+    },
+    {
+      "id": "bricks",
+      "label": "Bricks",
+      "source": "source/brick.png",
+      "file": "../../app/sprites/bricks.png",
+      "atlasRect": {
+        "x": 64,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "prompt": "Use case: stylized-concept. Asset type: production game inventory icon, an original sprite for paultendo's GenTown mod.\nThe three supplied images are STYLE REFERENCES ONLY: GenTown's 32 by 32 metal, stone, and crop icons. Do not edit or reproduce those icons. Create one new subject.\nA single isolated sprite, truly pixel art conceived on an EXACT 32 by 32 logical pixel grid. Every feature is an integer cluster of those 32x32 pixels. Render as a perfectly sharp nearest-neighbour enlargement of that logical grid, square canvas, no antialiasing, no soft edges or gradients. Real transparent background (RGBA), not a painted checkerboard.\nMatch the references' modest chunky silhouettes, 1-pixel very dark brown outline, restrained earthy palette with 4 to 7 flat shades, one simple highlight on the upper left, simplified 1990s strategy-game resource sprite. Fill roughly 24 by 24 logical pixels with 4 logical pixels of transparent padding on all sides. Readable both on a dark game interface and in a tiny inventory. No text, frame, badge, glow, floor shadow, multiple objects or tiny decorative details. No smooth illustration masquerading as pixel art.\nSubject: Bricks as a construction commodity: a compact stack of two simple terracotta rectangular bricks viewed three-quarter, one offset a little, strong straight edges, a flat pale brick top and dark red-brown side. No wall, mortar or setting.",
+      "sha256": "3653bd59ee1eca8aaefa30f8dc6e03e03843804ccdf15f8be8b4e4517562464d",
+      "sourceSha256": "37b02e5dad973d0c53cb764ecc25053e42471b2add8c8ef059950c23c7e09fc9",
+      "colours": 6,
+      "bytes": 441
+    },
+    {
+      "id": "glass",
+      "label": "Glass",
+      "source": "source/glass.png",
+      "file": "../../app/sprites/glass.png",
+      "atlasRect": {
+        "x": 96,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "prompt": "Use case: stylized-concept. Asset type: production game inventory icon, an original sprite for paultendo's GenTown mod.\nThe three supplied images are STYLE REFERENCES ONLY: GenTown's 32 by 32 metal, stone, and crop icons. Do not edit or reproduce those icons. Create one new subject.\nA single isolated sprite, truly pixel art conceived on an EXACT 32 by 32 logical pixel grid. Every feature is an integer cluster of those 32x32 pixels. Render as a perfectly sharp nearest-neighbour enlargement of that logical grid, square canvas, no antialiasing, no soft edges or gradients. Real transparent background (RGBA), not a painted checkerboard.\nMatch the references' modest chunky silhouettes, 1-pixel very dark brown outline, restrained earthy palette with 4 to 7 flat shades, one simple highlight on the upper left, simplified 1990s strategy-game resource sprite. Fill roughly 24 by 24 logical pixels with 4 logical pixels of transparent padding on all sides. Readable both on a dark game interface and in a tiny inventory. No text, frame, badge, glow, floor shadow, multiple objects or tiny decorative details. No smooth illustration masquerading as pixel art.\nSubject: glass as a raw commodity. A chunky pale aqua glass shard with a clipped irregular pentagonal silhouette, one opaque icy white shine and two blue-green facets, subtly translucent centre. Make it unmistakably glass, not a gemstone, not a window or a lens. Broad simple angular planes, dark teal outline rather than pure black.",
+      "sha256": "d9014ffd949c726cdf63ee143658fd85efde20c8fddff383464905cfe50ab42a",
+      "sourceSha256": "1b914a19e8cda01795f7b76b6c9b5634cd8743cb72169dd5734b78f8bd735bf6",
+      "colours": 6,
+      "bytes": 483
+    },
+    {
+      "id": "paper",
+      "label": "Paper",
+      "source": "source/paper.png",
+      "file": "../../app/sprites/paper.png",
+      "atlasRect": {
+        "x": 128,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "prompt": "Use case: stylized-concept. Asset type: production game inventory icon, an original sprite for paultendo's GenTown mod.\nThe three supplied images are STYLE REFERENCES ONLY: GenTown's 32 by 32 metal, stone, and crop icons. Do not edit or reproduce those icons. Create one new subject.\nA single isolated sprite, truly pixel art conceived on an EXACT 32 by 32 logical pixel grid. Every feature is an integer cluster of those 32x32 pixels. Render as a perfectly sharp nearest-neighbour enlargement of that logical grid, square canvas, no antialiasing, no soft edges or gradients. Real transparent background (RGBA), not a painted checkerboard.\nMatch the references' modest chunky silhouettes, 1-pixel very dark brown outline, restrained earthy palette with 4 to 7 flat shades, one simple highlight on the upper left, simplified 1990s strategy-game resource sprite. Fill roughly 24 by 24 logical pixels with 4 logical pixels of transparent padding on all sides. Readable both on a dark game interface and in a tiny inventory. No text, frame, badge, glow, floor shadow, multiple objects or tiny decorative details. No smooth illustration masquerading as pixel art.\nSubject: Paper as a commodity: one warm ivory square sheet viewed straight-on with its upper-right corner folded down, a soft parchment yellow highlight and gray-brown outline. No letters, handwriting, book, scroll, extra pages or background. Bold folded corner so it is identifiable at 32 pixels.",
+      "sha256": "9f9801a58911252410e468f46234491b34c4d28b111229bacb7a2ab212afdff2",
+      "sourceSha256": "871323bb8d2a28c2603a7a25d50d1b29dfdb93e0e0e5a3352314cd19b801e188",
+      "colours": 6,
+      "bytes": 456
+    },
+    {
+      "id": "compass",
+      "label": "Compass",
+      "source": "source/compass.png",
+      "file": "../../app/sprites/compass.png",
+      "atlasRect": {
+        "x": 160,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "prompt": "Use case: stylized-concept. Asset type: production game inventory icon, an original sprite for paultendo's GenTown mod.\nThe three supplied images are STYLE REFERENCES ONLY: GenTown's 32 by 32 metal, stone, and crop icons. Do not edit or reproduce those icons. Create one new subject.\nA single isolated sprite, truly pixel art conceived on an EXACT 32 by 32 logical pixel grid. Every feature is an integer cluster of those 32x32 pixels. Render as a perfectly sharp nearest-neighbour enlargement of that logical grid, square canvas, no antialiasing, no soft edges or gradients. Real transparent background (RGBA), not a painted checkerboard.\nMatch the references' modest chunky silhouettes, 1-pixel very dark brown outline, restrained earthy palette with 4 to 7 flat shades, one simple highlight on the upper left, simplified 1990s strategy-game resource sprite. Fill roughly 24 by 24 logical pixels with 4 logical pixels of transparent padding on all sides. Readable both on a dark game interface and in a tiny inventory. No text, frame, badge, glow, floor shadow, multiple objects or tiny decorative details. No smooth illustration masquerading as pixel art.\nSubject: The Traveler's compass: a squat round tarnished brass case, cream dial, dark blue needle pointing diagonally up-right with a small rust-red opposite tip. Keep a simple circular silhouette, broad brass ring, only four large tick marks and no lettering. No compass rose with tiny spokes, no chain, no glow.",
+      "sha256": "8215e009a4c4013358ced736fecc8a2af35a8efe8a55fed5af574767a7c6f2af",
+      "sourceSha256": "05d84017c564bef894972afcec6880b23a6f0084a3a67affbd2d57864e0b4e92",
+      "colours": 11,
+      "bytes": 576,
+      "roles": {
+        "#482b2a": {
+          "role": "fixed"
+        },
+        "#d2765f": {
+          "role": "fixed"
+        },
+        "#637ea4": {
+          "role": "fixed"
+        },
+        "#baab88": {
+          "role": "surface"
+        },
+        "#e0d1af": {
+          "role": "surface"
+        },
+        "#eddfc2": {
+          "role": "surface"
+        },
+        "#5a4b1b": {
+          "role": "body",
+          "shade": 0
+        },
+        "#8c7635": {
+          "role": "body",
+          "shade": 1
+        },
+        "#c1a954": {
+          "role": "body",
+          "shade": 2
+        }
+      },
+      "regions": [
+        {
+          "role": "accent",
+          "x": 12,
+          "y": 23,
+          "width": 8,
+          "height": 2
+        }
+      ]
+    },
+    {
+      "id": "clear-lens",
+      "label": "Clear lens",
+      "source": "source/lens.png",
+      "file": "../../app/sprites/clear-lens.png",
+      "atlasRect": {
+        "x": 192,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "prompt": "Use case: stylized-concept. Asset type: production game inventory icon, an original sprite for paultendo's GenTown mod.\nThe three supplied images are STYLE REFERENCES ONLY: GenTown's 32 by 32 metal, stone, and crop icons. Do not edit or reproduce those icons. Create one new subject.\nA single isolated sprite, truly pixel art conceived on an EXACT 32 by 32 logical pixel grid. Every feature is an integer cluster of those 32x32 pixels. Render as a perfectly sharp nearest-neighbour enlargement of that logical grid, square canvas, no antialiasing, no soft edges or gradients. Real transparent background (RGBA), not a painted checkerboard.\nMatch the references' modest chunky silhouettes, 1-pixel very dark brown outline, restrained earthy palette with 4 to 7 flat shades, one simple highlight on the upper left, simplified 1990s strategy-game resource sprite. Fill roughly 24 by 24 logical pixels with 4 logical pixels of transparent padding on all sides. Readable both on a dark game interface and in a tiny inventory. No text, frame, badge, glow, floor shadow, multiple objects or tiny decorative details. No smooth illustration masquerading as pixel art.\nSubject: The Traveler's clear lens: a single perfectly round pale aqua disc with a thin dark bronze edge and one blocky white crescent reflection at its upper left. Centre is subtly translucent. No handle, stem, chain, lettering or multiple objects. Shape must be distinctly circular unlike the irregular raw glass shard. Simpler and more restrained than a jewel.",
+      "sha256": "72e0f1426d9f9c66d3d9d17fa1ba368a235b5d8ab45ab9d0c843dc9ec722f74f",
+      "sourceSha256": "64121686ceb7f5505315f49c7202486ae18327b5c252f72781ce031771a3f97e",
+      "colours": 6,
+      "bytes": 470,
+      "roles": {
+        "#70acaa": {
+          "role": "surface"
+        },
+        "#aaccc4": {
+          "role": "surface"
+        },
+        "#aecfcc": {
+          "role": "surface"
+        },
+        "#9d7639": {
+          "role": "body",
+          "shade": 2
+        }
+      },
+      "regions": [
+        {
+          "role": "fixed",
+          "x": 9,
+          "y": 9,
+          "width": 5,
+          "height": 5
+        },
+        {
+          "role": "accent",
+          "x": 11,
+          "y": 24,
+          "width": 10,
+          "height": 2
+        }
+      ]
+    },
+    {
+      "id": "tuning-fork",
+      "label": "Tuning fork",
+      "source": "source/tuning_fork.png",
+      "file": "../../app/sprites/tuning-fork.png",
+      "atlasRect": {
+        "x": 224,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "prompt": "Use case: stylized-concept. Asset type: production game inventory icon, an original sprite for paultendo's GenTown mod.\nThe three supplied images are STYLE REFERENCES ONLY: GenTown's 32 by 32 metal, stone, and crop icons. Do not edit or reproduce those icons. Create one new subject.\nA single isolated sprite, truly pixel art conceived on an EXACT 32 by 32 logical pixel grid. Every feature is an integer cluster of those 32x32 pixels. Render as a perfectly sharp nearest-neighbour enlargement of that logical grid, square canvas, no antialiasing, no soft edges or gradients. Real transparent background (RGBA), not a painted checkerboard.\nMatch the references' modest chunky silhouettes, 1-pixel very dark brown outline, restrained earthy palette with 4 to 7 flat shades, one simple highlight on the upper left, simplified 1990s strategy-game resource sprite. Fill roughly 24 by 24 logical pixels with 4 logical pixels of transparent padding on all sides. Readable both on a dark game interface and in a tiny inventory. No text, frame, badge, glow, floor shadow, multiple objects or tiny decorative details. No smooth illustration masquerading as pixel art.\nSubject: The Traveler's tuning fork: a silver-blue U-shaped metal fork with TWO straight squared prongs, a clear three-pixel-wide gap, joined at a rounded squared shoulder and a short thick handle beneath. Upright, symmetrical, with one flat pale highlight on the left prong and dark steel-blue edge. No musical notes, vibration lines, sparkles or sound waves. Wide enough to be legible at 32 pixels.",
+      "sha256": "905d52c8edd924aaca3c935c21642059fcce0ab532fa2ddd172c9d948831567c",
+      "sourceSha256": "1703d6dc8296cd800407b0c3e9862255dfd4384b69107c93ab1d5b022796411e",
+      "colours": 6,
+      "bytes": 405,
+      "regions": [
+        {
+          "role": "accent",
+          "x": 13,
+          "y": 23,
+          "width": 6,
+          "height": 2
+        }
+      ]
+    },
+    {
+      "id": "sand",
+      "label": "Sand",
+      "source": "source/sand.png",
+      "file": "../../app/sprites/sand.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: A low squat heap of pale golden sand, a few stepped grains along its base. Simple broad ochre and cream areas. Not a rock.",
+      "sha256": "d82592018fcdf88afcdbe6e2d12d0cb2c7cabccf51ab9fd06193ac03eb4545e4",
+      "sourceSha256": "3ede066d61e51a9ff8c6613f527075f19262fcbbe81cc1ecc16159cd7eb1ed42",
+      "colours": 5,
+      "bytes": 166,
+      "atlasRect": {
+        "x": 256,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "coal",
+      "label": "Coal",
+      "source": "source/coal.png",
+      "file": "../../app/sprites/coal.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: One angular mineral coal chunk, broad near-black navy faces and a cool gray highlight. Distinct from fibrous burned wood charcoal. No flame.",
+      "sha256": "29d9c3bb0f3df020a062a29d11e661fe5c3416bd6290f6dbef25b4707dffec67",
+      "sourceSha256": "36c5735f394ccb4bf80fea39fb201cb480c6edc0774f70cc874c5ae2cff3f0e7",
+      "colours": 6,
+      "bytes": 223,
+      "atlasRect": {
+        "x": 288,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "steel",
+      "label": "Steel",
+      "source": "source/steel.png",
+      "file": "../../app/sprites/steel.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: One short silver-blue steel ingot in three-quarter view, bevelled top and straight sides. Broad highlights and darker steel edges. No engraving.",
+      "sha256": "a4fa909d1dc2225a8ed1fdee939d3fe1c4b2f3a596433e644a832bf54048b315",
+      "sourceSha256": "7eccb5dd5797f58c2d6cdad0ee09ec981f929f3ad8b2e3cba3dd0df23f8548cd",
+      "colours": 5,
+      "bytes": 175,
+      "atlasRect": {
+        "x": 320,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "pottery",
+      "label": "Clay vessel",
+      "source": "source/pottery.png",
+      "file": "../../app/sprites/pottery.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: A squat terracotta storage jar with a wide rim and dark open mouth, no handles, broad plain sides.",
+      "sha256": "d61a64af03b1ab3d9f3d587453e3432ec621b121a6d495f062e7c9f194566e58",
+      "sourceSha256": "826916bd72b55f4620cabeef92f26a7db44fc9591d5b9832b7107cbfe0881d25",
+      "colours": 6,
+      "bytes": 237,
+      "atlasRect": {
+        "x": 352,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "timber-bins",
+      "label": "Wooden grain bin",
+      "source": "source/timber_bins.png",
+      "file": "../../app/sprites/timber-bins.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: A compact wooden grain bin made of three broad upright planks, a flat fitted timber lid and one dark horizontal band. No grain or setting.",
+      "sha256": "e883b4191bc7e9af8f5ba224d3545a4b3f90625d944192cde78f27a147f9068c",
+      "sourceSha256": "01f532a6397d47fdaffb68fd71a07f2952e5526996636dc034f2a178971ab8f8",
+      "colours": 6,
+      "bytes": 194,
+      "atlasRect": {
+        "x": 384,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "glass-vessels",
+      "label": "Glass vessel",
+      "source": "source/glass_vessels.png",
+      "file": "../../app/sprites/glass-vessels.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: A squat aqua glass storage jar with a narrow open neck and a broad hollow translucent body. White blocky reflection at upper left. No stopper or contents.",
+      "sha256": "7a6e5877a745b9726b48e624f3e155fcaa69ca57416f71aa26e60c528a4005df",
+      "sourceSha256": "c4d2c50be9b54ae7c0367047ae12105a6e81deb5b410bc9bd4a12c5ff1c21108",
+      "colours": 5,
+      "bytes": 209,
+      "atlasRect": {
+        "x": 416,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "stone-tools",
+      "label": "Stone handtool",
+      "source": "source/stone_tools.png",
+      "file": "../../app/sprites/stone-tools.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: One chipped flint handtool, a broad irregular gray stone blade lashed to a short brown wooden handle, diagonal up-right. Distinct primitive chipped edge. No crossed tools.",
+      "sha256": "9a4172439c5561ca7418e1cc54070d181d6ba242466d8a504fc4666a136ec798",
+      "sourceSha256": "b5680b08b82cbe9e6d1acd0d9926ef1dc74ffb9547a201b2081fe09b95961ad9",
+      "colours": 6,
+      "bytes": 247,
+      "roles": {
+        "#9b633d": {
+          "role": "surface"
+        },
+        "#a58e6f": {
+          "role": "surface"
+        }
+      },
+      "atlasRect": {
+        "x": 448,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "overlayOffsets": {
+        "repaired": {
+          "x": 0,
+          "y": -5
+        }
+      }
+    },
+    {
+      "id": "metal-tools",
+      "label": "Metal handtool",
+      "source": "source/metal_tools.png",
+      "file": "../../app/sprites/metal-tools.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: One hand-sized iron hoe with a short brown wooden handle and a broad bronze-gray working blade, diagonal up-right. Two simple bindings. No crossed tools.",
+      "sha256": "cab31ec33af4fc47a7e0b74d7eb309ba713d704dcb4f0f99aaa9f6f5a285e5ba",
+      "sourceSha256": "1893b69f957d5f91668d28141db50a25b76b961d4543db46c5a7188d9bf6fb6f",
+      "colours": 6,
+      "bytes": 218,
+      "roles": {
+        "#9e623f": {
+          "role": "surface"
+        },
+        "#cf9b6d": {
+          "role": "surface"
+        },
+        "#6d5b46": {
+          "role": "body",
+          "shade": 0
+        },
+        "#bcb7a1": {
+          "role": "body",
+          "shade": 2
+        }
+      },
+      "atlasRect": {
+        "x": 480,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "overlayOffsets": {
+        "repaired": {
+          "x": 3,
+          "y": -5
+        }
+      }
+    },
+    {
+      "id": "steel-tools",
+      "label": "Steel handtool",
+      "source": "source/steel_tools.png",
+      "file": "../../app/sprites/steel-tools.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: One hand-sized steel hoe with a short brown wooden handle and a broad silver-blue sharpened working blade, diagonal up-right. Straight blade edge and one bright upper highlight. No crossed tools.",
+      "sha256": "032f5e11ab25c7e014b0b9d2f062eabebc25c8838090d15f5093994103363744",
+      "sourceSha256": "fd942d205a30eb3a0f063f1891907fafc49f211308c2d4ee5ca250ce03a813fd",
+      "colours": 5,
+      "bytes": 245,
+      "roles": {
+        "#955c36": {
+          "role": "surface"
+        },
+        "#c58952": {
+          "role": "surface"
+        },
+        "#a9b7c2": {
+          "role": "body",
+          "shade": 2
+        }
+      },
+      "atlasRect": {
+        "x": 512,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "overlayOffsets": {
+        "worn": {
+          "x": 0,
+          "y": -2
+        },
+        "cracked": {
+          "x": 0,
+          "y": -4
+        },
+        "repaired": {
+          "x": 4,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "coastal-boat",
+      "label": "Coastal boat",
+      "source": "source/coastal_boat.png",
+      "file": "../../app/sprites/coastal-boat.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: One small simple brown timber rowboat in three-quarter side view with a low empty open hull and a single short oar across it. No sail, sea, setting or crew.",
+      "sha256": "24cf0356f2c29df5838d7e12b43c79487675894eb6552cd5041e24fca7e5834c",
+      "sourceSha256": "94de1681062913f119f374e3c965f1b344877cf9fd437b2d8e01ca9dbc9f8935",
+      "colours": 6,
+      "bytes": 206,
+      "atlasRect": {
+        "x": 544,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "sailing-vessel",
+      "label": "Sailing vessel",
+      "source": "source/sailing_vessel.png",
+      "file": "../../app/sprites/sailing-vessel.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: One compact brown sailing ship hull with one mast and one square cream cloth sail, side view. A single small muted blue pennant. No water, setting or crew.",
+      "sha256": "0e6b928b459f586e11b45d524269a0b9730d944557edd294c371c80eeef31ae0",
+      "sourceSha256": "3e4024533748e650c8f2cba542031773f7e6ab218d560c20ad633a8a1c0f4787",
+      "colours": 6,
+      "bytes": 210,
+      "atlasRect": {
+        "x": 576,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "telescope",
+      "label": "Telescope",
+      "source": "source/telescope.png",
+      "file": "../../app/sprites/telescope.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: One short brass telescope with a broad aqua lens on its upper-right end, a brown adjustable stand beneath, diagonal up-right. No sky or setting.",
+      "sha256": "49588008e889570d9f8a3dd794346dbc15b25b86ef3bc75c492deb69ce931296",
+      "sourceSha256": "955e4a100156cb6933f6c4762b6d415b84f058a9cf01c69d881dfbe62109c7b0",
+      "colours": 6,
+      "bytes": 242,
+      "atlasRect": {
+        "x": 608,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "id": "overlay-worn",
+      "label": "Wear overlay",
+      "source": "source/overlay-worn.png",
+      "file": "../../app/sprites/overlay-worn.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: A transparent condition overlay ONLY, no subject beneath. Sparse tiny dark brown and tan 1-pixel logical chips scattered evenly across the central 24x24 logical area, with a few paired pixels near logical x=8 and x=21. 12 to 18 individual pixels total. Very restrained surface wear, no perimeter outline.",
+      "sha256": "83d746198bc547071bf6c0b7ea1edd9012b2134e26b7acd3e322e41f45d9f666",
+      "sourceSha256": "4f25d116406a91fd69bf65225fa6930ca448fd4e8efae079bb044d8bfb8b2247",
+      "colours": 4,
+      "bytes": 136
+    },
+    {
+      "id": "overlay-cracked",
+      "label": "Crack overlay",
+      "source": "source/overlay-cracked.png",
+      "file": "../../app/sprites/overlay-cracked.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: A transparent condition overlay ONLY, no subject beneath. Three disconnected short jagged hairline cracks positioned across the central 24x24 logical area at logical columns about 8, 16 and 22. Each crack is 5-7 logical pixels tall, 1 logical pixel wide, dark brown, with a few pale pixels immediately on one side. No frame, no perimeter outline.",
+      "sha256": "27f49e824a34aed4a18b873f2bc40db1b56b84af0e2203dd4df9a9be6f1e504b",
+      "sourceSha256": "455e2485dce991301042a924bcc2bf677e544e3a911412de9fbf1c9f2eeb0c0d",
+      "colours": 5,
+      "bytes": 156
+    },
+    {
+      "id": "overlay-repaired",
+      "label": "Repair overlay",
+      "source": "source/overlay-repaired.png",
+      "file": "../../app/sprites/overlay-repaired.png",
+      "prompt": "Use case: stylized-concept. Asset type: an original production inventory sprite for paultendo's GenTown mod. Input images are STYLE REFERENCES ONLY: previously created sprites and the native metal icon. Create only the requested new asset. Sharp chunky 1990s strategy-game pixel art designed on an EXACT 32 by 32 logical grid, rendered as a crisp nearest-neighbour enlargement. 4 logical pixels of transparent padding on every side. 1 logical pixel dark brown outline, 4-7 FLAT palette colours, no smooth gradients, no antialiasing, no tiny details, no shadows, no text or badges. Real transparent RGBA background. Readable at 32 pixels on a black interface. Upper-left highlight. Match the references' simple silhouettes and restrained earthy colours. For an OVERLAY asset, obey its sparse marks instruction instead of drawing a full outlined inventory object.  Subject: A transparent condition overlay ONLY, no subject beneath. Three small patches of cream thread and muted brown bindings across the central 24x24 logical area, at logical columns about 8, 16 and 22. Each patch consists of two tiny horizontal 3-logical-pixel strips linked by one upright stitch. No frame, no perimeter outline.",
+      "sha256": "16cb30df24ea1a93631f027dbcad39e5f210d27464dbe3a44881da07119c112d",
+      "sourceSha256": "03d58504c599f293b5acbebbcf8cf1cdfa876c4a8965a1e6067a6d6b0dce4633",
+      "colours": 5,
+      "bytes": 150
+    }
+  ]
+}

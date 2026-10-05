@@ -1,13 +1,14 @@
 {
   "name": "gentown-paultendo",
-  "version": "1.6.94",
+  "version": "1.6.95",
   "private": true,
   "description": "Local GenTown playground with the paultendo overhaul",
   "scripts": {
+    "build:sprites": "node scripts/build-sprites.mjs",
     "start": "node scripts/serve.mjs",
     "simulate": "node scripts/simulate.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check paultendo-mod.js && node --check hot-swap-mod.js && node --check scripts/serve.mjs && node --check scripts/simulate.mjs && node --check scripts/lib/game.mjs && node --check scripts/lib/campaign.mjs && node --check app/boot.js && node --check app/ready.js"
+    "check": "node --check paultendo-mod.js && node --check hot-swap-mod.js && node --check scripts/serve.mjs && node --check scripts/simulate.mjs && node --check scripts/lib/game.mjs && node --check scripts/lib/campaign.mjs && node --check app/boot.js && node --check app/ready.js && node --check app/sprites/renderer.js && node --check app/sprites/data.js && node --check scripts/build-sprites.mjs"
   },
   "engines": {
     "node": ">=22"

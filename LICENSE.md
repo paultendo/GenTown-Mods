@@ -12,7 +12,9 @@ Building a mod for GenTown, using its interfaces, crediting its creator or distr
 
 No open-source licence or general permission to reuse, redistribute, publish modified versions of, or commercially exploit paultendo’s original work is granted by this notice. Obtain paultendo’s written permission for those uses unless they are already permitted by applicable law, an existing licence or another express grant. Rights provided by GitHub’s terms, including viewing and forking a public repository on GitHub, are unaffected.
 
-The published mod may be downloaded, installed and run with GenTown for personal, non-commercial play and playtesting. This permission covers paultendo’s original mod code only. GenTown and other third-party material remain subject to their own terms.
+The published mod may be downloaded, installed and run with GenTown for personal, non-commercial play and playtesting. This permission covers paultendo’s original mod code and the additional sprite assets supplied with it. GenTown and other third-party material remain subject to their own terms.
+
+The additional artwork in `app/sprites/` and `artwork/paultendo-sprites/` was created for this overhaul using OpenAI’s image tools. It is separate from R74n’s original icons in `icons/`. Its prompts and source records are in `artwork/paultendo-sprites/manifest.json`. The original palette renderer, asset build scripts and integration code are paultendo’s code. The R74n Content License is not presented as a licence for those new assets or that original code.
 
 ## R74n’s GenTown content
 

@@ -1,0 +1,73 @@
+V1.6.95 RELEASE VERIFICATION
+5 October 2026
+
+Twenty transparent 32x32 sprites cover the added materials, tools, vessels,
+telescope and Traveler objects. Seven material ramps and six decoration
+ramps recolour assigned regions. Wear, cracks and repair bindings are
+clipped against each sprite's semantic mask. Narrow tools have authored
+overlay positions. Outlines, reflections and dial markings remain fixed.
+Glass can show cracks without changing its material colour. Repair marks
+fit frames and bodies. They do not mend glass or add a gameplay repair action.
+
+The pure renderer uses no canvas, network, timers or simulation randomness.
+It retains at most 128 cached appearances. Indexed art and renderer are
+embedded in paultendo-mod.js. Player installation still needs one script.
+ImageMagick is only needed to rebuild artwork during development. No new
+npm or runtime dependencies were added. The original icons are unchanged.
+
+New icons accompany native inventories, workshop supplies, shortages,
+projects, grain stores, field and carving tools, and Traveler stories.
+Labels, counts and existing actions stay present. Crafted objects derive
+their look from actual materials and lineage, retain it through ownership
+changes and reloads, and carry it in Traveler memory. Earlier passages
+add wear. Broken objects show cracks. Tool wear follows existing durability.
+
+Checks
+
+npm run check passed. The full suite passed all 692 tests with no failures,
+skips or cancellations. Seven added sprite tests cover indexed art, palette
+regions, visible overlays, clipping, unsafe options, cache bounds, native
+inventory integration and save/reload. Existing actual creation and time-
+loop tests now check appearance persistence and wear across passages.
+Rebuilding the exports produced identical script, data, atlas and manifest.
+The UI craft detector reported no findings.
+
+An initial suite caught a partially written script during a concurrent art
+rebuild. The builder now replaces complete scripts atomically. The final
+full run tested the corrected builder output. A tool-specific overlay check
+also caught wear missing a narrow steel tool. Authored positions repaired it.
+
+Three fresh campaigns completed 750 actual turns, 250 each with seeds 7,
+42 and 123 and mixed decisions. No runtime failures, console errors,
+warnings or proposals missing controls were recorded. These campaigns
+precede the final inventory formatter, glass mask and narrow-tool overlay
+positions. Those corrections change presentation, not simulation rules.
+The final build passed the suite and browser checks. Seed 42 retained three
+unfinished jobs, including a stone-tool exchange unchanged for 116 days.
+No forced completion was used to improve the report.
+
+Browser checks at 1280x720 and 390x844 confirmed actual-size and enlarged
+art, dark and light backgrounds, all 58 comparison images loaded, and no
+horizontal overflow in the comparison page, phone object drawer or tools
+panel. A turn and reload retained the visible map. A new keeper adopted the
+compass without changing its colours. No console errors or warnings were
+observed. Phone checks use viewport emulation, not a physical phone.
+
+The new README images use a deliberately prepared layout fixture with
+discovered stocks, worn tools and a steel compass. They are clearly marked
+as layout tests, separate from the earlier organic campaign story tour.
+Prompts, original source artwork, export hashes and authoring instructions
+are preserved in artwork/paultendo-sprites/. New sprites and original
+paultendo renderer/integration code remain separate from R74n's assets.
+
+Human playtesting remains necessary for enjoyment and arbitrary mod mixes.
+Source hashes, test-output hash, campaign summaries, unfinished work and
+screenshot provenance are recorded in docs/qa/release-1.6.95.json.
+
+Mod SHA-256
+1fcd5ee9aecb9cfe2cdc176ff8b45817f68b2fd3a068ff16a239644b65d3c248
+
+Install
+https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.95/paultendo-mod.js
+
+Publication status is recorded separately in the QA JSON.

@@ -1,0 +1,67 @@
+Building and extending the sprites
+
+Each PNG in app/sprites is a transparent 32x32 export. The source artwork and
+full image-generation prompt are recorded in manifest.json. New artwork should
+be created separately and exported using nearest-neighbour sampling,
+transparent padding to 32x32 and a small palette without dithering.
+
+Run npm run build:sprites after changing an export, its manifest entry, semantic
+regions, or app/sprites/renderer.js. ImageMagick is needed for this development
+step. Set SPRITE_MAGICK to its path if it is not available as magick.
+The build updates app/sprites/data.js, the atlas, hashes, and the marked block
+inside paultendo-mod.js. Commit the source changes and rebuilt output together.
+Run npm run check and npm test. Open /app/sprites/lab.html with the local server
+to compare actual-size and enlarged sprites on dark and light backgrounds.
+
+Semantic regions
+
+Each palette entry has its original colour, a role and a shade from 0 to 3.
+Manifest roles are keyed by lowercase RGB hex. Rectangular region annotations
+can refine a surface independently of its palette colour. They do not paint
+new pixels or alter outlines or transparency.
+
+outline: fixed silhouette, excluded from recolouring and condition overlays
+body: recoloured by the material ramp; accepts condition overlays
+accent: recoloured by the decoration ramp; accepts condition overlays
+surface: fixed material colour; accepts wear and cracks, such as glass
+fixed: protected feature, such as a needle, reflection or lettering
+
+No colours are changed when an option is omitted. The darkest visible palette
+entry defaults to outline. Other unannotated entries default to body. For a
+multi-material object, mark secondary materials as fixed or surface. Keep a
+reflection or dial marking fixed while allowing its surrounding glass to crack.
+
+Overlays use the same 32x32 index grid. The order is wear, cracks, repairs. They
+are clipped against the base sprite's semantic regions, never the rectangular
+image bounds alone. Repair bindings appear on frames and bodies, not glass.
+An asset may supply overlayOffsets, keyed by condition with integer x and y
+positions. This lets the same overlay fit a narrow tool or a wide object.
+Placement never changes clipping or lets a mark spill beyond the silhouette.
+Unknown sprites return null, so callers can keep their text-only fallback.
+Unknown palette names and condition marks are ignored. The cache holds at most
+128 variants and never belongs in a game save.
+
+Public API
+
+PaultendoSprites.render('compass', {
+    material: 'steel', accent: 'sea', overlays: ['worn', 'cracked']
+})
+
+This returns a self-contained image data URI. Use a text label beside it and
+image-rendering: pixelated at integer scales. Materials and accent ramps can be
+extended in renderer.js without duplicating sprite artwork.
+PaultendoSprites.artifactAppearance(object) reads an object's persistent look.
+
+Game integration
+
+Crafted objects use their actual input material and retain a decoration chosen
+deterministically from their lineage. Ownership and world changes do not choose
+a new palette. The look is saved at creation and carried in Traveler memory.
+Existing objects derive a compatible look from their recorded provenance.
+Earlier passages add wear. Broken objects show cracks. Field and carving tools
+show wear from their existing durability, not from idle days or random rolls.
+The repair overlay is available to authored appearance records and the renderer;
+this art change does not add a repair action or simulate a new repair system.
+
+The original R74n icons stay in icons/ and use their existing licence. New art,
+its source artwork, renderer, build scripts and provenance stay separate.

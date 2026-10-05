@@ -32,12 +32,15 @@ test('player-inspired successors use real materials, name a maker and retain the
  // Native production remains running. Compare the actual paid material record at completion.
  w.planet.day=work.due-1;next(w);const made=w.planet._paultendoLife.artifacts.find(a=>a.id===work.artifact);
  assert.ok(made);assert.equal(work.status,'made');assert.deepEqual(JSON.parse(JSON.stringify(work.materials)),{glass:1,metal:2});
+ assert.equal(made.appearance.material,'iron');assert.ok(made.appearance.accent);
+ const sprite=w.PaultendoSprites.render('clear-lens',w.PaultendoSprites.artifactAppearance(made));
  assert.equal(made.origin.maker.name,parent.name);assert.equal(made.origin.maker.town,'Wick');assert.equal(made.origin.maker.day,w.planet.day);
  assert.equal(made.parent.lineage,parent.lineage);assert.equal(made.origin.whisper,'Try making something of your own.');assert.equal(r.created,made.id);
  rename(w,town,made,'The Clouded Eye');assert.equal(made.title,'The Clouded Eye');assert.equal(made.named,true);
  const restored=await makeGame({save:JSON.parse(JSON.stringify(w.generateSave()))});t.after(restored.close);
  const copy=restored.window.planet._paultendoLife.artifacts.find(a=>a.id===made.id);
  assert.equal(copy.title,'The Clouded Eye');assert.equal(copy.origin.maker.name,made.origin.maker.name);assert.equal(copy.parent.lineage,parent.lineage);
+ assert.equal(restored.window.PaultendoSprites.render('clear-lens',restored.window.PaultendoSprites.artifactAppearance(copy)),sprite);
  assert.deepEqual(g.errors,[]);assert.deepEqual(restored.errors,[]);
 });
 
@@ -76,10 +79,12 @@ test('returned player-named work crosses the actual beginning with its history, 
  loop(w);assert.equal(w.planet.day,1);assert.equal(w.regCount('town'),0);assert.equal(JSON.stringify(w.planet.config),oldConfig);assert.equal(w.planet.chunks['3,14'].e,oldTerrain);
  assert.equal(w._paultendoUniverse.traveler.passage,1);assert.match(panel(w).textContent,/The Clouded Eye/);assert.equal([...panel(w).querySelectorAll('[role="button"]')].some(b=>b.textContent==='Clear lens'),false);
  const carried=w._paultendoUniverse.traveler.pack.find(a=>a.title==='The Clouded Eye');assert.equal(carried.lineage,made.lineage);assert.equal(carried.named,true);assert.equal(carried.origin.maker.day,made.origin.maker.day);assert.ok(carried.origin.history.some(h=>h.events.some(e=>e.text.includes('finishes'))));
+ assert.equal(carried.appearance.material,made.appearance.material);assert.equal(carried.appearance.accent,made.appearance.accent);assert.ok(w.PaultendoSprites.artifactAppearance(carried).overlays.includes('worn'));
  const saved=JSON.parse(w.localStorage.getItem('R74nMain-GenTownSave'));assert.equal(saved.paultendoUniverse.traveler.passage,1);assert.equal(saved.paultendoUniverse.traveler.previous.planet.day,oldDay);
  const restored=await makeGame({save:saved});t.after(restored.close);const rw=restored.window;assert.equal(rw._paultendoUniverse.traveler.passage,1);
  const newTown=settleGame(restored);memory(rw);click(rw,'What you carried');click(rw,'The Clouded Eye');click(rw,'Leave it at Near');const reborn=rw.planet._paultendoLife.artifacts.at(-1);
  assert.equal(reborn.lineage,made.lineage);assert.equal(reborn.title,'The Clouded Eye');assert.equal(reborn.named,true);assert.equal(reborn.events[0].day,1);assert.match(panel(rw).textContent,/Before this beginning/);assert.ok(newTown);
+ assert.equal(reborn.appearance.accent,made.appearance.accent);assert.ok(rw.PaultendoSprites.artifactAppearance(reborn).overlays.includes('worn'));
  assert.deepEqual(g.errors,[]);assert.deepEqual(restored.errors,[]);
 });
 

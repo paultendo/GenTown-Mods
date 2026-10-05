@@ -34,7 +34,7 @@ test('a resize before world creation waits safely and normal resize resumes afte
 test('installing after GenTown has loaded initializes the mod and advances a settled world', async t => {
   const game = await makeGame({ mod: 'late' });
   t.after(game.close);
-  assert.equal(game.window._paultendoState.loadedVersion, '1.6.94');
+  assert.equal(game.window._paultendoState.loadedVersion, '1.6.95');
   assert.ok(game.window._paultendoUniverse);
   assert.ok(game.lateMapDraws > 0, 'Late installation must redraw the cleared map');
   assert.ok(game.window.document.getElementById('paultendoMapControls'));

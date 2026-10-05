@@ -13,6 +13,11 @@ index.html adapts the original GenTown page. app/ contains the original
 paultendo launcher support and presentation changes. vendor/gentown/
 contains the upstream engine, styles and fonts. icons/ contains the
 original game icons used by the engine and launcher. Keep both directories.
+app/sprites/ holds the added 32x32 exports, palette renderer, built data and
+comparison page. artwork/paultendo-sprites/ holds source artwork,
+prompts, hashes and a technical usage guide. These are separate from icons/.
+scripts/build-sprites.mjs embeds the art and renderer in paultendo-mod.js.
+The installed mod does not fetch these development files at runtime.
 
 Development and verification
 
@@ -25,6 +30,7 @@ docs/release-1.6.93.txt records the subsequent headline alignment correction.
 docs/release-1.6.94.txt records the controls, dependency views, routine
 update folding, map repairs and performance work. Its QA record retains
 the passing suite, campaign summaries, benchmark and browser checks.
+docs/release-1.6.95.txt records the sprite, palette, overlay and layout checks.
 docs/mod-comparison-2026-10-05.txt and its QA record describe the other
 mods inspected before this work, with exact source hashes and limits.
 docs/screenshots/ contains genuine game captures used in the README, with

@@ -1,0 +1,21 @@
+Paultendo materials and Traveler sprites
+
+Twenty sprites and three overlays for the paultendo GenTown overhaul, created using OpenAI's
+built-in image generator. These are separate from R74n's original game icons.
+The original icons were used as style references and have not been changed.
+See manifest.json for every prompt and the export settings.
+
+Runtime exports: app/sprites/*.png (32x32, transparent backgrounds).
+Packed atlas: app/sprites/atlas.png (640x32, twenty adjacent 32x32 cells).
+Interactive comparison: app/sprites/lab.html.
+Original first-batch preview: artwork/paultendo-sprites/preview.png.
+Source artwork: artwork/paultendo-sprites/source/*.png.
+
+Use image-rendering: pixelated when displaying these at larger integer scales.
+Keep text labels alongside inventory and commodity icons.
+The indexed artwork and renderer are embedded in paultendo-mod.js. The game
+does not download the atlas or individual PNGs and needs no extra runtime files.
+
+R74n's assets remain governed by vendor/gentown/LICENSE.txt. The project ownership
+and licensing notice is LICENSE.md. The preview uses VT323, covered by the existing
+SIL Open Font License notice at vendor/gentown/fonts/VT323-LICENSE.txt.
