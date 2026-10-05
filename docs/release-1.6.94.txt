@@ -103,3 +103,8 @@ Source hashes, test output hash, campaign summaries, unfinished work,
 timings, browser checks and publication readback are recorded in
 docs/qa/release-1.6.94.json. The publication field distinguishes prepared
 local results from verified remote bytes.
+
+Publication confirmed: main and tag v1.6.94 point to release commit
+590d869339c9f46757b6aad13e4829fadd8c0d9b. The versioned jsDelivr script
+matches the tested file byte for byte. GitHub's published README loads
+all 11 images and fits a 390px phone viewport without horizontal overflow.

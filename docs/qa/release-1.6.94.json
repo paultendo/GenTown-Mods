@@ -1439,7 +1439,81 @@
     "readmeImages": 11,
     "allLocalImageReferencesExist": true,
     "captureProvenance": "docs/screenshots/captures.txt",
-    "liveReadmeRendering": "Not yet checked for this release."
+    "liveReadmeRendering": "Verified on GitHub after push at 1280x720 and 390x844. All 11 images loaded.",
+    "phoneRendering": {
+      "articleScrollWidth": 324,
+      "articleWidth": 324,
+      "images": [
+        {
+          "alt": "Towns, fields, roads and today\u2019s news on Ujoris e",
+          "complete": true,
+          "naturalWidth": 1280,
+          "width": 324
+        },
+        {
+          "alt": "Wayfarer 597 needs glass for telescopes. The panel follows the missing local forge discovery, sand, charcoal and timber.",
+          "complete": true,
+          "naturalWidth": 1280,
+          "width": 324
+        },
+        {
+          "alt": "A live choice about shared learning, with coloured town flags, Yes and No, and a quieter option to let the day pass.",
+          "complete": true,
+          "naturalWidth": 390,
+          "width": 195
+        },
+        {
+          "alt": "S\u00e9mena making metal handtools, with Faziel learning at the bench",
+          "complete": true,
+          "naturalWidth": 320,
+          "width": 320
+        },
+        {
+          "alt": "A town\u2019s work overview showing telescopes and handtools awaiting materials, with completed roads below",
+          "complete": true,
+          "naturalWidth": 320,
+          "width": 320
+        },
+        {
+          "alt": "A completed sailing voyage with links to the vessel\u2019s construction and the shore reached",
+          "complete": true,
+          "naturalWidth": 320,
+          "width": 320
+        },
+        {
+          "alt": "Dolius\u2019s road research, prompted by a returning crew\u2019s account of a crossing",
+          "complete": true,
+          "naturalWidth": 320,
+          "width": 320
+        },
+        {
+          "alt": "Howin\u2019s tuning fork, its maker, the need that inspired it, and its current keeper",
+          "complete": true,
+          "naturalWidth": 320,
+          "width": 320
+        },
+        {
+          "alt": "Ditma\u2019s guarded outlook and choices to encourage sharing, secrecy or entrusting the fork to the Traveler",
+          "complete": true,
+          "naturalWidth": 320,
+          "width": 320
+        },
+        {
+          "alt": "211 stone travelling from Montezumad to New Montezumad and being used to build a stadium",
+          "complete": true,
+          "naturalWidth": 320,
+          "width": 320
+        },
+        {
+          "alt": "A common market agreed by Wayfarer 597 and Montezumad, with a five percent outside customs levy",
+          "complete": true,
+          "naturalWidth": 320,
+          "width": 320
+        }
+      ],
+      "scrollWidth": 390,
+      "width": 390
+    }
   },
   "dependencies": {
     "newRuntimeDependencies": 0,
@@ -1455,6 +1529,12 @@
   "publication": {
     "installUrl": "https://cdn.jsdelivr.net/gh/paultendo/gentown-mods@v1.6.94/paultendo-mod.js",
     "modSha256": "6110cf3a02cb28ad1e6d06a541a3ac29eedd5c16235850e9bf019a256d448e8b",
-    "status": "Prepared and locally verified. CDN readback pending."
+    "status": "Published. Versioned CDN bytes match the locally tested release.",
+    "verifiedAtUtc": "2026-10-05T18:21:57.495527+00:00",
+    "releaseCommit": "590d869339c9f46757b6aad13e4829fadd8c0d9b",
+    "tag": "v1.6.94",
+    "remoteMainAndTagMatch": true,
+    "cdnSha256": "6110cf3a02cb28ad1e6d06a541a3ac29eedd5c16235850e9bf019a256d448e8b",
+    "cdnBytes": 2176793
   }
 }
