@@ -1,0 +1,249 @@
+GenTown overhaul: source provenance
+6 October 2026
+
+The overhaul was introduced as a separate paultendo project file. The
+preserved GenTown engine and original icons are upstream material, with
+their own source records. The additional systems, original supporting
+code and new pixel art have separate development and creation records.
+The mod still depends on GenTown to run. Source provenance and runtime
+independence are different questions.
+
+This audit covers the 252 tracked files at commit
+68e8b2efd3212f9bd1a2dcc39e8b0d431004fc90, including paultendo-mod.js v1.6.96.
+The companion provenance-2026-10-06.json records every file's hash, size,
+first recorded path addition and category. The new audit documents,
+audit script and added library notices are outside that frozen snapshot.
+Uncommitted local changes are not evidence for the audited release.
+
+History
+
+paultendo-mod.js first appears as a new, 10,912-line file in paultendo's
+commit ca64c0e93c5b59df29dbc4d6a85279a36b1d3b85, dated 31 December 2025.
+Its parent does not contain that file. It contains the inherited mod
+utilities and metadata listed below. Subsequent overhaul changes are
+recorded separately in this repository's Git history.
+
+The local GenTown snapshot was added in commit
+b8b306f9aa28ef75befa82d17eb11d272697ab6c, dated 2 October 2026. This
+introduced vendor/gentown/, icons/, the adapted index.html and the local
+launcher and testing support. The importer being paultendo does not make
+the imported engine and icons paultendo's original work.
+
+The campaign harness was added in commit
+8e3a3281ab1f87ceda7337516911c9bbf0a2ff80. The reusable sprite renderer and
+first additional sprite set were added in commit
+1ad0be382978e685b4d475564e90ffdf6fea0b8f and expanded in the v1.6.96 release.
+
+The audited mod contains 41,494 lines and 2,289,537 bytes. Its SHA-256 is
+ef201b9d78c4453e3aa956bb5589364af03011fa008c5348304fc422a818de1d.
+Commit attribution establishes recorded origin and sequence. It is not
+a substitute for identifying imported material or inspecting shared code.
+
+What came from GenTown
+
+R74n's original source is preserved in vendor/gentown/gentown.js,
+gentown-data.js and gentown-mass.js, with the original supporting loader,
+text viewer and styles. GenTown provides the initial world and towns,
+entity registry, population, species and resources, daily event machinery,
+proposals, unlock tree, government and economic events, war and revolution
+processes, save format, map and original Executive/popup structure.
+
+Examples in the preserved source:
+- Registry/event execution: gentown.js, happen(), line 927.
+- Saved global unlock state: gentown.js, lines 847-848.
+- Resource consumption and food: gentown-data.js, around line 1606.
+- Native war eligibility and creation: gentown-data.js, around line 1965.
+- Native unlock proposals: gentown-data.js, around line 2542.
+- Native saving/loading and menus: gentown.js, parseSave() at line 6281
+  and populateExecutive() at line 6562.
+
+These subjects were not invented by the overhaul. The overhaul adds its
+own behaviour around them, extends their data and replaces selected
+decisions and presentation while continuing to use the native engine.
+
+What was added for the paultendo overhaul
+
+The following are representative implementation anchors in the audited
+paultendo-mod.js. They identify the added implementation, rather than
+claiming exclusive ownership of a general game idea or all native
+behaviour in the same area.
+
+Exploration and local discovery:
+- livingDiscoveryBranches() at line 5464 and localKnowledgeOffer() at
+  line 5590 add local inquiry and discovery records.
+- initFogOfWarState() at line 12503 and advanceSeaVoyages() at line 13591
+  add exploration state and sea journeys around the native map and towns.
+
+Traveler, creations and remembered objects:
+- travelerState() at line 6101, openLivingArtifact() at line 6724 and
+  openTravelerMemory() at line 7311 manage the added object histories,
+  keepers and Traveler memory.
+
+Commodities, work and physical change:
+- COMMODITIES at line 7436 and MATERIAL_RECIPES at line 7496 define the
+  added material/work model, using native resources where applicable.
+- advanceLandscape() at line 7664 and advanceGroundWater() at line 7866
+  add landscape and water processes around native terrain.
+
+Beliefs and politics:
+- politicalState() at line 19459, politicalSupport() at line 19531 and
+  politicalPetition() at line 19560 implement the added political records
+  and pressures. createReligion() at line 32428 is part of the added
+  belief system. Native governments, influences and revolutions remain
+  part of the foundation these additions call into.
+
+Chronicle and presentation:
+- openAnnalsPanel() at line 35634 is part of the added history interface.
+- The original sprite renderer, palettes, clipped condition overlays and
+  asset build tools are in app/sprites/renderer.js and scripts/build-sprites.mjs.
+- Original local launcher support is in app/boot.js, app/ready.js and
+  app/play.css. The campaign runner and tests are project additions,
+  with native engine fixtures and quoted game content where needed.
+
+Shared code and the engine boundary
+
+The token screen compared paultendo-mod.js with the six preserved
+JavaScript sources and four inherited independent utilities. It ignores
+whitespace and comments and preserves identifiers, strings and operators.
+It found no identical runs of 80 tokens or more. At 40 tokens it found
+one 48-token run:
+
+  Native: vendor/gentown/gentown-data.js, lines 1352-1357
+  Mod:    paultendo-mod.js, lines 32109-32115
+
+This is the native revolution process bridge: the happen("Create", ...)
+call, type/town/duration fields and Math.max(Math.floor(subject.size / 10),
+5) duration formula. The mod labels it "Trigger base game revolution".
+It also uses the native 25-day cooldown value. Its surrounding unrest
+logic is separately implemented in the mod. Treat this bridge and its
+native process contract as an upstream-specific replacement boundary
+when extracting an independent game, rather than assuming every line
+in the mod is detached from the base implementation.
+
+A shared API call is not by itself proof of copying. This textual
+screen cannot detect renamed or rewritten copies, shorter quotations,
+unknown sources or all semantic adaptations. It does not parse JavaScript
+regex literals or template interpolations semantically. The result
+supports the separately developed overhaul record, not a legal finding
+about every line. Positive and negative controls confirmed that the
+screen detects a long identical block after comment/whitespace changes.
+
+Calls into happen(), regGet(), Registry, populateExecutive(), native
+popup/map helpers and parseSave() are dependencies even where no code
+matches. Native entity fields, unlock definitions, generated names and
+event wording also remain native where used. Removing vendor/gentown/
+would not turn the current mod into a working independent engine.
+
+Other authors and adapted material
+
+File/group                         Recorded source
+
+icons/                             15 preserved original GenTown icons.
+vendor/gentown/perlin.js            noisejs, independently authored.
+vendor/gentown/normalize.css        normalize.css 8.0.1, independently authored.
+vendor/gentown/fonts/               VT323 and Public Pixel, independent fonts.
+index.html                         Adapted original R74n game page, with
+                                   paultendo local-loading additions.
+better_mod_loader.mjs               Inherited Whirling contribution.
+whirl-load.js                      Inherited Whirling contribution.
+world-configurator.js              Inherited Whirling contribution.
+example_mod.js                     Inherited slweeb contribution.
+mods.json                          Inherited empty file, replaced with {}.
+package-lock.json                  Dependency record, including third-party
+                                   package metadata and licence identifiers.
+docs/screenshots/ and QA images    Composite game captures, including native
+                                   interface/assets and overhaul additions.
+
+Whirling's initial loader/configuration commit is
+588331fe503d94655ece33735af5512f3028bb5c. whirl-load.js was introduced in
+9f181666078e960ced2ab14b3aaf099463f671a3 and world-configurator.js in
+a272f2c26674668a7328ebbdc1bdb5b3803cd16a. slweeb's example was introduced
+in 94315ac251a86a61af27da311d6dc396faa6f3f6. These utilities are not loaded
+by the default overhaul launcher. hot-swap-mod.js is a separate paultendo
+development utility, first added in commit 59a3c76.
+
+The native game page was also fetched from https://r74n.com/gentown/ on
+the audit date. Its 10,411-byte response has SHA-256
+5d5c4f8ea7fc4edab6d02a74ce01b971a6f168b99206a7145268241694b94c85.
+The adapted index.html retains native markup, identifiers, credits and
+descriptive metadata. Its local paths, launcher hooks and added loading
+support are adaptations. It should not be classified as wholly original
+paultendo page code.
+
+Independent library attribution
+
+perlin.js is byte-identical to Joseph Gentle's noisejs repository at
+9c53d7faed1c1a1d4c0927b238ff3def7bb8803b. Its header identifies Stefan
+Gustavson's original implementation, Peter Eastman's optimisations and
+Joseph Gentle's JavaScript conversion. The header retains the original
+public-domain statement. The matching project also supplies an ISC
+licence, now preserved in vendor/gentown/licenses/noisejs-LICENSE.txt.
+
+The normalize.css copy is served by R74n but is normalize.css 8.0.1 by
+Nicolas Gallagher and Jonathan Neal. Comments are removed. All rules
+match the official release after removing comments and whitespace. Its
+MIT licence is now preserved in vendor/gentown/licenses/normalize-LICENSE.txt.
+The reference URLs and response hashes are in authoritativeReferenceChecks
+in the JSON report. Acquisition through GenTown is distinct from authorship.
+
+VT323 is by the VT323 Project Authors, including Peter Hull, under SIL
+OFL 1.1. Public Pixel is by GGBotNet, under CC0 1.0. Their existing full
+notices are retained in vendor/gentown/fonts/. They are not original
+implementations by either paultendo or R74n.
+
+Additional pixel art
+
+paultendo's added set contains 35 sprites and three condition overlays.
+artwork/paultendo-sprites/manifest.json preserves creation dates, prompts,
+source images, reference images, exports and hashes. Its technical record
+identifies use of OpenAI's image tools. GenTown's metal, rock and crop
+icons were supplied as style references, along with the first paultendo
+preview. This reference history remains recorded rather than erased.
+
+All 38 export hashes and 38 source hashes match the manifest. Dimensions
+and decoded RGBA pixels were compared with the 15 original game icons.
+No added export is pixel-identical to an original icon. This rules out
+an unchanged original icon presented as a new export. It does not establish
+absence of stylistic influence or decide legal rights in an image.
+
+The mechanically bundled art/renderer section occupies 95 lines and
+102,357 bytes, about 4.5% of the audited mod's bytes. It is separately
+identifiable from the game systems. Source artwork, palette renderer,
+integration and original GenTown icons have distinct records.
+
+Verification and reproduction
+
+All 26 files recorded with hashes in vendor/gentown/upstream.json match
+both the audited Git snapshot and fresh responses from their recorded
+official URLs on 6 October 2026. This includes engine/support code,
+styles, icons and fonts. All artwork manifest checks passed. The JSON
+also lists the 45 locked dependency entries and their licence identifiers.
+
+Run from the repository root:
+
+python3 scripts/audit-provenance.py \
+  --ref 68e8b2efd3212f9bd1a2dcc39e8b0d431004fc90 \
+  --date 2026-10-06 \
+  --output /tmp/gentown-provenance.json \
+  --verify-live --verify-pixels
+
+Use the actual date of a later audit. Live verification uses curl, and
+pixel comparison uses ImageMagick. Without those optional switches,
+the inventory, recorded upstream hashes, artwork manifest and token
+screen are repeatable using Python and Git without executing game code.
+Live failures or changed sources are reported, not treated as matches.
+
+For a separate game
+
+The original overhaul systems, writing, pixel art, palette tooling and
+test/harness code provide the project material to extract. Their engine
+calls still need replacement. The native engine, game data and styles,
+original icons and adapted native page must either remain attributed
+with their applicable permissions or be independently replaced. Review
+the marked revolution bridge during that extraction. Fonts and libraries
+can be considered separately under their own terms and retained notices.
+Game captures should not become a new game's asset pack.
+
+LICENSE.md and THIRD_PARTY_NOTICES.txt distinguish these sources. This
+audit establishes the recorded provenance and development separation.
+It makes no additional licence grant or determination of legal authorship.

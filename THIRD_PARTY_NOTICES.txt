@@ -2,12 +2,39 @@ Third-party material in this repository
 
 GenTown by R74n
 
-Original engine, supporting scripts and styles: vendor/gentown/
+Original engine and original supporting scripts and styles: vendor/gentown/
+Exceptions with independent authors: perlin.js, normalize.css and fonts/
 Original game icons: icons/
 Original game-page portions: index.html
 Source: https://r74n.com/gentown/
 Licence: vendor/gentown/LICENSE.txt
 Source URLs and hashes: vendor/gentown/upstream.json
+
+Independent libraries supplied with the upstream game
+
+vendor/gentown/perlin.js
+Project: noisejs
+JavaScript conversion: Joseph Gentle
+Original implementation and rank ordering: Stefan Gustavson
+Optimisations: Peter Eastman
+The source retains Gustavson's public-domain statement and the above credits.
+The matching noisejs repository supplies the ISC License.
+Full licence: vendor/gentown/licenses/noisejs-LICENSE.txt
+Source and licence: https://github.com/josephg/noisejs/tree/9c53d7faed1c1a1d4c0927b238ff3def7bb8803b
+The bundled source is byte-identical to perlin.js at that commit.
+
+vendor/gentown/normalize.css
+Project: normalize.css 8.0.1
+Copyright: Nicolas Gallagher and Jonathan Neal
+Licence: MIT
+Full licence: vendor/gentown/licenses/normalize-LICENSE.txt
+Source: https://github.com/necolas/normalize.css/tree/8.0.1
+The GenTown copy removes comments. Its rules match that release when
+comments and whitespace are ignored.
+
+These are third-party implementations distributed through GenTown, not
+original implementations by paultendo or R74n. Their retained licences
+apply to their own material, not to the whole repository.
 
 Fonts supplied with the upstream game
 
@@ -33,6 +60,8 @@ Inherited contributions from the GenTown-Mods repository
 
 better_mod_loader.mjs, whirl-load.js, world-configurator.js and mods.json:
 contributions recorded under Whirling in the inherited Git history.
+The inherited mods.json was empty. Its current {} is a local empty
+configuration, not the implementation of a mod loader.
 
 example_mod.js:
 contributions recorded under slweeb in the inherited Git history.
@@ -56,3 +85,5 @@ This notice attributes third-party material only. It makes no claim that
 paultendo owns these upstream contributions or that their contributors
 own paultendo's original code. Original paultendo work is addressed in
 LICENSE.md. Existing third-party terms and notices remain applicable.
+The source audit and per-file inventory are in docs/provenance-2026-10-06.txt
+and docs/provenance-2026-10-06.json.

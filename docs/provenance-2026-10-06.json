@@ -1,0 +1,3718 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-10-06",
+  "sourceCommit": "68e8b2efd3212f9bd1a2dcc39e8b0d431004fc90",
+  "scope": "Immutable Git tree at sourceCommit. New audit documents and later changes are outside this snapshot.",
+  "limits": [
+    "Git records attribution and sequence, not conclusive legal authorship.",
+    "Token screening compares only the listed preserved sources. It does not identify semantic adaptations, renamed copies, unknown sources or independent creation.",
+    "Shared API identifiers do not by themselves establish copying. The shared revolution bridge receives manual review in the companion report.",
+    "No automated copyright, licence-enforceability or permission conclusion is made."
+  ],
+  "inventory": [
+    {
+      "path": ".gitignore",
+      "sha256": "dfec20add4931c3dc7a50bafc738cc716941cf5176f3bc5b8b76d63eb1cbd185",
+      "bytes": 89,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "ca64c0e93c5b59df29dbc4d6a85279a36b1d3b85",
+      "firstRecordedDate": "2025-12-31T10:26:17Z",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "LICENSE.md",
+      "sha256": "cb08468a6dd4bc82997a7e956de500fafe97a5f7e388eb06f9cebcf8a0e4cfdd",
+      "bytes": 4406,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b671c4c900e5a8a5e498866b886771512446c14d",
+      "firstRecordedDate": "2026-10-04T22:24:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "README.md",
+      "sha256": "fffe8f5715ca9363ab709a34c3db6edcc0ce27a773454355a3ccfa3dcb0270f9",
+      "bytes": 25848,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.txt",
+      "sha256": "4c52301b8a59698a2126be1fdc7d07daf6fab34c0c88a6197f54e86388df748a",
+      "bytes": 2283,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b671c4c900e5a8a5e498866b886771512446c14d",
+      "firstRecordedDate": "2026-10-04T22:24:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/boot.js",
+      "sha256": "db769df1d0f01c9e11bf64c333f167ccb842c0ef80bd84842140b4b71540953d",
+      "bytes": 2261,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "app/play.css",
+      "sha256": "6222780d2d37e1c4f9377c7d0bea00c5fec28b9e430d337f1ecae31a39ebeedc",
+      "bytes": 2214,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/ready.js",
+      "sha256": "52c4b776993e06f053f82cb56e9e012d962077753f1d106d2dab8a333a331a78",
+      "bytes": 2563,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "app/sprites/alliance.png",
+      "sha256": "7a06c73565cb4168cbf1b9590139eee5924a021e1e6046138afdb89d2b6c4533",
+      "bytes": 220,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/atlas.png",
+      "sha256": "950fa835a464e8c1d5c5289adc33a918e691cf216a6fe1bcabc5a212976c3cc5",
+      "bytes": 6560,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "app/sprites/bricks.png",
+      "sha256": "3653bd59ee1eca8aaefa30f8dc6e03e03843804ccdf15f8be8b4e4517562464d",
+      "bytes": 441,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/charcoal.png",
+      "sha256": "90afbf1f2ba4c76f0b295d5377d01b86daab7d33d36107a04debf2bc3f15a3f0",
+      "bytes": 471,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/clay.png",
+      "sha256": "98a448d746870c8f386bd84c96a913f59946c3cbf08431a8bc2becf9a9f30830",
+      "bytes": 471,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/clear-lens.png",
+      "sha256": "72e0f1426d9f9c66d3d9d17fa1ba368a235b5d8ab45ab9d0c843dc9ec722f74f",
+      "bytes": 470,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/coal.png",
+      "sha256": "29d9c3bb0f3df020a062a29d11e661fe5c3416bd6290f6dbef25b4707dffec67",
+      "bytes": 223,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/coastal-boat.png",
+      "sha256": "24cf0356f2c29df5838d7e12b43c79487675894eb6552cd5041e24fca7e5834c",
+      "bytes": 206,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/compass.png",
+      "sha256": "8215e009a4c4013358ced736fecc8a2af35a8efe8a55fed5af574767a7c6f2af",
+      "bytes": 576,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/data.js",
+      "sha256": "cd4630b4045dec5ecf7970f572da8984c6d6cce94accbd2f3bd6fc39655b8982",
+      "bytes": 97512,
+      "classification": "mechanically-built-paultendo-pixel-art-data",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "app/sprites/dependency.png",
+      "sha256": "5b9abde673b0c2055ec4dd91d6305a331a56f5a8806cc44041444a3d8fdcf6b7",
+      "bytes": 221,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/embargo.png",
+      "sha256": "71e2223daba434006af59014d399205eeff5da6f3647d7e9f5d8715fb716105a",
+      "bytes": 273,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/festival.png",
+      "sha256": "d3de8fa1cf5d01d6f59155b131d4f8ee1d008f1b7269ee692f00c6b3a362900a",
+      "bytes": 217,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/finished.png",
+      "sha256": "37a8ba58d8d078034a6b03fcf1fb024dc7a14ca1ad7bf276a681d4ff82985364",
+      "bytes": 212,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/flood.png",
+      "sha256": "8fa74c60dbfb69c91b3b563a8d10fc7cf068ebc8bd975eb1adc1d6346fd97410",
+      "bytes": 209,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/glass-vessels.png",
+      "sha256": "7a6e5877a745b9726b48e624f3e155fcaa69ca57416f71aa26e60c528a4005df",
+      "bytes": 209,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/glass.png",
+      "sha256": "d9014ffd949c726cdf63ee143658fd85efde20c8fddff383464905cfe50ab42a",
+      "bytes": 483,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/lab.html",
+      "sha256": "2b97ccf3fe1a7789ca9e262ed88688339dc76b70393b6cfd8f9375aaea98de66",
+      "bytes": 5555,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "app/sprites/metal-tools.png",
+      "sha256": "cab31ec33af4fc47a7e0b74d7eb309ba713d704dcb4f0f99aaa9f6f5a285e5ba",
+      "bytes": 218,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/overlay-cracked.png",
+      "sha256": "27f49e824a34aed4a18b873f2bc40db1b56b84af0e2203dd4df9a9be6f1e504b",
+      "bytes": 156,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/overlay-repaired.png",
+      "sha256": "16cb30df24ea1a93631f027dbcad39e5f210d27464dbe3a44881da07119c112d",
+      "bytes": 150,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/overlay-worn.png",
+      "sha256": "83d746198bc547071bf6c0b7ea1edd9012b2134e26b7acd3e322e41f45d9f666",
+      "bytes": 136,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/paper.png",
+      "sha256": "9f9801a58911252410e468f46234491b34c4d28b111229bacb7a2ab212afdff2",
+      "bytes": 456,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/pottery.png",
+      "sha256": "d61a64af03b1ab3d9f3d587453e3432ec621b121a6d495f062e7c9f194566e58",
+      "bytes": 237,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/rebellion.png",
+      "sha256": "27d76f7ae6ca7b72556dd4dc19c7e233dce6726f56481457193f3bc714406b87",
+      "bytes": 270,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/renderer.js",
+      "sha256": "773ccfcb88c3c6644e2eab99293d9723be0f29dd44029dffdf893c8aa141a1ea",
+      "bytes": 4810,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/research.png",
+      "sha256": "5bfa8d6c8d4efc82944b6bb8b8e20cdbade36078fe0f2910bc75067bd1c60fe3",
+      "bytes": 260,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/ruins.png",
+      "sha256": "c1a0f377a58a70d07e90f5ef0026b00ef83ecfa2c8ffb75d8e6ab8e586e5f3eb",
+      "bytes": 241,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/sailing-vessel.png",
+      "sha256": "0e6b928b459f586e11b45d524269a0b9730d944557edd294c371c80eeef31ae0",
+      "bytes": 210,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/sand.png",
+      "sha256": "d82592018fcdf88afcdbe6e2d12d0cb2c7cabccf51ab9fd06193ac03eb4545e4",
+      "bytes": 166,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/shortage.png",
+      "sha256": "01a020e4bac51dcedde9a9b5a67c6314e546dab7a109fefb0310d2832f23887f",
+      "bytes": 252,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/shrine.png",
+      "sha256": "a82f0c72832313c86308ea7c89e6cc22f80520b0a05388a946db3f3bb4a3abde",
+      "bytes": 251,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/steel-tools.png",
+      "sha256": "032f5e11ab25c7e014b0b9d2f062eabebc25c8838090d15f5093994103363744",
+      "bytes": 245,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/steel.png",
+      "sha256": "a4fa909d1dc2225a8ed1fdee939d3fe1c4b2f3a596433e644a832bf54048b315",
+      "bytes": 175,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/stone-tools.png",
+      "sha256": "9a4172439c5561ca7418e1cc54070d181d6ba242466d8a504fc4666a136ec798",
+      "bytes": 247,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/telescope.png",
+      "sha256": "49588008e889570d9f8a3dd794346dbc15b25b86ef3bc75c492deb69ce931296",
+      "bytes": 242,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/timber-bins.png",
+      "sha256": "e883b4191bc7e9af8f5ba224d3545a4b3f90625d944192cde78f27a147f9068c",
+      "bytes": 194,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/tuning-fork.png",
+      "sha256": "905d52c8edd924aaca3c935c21642059fcce0ab532fa2ddd172c9d948831567c",
+      "bytes": 405,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/volcano.png",
+      "sha256": "552dbe9881bead104751779e0da013809c09fb6c9d8e7a5f2975e4c5886b5d3d",
+      "bytes": 210,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/waiting.png",
+      "sha256": "21042bc1eba3401349fd6a12b4b56042b975e5ace610f42cb03e5a2566b03c57",
+      "bytes": 219,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/waystone.png",
+      "sha256": "21fcf40ec0dcac09956d115d75edaf900d78e8c12775d721cc7f5155658e1e21",
+      "bytes": 246,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "app/sprites/workshop.png",
+      "sha256": "92bd9fdb05a7935f8fe3461a3c9710d867e7f39fdb06e0f2df1bffa2d82713ce",
+      "bytes": 258,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/NOTICE.txt",
+      "sha256": "ceca3fd34e68653fe25b25cb24af60e45ca98043f2ad834f68fd552796881da4",
+      "bytes": 1188,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "artwork/paultendo-sprites/USAGE.txt",
+      "sha256": "c2eee5a0f683c7d7d515b0d6b2f9f9a042c8b71896a0db33d9a9576ec219116d",
+      "bytes": 5076,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "artwork/paultendo-sprites/manifest.json",
+      "sha256": "8bc6036ef0fe77e7b4c34b6c6a49a4e3b1fcfdb15ea4678f441cbacdd98dccd7",
+      "bytes": 69640,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "artwork/paultendo-sprites/preview.png",
+      "sha256": "358107385f65d7a730ba8cd5fe92d392b25894bd8e25adcf283019da3c11b686",
+      "bytes": 25782,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/alliance.png",
+      "sha256": "21e030be355c6e0a1991216e8497f5e236916b146cc432ed842b0dc82798d59d",
+      "bytes": 234944,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/brick.png",
+      "sha256": "37b02e5dad973d0c53cb764ecc25053e42471b2add8c8ef059950c23c7e09fc9",
+      "bytes": 366851,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/charcoal.png",
+      "sha256": "15af4c0fb12e3dd0b73cde07b74b7dc21369ae593d558ceb4df522121e7cd496",
+      "bytes": 310804,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/clay.png",
+      "sha256": "1027c6f2d793fd5f54993d06190cb48f1de8e82789c774a1ef14212c5163db7e",
+      "bytes": 387760,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/coal.png",
+      "sha256": "36c5735f394ccb4bf80fea39fb201cb480c6edc0774f70cc874c5ae2cff3f0e7",
+      "bytes": 304589,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/coastal_boat.png",
+      "sha256": "94de1681062913f119f374e3c965f1b344877cf9fd437b2d8e01ca9dbc9f8935",
+      "bytes": 256416,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/compass.png",
+      "sha256": "05d84017c564bef894972afcec6880b23a6f0084a3a67affbd2d57864e0b4e92",
+      "bytes": 551739,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/dependency.png",
+      "sha256": "78a2808c35d47be151183c27d63166cd226afd937213ebbf51b958ce04d1518f",
+      "bytes": 241757,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/embargo.png",
+      "sha256": "6f7b25c277632e3b891953945b69215dc83f10f015406ae157235eee218d2603",
+      "bytes": 603913,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/festival.png",
+      "sha256": "b805130cb17be62eed7ecbb1eb192dd2363de713ba0cdce9915df99cfe347a8f",
+      "bytes": 206320,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/finished.png",
+      "sha256": "e44b8903f0a6615c2c6567c2fc1a47734acae2a8ffe5907bca1fb39050e0ac68",
+      "bytes": 279728,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/flood.png",
+      "sha256": "db0bf5d6d1680abaca119bacdfe9095f8f5305e702ae6dc37e18517f23855de1",
+      "bytes": 285576,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/glass.png",
+      "sha256": "1b914a19e8cda01795f7b76b6c9b5634cd8743cb72169dd5734b78f8bd735bf6",
+      "bytes": 387936,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/glass_vessels.png",
+      "sha256": "c4d2c50be9b54ae7c0367047ae12105a6e81deb5b410bc9bd4a12c5ff1c21108",
+      "bytes": 353211,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/lens.png",
+      "sha256": "64121686ceb7f5505315f49c7202486ae18327b5c252f72781ce031771a3f97e",
+      "bytes": 453600,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/metal_tools.png",
+      "sha256": "1893b69f957d5f91668d28141db50a25b76b961d4543db46c5a7188d9bf6fb6f",
+      "bytes": 228759,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/overlay-cracked.png",
+      "sha256": "455e2485dce991301042a924bcc2bf677e544e3a911412de9fbf1c9f2eeb0c0d",
+      "bytes": 79248,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/overlay-repaired.png",
+      "sha256": "03d58504c599f293b5acbebbcf8cf1cdfa876c4a8965a1e6067a6d6b0dce4633",
+      "bytes": 90944,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/overlay-worn.png",
+      "sha256": "4f25d116406a91fd69bf65225fa6930ca448fd4e8efae079bb044d8bfb8b2247",
+      "bytes": 54891,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/paper.png",
+      "sha256": "871323bb8d2a28c2603a7a25d50d1b29dfdb93e0e0e5a3352314cd19b801e188",
+      "bytes": 416470,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/pottery.png",
+      "sha256": "826916bd72b55f4620cabeef92f26a7db44fc9591d5b9832b7107cbfe0881d25",
+      "bytes": 349447,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/rebellion.png",
+      "sha256": "435d746199eb0e759205c6dcae51fef60feb81a7f10c2c193d38bbb3afcd8654",
+      "bytes": 394873,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/research.png",
+      "sha256": "ac104faf9774e7791b0db60b5c54da078b135d59825f76a4caf16796cfc149d2",
+      "bytes": 374760,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/ruins.png",
+      "sha256": "20c525c9b4700c727750c4cbf9dc2b90c9050cc7556d283003509aa39c246d8e",
+      "bytes": 362030,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/sailing_vessel.png",
+      "sha256": "3e4024533748e650c8f2cba542031773f7e6ab218d560c20ad633a8a1c0f4787",
+      "bytes": 275804,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/sand.png",
+      "sha256": "3ede066d61e51a9ff8c6613f527075f19262fcbbe81cc1ecc16159cd7eb1ed42",
+      "bytes": 202475,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/shortage.png",
+      "sha256": "cb14a524f3c7ea24d369cef08877bc21527d6b70e420e3fda47a13f5e327dbad",
+      "bytes": 449567,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/shrine.png",
+      "sha256": "81b869e5dfd0bb357e949b65364a06ab7a643b7a5562a7251753f6230c51e432",
+      "bytes": 327895,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/steel.png",
+      "sha256": "7eccb5dd5797f58c2d6cdad0ee09ec981f929f3ad8b2e3cba3dd0df23f8548cd",
+      "bytes": 711751,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/steel_tools.png",
+      "sha256": "fd942d205a30eb3a0f063f1891907fafc49f211308c2d4ee5ca250ce03a813fd",
+      "bytes": 366025,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/stone_tools.png",
+      "sha256": "b5680b08b82cbe9e6d1acd0d9926ef1dc74ffb9547a201b2081fe09b95961ad9",
+      "bytes": 282963,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/telescope.png",
+      "sha256": "955e4a100156cb6933f6c4762b6d415b84f058a9cf01c69d881dfbe62109c7b0",
+      "bytes": 342204,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/timber_bins.png",
+      "sha256": "01f532a6397d47fdaffb68fd71a07f2952e5526996636dc034f2a178971ab8f8",
+      "bytes": 275483,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/tuning_fork.png",
+      "sha256": "1703d6dc8296cd800407b0c3e9862255dfd4384b69107c93ab1d5b022796411e",
+      "bytes": 278525,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/volcano.png",
+      "sha256": "2fd780006ffbb8808a5a243b8cdac3832fed714b2d2ea91a107dd9038aab31a5",
+      "bytes": 233697,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/waiting.png",
+      "sha256": "75c88f2f20ede2c8abc0cbe8a3fba2daa1c922f57c4372f7b3003ee79e80a235",
+      "bytes": 300662,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/waystone.png",
+      "sha256": "aa693b500b012b2db3fa64befb9d754ddd520acf4fd7c93f8335db3b98d6146e",
+      "bytes": 344274,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "artwork/paultendo-sprites/source/workshop.png",
+      "sha256": "e0653dfb5fbed474dbae442b51ba4905a4883a3f5bee7c7b073a793f276232a6",
+      "bytes": 486791,
+      "classification": "paultendo-pixel-art-set-see-creation-and-reference-records",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "better_mod_loader.mjs",
+      "sha256": "9bc890da45c4977c64b84e6264ffcac22b7e1b6510729b230ceb41175f8be79c",
+      "bytes": 7491,
+      "classification": "inherited-independent-mod-contribution",
+      "firstRecordedCommit": "588331fe503d94655ece33735af5512f3028bb5c",
+      "firstRecordedDate": "2025-10-09T21:47:55-06:00",
+      "firstRecordedCommitAuthor": "Whirling",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/campaign-harness.txt",
+      "sha256": "8d2c1e7f6f7b85d23f1dcc341d70ba5994ac2bee9af3086764f82b98e7c93694",
+      "bytes": 6705,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "8e3a3281ab1f87ceda7337516911c9bbf0a2ff80",
+      "firstRecordedDate": "2026-10-04T18:34:32+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/mod-comparison-2026-10-05.txt",
+      "sha256": "a3debd4508c77d2a647d668a84ae410095d53119a5db25a159e27a04cb30d9a7",
+      "bytes": 8524,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "590d869339c9f46757b6aad13e4829fadd8c0d9b",
+      "firstRecordedDate": "2026-10-05T19:20:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/mod-notes.txt",
+      "sha256": "aada6847b61678019fe59148f54ee6d8011e3421809b3038fe641bdbc2995819",
+      "bytes": 72663,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "c4a26065e7736fd536976c611c82ad59fcadeb9e",
+      "firstRecordedDate": "2026-10-04T18:07:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/qa/campaigns-1.6.92.txt",
+      "sha256": "978330f05dc21e0b72439c2b676113dbc4159232b528a4cb4c959997b426c9b9",
+      "bytes": 11707,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "ce0f81a1c84b4d975b61483bc6e63bfb4699e0f2",
+      "firstRecordedDate": "2026-10-04T19:40:26+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/qa/mod-comparison-2026-10-05.json",
+      "sha256": "ab52ddd0f0cc17f6bb3505c2d1606a9f8f869ee16c70bacfef2160acdaeee559",
+      "bytes": 16059,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "590d869339c9f46757b6aad13e4829fadd8c0d9b",
+      "firstRecordedDate": "2026-10-05T19:20:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/qa/readme-1.6.95-mobile.png",
+      "sha256": "22376af35a906839f187c8ccc8bee6130c2c56abf5abcf8e431ea4bd26cefa31",
+      "bytes": 44567,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "0204de5433cc768912e573b550e75044b1f2b14b",
+      "firstRecordedDate": "2026-10-05T20:34:38+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/qa/readme-1.6.96-mobile.png",
+      "sha256": "4656a7ed26d784a278996200830db7a3d615b409ba54c12a5980997cdd64fd26",
+      "bytes": 7501,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "6dc3c493fd93456a7f9e4b988b1d265ed7cc7273",
+      "firstRecordedDate": "2026-10-05T21:47:34+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/qa/release-1.6.92.json",
+      "sha256": "8cb754cd37501d54c96d027486cb81235bd8ee983317fd8bfd096725b372607b",
+      "bytes": 49137,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "ce0f81a1c84b4d975b61483bc6e63bfb4699e0f2",
+      "firstRecordedDate": "2026-10-04T19:40:26+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/qa/release-1.6.93.json",
+      "sha256": "d0d1b94de22f86a059853a0d742e02914b026f263b9ee32a258dc3a6fdd3bf88",
+      "bytes": 3469,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/qa/release-1.6.94.json",
+      "sha256": "fe8da5cae696498e37517ed9b559e6409e3eaba3730ec85c3e67f9b5d60493f0",
+      "bytes": 53275,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "590d869339c9f46757b6aad13e4829fadd8c0d9b",
+      "firstRecordedDate": "2026-10-05T19:20:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/qa/release-1.6.95.json",
+      "sha256": "77ee2eb52436c2c6596738488e4b53be4ccf4b34bcd3e6141889448bce6ae4ff",
+      "bytes": 36433,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/qa/release-1.6.96.json",
+      "sha256": "c62b30c24c14544679c9569e766a31fbf8a2e3f6e1bc7b699c39a5410e4a249c",
+      "bytes": 9434,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/release-1.6.92.txt",
+      "sha256": "68ba0b633e0dd9d9ab535d6b5839c6f99408f996fb8220db77316287c42a932c",
+      "bytes": 5466,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "ce0f81a1c84b4d975b61483bc6e63bfb4699e0f2",
+      "firstRecordedDate": "2026-10-04T19:40:26+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/release-1.6.93.txt",
+      "sha256": "a9247b11f55de4ecbc1e10790b68fed8d4c85d9b5a86ec7e86b846636128c7d4",
+      "bytes": 1658,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/release-1.6.94.txt",
+      "sha256": "72bd2d2361b659d91240da9095df8ffae2364584e66c443703bde3dff27c734f",
+      "bytes": 5692,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "590d869339c9f46757b6aad13e4829fadd8c0d9b",
+      "firstRecordedDate": "2026-10-05T19:20:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/release-1.6.95.txt",
+      "sha256": "3c3b56a8a0aa467e9b4b625ea0dd896c3eb92c3624a8e5c1f64cb75526ffb1f0",
+      "bytes": 4317,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/release-1.6.96.txt",
+      "sha256": "02a7c120aa71e5901716fe105b9e143dd9055db7a719383700a664de7bf7b185",
+      "bytes": 3188,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/repository-layout.txt",
+      "sha256": "9b87344ed7ff7fad6a2482fee9fa8647cf360201923e1b5501c5520a02b5cab9",
+      "bytes": 3106,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b671c4c900e5a8a5e498866b886771512446c14d",
+      "firstRecordedDate": "2026-10-04T22:24:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/captures.txt",
+      "sha256": "1fdd6e064516fb503c3a8c7e098ac53fc1110c2209781f97d087f943cc9d0a5f",
+      "bytes": 4404,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/concepts/council-desktop.png",
+      "sha256": "ba7d4cc79fc5d03d756741abb9c3b9951075f57adf34d5f68807f7be73b6e2cf",
+      "bytes": 103335,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/concepts/council-mobile.png",
+      "sha256": "48b8355702eee6507ea5e50a1938c9f699c0721ee3942121a7fe8dd8435c02f9",
+      "bytes": 53018,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/concepts/gallery-desktop.png",
+      "sha256": "fd828b67ac51bf836872fa9e49b1895a0fbf22f6787a91ecfc7720ff11b990c7",
+      "bytes": 181681,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/concepts/gallery-mobile-light.png",
+      "sha256": "6c57d4723a305b29bb216befeb577a7eca322e1b61eb195e79878e4986b56f98",
+      "bytes": 178291,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/concepts/highlights-desktop.png",
+      "sha256": "9ebf44012927d95a4d3cb5e8d87d08f54cc267bd6fbfe0952c35fd47de78da16",
+      "bytes": 96718,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/concepts/preview.png",
+      "sha256": "3c63ed8a19a2c5feda5de57a18427dacd1e5a8fa1f401c0cd02b65f32567206c",
+      "bytes": 41345,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/concepts/reload-desktop.png",
+      "sha256": "54722a1f171957065ed72a47c0f4f604626cd86d7d0be014c073df8ed363b8d5",
+      "bytes": 71197,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/concepts/work-desktop.png",
+      "sha256": "2b7a1ed91e298fed01a3a9312c48498f5789a551f42273cacdb75253dd01c785",
+      "bytes": 93279,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/concepts/work-mobile.png",
+      "sha256": "30d29166ccb0106000c9dc618dda3bc4f434d63db9164486a340790b13e3fc45",
+      "bytes": 53031,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/council.jpg",
+      "sha256": "35fbba97e616eff71f30483d57d9236881820bc68e351343292a274762c86778",
+      "bytes": 23728,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/decisions-desktop.png",
+      "sha256": "a7b3b248a52eabbe5a227497cbbbf6d2abb15558b74021e71d895f6d2c945bf1",
+      "bytes": 82172,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "590d869339c9f46757b6aad13e4829fadd8c0d9b",
+      "firstRecordedDate": "2026-10-05T19:20:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/decisions-mobile.png",
+      "sha256": "44f2ab833f22c99a3989c479f4bf0e11333d6632024043170f458e28c3bdd220",
+      "bytes": 28114,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "590d869339c9f46757b6aad13e4829fadd8c0d9b",
+      "firstRecordedDate": "2026-10-05T19:20:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/discovery.jpg",
+      "sha256": "5e70ef6484a2cdc66327708f7d3c66b5aa8c3f5af4d834e369bdecbd399850a7",
+      "bytes": 26354,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/headlines.jpg",
+      "sha256": "a35ac79eaa44dd16cab55dc0287444a060a2bab20deea6ad5bc8cc09307c66bc",
+      "bytes": 22635,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/material-dependencies.jpg",
+      "sha256": "9ee344eb3240374ccb71c90b5217df35e90af62fc98e2c9b7489747400cc8d0d",
+      "bytes": 111922,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "68e8b2efd3212f9bd1a2dcc39e8b0d431004fc90",
+      "firstRecordedDate": "2026-10-05T21:57:38+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/material-dependencies.png",
+      "sha256": "92270095f9f446b28785b4ab0f8a651453a07fc988f4deca0317beab0f5c01a4",
+      "bytes": 115283,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "590d869339c9f46757b6aad13e4829fadd8c0d9b",
+      "firstRecordedDate": "2026-10-05T19:20:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/object.jpg",
+      "sha256": "b591e9c97ee362e43d38bea1c3a9fc2c4174b48273c4b796ded8c56e373ff24e",
+      "bytes": 36556,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/sprites/materials-desktop.png",
+      "sha256": "62479c7bf53ac6c294625d677ab97305096ed5fea70bda1e120be04d84e8c1cb",
+      "bytes": 114814,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/sprites/object-desktop.png",
+      "sha256": "a14022faed01d844cbe854c0c4e25b78401bc4a7a1f20b038ea8c6b8806935c0",
+      "bytes": 116708,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/sprites/object-mobile.png",
+      "sha256": "cada526ac792d88aee6b9048319739ebef8a71f30b9ddae7140086a72d9d44e7",
+      "bytes": 42996,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/sprites/palette-desktop.png",
+      "sha256": "c9fa7ca5d69ae1734e37d1a4d26eb702634c382ec8c3fea2d797122cc822748f",
+      "bytes": 124501,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/sprites/palette-mobile-light.png",
+      "sha256": "2a527937c54b6fee2b4767e2640ff118dcb189db3db1788c5634e3ef144eb094",
+      "bytes": 130284,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/sprites/tools-desktop.png",
+      "sha256": "720b7bed9e9615835ee005d2ed1c8517c95e055e2c20503f5950898b9544f76a",
+      "bytes": 103477,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "docs/screenshots/trade.jpg",
+      "sha256": "a3c657742c68c8eaca580331843513b1799ea0492b774c07a3473760a8a8b600",
+      "bytes": 30645,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/voyage.jpg",
+      "sha256": "ca8cb34b95f8fc9420c9462fa0146cb310d045adf144160a10ad20449e8dc785",
+      "bytes": 31953,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/whisper.jpg",
+      "sha256": "0259d747b006eb63958ff7c3efff0d0b5a7f7392581fe898e90a57153b6be2f3",
+      "bytes": 27115,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/work.jpg",
+      "sha256": "c90cbbfb090e4bb6b89528c260b162af7ad1c9ef27b6252532a80b8585d8ccf6",
+      "bytes": 31411,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/workshop.jpg",
+      "sha256": "e7e04cf2b23458e35f6aeb19d9b7f44f7a6857395955e004aa3e09140838a78b",
+      "bytes": 28227,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "docs/screenshots/world.jpg",
+      "sha256": "c5c5e9f665fe251e9d10b59236fdb0b9d73f10b892b4ef9215ed5a173dec638a",
+      "bytes": 117816,
+      "classification": "composite-capture-paultendo-and-visible-third-party-content",
+      "firstRecordedCommit": "056c32d6b0ec367cad57725dcefad12c601011d5",
+      "firstRecordedDate": "2026-10-05T00:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "example_mod.js",
+      "sha256": "abf7b7dafda14d200ede6adc36831fd360cf7d4be2799ae1b1c1be653e29dc8a",
+      "bytes": 1217,
+      "classification": "inherited-independent-mod-contribution",
+      "firstRecordedCommit": "94315ac251a86a61af27da311d6dc396faa6f3f6",
+      "firstRecordedDate": "2025-10-07T21:51:40-04:00",
+      "firstRecordedCommitAuthor": "slweeb",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "hot-swap-mod.js",
+      "sha256": "7333ff666d5e6d58f3a78dc1e9f6f7d911567531ac8adf6fdb0842b92464c0bc",
+      "bytes": 12843,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "59a3c768b835933678af3e8dd46e97e73770daea",
+      "firstRecordedDate": "2026-01-01T13:04:39Z",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/crop.png",
+      "sha256": "2e8d9d25fcafcec6528d1d2d66bdf848290b8b60f08497e593231b12b26e4f83",
+      "bytes": 440,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/down-bad.png",
+      "sha256": "212568036db7e208a1f9f64fc5f9e148bfd88f0e0577bc8b74a6af043717ec85",
+      "bytes": 330,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/down-good.png",
+      "sha256": "71588135f9403d83aba537f8d8615506a682c8573284ad063efbf45a66918613",
+      "bytes": 329,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/happy.png",
+      "sha256": "df9dfb2d142d067e399d6efde972aec6b10d1d911e80fbc417a4609a7fbaaf1b",
+      "bytes": 534,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/land.png",
+      "sha256": "60e4b06005fdde582e56e994aa2c2cee42a2c705b0ce06ce796c906aa2e255a9",
+      "bytes": 252,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/livestock.png",
+      "sha256": "3891eb1ac86dd64f556d6a23c74abce9dfb98a45fe1c2464e4479fb57849a25d",
+      "bytes": 560,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/lumber.png",
+      "sha256": "006c3d1ea6bab942907fa5229d6e9555c9315a04ee4dff07bbb4239552132fce",
+      "bytes": 341,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/metal.png",
+      "sha256": "9483185252e4e29f1d271cbb69c13ab0722f27227ec86ceec3f6d4eb681a79e6",
+      "bytes": 368,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/neutral.png",
+      "sha256": "72a1601de5f8820220aa26a9fa04bf231d69acfe53340f5908c14c819e970820",
+      "bytes": 486,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/rock.png",
+      "sha256": "b9cc7997e43772ef621a6c0c238adffb337984d1099410c4fc8ac91a72545b5d",
+      "bytes": 461,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/sad.png",
+      "sha256": "9b2c66e86b601307977247d752b23149c8eb3fe476d9dc39b5c6ef6c74ecec4b",
+      "bytes": 532,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/shuffle.png",
+      "sha256": "0a6bf437c4a31b6541edca6aa408c7bdff7aa2b4409ef79b6796826c51f80178",
+      "bytes": 741,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/sword.png",
+      "sha256": "12c8fff6eed039669c4ff6518a7ad704c754f6e9fca9f7752be45564b1054af6",
+      "bytes": 431,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/up-bad.png",
+      "sha256": "7b644b40b1969ac0ed9039ebcdc49e6df57a10678afbd853306020612bc5b69e",
+      "bytes": 324,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "icons/up-good.png",
+      "sha256": "1bc0fa7e8548d5af5b8442755b55f180194fef4a9cccfd53a64fd73e440d2cf6",
+      "bytes": 324,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "index.html",
+      "sha256": "19eccde1a476ad46e0a2b88fb8888bef334e3506f8d42f3f7a99198f10a08159",
+      "bytes": 9919,
+      "classification": "adapted-r74n-page-with-paultendo-additions",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "mods.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "bytes": 3,
+      "classification": "inherited-metadata-replaced-by-local-empty-configuration",
+      "firstRecordedCommit": "588331fe503d94655ece33735af5512f3028bb5c",
+      "firstRecordedDate": "2025-10-09T21:47:55-06:00",
+      "firstRecordedCommitAuthor": "Whirling",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "44dc000bea88d79e43debe12715a0f3e0d25906cd33cae3d4d107943826a5c20",
+      "bytes": 21913,
+      "classification": "paultendo-dependency-record-with-third-party-package-metadata",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "package.json",
+      "sha256": "6504e8eb2dd1f228b2c56d67114ade98774ea8254b66fefbe750a9d3447d493d",
+      "bytes": 843,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "paultendo-mod.js",
+      "sha256": "ef201b9d78c4453e3aa956bb5589364af03011fa008c5348304fc422a818de1d",
+      "bytes": 2289537,
+      "classification": "paultendo-overhaul-with-gentown-bridges-and-bundled-pixel-art",
+      "firstRecordedCommit": "ca64c0e93c5b59df29dbc4d6a85279a36b1d3b85",
+      "firstRecordedDate": "2025-12-31T10:26:17Z",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "scripts/build-sprites.mjs",
+      "sha256": "a3c6c52afd315221e7c884bec4cdf3055d403159011c9f3ef4e5545ad087a490",
+      "bytes": 5310,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "scripts/lib/campaign.mjs",
+      "sha256": "712261bf607f99354f95f948c13e0ce56c6cb8e74031c4bd731af69530c2acbb",
+      "bytes": 21647,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "8e3a3281ab1f87ceda7337516911c9bbf0a2ff80",
+      "firstRecordedDate": "2026-10-04T18:34:32+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "scripts/lib/game.mjs",
+      "sha256": "2db8895e37c4ed6ed7a7b011e53556c4a2b73d33ecccf43ba470bb33dc069b94",
+      "bytes": 7339,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "8e3a3281ab1f87ceda7337516911c9bbf0a2ff80",
+      "firstRecordedDate": "2026-10-04T18:34:32+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "scripts/serve.mjs",
+      "sha256": "08dd284915eee98d0104a43c70aec1cef4cf872e0e7ffe34b043c53bb8f4f2cd",
+      "bytes": 2533,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "scripts/simulate.mjs",
+      "sha256": "175021ff19fb9accf8e924dfc51263214ff23eb9fc46f28a9930076b8ac944de",
+      "bytes": 6396,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "8e3a3281ab1f87ceda7337516911c9bbf0a2ff80",
+      "firstRecordedDate": "2026-10-04T18:34:32+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/artifact-memory.test.mjs",
+      "sha256": "15fbee18f173adad747aad6e23c5f01e60e87ece2fdb7dfb18ce219ac27180a2",
+      "bytes": 7047,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "95b86bb49da19b24cb3e3d77c8370289ae9b6d3b",
+      "firstRecordedDate": "2026-10-04T09:54:51+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/autonomous-events.test.mjs",
+      "sha256": "5a6bb4ae69126cb493819752dd48c52808646a736da3b5c36e0215a7aa4005f9",
+      "bytes": 3911,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "ce0f81a1c84b4d975b61483bc6e63bfb4699e0f2",
+      "firstRecordedDate": "2026-10-04T19:40:26+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/autonomous-inventions.test.mjs",
+      "sha256": "d614b89e9961da5d51371b73bd43466eb07c25a26aad9498f8bcee15d0af0dda",
+      "bytes": 20096,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "bfb649ba42b6e29bd00ed05acdb08cc37f6542de",
+      "firstRecordedDate": "2026-10-03T17:15:00+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/background-worlds.test.mjs",
+      "sha256": "8f6a4f288dc5ce9994572e40665026bb78277a39e8196c86e8af065dc7cba575",
+      "bytes": 23769,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "7aa73d8d62b7ee3c39278bf5e307c1816503a00c",
+      "firstRecordedDate": "2026-10-03T23:44:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/campaign-harness.test.mjs",
+      "sha256": "ec361fe8c622f08f3a85e8d42ccfefd4b7bad506eaed9d64c237ad2a8a85ffc5",
+      "bytes": 13020,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "8e3a3281ab1f87ceda7337516911c9bbf0a2ff80",
+      "firstRecordedDate": "2026-10-04T18:34:32+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/choice-stories.test.mjs",
+      "sha256": "bf38039a27043fba9437370f748d15ea7a1bacd8adf6ae4e0ba3ff920de75c7f",
+      "bytes": 7647,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "5695d665a66b1cb15141e29c42652c0ea90dd046",
+      "firstRecordedDate": "2026-10-03T08:28:39+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/chronicle-stories.test.mjs",
+      "sha256": "79ef4609f5f2c03ae7710f3a4a25d01f6f249348addf6ce4ff4187a8844f3d85",
+      "bytes": 17057,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "9994b388fc56ac9eab17bb2dc695c1baf49f41c8",
+      "firstRecordedDate": "2026-10-03T13:12:50+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/civic-construction.test.mjs",
+      "sha256": "926febead3378d187e8f6a935f98a9cd8360b3bf538675e5329548cba8169e4d",
+      "bytes": 12481,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "c9774cf4371845bc0da9212199be91966014b481",
+      "firstRecordedDate": "2026-10-04T02:05:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/commodity-exchanges.test.mjs",
+      "sha256": "5ebf0578eff8a45bb8c0cd7691537f79c4695abdfd137953188277891ae3859c",
+      "bytes": 9886,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1fa3c73ae28170912522ae59d02bc3d043417c10",
+      "firstRecordedDate": "2026-10-03T15:17:30+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/community-ideas.test.mjs",
+      "sha256": "8213a45d57ae8a213de92968dd5352df1fb00e8246e86dd29a2262fd946b3ed4",
+      "bytes": 11707,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "8a2f9062e04d6f603adfde0603f99d15f637b9b4",
+      "firstRecordedDate": "2026-10-03T12:45:28+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/concept-sprites.test.mjs",
+      "sha256": "b75990417be44db2a35eef36772bd0f7fa2ca4c45cfae5214dd35d16eabe1a04",
+      "bytes": 7607,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "af9640f741437e2f78bd4dc7cbaed6f9f988acf8",
+      "firstRecordedDate": "2026-10-05T21:44:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/container-storage.test.mjs",
+      "sha256": "4638968d69d98359b0f949b47dc9021c6bc114ecf6f3b63237e4204bde5ff09b",
+      "bytes": 10261,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "77dc10a0f007337f1e45179299d539d509c89f2a",
+      "firstRecordedDate": "2026-10-04T14:25:22+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/credit-progression.test.mjs",
+      "sha256": "69f8c8513668c9faec3edff673838e8120357f4237a864b28be352325b0d0e39",
+      "bytes": 22783,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "2eea0f9873b302f8c0286bc194c0b43ad9fc8507",
+      "firstRecordedDate": "2026-10-04T06:37:00+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/disaster-supplies.test.mjs",
+      "sha256": "cfbf7bcfc09fa7348b25a7e88eb4bb92f1620863333fa07ea7f06b53b184f2ec",
+      "bytes": 7411,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "a447b292442f261f631713e28c803288ffe0eac1",
+      "firstRecordedDate": "2026-10-04T14:45:03+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/discovery-catalog.test.mjs",
+      "sha256": "3e9389428a19f324e61a6046dde9efb3a280735d92911ec772c3bebc4091319e",
+      "bytes": 7299,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "bce5e84c4379d6ccfd9faac5f36c03ef1112408d",
+      "firstRecordedDate": "2026-10-03T06:00:50+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/economic-news.test.mjs",
+      "sha256": "6da6149199c5eea1baae600cf1b241d181092434d44f014071c261dac6b5ff97",
+      "bytes": 6040,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "c8f6cb3fcb2f365a6030befef610706d8fe0ff09",
+      "firstRecordedDate": "2026-10-04T10:40:58+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/economic-policies.test.mjs",
+      "sha256": "75aaee1cb6b755e09ca3de74e6e7894e22e8b418030038857c4af16a4e3d5f98",
+      "bytes": 11091,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "c8f6cb3fcb2f365a6030befef610706d8fe0ff09",
+      "firstRecordedDate": "2026-10-04T10:40:58+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/exploration-places.test.mjs",
+      "sha256": "fbfb8615e389a21664d4cca82e5a3544f014d335f7a008332159727b1fa8be6d",
+      "bytes": 9354,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "fe869b44f5d6b478f7220ef380d383521df642a1",
+      "firstRecordedDate": "2026-10-03T10:39:38+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/farm-tools.test.mjs",
+      "sha256": "23e19c4d18253cd619b5938df1a560034abb5d905f2f5bc136702b776f7aff22",
+      "bytes": 19681,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "acb4e8d6c6209a4deae3ead81dfc8ad274432366",
+      "firstRecordedDate": "2026-10-03T20:03:41+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/food-needs.test.mjs",
+      "sha256": "b4a8e215bd0611d38414f9085354b547a314c9d8697623f05745288bfbfa192e",
+      "bytes": 16434,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1fa3c73ae28170912522ae59d02bc3d043417c10",
+      "firstRecordedDate": "2026-10-03T15:17:30+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/frontier-supplies.test.mjs",
+      "sha256": "227b2f0a8cb96cfbd5fbd9fb90addf46544ac9d764d854224ad95f7d7a3cd85b",
+      "bytes": 14913,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "7c1bd5bc9d5c98c0087123848e20204f014cf8a6",
+      "firstRecordedDate": "2026-10-03T22:55:27+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/glass-workshops.test.mjs",
+      "sha256": "1d240febaf01c398e1d46f9731ba8ab11e485cfb6a3aff9f472bad16b199ffaf",
+      "bytes": 15193,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "6f4d6b26d37a51c1154b8fba41ff8932c7e8f0dc",
+      "firstRecordedDate": "2026-10-03T16:32:27+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/government-progression.test.mjs",
+      "sha256": "061f2131496cb81e3d2f62aea25ed44a80b2151de9055997aaefadeb01ac0e55",
+      "bytes": 7914,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b65a6e7a71d0745413b159bbf3dcf53258077894",
+      "firstRecordedDate": "2026-10-04T09:31:22+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/ground-water.test.mjs",
+      "sha256": "e53820e4894567e8d08327d46c88d71beb6b9c8d5a9fe68b9b31862674bfdbc5",
+      "bytes": 12872,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "290246a82499437de1f041c87d7f2cf0bb301d42",
+      "firstRecordedDate": "2026-10-04T16:48:30+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/harness.mjs",
+      "sha256": "e432711f848c8d279d746e65715e5cd78aee7ce865902f1ca59ece203342a722",
+      "bytes": 151,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/interworld-cargo.test.mjs",
+      "sha256": "07429c22c5952a55498cfecae3db8f68a24419ac054d3625163b39903bf1e087",
+      "bytes": 11203,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "c92c6548b3c36cd631f5bf31cea844d9587e52b1",
+      "firstRecordedDate": "2026-10-03T23:21:26+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/landscape.test.mjs",
+      "sha256": "dd39e95b9533c9e85f84555c7d00fbc8512e7d21f85117095301b5e6bf5821ce",
+      "bytes": 11057,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "3192c37fec9edacc18fd0ffc4eb1896957584d3b",
+      "firstRecordedDate": "2026-10-04T15:43:20+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/learning-consequences.test.mjs",
+      "sha256": "68bf7b35ea479a6bdfc1a8d8dc82fd1d357023c71157419b658abbfc7d5dd276",
+      "bytes": 10177,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "be08db7282977dc2474bdda374283df7f031168e",
+      "firstRecordedDate": "2026-10-04T04:40:46+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/local-knowledge.test.mjs",
+      "sha256": "b9c610c8a46b4f7c2cfaa84a0a525210256b07e88cb7a1c28dc070f3fccb4e66",
+      "bytes": 14043,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "f72071d58a7d31abac6ecf778db9cfbff882edca",
+      "firstRecordedDate": "2026-10-04T04:20:44+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/local-laws.test.mjs",
+      "sha256": "e90886015c625f689741ef0662fac42cb17dee2b39f5f783da82893d2ee03bfe",
+      "bytes": 12765,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "5016a0a13bc48bdbb560e5febfb7e44b0650601d",
+      "firstRecordedDate": "2026-10-04T08:44:05+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/local-military.test.mjs",
+      "sha256": "c59ba1fead5cc31eb736ce4ede9c5b96098e096282e17c827ec0cc3ed64ba564",
+      "bytes": 5514,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "4340cde14a6102afc7a6b5cef989e9e04928948e",
+      "firstRecordedDate": "2026-10-04T05:09:48+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/material-affordances.test.mjs",
+      "sha256": "5b4781790e62a4390f48cddc75ecc387da56e4c37830ed0332fb969d5afdd62d",
+      "bytes": 5212,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "178b7cf4eff3e79433019357252690f6b2620e1d",
+      "firstRecordedDate": "2026-10-04T12:14:03+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/material-discovery.test.mjs",
+      "sha256": "f1ac70cbae53e97b46fc7742bd363fff68b8a0351b07c9563a2d52865381d398",
+      "bytes": 9614,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "81322dc9d3305f81cdad2129b7a253f6e3a13fb3",
+      "firstRecordedDate": "2026-10-03T15:54:57+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/material-surveys.test.mjs",
+      "sha256": "05e44cd5cf61597e82aff4a4be56f0d3e6d4958e1f3e0bc46965c9b79cb25ffd",
+      "bytes": 12374,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "c115fae1e539e56ea38fd5febfc1dd5a49b17f04",
+      "firstRecordedDate": "2026-10-04T03:30:12+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/observed-effects.test.mjs",
+      "sha256": "8a65e201bab85a518aa5d7c0154cbfe3c5099ba4d90e4f3b10fdee3231931bf7",
+      "bytes": 15898,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "e8b6b6d7818e4ed3d78395d24422327832799956",
+      "firstRecordedDate": "2026-10-04T14:07:01+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/paper-records.test.mjs",
+      "sha256": "731dd5d320cce6514c8665eb9fe1b36b5b31eece358c595aa383c009e0cd5cfa",
+      "bytes": 5010,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "779e0eb2c5f2dd3785af123ac47489dca302cfe2",
+      "firstRecordedDate": "2026-10-04T11:45:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/people-whispers.test.mjs",
+      "sha256": "a99c4b880f6abb0c62dc536169bf9142fab84b42a85e407c9650618733e1ded4",
+      "bytes": 16019,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "d6d27a8ffbe884264c17b1cb57e353e99bc171d7",
+      "firstRecordedDate": "2026-10-03T10:00:47+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/political-communities.test.mjs",
+      "sha256": "91e050899e9e4b75ec31905bc80dbdcbe3230554b39f76243bea359ca4cb620b",
+      "bytes": 29221,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "637548bc43a2d5b98a5cf337361def738afaa18f",
+      "firstRecordedDate": "2026-10-04T17:26:07+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/pottery-stores.test.mjs",
+      "sha256": "2753b6a4757f3a8e43b7a05ecdf02bff80bfade5bde8cc23811a9fb989010111",
+      "bytes": 11368,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "adece0a99a0c25ea2434d01b8e0516b0cfa30df2",
+      "firstRecordedDate": "2026-10-03T18:51:54+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/release-polish.test.mjs",
+      "sha256": "7d24d60d3b77dbece9d2fdcb6afc7ed53171452dc2b8fed057c9aecac71ed489",
+      "bytes": 11128,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "590d869339c9f46757b6aad13e4829fadd8c0d9b",
+      "firstRecordedDate": "2026-10-05T19:20:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/research-work.test.mjs",
+      "sha256": "010a1df96574ff1c25a4a268b33e80580bfb36d7d19596b4f15a01fc279e9042",
+      "bytes": 10172,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8bb61b62ce8f59553158ee78289fe9b4155574e",
+      "firstRecordedDate": "2026-10-04T00:47:00+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/resident-news.test.mjs",
+      "sha256": "6ea2d3dae15266627009c3dccbe4485b71eb308c5fcab24bb2152bb0e0410dca",
+      "bytes": 6357,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "a73072d22c130936cc50547cb9a0859fa87a2b21",
+      "firstRecordedDate": "2026-10-04T11:07:53+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/runtime.test.mjs",
+      "sha256": "1c01ee86aaedbba0e29fc07165a671321c3238b0a5dda652b931f707a2ceddeb",
+      "bytes": 33889,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/sea-freight.test.mjs",
+      "sha256": "f775ca3bf2bfd8437d59ad0c194aecb04fa8f32918d43c32c02287065966cc55",
+      "bytes": 18690,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "bfb2ea42273141ef5461dd510c903520152a7549",
+      "firstRecordedDate": "2026-10-04T07:55:33+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/sea-progression.test.mjs",
+      "sha256": "385fcac00fd1538388e0e1613c38363da37933fe3438b4ba903706065b59900c",
+      "bytes": 14881,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "432151a4dda15c11f3ccd78d6c39ff3b2b5cf47e",
+      "firstRecordedDate": "2026-10-04T07:16:18+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/server.test.mjs",
+      "sha256": "f6b02e4b014050a4669d270b199d753490ea7b28077b623391c8c4c220e670fd",
+      "bytes": 1105,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/settlement-growth.test.mjs",
+      "sha256": "c7cc405954a63bf4e11a66b558e189904a8025c99b5f9da6d5f6309426e9fe1d",
+      "bytes": 6537,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "ce0f81a1c84b4d975b61483bc6e63bfb4699e0f2",
+      "firstRecordedDate": "2026-10-04T19:40:26+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/settlement-life.test.mjs",
+      "sha256": "09df17696b206f0d21955eb988f4daf5ed2f04da7b0db64ad2b15beaf111af23",
+      "bytes": 19066,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "19e74524fb076ceae29898d07611cd58c93af896",
+      "firstRecordedDate": "2026-10-03T01:11:19+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/sky-progression.test.mjs",
+      "sha256": "66efced62d31991d835ff15a85d710ec071596508f4e39003854b52c110fee5f",
+      "bytes": 19060,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "92e5d2c9725335266d499962a9f3224575e0ab73",
+      "firstRecordedDate": "2026-10-03T21:41:16+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/source-expansion.test.mjs",
+      "sha256": "144b120fc82031c0b3588596223ac910ac437332fbc85583522a5798e07f0e6a",
+      "bytes": 11483,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "931676f4de90348cc29640274852bc1e30b26d8e",
+      "firstRecordedDate": "2026-10-04T03:49:50+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/species-field-notes.test.mjs",
+      "sha256": "2f7a7028eb0540dc3cca0437ece5e97868c48a7465f0042833416c5523613b88",
+      "bytes": 7373,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "c5b912cfc573d18506c4d6a3092fb5cd50ed949c",
+      "firstRecordedDate": "2026-10-03T08:50:12+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/sprites.test.mjs",
+      "sha256": "9596894343eb69ef7486783f143b85fa9b7aab91bed8e2519edcf167fbb73d11",
+      "bytes": 9351,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "1ad0be382978e685b4d475564e90ffdf6fea0b8f",
+      "firstRecordedDate": "2026-10-05T20:33:08+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/steel-and-fuels.test.mjs",
+      "sha256": "638cf3d3dbcfbb45bd0a53fbbf1b9dcee751e8b448f0c73bc2486ea465f7b7d6",
+      "bytes": 15413,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "f8843be1db9d9efbc70acac8aa35fd6dac15e214",
+      "firstRecordedDate": "2026-10-03T17:49:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/storage-hazards.test.mjs",
+      "sha256": "2635364daa8165046308d6c35e1c8a7a2d221cf8a225a1eae0f2d4ba7c4bc14f",
+      "bytes": 10189,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "804c4fa291a693f8a114fffd01b0916a6acd788f",
+      "firstRecordedDate": "2026-10-04T15:18:35+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/supply-disputes.test.mjs",
+      "sha256": "38dba7777ebbfbb7cd69391f07d1f70d7d229c0a8e6d2888bad0b1e4b2a60e5b",
+      "bytes": 16868,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "688d87e61ddea669fd2cde3999a8a0c4d8da2749",
+      "firstRecordedDate": "2026-10-04T05:44:34+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/surface-marks.test.mjs",
+      "sha256": "860b4be12e228c5c45f2b2afefd34213013e8526384e2c48c02374879f975d52",
+      "bytes": 10363,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "6e964ee12dccb76de7b577d27adfc361b87ba073",
+      "firstRecordedDate": "2026-10-04T13:24:00+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/technology-needs.test.mjs",
+      "sha256": "3eec7b2711ec5cd8e60d8c6154d4bd4f1b32d229e3a25afd89f72b32afcaccfc",
+      "bytes": 15447,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "3129de8b761735674c1d63c7cd941a8f4e21291d",
+      "firstRecordedDate": "2026-10-03T19:25:48+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/town-accounts.test.mjs",
+      "sha256": "ef71086d8548f6abfd0d4166f0e46a28d28cfda5beec023729286ef3b564ca9d",
+      "bytes": 9836,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "779e0eb2c5f2dd3785af123ac47489dca302cfe2",
+      "firstRecordedDate": "2026-10-04T11:45:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/trade-progression.test.mjs",
+      "sha256": "9a6c34ed2f328b87af6fed3f32eaad5189576bf1abf11c64daf07794b23e269c",
+      "bytes": 8860,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "4340cde14a6102afc7a6b5cef989e9e04928948e",
+      "firstRecordedDate": "2026-10-04T05:09:48+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/traveler-artifacts.test.mjs",
+      "sha256": "bf546f808763ae4508dc0b00bc909994503b878c7989ae5c41c7a7f9f881ffba",
+      "bytes": 10757,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "28e5d960e0f010f3cb5e2e9d5888ce9e307180e6",
+      "firstRecordedDate": "2026-10-03T11:10:56+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/traveler-loop.test.mjs",
+      "sha256": "dc4fe1c9d1c6d5ae9abe18a12723f885ad9e43591cd3fa0a7faf6ccff76191b2",
+      "bytes": 19781,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "835cc03c93d739ae1e806d7c88b888aec7962130",
+      "firstRecordedDate": "2026-10-03T12:05:52+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/visitor-diagrams.test.mjs",
+      "sha256": "8f337cca55acd996f42f4d00429bf01eb66fbf3695ba609c7f1fe0e301e2b5bd",
+      "bytes": 12048,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "6e964ee12dccb76de7b577d27adfc361b87ba073",
+      "firstRecordedDate": "2026-10-04T13:24:00+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/war-rations.test.mjs",
+      "sha256": "83a101c2a5be7d7242f60b715132479ecad51baa3fc9727922a601a2196bdf14",
+      "bytes": 12498,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "7d364bc5996e4a2c5967c75420f782e1d9309a35",
+      "firstRecordedDate": "2026-10-04T01:35:06+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/war-supplies.test.mjs",
+      "sha256": "587677a4ad4dca531baa19b224c5df58f439f51905081170d2b1711d0fe4c8b4",
+      "bytes": 10324,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "33f5708623851ff1bfaf653555e4ff1ea487cf5c",
+      "firstRecordedDate": "2026-10-04T02:31:36+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/work-reading.test.mjs",
+      "sha256": "f28456a890db481cc888f9652e921222b253ce4fa41cf3ea062f17de535bf1b3",
+      "bytes": 7083,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "c4a26065e7736fd536976c611c82ad59fcadeb9e",
+      "firstRecordedDate": "2026-10-04T18:07:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "tests/workshop-learning.test.mjs",
+      "sha256": "9076bd01351737b35d4b0e5fe92d2ff72e3e76a7d0f1ff418247376e3fa63340",
+      "bytes": 14307,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "f41883a0fe8e84c0a0772b359b53b07bf01699af",
+      "firstRecordedDate": "2026-10-04T03:04:48+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/workshop-orders.test.mjs",
+      "sha256": "b8c5a5f7bd2efcc19c11d6ad043c94c8da9b9d316a0519bec2bc56d8d69220bd",
+      "bytes": 19183,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "9a8cf79d2691e198630cf5c6595167371544cb18",
+      "firstRecordedDate": "2026-10-03T18:23:36+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "tests/workshop-prerequisites.test.mjs",
+      "sha256": "1b9a50e4b4f3de9032653bc511a36532a76ac4e26b8ae4302bc3d6567171e052",
+      "bytes": 6442,
+      "classification": "paultendo-project-addition-subject-to-identified-quotations-and-notices",
+      "firstRecordedCommit": "ce0f81a1c84b4d975b61483bc6e63bfb4699e0f2",
+      "firstRecordedDate": "2026-10-04T19:40:26+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/LICENSE.txt",
+      "sha256": "8ba2c289e083ce9f2ab6c25bcd8a136205f8cbf5606b91c55a7f991be31b2b94",
+      "bytes": 2654,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/fonts/PublicPixel-LICENSE.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "bytes": 7048,
+      "classification": "third-party-font-or-font-licence",
+      "firstRecordedCommit": "b671c4c900e5a8a5e498866b886771512446c14d",
+      "firstRecordedDate": "2026-10-04T22:24:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/fonts/PublicPixel.ttf",
+      "sha256": "931eb4bf9ef25a6d4bb31783b8681712a42b7408988d53971a3070a2f7443ccf",
+      "bytes": 128684,
+      "classification": "third-party-font-or-font-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/fonts/VT323-LICENSE.txt",
+      "sha256": "27d9af34210253e7ca1251fbace86c6f65b40031d6ce1a75493a1b2093631298",
+      "bytes": 4367,
+      "classification": "third-party-font-or-font-licence",
+      "firstRecordedCommit": "b671c4c900e5a8a5e498866b886771512446c14d",
+      "firstRecordedDate": "2026-10-04T22:24:40+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/fonts/VT323-Regular.ttf",
+      "sha256": "cee34b1d391e4b77b07b514f2c9c98fb2f60b49d4936fde107d212cceac5e012",
+      "bytes": 149688,
+      "classification": "third-party-font-or-font-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/gentown-data.js",
+      "sha256": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+      "bytes": 166549,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/gentown-mass.js",
+      "sha256": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+      "bytes": 12182,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/gentown.css",
+      "sha256": "f18d765240efed3ba07576b6351a4ff4d9fca37b9363a2cf9c5c663dc289a0b1",
+      "bytes": 28593,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/gentown.js",
+      "sha256": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+      "bytes": 228144,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/load.js",
+      "sha256": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+      "bytes": 26000,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/normalize.css",
+      "sha256": "eb294cd14adaf657235f5e13d5ae71ef3b60b5b72bcf25b6ba003c3fa2834090",
+      "bytes": 2511,
+      "classification": "third-party-normalize-css",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/perlin.js",
+      "sha256": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+      "bytes": 10439,
+      "classification": "third-party-noisejs",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/standalone.js",
+      "sha256": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+      "bytes": 3080,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/stylesheet.css",
+      "sha256": "346a2cbfb65d735eb018b4aeed3d24fb2238a78ea111a0c5cf475baec94f3fd5",
+      "bytes": 32655,
+      "classification": "preserved-r74n-content-or-licence",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "vendor/gentown/upstream.json",
+      "sha256": "cd25d627e2d80cf5aadd760590e197dd83d977753a736cfce3556110a8cade5d",
+      "bytes": 4390,
+      "classification": "paultendo-source-metadata",
+      "firstRecordedCommit": "b8b306f9aa28ef75befa82d17eb11d272697ab6c",
+      "firstRecordedDate": "2026-10-02T23:27:15+01:00",
+      "firstRecordedCommitAuthor": "paultendo",
+      "unchangedSinceFirstRecordedCommit": true
+    },
+    {
+      "path": "whirl-load.js",
+      "sha256": "32a476058d84d00b7d1f6cf7b458ce0aae5459cd2c5bdb494bd58b2d024d4fea",
+      "bytes": 4424,
+      "classification": "inherited-independent-mod-contribution",
+      "firstRecordedCommit": "9f181666078e960ced2ab14b3aaf099463f671a3",
+      "firstRecordedDate": "2025-10-08T23:24:20-06:00",
+      "firstRecordedCommitAuthor": "Whirling",
+      "unchangedSinceFirstRecordedCommit": false
+    },
+    {
+      "path": "world-configurator.js",
+      "sha256": "47072cd2a4dc544754781d58ff4ce3c9908ce5be95aca7a538fffda36ec73470",
+      "bytes": 6134,
+      "classification": "inherited-independent-mod-contribution",
+      "firstRecordedCommit": "a272f2c26674668a7328ebbdc1bdb5b3803cd16a",
+      "firstRecordedDate": "2025-10-08T23:25:10-06:00",
+      "firstRecordedCommitAuthor": "Whirling",
+      "unchangedSinceFirstRecordedCommit": false
+    }
+  ],
+  "classificationCounts": {
+    "paultendo-project-addition-subject-to-identified-quotations-and-notices": 104,
+    "paultendo-pixel-art-set-see-creation-and-reference-records": 78,
+    "mechanically-built-paultendo-pixel-art-data": 1,
+    "inherited-independent-mod-contribution": 4,
+    "composite-capture-paultendo-and-visible-third-party-content": 31,
+    "preserved-r74n-content-or-licence": 23,
+    "adapted-r74n-page-with-paultendo-additions": 1,
+    "inherited-metadata-replaced-by-local-empty-configuration": 1,
+    "paultendo-dependency-record-with-third-party-package-metadata": 1,
+    "paultendo-overhaul-with-gentown-bridges-and-bundled-pixel-art": 1,
+    "third-party-font-or-font-licence": 4,
+    "third-party-normalize-css": 1,
+    "third-party-noisejs": 1,
+    "paultendo-source-metadata": 1
+  },
+  "upstreamHashes": [
+    {
+      "path": "vendor/gentown/normalize.css",
+      "source": "https://r74n.com/normalize.css",
+      "expectedSha256": "eb294cd14adaf657235f5e13d5ae71ef3b60b5b72bcf25b6ba003c3fa2834090",
+      "actualSha256": "eb294cd14adaf657235f5e13d5ae71ef3b60b5b72bcf25b6ba003c3fa2834090",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "eb294cd14adaf657235f5e13d5ae71ef3b60b5b72bcf25b6ba003c3fa2834090",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/stylesheet.css",
+      "source": "https://r74n.com/stylesheet.css",
+      "expectedSha256": "346a2cbfb65d735eb018b4aeed3d24fb2238a78ea111a0c5cf475baec94f3fd5",
+      "actualSha256": "346a2cbfb65d735eb018b4aeed3d24fb2238a78ea111a0c5cf475baec94f3fd5",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "346a2cbfb65d735eb018b4aeed3d24fb2238a78ea111a0c5cf475baec94f3fd5",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/load.js",
+      "source": "https://r74n.com/load.js",
+      "expectedSha256": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+      "actualSha256": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "97e753eac82499f75b8c8c9dbd884767c6fcfbff306cd6e502e88cda515e16b9",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/gentown.css",
+      "source": "https://r74n.com/gentown/gentown.css",
+      "expectedSha256": "f18d765240efed3ba07576b6351a4ff4d9fca37b9363a2cf9c5c663dc289a0b1",
+      "actualSha256": "f18d765240efed3ba07576b6351a4ff4d9fca37b9363a2cf9c5c663dc289a0b1",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "f18d765240efed3ba07576b6351a4ff4d9fca37b9363a2cf9c5c663dc289a0b1",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/perlin.js",
+      "source": "https://r74n.com/gentown/perlin.js",
+      "expectedSha256": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+      "actualSha256": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/standalone.js",
+      "source": "https://r74n.com/textviewer/standalone.js",
+      "expectedSha256": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+      "actualSha256": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "26d98478f739a9c31b8bb66fb677766983635125a979c0e7c4ad1931ada73431",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/gentown-data.js",
+      "source": "https://r74n.com/gentown/gentown-data.js",
+      "expectedSha256": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+      "actualSha256": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "ba962528a007b355658b87129c90e1621e709871d6752480e2805fadd893cd3c",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/gentown.js",
+      "source": "https://r74n.com/gentown/gentown.js",
+      "expectedSha256": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+      "actualSha256": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "da7f4b91cc36222c2c9023655ac83d1bad71574f5c3d27e0f7a2c32a19d08f5a",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/gentown-mass.js",
+      "source": "https://r74n.com/gentown/gentown-mass.js",
+      "expectedSha256": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+      "actualSha256": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "f07b3efb39fd2ee03e1ed013b1ece4e8737ae3e26f689cd6c00cd5bda24e38c0",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/crop.png",
+      "source": "https://r74n.com/gentown/icons/crop.png",
+      "expectedSha256": "2e8d9d25fcafcec6528d1d2d66bdf848290b8b60f08497e593231b12b26e4f83",
+      "actualSha256": "2e8d9d25fcafcec6528d1d2d66bdf848290b8b60f08497e593231b12b26e4f83",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "2e8d9d25fcafcec6528d1d2d66bdf848290b8b60f08497e593231b12b26e4f83",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/down-bad.png",
+      "source": "https://r74n.com/gentown/icons/down-bad.png",
+      "expectedSha256": "212568036db7e208a1f9f64fc5f9e148bfd88f0e0577bc8b74a6af043717ec85",
+      "actualSha256": "212568036db7e208a1f9f64fc5f9e148bfd88f0e0577bc8b74a6af043717ec85",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "212568036db7e208a1f9f64fc5f9e148bfd88f0e0577bc8b74a6af043717ec85",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/down-good.png",
+      "source": "https://r74n.com/gentown/icons/down-good.png",
+      "expectedSha256": "71588135f9403d83aba537f8d8615506a682c8573284ad063efbf45a66918613",
+      "actualSha256": "71588135f9403d83aba537f8d8615506a682c8573284ad063efbf45a66918613",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "71588135f9403d83aba537f8d8615506a682c8573284ad063efbf45a66918613",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/happy.png",
+      "source": "https://r74n.com/gentown/icons/happy.png",
+      "expectedSha256": "df9dfb2d142d067e399d6efde972aec6b10d1d911e80fbc417a4609a7fbaaf1b",
+      "actualSha256": "df9dfb2d142d067e399d6efde972aec6b10d1d911e80fbc417a4609a7fbaaf1b",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "df9dfb2d142d067e399d6efde972aec6b10d1d911e80fbc417a4609a7fbaaf1b",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/land.png",
+      "source": "https://r74n.com/gentown/icons/land.png",
+      "expectedSha256": "60e4b06005fdde582e56e994aa2c2cee42a2c705b0ce06ce796c906aa2e255a9",
+      "actualSha256": "60e4b06005fdde582e56e994aa2c2cee42a2c705b0ce06ce796c906aa2e255a9",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "60e4b06005fdde582e56e994aa2c2cee42a2c705b0ce06ce796c906aa2e255a9",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/livestock.png",
+      "source": "https://r74n.com/gentown/icons/livestock.png",
+      "expectedSha256": "3891eb1ac86dd64f556d6a23c74abce9dfb98a45fe1c2464e4479fb57849a25d",
+      "actualSha256": "3891eb1ac86dd64f556d6a23c74abce9dfb98a45fe1c2464e4479fb57849a25d",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "3891eb1ac86dd64f556d6a23c74abce9dfb98a45fe1c2464e4479fb57849a25d",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/lumber.png",
+      "source": "https://r74n.com/gentown/icons/lumber.png",
+      "expectedSha256": "006c3d1ea6bab942907fa5229d6e9555c9315a04ee4dff07bbb4239552132fce",
+      "actualSha256": "006c3d1ea6bab942907fa5229d6e9555c9315a04ee4dff07bbb4239552132fce",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "006c3d1ea6bab942907fa5229d6e9555c9315a04ee4dff07bbb4239552132fce",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/metal.png",
+      "source": "https://r74n.com/gentown/icons/metal.png",
+      "expectedSha256": "9483185252e4e29f1d271cbb69c13ab0722f27227ec86ceec3f6d4eb681a79e6",
+      "actualSha256": "9483185252e4e29f1d271cbb69c13ab0722f27227ec86ceec3f6d4eb681a79e6",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "9483185252e4e29f1d271cbb69c13ab0722f27227ec86ceec3f6d4eb681a79e6",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/neutral.png",
+      "source": "https://r74n.com/gentown/icons/neutral.png",
+      "expectedSha256": "72a1601de5f8820220aa26a9fa04bf231d69acfe53340f5908c14c819e970820",
+      "actualSha256": "72a1601de5f8820220aa26a9fa04bf231d69acfe53340f5908c14c819e970820",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "72a1601de5f8820220aa26a9fa04bf231d69acfe53340f5908c14c819e970820",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/rock.png",
+      "source": "https://r74n.com/gentown/icons/rock.png",
+      "expectedSha256": "b9cc7997e43772ef621a6c0c238adffb337984d1099410c4fc8ac91a72545b5d",
+      "actualSha256": "b9cc7997e43772ef621a6c0c238adffb337984d1099410c4fc8ac91a72545b5d",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "b9cc7997e43772ef621a6c0c238adffb337984d1099410c4fc8ac91a72545b5d",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/sad.png",
+      "source": "https://r74n.com/gentown/icons/sad.png",
+      "expectedSha256": "9b2c66e86b601307977247d752b23149c8eb3fe476d9dc39b5c6ef6c74ecec4b",
+      "actualSha256": "9b2c66e86b601307977247d752b23149c8eb3fe476d9dc39b5c6ef6c74ecec4b",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "9b2c66e86b601307977247d752b23149c8eb3fe476d9dc39b5c6ef6c74ecec4b",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/shuffle.png",
+      "source": "https://r74n.com/gentown/icons/shuffle.png",
+      "expectedSha256": "0a6bf437c4a31b6541edca6aa408c7bdff7aa2b4409ef79b6796826c51f80178",
+      "actualSha256": "0a6bf437c4a31b6541edca6aa408c7bdff7aa2b4409ef79b6796826c51f80178",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "0a6bf437c4a31b6541edca6aa408c7bdff7aa2b4409ef79b6796826c51f80178",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/sword.png",
+      "source": "https://r74n.com/gentown/icons/sword.png",
+      "expectedSha256": "12c8fff6eed039669c4ff6518a7ad704c754f6e9fca9f7752be45564b1054af6",
+      "actualSha256": "12c8fff6eed039669c4ff6518a7ad704c754f6e9fca9f7752be45564b1054af6",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "12c8fff6eed039669c4ff6518a7ad704c754f6e9fca9f7752be45564b1054af6",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/up-bad.png",
+      "source": "https://r74n.com/gentown/icons/up-bad.png",
+      "expectedSha256": "7b644b40b1969ac0ed9039ebcdc49e6df57a10678afbd853306020612bc5b69e",
+      "actualSha256": "7b644b40b1969ac0ed9039ebcdc49e6df57a10678afbd853306020612bc5b69e",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "7b644b40b1969ac0ed9039ebcdc49e6df57a10678afbd853306020612bc5b69e",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "icons/up-good.png",
+      "source": "https://r74n.com/gentown/icons/up-good.png",
+      "expectedSha256": "1bc0fa7e8548d5af5b8442755b55f180194fef4a9cccfd53a64fd73e440d2cf6",
+      "actualSha256": "1bc0fa7e8548d5af5b8442755b55f180194fef4a9cccfd53a64fd73e440d2cf6",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "1bc0fa7e8548d5af5b8442755b55f180194fef4a9cccfd53a64fd73e440d2cf6",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/fonts/PublicPixel.ttf",
+      "source": "https://r74n.com/gentown/fonts/PublicPixel.ttf",
+      "expectedSha256": "931eb4bf9ef25a6d4bb31783b8681712a42b7408988d53971a3070a2f7443ccf",
+      "actualSha256": "931eb4bf9ef25a6d4bb31783b8681712a42b7408988d53971a3070a2f7443ccf",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "931eb4bf9ef25a6d4bb31783b8681712a42b7408988d53971a3070a2f7443ccf",
+      "matchesLiveSource": true
+    },
+    {
+      "path": "vendor/gentown/fonts/VT323-Regular.ttf",
+      "source": "https://r74n.com/gentown/fonts/VT323-Regular.ttf",
+      "expectedSha256": "cee34b1d391e4b77b07b514f2c9c98fb2f60b49d4936fde107d212cceac5e012",
+      "actualSha256": "cee34b1d391e4b77b07b514f2c9c98fb2f60b49d4936fde107d212cceac5e012",
+      "matchesRecordedSourceHash": true,
+      "liveSha256": "cee34b1d391e4b77b07b514f2c9c98fb2f60b49d4936fde107d212cceac5e012",
+      "matchesLiveSource": true
+    }
+  ],
+  "sharedTokenScreen": {
+    "minimumTokens": 40,
+    "sources": [
+      "vendor/gentown/gentown-data.js",
+      "vendor/gentown/gentown-mass.js",
+      "vendor/gentown/gentown.js",
+      "vendor/gentown/load.js",
+      "vendor/gentown/perlin.js",
+      "vendor/gentown/standalone.js",
+      "example_mod.js",
+      "better_mod_loader.mjs",
+      "whirl-load.js",
+      "world-configurator.js"
+    ],
+    "matches": [
+      {
+        "source": "vendor/gentown/gentown-data.js",
+        "target": "paultendo-mod.js",
+        "sourceStart": 1352,
+        "sourceEnd": 1357,
+        "targetStart": 32109,
+        "targetEnd": 32115,
+        "tokens": 48
+      }
+    ]
+  },
+  "authoritativeReferenceChecks": [
+    {
+      "id": "noisejs-code",
+      "source": "https://raw.githubusercontent.com/josephg/noisejs/9c53d7faed1c1a1d4c0927b238ff3def7bb8803b/perlin.js",
+      "sha256": "71e83a16ee13df4eaf5042a1e2e604afe39c71ff0b205a0ab627fe154428f88c",
+      "bytes": 10439,
+      "localPath": "vendor/gentown/perlin.js",
+      "identicalBytes": true
+    },
+    {
+      "id": "noisejs-licence",
+      "source": "https://raw.githubusercontent.com/josephg/noisejs/9c53d7faed1c1a1d4c0927b238ff3def7bb8803b/LICENSE",
+      "sha256": "da32a58f8d7ac77537b1e0552af45f04c7a48221bfd9e6777f13947cf6ee0f23",
+      "bytes": 745
+    },
+    {
+      "id": "normalize-css-code",
+      "source": "https://raw.githubusercontent.com/necolas/normalize.css/8.0.1/normalize.css",
+      "sha256": "580818700724d42d7fcc4979b0197971fca1c6d2e0286769237a0ac897df5512",
+      "bytes": 6138,
+      "localPath": "vendor/gentown/normalize.css",
+      "identicalBytes": false,
+      "identicalRulesIgnoringCommentsAndWhitespace": true
+    },
+    {
+      "id": "normalize-css-licence",
+      "source": "https://raw.githubusercontent.com/necolas/normalize.css/8.0.1/LICENSE.md",
+      "sha256": "89a9a9ace8be9e79bdc962823479bf980e4a14777ebe51b37e669f658e6f25ef",
+      "bytes": 1098
+    },
+    {
+      "id": "original-game-page",
+      "source": "https://r74n.com/gentown/",
+      "sha256": "5d5c4f8ea7fc4edab6d02a74ce01b971a6f168b99206a7145268241694b94c85",
+      "bytes": 10411
+    }
+  ],
+  "artworkManifestChecks": [
+    {
+      "asset": "clay",
+      "kind": "file",
+      "path": "app/sprites/clay.png",
+      "sha256": "98a448d746870c8f386bd84c96a913f59946c3cbf08431a8bc2becf9a9f30830",
+      "matchesManifest": true
+    },
+    {
+      "asset": "clay",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/clay.png",
+      "sha256": "1027c6f2d793fd5f54993d06190cb48f1de8e82789c774a1ef14212c5163db7e",
+      "matchesManifest": true
+    },
+    {
+      "asset": "charcoal",
+      "kind": "file",
+      "path": "app/sprites/charcoal.png",
+      "sha256": "90afbf1f2ba4c76f0b295d5377d01b86daab7d33d36107a04debf2bc3f15a3f0",
+      "matchesManifest": true
+    },
+    {
+      "asset": "charcoal",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/charcoal.png",
+      "sha256": "15af4c0fb12e3dd0b73cde07b74b7dc21369ae593d558ceb4df522121e7cd496",
+      "matchesManifest": true
+    },
+    {
+      "asset": "bricks",
+      "kind": "file",
+      "path": "app/sprites/bricks.png",
+      "sha256": "3653bd59ee1eca8aaefa30f8dc6e03e03843804ccdf15f8be8b4e4517562464d",
+      "matchesManifest": true
+    },
+    {
+      "asset": "bricks",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/brick.png",
+      "sha256": "37b02e5dad973d0c53cb764ecc25053e42471b2add8c8ef059950c23c7e09fc9",
+      "matchesManifest": true
+    },
+    {
+      "asset": "glass",
+      "kind": "file",
+      "path": "app/sprites/glass.png",
+      "sha256": "d9014ffd949c726cdf63ee143658fd85efde20c8fddff383464905cfe50ab42a",
+      "matchesManifest": true
+    },
+    {
+      "asset": "glass",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/glass.png",
+      "sha256": "1b914a19e8cda01795f7b76b6c9b5634cd8743cb72169dd5734b78f8bd735bf6",
+      "matchesManifest": true
+    },
+    {
+      "asset": "paper",
+      "kind": "file",
+      "path": "app/sprites/paper.png",
+      "sha256": "9f9801a58911252410e468f46234491b34c4d28b111229bacb7a2ab212afdff2",
+      "matchesManifest": true
+    },
+    {
+      "asset": "paper",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/paper.png",
+      "sha256": "871323bb8d2a28c2603a7a25d50d1b29dfdb93e0e0e5a3352314cd19b801e188",
+      "matchesManifest": true
+    },
+    {
+      "asset": "compass",
+      "kind": "file",
+      "path": "app/sprites/compass.png",
+      "sha256": "8215e009a4c4013358ced736fecc8a2af35a8efe8a55fed5af574767a7c6f2af",
+      "matchesManifest": true
+    },
+    {
+      "asset": "compass",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/compass.png",
+      "sha256": "05d84017c564bef894972afcec6880b23a6f0084a3a67affbd2d57864e0b4e92",
+      "matchesManifest": true
+    },
+    {
+      "asset": "clear-lens",
+      "kind": "file",
+      "path": "app/sprites/clear-lens.png",
+      "sha256": "72e0f1426d9f9c66d3d9d17fa1ba368a235b5d8ab45ab9d0c843dc9ec722f74f",
+      "matchesManifest": true
+    },
+    {
+      "asset": "clear-lens",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/lens.png",
+      "sha256": "64121686ceb7f5505315f49c7202486ae18327b5c252f72781ce031771a3f97e",
+      "matchesManifest": true
+    },
+    {
+      "asset": "tuning-fork",
+      "kind": "file",
+      "path": "app/sprites/tuning-fork.png",
+      "sha256": "905d52c8edd924aaca3c935c21642059fcce0ab532fa2ddd172c9d948831567c",
+      "matchesManifest": true
+    },
+    {
+      "asset": "tuning-fork",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/tuning_fork.png",
+      "sha256": "1703d6dc8296cd800407b0c3e9862255dfd4384b69107c93ab1d5b022796411e",
+      "matchesManifest": true
+    },
+    {
+      "asset": "sand",
+      "kind": "file",
+      "path": "app/sprites/sand.png",
+      "sha256": "d82592018fcdf88afcdbe6e2d12d0cb2c7cabccf51ab9fd06193ac03eb4545e4",
+      "matchesManifest": true
+    },
+    {
+      "asset": "sand",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/sand.png",
+      "sha256": "3ede066d61e51a9ff8c6613f527075f19262fcbbe81cc1ecc16159cd7eb1ed42",
+      "matchesManifest": true
+    },
+    {
+      "asset": "coal",
+      "kind": "file",
+      "path": "app/sprites/coal.png",
+      "sha256": "29d9c3bb0f3df020a062a29d11e661fe5c3416bd6290f6dbef25b4707dffec67",
+      "matchesManifest": true
+    },
+    {
+      "asset": "coal",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/coal.png",
+      "sha256": "36c5735f394ccb4bf80fea39fb201cb480c6edc0774f70cc874c5ae2cff3f0e7",
+      "matchesManifest": true
+    },
+    {
+      "asset": "steel",
+      "kind": "file",
+      "path": "app/sprites/steel.png",
+      "sha256": "a4fa909d1dc2225a8ed1fdee939d3fe1c4b2f3a596433e644a832bf54048b315",
+      "matchesManifest": true
+    },
+    {
+      "asset": "steel",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/steel.png",
+      "sha256": "7eccb5dd5797f58c2d6cdad0ee09ec981f929f3ad8b2e3cba3dd0df23f8548cd",
+      "matchesManifest": true
+    },
+    {
+      "asset": "pottery",
+      "kind": "file",
+      "path": "app/sprites/pottery.png",
+      "sha256": "d61a64af03b1ab3d9f3d587453e3432ec621b121a6d495f062e7c9f194566e58",
+      "matchesManifest": true
+    },
+    {
+      "asset": "pottery",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/pottery.png",
+      "sha256": "826916bd72b55f4620cabeef92f26a7db44fc9591d5b9832b7107cbfe0881d25",
+      "matchesManifest": true
+    },
+    {
+      "asset": "timber-bins",
+      "kind": "file",
+      "path": "app/sprites/timber-bins.png",
+      "sha256": "e883b4191bc7e9af8f5ba224d3545a4b3f90625d944192cde78f27a147f9068c",
+      "matchesManifest": true
+    },
+    {
+      "asset": "timber-bins",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/timber_bins.png",
+      "sha256": "01f532a6397d47fdaffb68fd71a07f2952e5526996636dc034f2a178971ab8f8",
+      "matchesManifest": true
+    },
+    {
+      "asset": "glass-vessels",
+      "kind": "file",
+      "path": "app/sprites/glass-vessels.png",
+      "sha256": "7a6e5877a745b9726b48e624f3e155fcaa69ca57416f71aa26e60c528a4005df",
+      "matchesManifest": true
+    },
+    {
+      "asset": "glass-vessels",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/glass_vessels.png",
+      "sha256": "c4d2c50be9b54ae7c0367047ae12105a6e81deb5b410bc9bd4a12c5ff1c21108",
+      "matchesManifest": true
+    },
+    {
+      "asset": "stone-tools",
+      "kind": "file",
+      "path": "app/sprites/stone-tools.png",
+      "sha256": "9a4172439c5561ca7418e1cc54070d181d6ba242466d8a504fc4666a136ec798",
+      "matchesManifest": true
+    },
+    {
+      "asset": "stone-tools",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/stone_tools.png",
+      "sha256": "b5680b08b82cbe9e6d1acd0d9926ef1dc74ffb9547a201b2081fe09b95961ad9",
+      "matchesManifest": true
+    },
+    {
+      "asset": "metal-tools",
+      "kind": "file",
+      "path": "app/sprites/metal-tools.png",
+      "sha256": "cab31ec33af4fc47a7e0b74d7eb309ba713d704dcb4f0f99aaa9f6f5a285e5ba",
+      "matchesManifest": true
+    },
+    {
+      "asset": "metal-tools",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/metal_tools.png",
+      "sha256": "1893b69f957d5f91668d28141db50a25b76b961d4543db46c5a7188d9bf6fb6f",
+      "matchesManifest": true
+    },
+    {
+      "asset": "steel-tools",
+      "kind": "file",
+      "path": "app/sprites/steel-tools.png",
+      "sha256": "032f5e11ab25c7e014b0b9d2f062eabebc25c8838090d15f5093994103363744",
+      "matchesManifest": true
+    },
+    {
+      "asset": "steel-tools",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/steel_tools.png",
+      "sha256": "fd942d205a30eb3a0f063f1891907fafc49f211308c2d4ee5ca250ce03a813fd",
+      "matchesManifest": true
+    },
+    {
+      "asset": "coastal-boat",
+      "kind": "file",
+      "path": "app/sprites/coastal-boat.png",
+      "sha256": "24cf0356f2c29df5838d7e12b43c79487675894eb6552cd5041e24fca7e5834c",
+      "matchesManifest": true
+    },
+    {
+      "asset": "coastal-boat",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/coastal_boat.png",
+      "sha256": "94de1681062913f119f374e3c965f1b344877cf9fd437b2d8e01ca9dbc9f8935",
+      "matchesManifest": true
+    },
+    {
+      "asset": "sailing-vessel",
+      "kind": "file",
+      "path": "app/sprites/sailing-vessel.png",
+      "sha256": "0e6b928b459f586e11b45d524269a0b9730d944557edd294c371c80eeef31ae0",
+      "matchesManifest": true
+    },
+    {
+      "asset": "sailing-vessel",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/sailing_vessel.png",
+      "sha256": "3e4024533748e650c8f2cba542031773f7e6ab218d560c20ad633a8a1c0f4787",
+      "matchesManifest": true
+    },
+    {
+      "asset": "telescope",
+      "kind": "file",
+      "path": "app/sprites/telescope.png",
+      "sha256": "49588008e889570d9f8a3dd794346dbc15b25b86ef3bc75c492deb69ce931296",
+      "matchesManifest": true
+    },
+    {
+      "asset": "telescope",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/telescope.png",
+      "sha256": "955e4a100156cb6933f6c4762b6d415b84f058a9cf01c69d881dfbe62109c7b0",
+      "matchesManifest": true
+    },
+    {
+      "asset": "overlay-worn",
+      "kind": "file",
+      "path": "app/sprites/overlay-worn.png",
+      "sha256": "83d746198bc547071bf6c0b7ea1edd9012b2134e26b7acd3e322e41f45d9f666",
+      "matchesManifest": true
+    },
+    {
+      "asset": "overlay-worn",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/overlay-worn.png",
+      "sha256": "4f25d116406a91fd69bf65225fa6930ca448fd4e8efae079bb044d8bfb8b2247",
+      "matchesManifest": true
+    },
+    {
+      "asset": "overlay-cracked",
+      "kind": "file",
+      "path": "app/sprites/overlay-cracked.png",
+      "sha256": "27f49e824a34aed4a18b873f2bc40db1b56b84af0e2203dd4df9a9be6f1e504b",
+      "matchesManifest": true
+    },
+    {
+      "asset": "overlay-cracked",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/overlay-cracked.png",
+      "sha256": "455e2485dce991301042a924bcc2bf677e544e3a911412de9fbf1c9f2eeb0c0d",
+      "matchesManifest": true
+    },
+    {
+      "asset": "overlay-repaired",
+      "kind": "file",
+      "path": "app/sprites/overlay-repaired.png",
+      "sha256": "16cb30df24ea1a93631f027dbcad39e5f210d27464dbe3a44881da07119c112d",
+      "matchesManifest": true
+    },
+    {
+      "asset": "overlay-repaired",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/overlay-repaired.png",
+      "sha256": "03d58504c599f293b5acbebbcf8cf1cdfa876c4a8965a1e6067a6d6b0dce4633",
+      "matchesManifest": true
+    },
+    {
+      "asset": "workshop",
+      "kind": "file",
+      "path": "app/sprites/workshop.png",
+      "sha256": "92bd9fdb05a7935f8fe3461a3c9710d867e7f39fdb06e0f2df1bffa2d82713ce",
+      "matchesManifest": true
+    },
+    {
+      "asset": "workshop",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/workshop.png",
+      "sha256": "e0653dfb5fbed474dbae442b51ba4905a4883a3f5bee7c7b073a793f276232a6",
+      "matchesManifest": true
+    },
+    {
+      "asset": "ruins",
+      "kind": "file",
+      "path": "app/sprites/ruins.png",
+      "sha256": "c1a0f377a58a70d07e90f5ef0026b00ef83ecfa2c8ffb75d8e6ab8e586e5f3eb",
+      "matchesManifest": true
+    },
+    {
+      "asset": "ruins",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/ruins.png",
+      "sha256": "20c525c9b4700c727750c4cbf9dc2b90c9050cc7556d283003509aa39c246d8e",
+      "matchesManifest": true
+    },
+    {
+      "asset": "shrine",
+      "kind": "file",
+      "path": "app/sprites/shrine.png",
+      "sha256": "a82f0c72832313c86308ea7c89e6cc22f80520b0a05388a946db3f3bb4a3abde",
+      "matchesManifest": true
+    },
+    {
+      "asset": "shrine",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/shrine.png",
+      "sha256": "81b869e5dfd0bb357e949b65364a06ab7a643b7a5562a7251753f6230c51e432",
+      "matchesManifest": true
+    },
+    {
+      "asset": "waystone",
+      "kind": "file",
+      "path": "app/sprites/waystone.png",
+      "sha256": "21fcf40ec0dcac09956d115d75edaf900d78e8c12775d721cc7f5155658e1e21",
+      "matchesManifest": true
+    },
+    {
+      "asset": "waystone",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/waystone.png",
+      "sha256": "aa693b500b012b2db3fa64befb9d754ddd520acf4fd7c93f8335db3b98d6146e",
+      "matchesManifest": true
+    },
+    {
+      "asset": "alliance",
+      "kind": "file",
+      "path": "app/sprites/alliance.png",
+      "sha256": "7a06c73565cb4168cbf1b9590139eee5924a021e1e6046138afdb89d2b6c4533",
+      "matchesManifest": true
+    },
+    {
+      "asset": "alliance",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/alliance.png",
+      "sha256": "21e030be355c6e0a1991216e8497f5e236916b146cc432ed842b0dc82798d59d",
+      "matchesManifest": true
+    },
+    {
+      "asset": "embargo",
+      "kind": "file",
+      "path": "app/sprites/embargo.png",
+      "sha256": "71e2223daba434006af59014d399205eeff5da6f3647d7e9f5d8715fb716105a",
+      "matchesManifest": true
+    },
+    {
+      "asset": "embargo",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/embargo.png",
+      "sha256": "6f7b25c277632e3b891953945b69215dc83f10f015406ae157235eee218d2603",
+      "matchesManifest": true
+    },
+    {
+      "asset": "dependency",
+      "kind": "file",
+      "path": "app/sprites/dependency.png",
+      "sha256": "5b9abde673b0c2055ec4dd91d6305a331a56f5a8806cc44041444a3d8fdcf6b7",
+      "matchesManifest": true
+    },
+    {
+      "asset": "dependency",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/dependency.png",
+      "sha256": "78a2808c35d47be151183c27d63166cd226afd937213ebbf51b958ce04d1518f",
+      "matchesManifest": true
+    },
+    {
+      "asset": "rebellion",
+      "kind": "file",
+      "path": "app/sprites/rebellion.png",
+      "sha256": "27d76f7ae6ca7b72556dd4dc19c7e233dce6726f56481457193f3bc714406b87",
+      "matchesManifest": true
+    },
+    {
+      "asset": "rebellion",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/rebellion.png",
+      "sha256": "435d746199eb0e759205c6dcae51fef60feb81a7f10c2c193d38bbb3afcd8654",
+      "matchesManifest": true
+    },
+    {
+      "asset": "flood",
+      "kind": "file",
+      "path": "app/sprites/flood.png",
+      "sha256": "8fa74c60dbfb69c91b3b563a8d10fc7cf068ebc8bd975eb1adc1d6346fd97410",
+      "matchesManifest": true
+    },
+    {
+      "asset": "flood",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/flood.png",
+      "sha256": "db0bf5d6d1680abaca119bacdfe9095f8f5305e702ae6dc37e18517f23855de1",
+      "matchesManifest": true
+    },
+    {
+      "asset": "volcano",
+      "kind": "file",
+      "path": "app/sprites/volcano.png",
+      "sha256": "552dbe9881bead104751779e0da013809c09fb6c9d8e7a5f2975e4c5886b5d3d",
+      "matchesManifest": true
+    },
+    {
+      "asset": "volcano",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/volcano.png",
+      "sha256": "2fd780006ffbb8808a5a243b8cdac3832fed714b2d2ea91a107dd9038aab31a5",
+      "matchesManifest": true
+    },
+    {
+      "asset": "festival",
+      "kind": "file",
+      "path": "app/sprites/festival.png",
+      "sha256": "d3de8fa1cf5d01d6f59155b131d4f8ee1d008f1b7269ee692f00c6b3a362900a",
+      "matchesManifest": true
+    },
+    {
+      "asset": "festival",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/festival.png",
+      "sha256": "b805130cb17be62eed7ecbb1eb192dd2363de713ba0cdce9915df99cfe347a8f",
+      "matchesManifest": true
+    },
+    {
+      "asset": "research",
+      "kind": "file",
+      "path": "app/sprites/research.png",
+      "sha256": "5bfa8d6c8d4efc82944b6bb8b8e20cdbade36078fe0f2910bc75067bd1c60fe3",
+      "matchesManifest": true
+    },
+    {
+      "asset": "research",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/research.png",
+      "sha256": "ac104faf9774e7791b0db60b5c54da078b135d59825f76a4caf16796cfc149d2",
+      "matchesManifest": true
+    },
+    {
+      "asset": "shortage",
+      "kind": "file",
+      "path": "app/sprites/shortage.png",
+      "sha256": "01a020e4bac51dcedde9a9b5a67c6314e546dab7a109fefb0310d2832f23887f",
+      "matchesManifest": true
+    },
+    {
+      "asset": "shortage",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/shortage.png",
+      "sha256": "cb14a524f3c7ea24d369cef08877bc21527d6b70e420e3fda47a13f5e327dbad",
+      "matchesManifest": true
+    },
+    {
+      "asset": "waiting",
+      "kind": "file",
+      "path": "app/sprites/waiting.png",
+      "sha256": "21042bc1eba3401349fd6a12b4b56042b975e5ace610f42cb03e5a2566b03c57",
+      "matchesManifest": true
+    },
+    {
+      "asset": "waiting",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/waiting.png",
+      "sha256": "75c88f2f20ede2c8abc0cbe8a3fba2daa1c922f57c4372f7b3003ee79e80a235",
+      "matchesManifest": true
+    },
+    {
+      "asset": "finished",
+      "kind": "file",
+      "path": "app/sprites/finished.png",
+      "sha256": "37a8ba58d8d078034a6b03fcf1fb024dc7a14ca1ad7bf276a681d4ff82985364",
+      "matchesManifest": true
+    },
+    {
+      "asset": "finished",
+      "kind": "source",
+      "path": "artwork/paultendo-sprites/source/finished.png",
+      "sha256": "e44b8903f0a6615c2c6567c2fc1a47734acae2a8ffe5907bca1fb39050e0ac68",
+      "matchesManifest": true
+    }
+  ],
+  "artworkStyleReferences": [
+    "icons/metal.png",
+    "icons/rock.png",
+    "icons/crop.png",
+    "artwork/paultendo-sprites/preview.png"
+  ],
+  "artworkPixelComparison": {
+    "method": "Compare dimensions and decoded 8-bit RGBA pixels. This detects identical images, not visual influence or authorship.",
+    "toolVersion": "Version: ImageMagick 7.1.2-16 Q16-HDRI aarch64 23761 https://imagemagick.org",
+    "originalIconCount": 15,
+    "addedExportCount": 38,
+    "identicalImages": []
+  },
+  "bundledArtwork": {
+    "lines": 95,
+    "bytes": 102357,
+    "sha256": "1049d8c5526784d72d2c588ace1d07b8ac8e5e2189c5b08d736d1eefe4ee03c4"
+  },
+  "dependencies": [
+    {
+      "path": "node_modules/@acemir/cssom",
+      "version": "0.9.31",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/@acemir/cssom/-/cssom-0.9.31.tgz",
+      "integrity": "sha512-ZnR3GSaH+/vJ0YlHau21FjfLYjMpYVIzTD8M8vIEQvIGxeOXyXdzCI140rrCY862p/C/BbzWsjc1dgnM9mkoTA=="
+    },
+    {
+      "path": "node_modules/@asamuzakjp/css-color",
+      "version": "4.1.2",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/@asamuzakjp/css-color/-/css-color-4.1.2.tgz",
+      "integrity": "sha512-NfBUvBaYgKIuq6E/RBLY1m0IohzNHAYyaJGuTK79Z23uNwmz2jl1mPsC5ZxCCxylinKhT1Amn5oNTlx1wN8cQg=="
+    },
+    {
+      "path": "node_modules/@asamuzakjp/dom-selector",
+      "version": "6.8.1",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/@asamuzakjp/dom-selector/-/dom-selector-6.8.1.tgz",
+      "integrity": "sha512-MvRz1nCqW0fsy8Qz4dnLIvhOlMzqDVBabZx6lH+YywFDdjXhMY37SmpV1XFX3JzG5GWHn63j6HX6QPr3lZXHvQ=="
+    },
+    {
+      "path": "node_modules/@asamuzakjp/nwsapi",
+      "version": "2.3.9",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/@asamuzakjp/nwsapi/-/nwsapi-2.3.9.tgz",
+      "integrity": "sha512-n8GuYSrI9bF7FFZ/SjhwevlHc8xaVlb/7HmHelnc/PZXBD2ZR49NnN9sMMuDdEGPeeRQ5d0hqlSlEpgCX3Wl0Q=="
+    },
+    {
+      "path": "node_modules/@csstools/color-helpers",
+      "version": "6.1.2",
+      "licenceIdentifier": "MIT-0",
+      "resolved": "https://registry.npmjs.org/@csstools/color-helpers/-/color-helpers-6.1.2.tgz",
+      "integrity": "sha512-grhRy3OKmniaAEKXMjua5z/EODX0MSqBGjunw8+j/3HQjOnahs2AGhvEOIYVUWcU6ScApbhLhVrQTX8XqrMrow=="
+    },
+    {
+      "path": "node_modules/@csstools/css-calc",
+      "version": "3.4.3",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/@csstools/css-calc/-/css-calc-3.4.3.tgz",
+      "integrity": "sha512-iex20d8CHVkyvg6B7UKV7uHnI2Bqo9g+EFfT9E0y+GvTvhZ/DwONJ+9aKb1dlqm0ZiGsL5RXjp0fCoJYnkeDjA=="
+    },
+    {
+      "path": "node_modules/@csstools/css-color-parser",
+      "version": "4.2.6",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/@csstools/css-color-parser/-/css-color-parser-4.2.6.tgz",
+      "integrity": "sha512-iiPQ3iRWwnJkeEn6RIu6SJPr7hYrLz6XZ9s/QZl+2/LI5KQVjpl2fdmDSZKuD4xP6GMmMPgHFFXg6k1Wkz0Trg=="
+    },
+    {
+      "path": "node_modules/@csstools/css-parser-algorithms",
+      "version": "4.0.2",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/@csstools/css-parser-algorithms/-/css-parser-algorithms-4.0.2.tgz",
+      "integrity": "sha512-40cSKyMvK+tq4qz6Awrlye2WGuOKt3FwPgtGg6KTfbHOWNw+Rk1rzbAtZnZ6IBhsY491HLRnDXwoyBAijmmILA=="
+    },
+    {
+      "path": "node_modules/@csstools/css-syntax-patches-for-csstree",
+      "version": "1.1.15",
+      "licenceIdentifier": "MIT-0",
+      "resolved": "https://registry.npmjs.org/@csstools/css-syntax-patches-for-csstree/-/css-syntax-patches-for-csstree-1.1.15.tgz",
+      "integrity": "sha512-J0u7HkVl2nzSlhsiTOp4AmwcUQ3D+mGEEKfBy/7To5/y7F2OHwyLrXfrhR0SMgr4p5Lo+eaMVSeai24zUcBIxA=="
+    },
+    {
+      "path": "node_modules/@csstools/css-tokenizer",
+      "version": "4.0.2",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/@csstools/css-tokenizer/-/css-tokenizer-4.0.2.tgz",
+      "integrity": "sha512-OoKoR0f76dCY666JlcbhmVTs2drYj1GUXZTYTcbUgJjh9Nv41aFfZ21bPQTERm5+L5cBDo466NltB2lplS5GBw=="
+    },
+    {
+      "path": "node_modules/@exodus/bytes",
+      "version": "1.16.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/@exodus/bytes/-/bytes-1.16.0.tgz",
+      "integrity": "sha512-IcpW84uEn3N7ETtNZMlxKhfl6Pec8rUNGOTBtWbK1FKhJxIFAptZyVrvVRVBimAJxJCgc3PxepxkdWWG4DVzfA=="
+    },
+    {
+      "path": "node_modules/agent-base",
+      "version": "7.1.4",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/agent-base/-/agent-base-7.1.4.tgz",
+      "integrity": "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ=="
+    },
+    {
+      "path": "node_modules/bidi-js",
+      "version": "1.1.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/bidi-js/-/bidi-js-1.1.0.tgz",
+      "integrity": "sha512-fX1Onk0tdVPC7obPWB5EbJ1z7NVhLq4m2xZLq2YXBkxzMXIGRpNMU88n0EPgWseKl12J7zXs7qrDxPK4sRs2fg=="
+    },
+    {
+      "path": "node_modules/css-tree",
+      "version": "3.2.1",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/css-tree/-/css-tree-3.2.1.tgz",
+      "integrity": "sha512-X7sjQzceUhu1u7Y/ylrRZFU2FS6LRiFVp6rKLPg23y3x3c3DOKAwuXGDp+PAGjh6CSnCjYeAul8pcT8bAl+lSA=="
+    },
+    {
+      "path": "node_modules/cssstyle",
+      "version": "5.3.7",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/cssstyle/-/cssstyle-5.3.7.tgz",
+      "integrity": "sha512-7D2EPVltRrsTkhpQmksIu+LxeWAIEk6wRDMJ1qljlv+CKHJM+cJLlfhWIzNA44eAsHXSNe3+vO6DW1yCYx8SuQ=="
+    },
+    {
+      "path": "node_modules/data-urls",
+      "version": "6.0.1",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/data-urls/-/data-urls-6.0.1.tgz",
+      "integrity": "sha512-euIQENZg6x8mj3fO6o9+fOW8MimUI4PpD/fZBhJfeioZVy9TUpM4UY7KjQNVZFlqwJ0UdzRDzkycB997HEq1BQ=="
+    },
+    {
+      "path": "node_modules/data-urls/node_modules/whatwg-mimetype",
+      "version": "5.0.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/whatwg-mimetype/-/whatwg-mimetype-5.0.0.tgz",
+      "integrity": "sha512-sXcNcHOC51uPGF0P/D4NVtrkjSU2fNsm9iog4ZvZJsL3rjoDAzXZhkm2MWt1y+PUdggKAYVoMAIYcs78wJ51Cw=="
+    },
+    {
+      "path": "node_modules/debug",
+      "version": "4.4.3",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+      "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA=="
+    },
+    {
+      "path": "node_modules/decimal.js",
+      "version": "10.6.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/decimal.js/-/decimal.js-10.6.0.tgz",
+      "integrity": "sha512-YpgQiITW3JXGntzdUmyUR1V812Hn8T1YVXhCu+wO3OpS4eU9l4YdD3qjyiKdV6mvV29zapkMeD390UVEf2lkUg=="
+    },
+    {
+      "path": "node_modules/entities",
+      "version": "8.1.0",
+      "licenceIdentifier": "BSD-2-Clause",
+      "resolved": "https://registry.npmjs.org/entities/-/entities-8.1.0.tgz",
+      "integrity": "sha512-kxL7msIffSuh9aaFAMD7rxAIuTRMAHMeBtgHW2yUdWw732ZNh4MehkF2gdjvtdmikkaIP9bFDDJOPlsvm7avrA=="
+    },
+    {
+      "path": "node_modules/html-encoding-sniffer",
+      "version": "6.0.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/html-encoding-sniffer/-/html-encoding-sniffer-6.0.0.tgz",
+      "integrity": "sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg=="
+    },
+    {
+      "path": "node_modules/http-proxy-agent",
+      "version": "7.0.2",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/http-proxy-agent/-/http-proxy-agent-7.0.2.tgz",
+      "integrity": "sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig=="
+    },
+    {
+      "path": "node_modules/https-proxy-agent",
+      "version": "7.0.6",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-7.0.6.tgz",
+      "integrity": "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw=="
+    },
+    {
+      "path": "node_modules/is-potential-custom-element-name",
+      "version": "1.0.1",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/is-potential-custom-element-name/-/is-potential-custom-element-name-1.0.1.tgz",
+      "integrity": "sha512-bCYeRA2rVibKZd+s2625gGnGF/t7DSqDs4dP7CrLA1m7jKWz6pps0LpYLJN8Q64HtmPKJ1hrN3nzPNKFEKOUiQ=="
+    },
+    {
+      "path": "node_modules/jsdom",
+      "version": "27.4.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/jsdom/-/jsdom-27.4.0.tgz",
+      "integrity": "sha512-mjzqwWRD9Y1J1KUi7W97Gja1bwOOM5Ug0EZ6UDK3xS7j7mndrkwozHtSblfomlzyB4NepioNt+B2sOSzczVgtQ=="
+    },
+    {
+      "path": "node_modules/lru-cache",
+      "version": "11.5.3",
+      "licenceIdentifier": "BlueOak-1.0.0",
+      "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-11.5.3.tgz",
+      "integrity": "sha512-U4N8FgzmWxc8k1VH8Kr6lQg18U7Fjvby6wXHVRX/ZZ7IwWbRMgrRbP0Wrb5q5NVinryp4SQampHKdvtecItxUg=="
+    },
+    {
+      "path": "node_modules/mdn-data",
+      "version": "2.27.1",
+      "licenceIdentifier": "CC0-1.0",
+      "resolved": "https://registry.npmjs.org/mdn-data/-/mdn-data-2.27.1.tgz",
+      "integrity": "sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ=="
+    },
+    {
+      "path": "node_modules/ms",
+      "version": "2.1.3",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="
+    },
+    {
+      "path": "node_modules/parse5",
+      "version": "8.0.1",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/parse5/-/parse5-8.0.1.tgz",
+      "integrity": "sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw=="
+    },
+    {
+      "path": "node_modules/punycode",
+      "version": "2.3.1",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
+      "integrity": "sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg=="
+    },
+    {
+      "path": "node_modules/require-from-string",
+      "version": "2.0.2",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz",
+      "integrity": "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="
+    },
+    {
+      "path": "node_modules/saxes",
+      "version": "6.0.0",
+      "licenceIdentifier": "ISC",
+      "resolved": "https://registry.npmjs.org/saxes/-/saxes-6.0.0.tgz",
+      "integrity": "sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA=="
+    },
+    {
+      "path": "node_modules/source-map-js",
+      "version": "1.2.2",
+      "licenceIdentifier": "BSD-3-Clause",
+      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
+      "integrity": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw=="
+    },
+    {
+      "path": "node_modules/symbol-tree",
+      "version": "3.2.4",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/symbol-tree/-/symbol-tree-3.2.4.tgz",
+      "integrity": "sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw=="
+    },
+    {
+      "path": "node_modules/tldts",
+      "version": "7.4.16",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/tldts/-/tldts-7.4.16.tgz",
+      "integrity": "sha512-QwBER5KMR86IIjpIiO7H/Z3IMJPsZ1A6RKPAqzTTgOyUQUSt9FdnKcqhTaJmkY6HVrgouZHZR0ncK5QxvmnQeg=="
+    },
+    {
+      "path": "node_modules/tldts-core",
+      "version": "7.4.16",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/tldts-core/-/tldts-core-7.4.16.tgz",
+      "integrity": "sha512-MDolfaSJtlSK5Y0A1xl3277ekubZwobpBjugknDizI9O5Rm60a1m8k4ICK+MRsCDzPygT81mp3BBf5RKDlFRfA=="
+    },
+    {
+      "path": "node_modules/tough-cookie",
+      "version": "6.0.2",
+      "licenceIdentifier": "BSD-3-Clause",
+      "resolved": "https://registry.npmjs.org/tough-cookie/-/tough-cookie-6.0.2.tgz",
+      "integrity": "sha512-exgYmnmL/sJpR3upZfXG5PoatXQii55xAiXGXzY+sROLZ/Y+SLcp9PgJNI9Vz37HpQ74WvDcLT8eqm+kV3FzrA=="
+    },
+    {
+      "path": "node_modules/tr46",
+      "version": "6.0.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/tr46/-/tr46-6.0.0.tgz",
+      "integrity": "sha512-bLVMLPtstlZ4iMQHpFHTR7GAGj2jxi8Dg0s2h2MafAE4uSWF98FC/3MomU51iQAMf8/qDUbKWf5GxuvvVcXEhw=="
+    },
+    {
+      "path": "node_modules/w3c-xmlserializer",
+      "version": "5.0.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/w3c-xmlserializer/-/w3c-xmlserializer-5.0.0.tgz",
+      "integrity": "sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA=="
+    },
+    {
+      "path": "node_modules/webidl-conversions",
+      "version": "8.0.1",
+      "licenceIdentifier": "BSD-2-Clause",
+      "resolved": "https://registry.npmjs.org/webidl-conversions/-/webidl-conversions-8.0.1.tgz",
+      "integrity": "sha512-BMhLD/Sw+GbJC21C/UgyaZX41nPt8bUTg+jWyDeg7e7YN4xOM05YPSIXceACnXVtqyEw/LMClUQMtMZ+PGGpqQ=="
+    },
+    {
+      "path": "node_modules/whatwg-mimetype",
+      "version": "4.0.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/whatwg-mimetype/-/whatwg-mimetype-4.0.0.tgz",
+      "integrity": "sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg=="
+    },
+    {
+      "path": "node_modules/whatwg-url",
+      "version": "15.1.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/whatwg-url/-/whatwg-url-15.1.0.tgz",
+      "integrity": "sha512-2ytDk0kiEj/yu90JOAp44PVPUkO9+jVhyf+SybKlRHSDlvOOZhdPIrr7xTH64l4WixO2cP+wQIcgujkGBPPz6g=="
+    },
+    {
+      "path": "node_modules/ws",
+      "version": "8.22.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/ws/-/ws-8.22.0.tgz",
+      "integrity": "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg=="
+    },
+    {
+      "path": "node_modules/xml-name-validator",
+      "version": "5.0.0",
+      "licenceIdentifier": "Apache-2.0",
+      "resolved": "https://registry.npmjs.org/xml-name-validator/-/xml-name-validator-5.0.0.tgz",
+      "integrity": "sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg=="
+    },
+    {
+      "path": "node_modules/xmlchars",
+      "version": "2.2.0",
+      "licenceIdentifier": "MIT",
+      "resolved": "https://registry.npmjs.org/xmlchars/-/xmlchars-2.2.0.tgz",
+      "integrity": "sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw=="
+    }
+  ]
+}

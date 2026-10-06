@@ -1,5 +1,5 @@
 Repository layout
-5 October 2026
+6 October 2026
 
 Player installation
 
@@ -45,6 +45,10 @@ Documentation
 README.md describes the current release, installation and comparison with
 base GenTown. LICENSE.md separates ownership and permissions.
 THIRD_PARTY_NOTICES.txt identifies inherited assets and utilities.
+docs/provenance-2026-10-06.txt records the source comparison and attribution.
+docs/provenance-2026-10-06.json inventories the audited Git tree, file
+hashes, first recorded commits and comparison results. The audit can be
+repeated with scripts/audit-provenance.py without executing the game.
 docs/campaign-harness.txt describes the simulation runner.
 docs/mod-notes.txt is a dated development record, including older results
 and limitations. It is not the current installation guide.

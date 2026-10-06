@@ -201,6 +201,8 @@ The runner uses actual game turns and decisions. It writes campaign reports, a t
 
 **The fonts have their own authors and terms.** VT323 is by the VT323 Project Authors, including Peter Hull, under the [SIL Open Font License 1.1](vendor/gentown/fonts/VT323-LICENSE.txt). Public Pixel is by GGBotNet, released under [CC0 1.0 Universal](vendor/gentown/fonts/PublicPixel-LICENSE.txt).
 
+**Two bundled libraries also have independent authors.** The noise implementation is noisejs by Joseph Gentle, based on Stefan Gustavson’s work with optimisations by Peter Eastman, with its [ISC licence](vendor/gentown/licenses/noisejs-LICENSE.txt). normalize.css is by Nicolas Gallagher and Jonathan Neal under the [MIT licence](vendor/gentown/licenses/normalize-LICENSE.txt). They were supplied through GenTown and retain their own credits.
+
 **The additional sprites are my own pixel art, supplied with this overhaul.** They are separate from R74n's original icons. Their [source records and full prompts](artwork/paultendo-sprites/manifest.json) accompany the exports. The original renderer, build tools and integration code are paultendo's work.
 
 **Adapted files contain work from both sources.** [index.html](index.html) adapts R74n’s original game page for local loading. Its upstream portions retain their original attribution and applicable terms. The original additions by paultendo remain paultendo’s work. Any third-party components retain their own notices and licences.
@@ -208,3 +210,5 @@ The runner uses actual game turns and decisions. It writes campaign reports, a t
 See [LICENSE.md](LICENSE.md) for the ownership separation, permission to play the published mod and the terms governing reuse of paultendo’s original work.
 
 The [third-party notices](THIRD_PARTY_NOTICES.txt) identify inherited assets and independent utilities. The [repository guide](docs/repository-layout.txt) explains which files run the overhaul and which are development tools.
+
+The [source provenance audit](docs/provenance-2026-10-06.txt) records what came from GenTown and what was added for this overhaul, with a [per-file inventory and hash checks](docs/provenance-2026-10-06.json). It also identifies the shared engine bridge and the files that contain work from more than one source.
